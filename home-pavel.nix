@@ -22,6 +22,7 @@
     jetbrains.idea-ultimate
     visualvm
     vlc
+    telegram-desktop
   ];
 
   home.sessionVariables = {
@@ -47,4 +48,37 @@
     [[ "$USER" != "root" ]] && nix-env --profile ~/.local/state/nix/profiles/home-manager --delete-generations +5
   '';
 
+  home.file = builtins.listToAttrs
+    (map
+      (pkg:
+        {
+          name = ".config/autostart/" + pkg.name + ".desktop";
+          value.text = ''
+            [Desktop Entry]
+            Type=Application
+            Version=1.0
+            Name=${pkg.name}
+            Exec=${pkg.exec}
+            StartupNotify=false
+            Terminal=false
+          '';
+        })
+
+      # ${pkg.bin} ${lib.concatStringsSep " " (map (f: "\"${f}\"") pkg.flags)}
+      (with pkgs; [
+        {
+          name = "element";
+          exec = "${element-desktop}/bin/element-desktop --hidden";
+        }
+        {
+          name = "slack";
+          exec = "${slack}/bin/slack -u";
+        }
+        {
+          name = "telegram-desktop";
+          exec = "${pkgs.telegram-desktop}/bin/telegram-desktop -startintray";
+        }
+      ])
+    );
 }
+

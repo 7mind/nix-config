@@ -1,11 +1,83 @@
 { pkgs, lib, ... }: {
   environment.sessionVariables = {
-    GTK_THEME = "Adwaita-dark";
+    GTK_THEME = "Adwaita:dark";
+
+    #QT_STYLE_OVERRIDE = "adwaita-dark";
+    #QT_QPA_PLATFORMTHEME = "gnome"; # this breaks Telegram systray icon
+    QT_QPA_PLATFORMTHEME = "";
+
     QT_AUTO_SCREEN_SCALE_FACTOR = "1";
     QT_ENABLE_HIGHDPI_SCALING = "1";
-    # QT_QPA_PLATFORMTHEME="gnome"; # this breaks Telegram systray icon
-    QT_STYLE_OVERRIDE = "adwaita-dark";
+    QT_QPA_PLATFORM = "wayland";
   };
+
+  qt =
+    {
+      enable = true;
+      #platformTheme = "gnome"; # this breaks Telegram systray icon
+      platformTheme = null;
+      style = "adwaita-dark";
+
+    };
+  # https://github.com/NixOS/nixpkgs/issues/33277#issuecomment-639281657
+  # https://github.com/NixOS/nixpkgs/issues/114514
+  services.xserver.desktopManager.gnome = {
+    enable = true;
+    # extraGSettingsOverridePackages = [ pkgs.mutter ];
+    # extraGSettingsOverrides = ''
+    #   [org.gnome.mutter]
+    #   experimental-features=['scale-monitor-framebuffer', 'xwayland-native-scaling']
+    #   [org.gnome.mutter.wayland]
+    #   xwayland-allow-grabs=true
+    #   xwayland-grab-access-rules=['parsecd']
+    # '';
+  };
+
+  services.udev.packages = [ pkgs.gnome-settings-daemon ];
+
+  services.xserver.enable = true;
+  services.xserver.displayManager.gdm.enable = true;
+
+  environment.systemPackages = (with pkgs.gnomeExtensions; [
+    appindicator
+  ]) ++ (with pkgs; [
+    dconf-editor
+  ]);
+
+  services.gnome = {
+    gnome-settings-daemon.enable = true;
+    core-utilities.enable = true;
+    core-os-services.enable = true;
+    core-shell.enable = true;
+    core-developer-tools.enable = true;
+    sushi.enable = true;
+    gnome-remote-desktop.enable = true;
+  };
+
+  programs.gnome-terminal.enable = true;
+  programs.gnome-disks.enable = true;
+  programs.file-roller.enable = true;
+  environment.gnome.excludePackages = with pkgs; [
+    orca # text to speech
+    epiphany
+    gnome-text-editor
+    gnome-calculator
+    gnome-calendar
+    gnome-characters
+    gnome-clocks
+    gnome-console
+    gnome-contacts
+    gnome-font-viewer
+    gnome-logs
+    gnome-maps
+    gnome-music
+    gnome-weather
+    totem
+    yelp
+    gnome-tour
+    gnome-user-docs
+    simple-scan
+  ];
 
   programs.dconf = {
     enable = true;
@@ -285,64 +357,4 @@
       }
     ];
   };
-
-  # https://github.com/NixOS/nixpkgs/issues/33277#issuecomment-639281657
-  # https://github.com/NixOS/nixpkgs/issues/114514
-  services.xserver.desktopManager.gnome = {
-    enable = true;
-    # extraGSettingsOverridePackages = [ pkgs.mutter ];
-    # extraGSettingsOverrides = ''
-    #   [org.gnome.mutter]
-    #   experimental-features=['scale-monitor-framebuffer', 'xwayland-native-scaling']
-    #   [org.gnome.mutter.wayland]
-    #   xwayland-allow-grabs=true
-    #   xwayland-grab-access-rules=['parsecd']
-    # '';
-  };
-
-  services.udev.packages = [ pkgs.gnome-settings-daemon ];
-
-  services.xserver.enable = true;
-  services.xserver.displayManager.gdm.enable = true;
-
-  environment.systemPackages = (with pkgs.gnomeExtensions; [
-    appindicator
-  ]) ++ (with pkgs; [
-    dconf-editor
-  ]);
-
-  services.gnome = {
-    gnome-settings-daemon.enable = true;
-    core-utilities.enable = true;
-    core-os-services.enable = true;
-    core-shell.enable = true;
-    core-developer-tools.enable = true;
-    sushi.enable = true;
-    gnome-remote-desktop.enable = true;
-  };
-
-  programs.gnome-terminal.enable = true;
-  programs.gnome-disks.enable = true;
-  programs.file-roller.enable = true;
-  environment.gnome.excludePackages = with pkgs; [
-    orca # text to speech
-    epiphany
-    gnome-text-editor
-    gnome-calculator
-    gnome-calendar
-    gnome-characters
-    gnome-clocks
-    gnome-console
-    gnome-contacts
-    gnome-font-viewer
-    gnome-logs
-    gnome-maps
-    gnome-music
-    gnome-weather
-    totem
-    yelp
-    gnome-tour
-    gnome-user-docs
-    simple-scan
-  ];
 }

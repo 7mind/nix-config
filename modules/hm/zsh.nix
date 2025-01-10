@@ -1,4 +1,4 @@
-{ pkgs, lib, config, ... }: {
+{ ... }: {
   # home.activation.zsh-cleanup = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
   #   echo >&2 "Cleaning up zsh junk..."
   #   rm -f ${config.home.homeDirectory}/.zshrc.zwc

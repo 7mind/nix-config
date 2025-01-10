@@ -36,21 +36,29 @@
           pkgs7mind = inputs.smind.legacyPackages."${arch}";
           nix-apple-fonts = inputs.nix-apple-fonts.packages."${arch}";
         };
+        # cfgtools = { config, ... }: rec {
+        # };
+
+
         specialArgs = {
           cfgmeta = cfgmeta;
           cfgnix = cfgnix;
+          # cfgtools = cfgtools;
         };
       in
       {
         freshnix = inputs.nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
           modules = [
+            ./modules/nix/flake-lib.nix
+
             inputs.nix-apple-fonts.nixosModules
             inputs.home-manager.nixosModules.home-manager
             {
               home-manager.extraSpecialArgs = specialArgs;
             }
             ./configuration.nix
+            # cfgtools
           ];
 
           specialArgs = specialArgs;

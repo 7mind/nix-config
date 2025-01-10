@@ -1,4 +1,4 @@
-{ pkgs, lib, cfgmeta, ... }: {
+{ cfgmeta, ... }: {
   programs.wezterm =
     let
       font_size = if cfgmeta.isDarwin then 14 else 10;
@@ -23,7 +23,7 @@
               top = "5px",
             };
             window_decorations = "TITLE|RESIZE";
-            
+
             -- to fix borders under gnome
             enable_wayland = false;
 
