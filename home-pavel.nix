@@ -23,6 +23,9 @@
     visualvm
     vlc
     telegram-desktop
+
+    pstree
+    pciutils
   ];
 
   home.sessionVariables = {

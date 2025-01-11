@@ -1,11 +1,22 @@
-{ config, pkgs, ... }:
+{ config, lib, ... }:
 
 {
-  boot.kernel.sysctl = {
-    "net.ipv4.ip_forward" = 1;
-    #"net.ipv6.ip_forward" = 1;
-    "net.ipv6.conf.all.forwarding" = 1;
+  options = {
+    smind.router.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "enable ipv4/ipv6 forwarding";
+    };
   };
 
-  networking.firewall.checkReversePath = "loose";
+  config = lib.mkIf config.smind.router.enable {
+    assertions = [ ];
+    boot.kernel.sysctl = {
+      "net.ipv4.ip_forward" = 1;
+      #"net.ipv6.ip_forward" = 1;
+      "net.ipv6.conf.all.forwarding" = 1;
+    };
+
+    networking.firewall.checkReversePath = "loose";
+  };
 }

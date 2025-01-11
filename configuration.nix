@@ -4,17 +4,6 @@
   imports =
     [
       ./hardware-configuration.nix
-      ./modules/nix/gnome.nix
-      ./modules/nix/kernel.nix
-      ./modules/nix/router.nix
-      ./modules/nix/zswap.nix
-      ./modules/nix/zfs.nix
-      ./modules/nix/zfs-ssh-initrd.nix
-      ./modules/nix/grub.nix
-      ./modules/nix/nix.nix
-      ./modules/nix/zsh.nix
-
-      ./modules/nix/realtek-kernel-hack.nix
     ];
 
   programs.nix-ld = {
@@ -36,22 +25,9 @@
   #          }
 
   networking.hostId = "8a9c7614";
-  networking.hostName = "freshnix";
+  networking.hostName = "pavel-am5";
 
   boot.initrd = {
-    systemd =
-      {
-        network = {
-          networks.bootnet = {
-            name = "enp8s0";
-            dhcpV4Config = {
-              Hostname = "pavel-am5-initrd.home.7mind.io";
-            };
-          };
-        };
-      };
-
-
     network = {
       ssh = {
         hostKeys = [ "/etc/secrets/initrd/ssh_host_ed25519_key" ];
@@ -60,10 +36,7 @@
     };
   };
 
-
   networking.networkmanager.enable = true;
-
-
 
   users = {
     users.root.password = "nixos";
@@ -98,4 +71,22 @@
 
   home-manager.users.pavel = import ./home-pavel.nix;
   home-manager.users.root = import ./home-root.nix;
+
+  smind = {
+    roles.desktop.generic-gnome = true;
+
+    security.sudo.wheel-permissive-rules = true;
+    security.sudo.wheel-passwordless = true;
+
+    zfs.email.enable = false;
+    zfs.email.to = "team@7mind.io";
+    zfs.email.sender = "zed-vm@home.7mind.io";
+
+    zfs.initrd-unlock.enable = true;
+    zfs.initrd-unlock.interface = "enp8s0";
+
+    ssh.permissive = true;
+
+    kernel.hack-rtl8125.enable = true;
+  };
 }

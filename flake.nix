@@ -22,35 +22,54 @@
       let
         arch = "x86_64-linux";
         pkgs = inputs.nixpkgs.legacyPackages."${arch}";
+
         paths = {
           root = "${self}";
           pkg = "${self}/pkgs";
         };
+
         cfgmeta = {
           isLinux = true;
           isDarwin = false;
           paths = paths;
           jdk-main = pkgs.graalvm-ce;
         };
+
         cfgnix = {
           pkgs7mind = inputs.smind.legacyPackages."${arch}";
           nix-apple-fonts = inputs.nix-apple-fonts.packages."${arch}";
         };
-        # cfgtools = { config, ... }: rec {
-        # };
-
 
         specialArgs = {
           cfgmeta = cfgmeta;
           cfgnix = cfgnix;
-          # cfgtools = cfgtools;
         };
       in
       {
-        freshnix = inputs.nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
+        pavel-am5 = inputs.nixpkgs.lib.nixosSystem {
+          system = "${arch}";
           modules = [
-            ./modules/nix/flake-lib.nix
+            ./modules/nix/_desktop.nix
+            ./modules/nix/env-settings.nix
+            ./modules/nix/fonts-apple.nix
+            ./modules/nix/fonts-nerd.nix
+            ./modules/nix/gnome.nix
+            ./modules/nix/gnome-minimal-hotkeys.nix
+            ./modules/nix/grub.nix
+            ./modules/nix/kernel-settings.nix
+            ./modules/nix/locale-ie.nix
+            ./modules/nix/nix.nix
+            ./modules/nix/power.nix
+            ./modules/nix/realtek-kernel-hack.nix
+            ./modules/nix/router.nix
+            ./modules/nix/ssh-permissive.nix
+            ./modules/nix/ssh-safe.nix
+            ./modules/nix/sudo.nix
+            ./modules/nix/zfs-ssh-initrd.nix
+            ./modules/nix/zfs.nix
+            ./modules/nix/zsh.nix
+            ./modules/nix/zswap.nix
+
 
             inputs.nix-apple-fonts.nixosModules
             inputs.home-manager.nixosModules.home-manager

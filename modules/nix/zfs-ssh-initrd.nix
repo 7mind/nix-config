@@ -1,83 +1,93 @@
-{ pkgs
-, assertHasStringAttr
-, ...
-}:
+{ pkgs, lib, config, ... }:
 {
-  assertions = [
-    (assertHasStringAttr
-      {
-        source = "zfs-ssh-initrd.nix";
-        base = "boot.initrd.systemd.network.networks.bootnet";
-        name = "name";
-        msg = "should be set to a network device name";
+  options = {
+    smind.zfs.initrd-unlock.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Allow ZFS to be unlocked through SSH running in initrd";
+    };
+
+    smind.zfs.initrd-unlock.interface = lib.mkOption {
+      type = lib.types.str;
+      description = "network interface to configure";
+    };
+
+    smind.zfs.initrd-unlock.hostname = lib.mkOption {
+      type = lib.types.str;
+      default = "initrd-${config.networking.hostName}";
+      description = "hostname to use (must differ from primary system hostname)";
+    };
+  };
+
+  config = lib.mkIf config.smind.zfs.initrd-unlock.enable {
+    assertions = [
+      ({
+        assertion = config.smind.zfs.initrd-unlock.interface != "";
+        message = "set config.smind.zfs.initrd-unlock.interface";
       })
-    (assertHasStringAttr
-      {
-        source = "zfs-ssh-initrd.nix";
-        base = "boot.initrd.systemd.network.networks.bootnet.dhcpV4Config";
-        name = "Hostname";
-        msg = "should be set to a special hostname for initrd";
+      ({
+        assertion = config.smind.zfs.initrd-unlock.hostname != "" && config.networking.hostName != "" && config.smind.zfs.initrd-unlock.hostname != config.networking.hostName;
+        message = "set config.smind.zfs.initrd-unlock.hostname";
       })
-  ];
+    ];
 
-  boot.initrd = {
+    boot.initrd = {
+      systemd =
+        {
+          enable = true;
+          emergencyAccess = true;
 
-    systemd =
-      {
-        enable = true;
-        emergencyAccess = true;
-
-        initrdBin = with pkgs; [
-          busybox
-        ];
-
-        services.zfs-remote-unlock = {
-          description = "Prepare for ZFS remote unlock";
-          wantedBy = [ "initrd.target" ];
-          after = [ "systemd-networkd.service" ];
-
-          path = with pkgs; [
-            zfs
+          initrdBin = with pkgs; [
+            busybox
           ];
 
-          serviceConfig.Type = "oneshot";
-          script = ''
-            echo "systemctl default" >> /var/empty/.profile
-          '';
-        };
+          services.zfs-remote-unlock = {
+            description = "Prepare for ZFS remote unlock";
+            wantedBy = [ "initrd.target" ];
+            after = [ "systemd-networkd.service" ];
 
-        network = {
-          enable = true;
+            path = with pkgs; [
+              zfs
+            ];
 
-          networks.bootnet = {
-            enable = true;
-            # name = "enpXXX";
-            DHCP = "yes";
-            dhcpV4Config = {
-              SendHostname = true;
-              #Hostname = "HOST-initrd.home.7mind.io";
-            };
+            serviceConfig.Type = "oneshot";
+            script = ''
+              echo "systemctl default" >> /var/empty/.profile
+            '';
           };
 
+          network = {
+            enable = true;
+
+            networks.bootnet = {
+              enable = true;
+              name = config.smind.zfs.initrd-unlock.interface;
+              DHCP = "yes";
+              dhcpV4Config = {
+                SendHostname = true;
+                Hostname = config.smind.zfs.initrd-unlock.hostname;
+              };
+            };
+
+          };
         };
-      };
 
 
-    network = {
-      enable = true;
-
-      ssh = {
+      network = {
         enable = true;
-        port = 22;
 
-        # `ssh-keygen -t ed25519 -N "" -f /path/to/ssh_host_ed25519_key`
-        # hostKeys = [ "/etc/secrets/initrd/ssh_host_ed25519_key" ];
+        ssh = {
+          enable = true;
+          port = 22;
 
-        # authorizedKeys = config.sshkeys.pavel-all
-        #   ++ [ config.sshkeys.initrd ];
+          # `ssh-keygen -t ed25519 -N "" -f /path/to/ssh_host_ed25519_key`
+          # hostKeys = [ "/etc/secrets/initrd/ssh_host_ed25519_key" ];
+
+          # authorizedKeys = config.sshkeys.pavel-all
+          #   ++ [ config.sshkeys.initrd ];
+        };
       };
     };
   };
+
 }
-
-

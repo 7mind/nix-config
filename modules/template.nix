@@ -2,14 +2,14 @@
 
 {
   options = {
-    smind.ssh.safe = lib.mkOption {
+    smind.xxx = lib.mkOption {
       type = lib.types.bool;
       default = false;
       description = "";
     };
   };
 
-  config = lib.mkIf config.smind.ssh.safe {
+  config = lib.mkIf config.smind.xxx {
     assertions = [ ];
   };
 }

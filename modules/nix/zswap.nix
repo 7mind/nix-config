@@ -1,6 +1,14 @@
 { config, pkgs, lib, ... }:
 
 {
+  options = {
+    smind.zram-swap = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Turn on zramSwap";
+    };
+  };
+
   # boot = {
   #   kernelPatches = [{
   #     name = "le9";
@@ -27,10 +35,15 @@
   #   };
   # };
 
-  zramSwap = {
-    enable = true;
-    algorithm = "zstd";
-    memoryPercent = 20;
-    priority = 10;
+  config = {
+    zramSwap = lib.mkIf
+      config.smind.zram-swap
+      {
+        enable = true;
+        algorithm = "zstd";
+        memoryPercent = 20;
+        priority = 10;
+      };
   };
+
 }

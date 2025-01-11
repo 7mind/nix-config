@@ -1,20 +1,33 @@
-{ ... }: {
-  boot.loader.efi = {
-    canTouchEfiVariables = false;
+{ config, lib, ... }:
+
+{
+  options = {
+    smind.grub.efi.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "";
+    };
   };
 
-  boot.loader.grub = {
-    enable = true;
-    useOSProber = true;
-    memtest86.enable = true;
+  config = lib.mkIf config.smind.grub.efi.enable {
+    assertions = [ ];
+    boot.loader.efi = {
+      canTouchEfiVariables = false;
+    };
 
-    device = "nodev";
-    efiSupport = true;
-    efiInstallAsRemovable = true;
-    extraEntries = ''
-      menuentry "Firmware setup" {
-          fwsetup
-      }
-    '';
+    boot.loader.grub = {
+      enable = true;
+      useOSProber = true;
+      memtest86.enable = true;
+
+      device = "nodev";
+      efiSupport = true;
+      efiInstallAsRemovable = true;
+      extraEntries = ''
+        menuentry "Firmware setup" {
+            fwsetup
+        }
+      '';
+    };
   };
 }
