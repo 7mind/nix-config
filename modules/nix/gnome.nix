@@ -11,6 +11,7 @@
     QT_QPA_PLATFORM = "wayland";
   };
 
+  # see https://github.com/NixOS/nixpkgs/issues/372802
   programs.seahorse.enable = true;
 
   programs.ssh = {
