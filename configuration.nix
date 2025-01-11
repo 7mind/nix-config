@@ -54,5 +54,9 @@
     ssh.permissive = true;
 
     kernel.hack-rtl8125.enable = true;
+
+    hw.uhk-keyboard.enable = true;
+    hw.trezor.enable = true;
+    hw.ledger.enable = true;
   };
 }

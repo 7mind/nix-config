@@ -16,6 +16,7 @@
       firefox.enable = true;
       firefox.no-tabbar = true;
       dev.generic.enable = true;
+      dev.scala.enable = true;
       kitty.enable = true;
       vscodium.enable = true;
       wezterm.enable = true;

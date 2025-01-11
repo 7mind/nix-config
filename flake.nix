@@ -41,6 +41,7 @@
           ./modules/nix/grub.nix
           ./modules/nix/home-manager.nix
           ./modules/nix/kernel-settings.nix
+          ./modules/nix/ledger.nix
           ./modules/nix/locale-ie.nix
           ./modules/nix/nix-ld.nix
           ./modules/nix/nix.nix
@@ -50,6 +51,8 @@
           ./modules/nix/ssh-permissive.nix
           ./modules/nix/ssh-safe.nix
           ./modules/nix/sudo.nix
+          ./modules/nix/trezor.nix
+          ./modules/nix/uhk-keyboard.nix
           ./modules/nix/zfs-ssh-initrd.nix
           ./modules/nix/zfs.nix
           ./modules/nix/zsh.nix
@@ -64,6 +67,7 @@
               ./modules/hm/autostart.nix
               ./modules/hm/cleanups.nix
               ./modules/hm/dev-generic.nix
+              ./modules/hm/dev-scala.nix
               ./modules/hm/firefox-notabbar.nix
               ./modules/hm/firefox.nix
               ./modules/hm/htop.nix

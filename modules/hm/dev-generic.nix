@@ -25,6 +25,9 @@
     home.packages = with pkgs; [
       slack
       gitFull
+
+      websocat
+      jq
     ];
   };
 
