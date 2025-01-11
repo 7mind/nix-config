@@ -2,6 +2,12 @@
 
 {
   options = {
+    smind.isDesktop = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "";
+    };
+
     smind.roles.desktop.generic-gnome = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -11,6 +17,8 @@
 
   config = lib.mkIf config.smind.roles.desktop.generic-gnome {
     smind = {
+      isDesktop = true;
+
       environment.sane-defaults.enable = true;
       environment.linux.sane-defaults.enable = true;
       environment.alien-filesystems.enable = true;
@@ -29,8 +37,6 @@
       kernel.sane-defaults.enable = true;
       power-management.enable = true;
 
-
-
       grub.efi.enable = true;
       fonts.nerd.enable = true;
       fonts.apple.enable = true;
@@ -42,6 +48,8 @@
       keyboard.super-remap.enable = true;
 
       vm.virt-manager.enable = true;
+      net.enable = true;
+      net.desktop.enable = true;
     };
   };
 }

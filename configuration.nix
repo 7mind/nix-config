@@ -49,7 +49,8 @@
     host.email.sender = "${config.networking.hostName}@home.7mind.io";
 
     zfs.initrd-unlock.enable = true;
-    zfs.initrd-unlock.interface = "enp8s0";
+
+    net.main-interface = "enp8s0";
 
     ssh.permissive = true;
 
@@ -59,6 +60,29 @@
     hw.trezor.enable = true;
     hw.ledger.enable = true;
 
+    isDesktop = true;
     hw.cpu.isAmd = true;
   };
+
+  systemd.network = {
+    networks = {
+      "20-${config.smind.net.main-bridge}" = {
+        name = "${config.smind.net.main-bridge}";
+        DHCP = "yes";
+
+        dhcpV4Config = {
+          SendHostname = true;
+          Hostname = "${config.networking.hostName}.home.7mind.io";
+          UseDomains = true;
+        };
+
+        # routes = [{
+        #   Gateway = "192.168.10.1";
+        #   Destination = "0.0.0.0/0";
+        #   Metric = 500;
+        # }];
+      };
+    };
+  };
+
 }

@@ -38,9 +38,7 @@
             swtpm.enable = true;
           };
           allowedBridges = [
-            # TODO
-            # "br-infra"
-            # "br-untrusted"
+            config.smind.net.main-bridge
           ];
         };
 
