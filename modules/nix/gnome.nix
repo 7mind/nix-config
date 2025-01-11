@@ -4,12 +4,25 @@
 
     #QT_STYLE_OVERRIDE = "adwaita-dark";
     #QT_QPA_PLATFORMTHEME = "gnome"; # this breaks Telegram systray icon
-    QT_QPA_PLATFORMTHEME = "";
+    QT_QPA_PLATFORMTHEME = "qgnomeplatform";
 
     QT_AUTO_SCREEN_SCALE_FACTOR = "1";
     QT_ENABLE_HIGHDPI_SCALING = "1";
     QT_QPA_PLATFORM = "wayland";
   };
+
+  programs.seahorse.enable = true;
+
+  programs.ssh = {
+    startAgent = false;
+    enableAskPassword = true;
+    # ssh ignores SSH_ASKPASS if it detects a TTY, workaround:
+    # setsid ssh-add < /dev/null
+    #askPassword =
+    #  lib.mkForce "${pkgs.seahorse}/libexec/seahorse/#ssh-askpass";
+  };
+
+  security.polkit.enable = true;
 
   qt =
     {
@@ -38,12 +51,22 @@
   services.xserver.enable = true;
   services.xserver.displayManager.gdm.enable = true;
 
+  security.pam = {
+    services = {
+      login.enableGnomeKeyring = true;
+      sddm.enableGnomeKeyring = true;
+      lightdm.enableGnomeKeyring = true;
+      greetd.enableGnomeKeyring = true;
+      gdm.enableGnomeKeyring = true;
+    };
+  };
+
   environment.systemPackages = (with pkgs.gnomeExtensions; [
     appindicator
   ]) ++ (with pkgs; [
     dconf-editor
   ]);
-
+  services.accounts-daemon.enable = true; # ???
   services.gnome = {
     gnome-settings-daemon.enable = true;
     core-utilities.enable = true;
@@ -52,6 +75,8 @@
     core-developer-tools.enable = true;
     sushi.enable = true;
     gnome-remote-desktop.enable = true;
+    gnome-keyring.enable = true;
+
   };
 
   programs.gnome-terminal.enable = true;
