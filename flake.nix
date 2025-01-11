@@ -123,7 +123,6 @@
               home-manager.extraSpecialArgs = specialArgs;
             }
             ./configuration.nix
-            # cfgtools
           ] ++
           smind-nix-imports
           ;

@@ -58,6 +58,33 @@
         llmnr = "false";
       };
 
+      systemd.network = {
+        networks = {
+          "20-${config.smind.net.main-bridge}" = {
+            name = "${config.smind.net.main-bridge}";
+            DHCP = "yes";
+
+            dhcpV4Config = {
+              SendHostname = true;
+              Hostname = "${config.networking.hostName}.${config.networking.domain}";
+              UseDomains = true;
+            };
+
+            dhcpV6Config = {
+              SendHostname = false;
+              #Hostname = "${config.networking.hostName}-ipv6.${config.networking.domain}";
+              #UseDomains = true;
+            };
+
+            # routes = [{
+            #   Gateway = "192.168.10.1";
+            #   Destination = "0.0.0.0/0";
+            #   Metric = 500;
+            # }];
+          };
+        };
+      };
+
     })
 
     (lib.mkIf config.smind.net.desktop.enable {

@@ -8,6 +8,7 @@
 
   networking.hostId = "8a9c7614";
   networking.hostName = "pavel-am5";
+  networking.domain = "home.7mind.io";
 
   networking.networkmanager.enable = true;
   programs.virt-manager.enable = true;
@@ -63,26 +64,4 @@
     isDesktop = true;
     hw.cpu.isAmd = true;
   };
-
-  systemd.network = {
-    networks = {
-      "20-${config.smind.net.main-bridge}" = {
-        name = "${config.smind.net.main-bridge}";
-        DHCP = "yes";
-
-        dhcpV4Config = {
-          SendHostname = true;
-          Hostname = "${config.networking.hostName}.home.7mind.io";
-          UseDomains = true;
-        };
-
-        # routes = [{
-        #   Gateway = "192.168.10.1";
-        #   Destination = "0.0.0.0/0";
-        #   Metric = 500;
-        # }];
-      };
-    };
-  };
-
 }
