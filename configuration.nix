@@ -58,5 +58,7 @@
     hw.uhk-keyboard.enable = true;
     hw.trezor.enable = true;
     hw.ledger.enable = true;
+
+    vm.virt-manager.amd.enable = true;
   };
 }

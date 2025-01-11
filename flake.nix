@@ -59,6 +59,7 @@
           ./modules/nix/sudo.nix
           ./modules/nix/trezor.nix
           ./modules/nix/uhk-keyboard.nix
+          ./modules/nix/virt-manager.nix
           ./modules/nix/zfs-ssh-initrd.nix
           ./modules/nix/zfs.nix
           ./modules/nix/zsh.nix
