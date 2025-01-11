@@ -45,6 +45,7 @@
           ./modules/nix/grub.nix
           ./modules/nix/home-manager.nix
           ./modules/nix/kernel-settings.nix
+          ./modules/nix/keyd-super-remap.nix
           ./modules/nix/ledger.nix
           ./modules/nix/locale-ie.nix
           ./modules/nix/nix-ld.nix

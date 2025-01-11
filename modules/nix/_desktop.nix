@@ -39,7 +39,7 @@
       desktop.gnome.enable = true;
       desktop.gnome.minimal-hotkeys = true;
       home-manager.enable = true;
-
+      keyboard.super-remap.enable = true;
     };
   };
 }

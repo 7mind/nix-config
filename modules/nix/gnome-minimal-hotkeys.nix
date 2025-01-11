@@ -17,6 +17,16 @@
           lockAll = true; # prevents overriding
 
           settings = let empty = lib.gvariant.mkEmptyArray lib.gvariant.type.string; in {
+            # sclk mapped by keyd
+            "org/gnome/desktop/input-sources" = {
+              xkb-options = [
+                  "terminate:ctrl_alt_bksp"
+                  "grp:sclk_toggle"
+                  "lv3:ralt_switch"
+                  "eurosign:4"
+                ];
+            };
+
             "org/gnome/shell" = {
               disable-user-extensions = false;
               enabled-extensions = [
@@ -281,7 +291,8 @@
               switch-windows = empty; # app windows with overview
 
               close = [ "<Super>q" ];
-              switch-input-source = [ "<Primary><Alt><Super>space" ];
+              #switch-input-source = [ "<Primary><Alt><Super>space" ];
+              switch-input-source = empty;
               toggle-maximized = [ "<Primary><Alt>f" ];
             };
           };

@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+
+# set -x
+set -e
+
+declare -A known_hosts
+known_hosts["pavel-am5"]="linux pavel !"
+
+infrahosts=("nas" "vm" "o1" "o2")
+
+THISHOST="`hostname -s`"
+HOSTS=()
+DO_REFRESH=0
+DO_SWITCH=0
+DO_GIT=1
+MESSAGE=""
+
+function workdir() {
+    ORIGIN="$(cd "$(dirname "$0")" && pwd)"
+    pushd .
+    cd "$ORIGIN"
+}
+
+function variables() {
+    ROOTS=/nix/var/nix/gcroots/my-builds
+    if [ "$MESSAGE" == "" ]; then
+        MESSAGE="autosave ($(hostname) / $(uname))"
+    fi
+}
+
+function sethosts() {
+    hosts=("$@")
+
+    if [[ ${#hosts[@]} == 0 ]]; then
+        hosts=("$THISHOST")
+    fi
+
+    if [[ "${hosts[0]}" == "all" ]]; then
+        hosts=("$THISHOST")
+    fi
+}
+
+function refresh() {
+    if [[ $DO_REFRESH == "1" ]]; then
+        echo "Will update..."
+        nix flake update
+    else
+        echo "Using existing version"
+    fi
+}
+
+function rebuild() {
+    echo "Will build: ${hosts[*]}"
+    git add .
+
+    for HOST in "${hosts[@]}"; do
+        re="^([a-z0-9]+)[[:space:]]+([A-Za-z0-9]+)[[:space:]]+(.+)$"
+        host_data=${known_hosts["$HOST"]}
+        [[ "${host_data}" =~ $re ]] && HOST_PLATFORM="${BASH_REMATCH[1]}" && HOST_OWNER="${BASH_REMATCH[2]}"
+
+        case "${HOST_PLATFORM}" in
+        darwin)
+            set -x
+            nix build ".#darwinConfigurations.${HOST}.system" --out-link "${ROOTS}/${HOST}" --extra-experimental-features 'nix-command flakes'
+            set +x
+            ;;
+        linux)
+            mkdir -p "$ROOTS"
+            set -x
+            nix build ".#nixosConfigurations.${HOST}.config.system.build.toplevel" --out-link "${ROOTS}/${HOST}" --extra-experimental-features 'nix-command flakes'
+            set +x
+            ;;
+        esac
+    done
+
+    if [[ $DO_GIT == "1" ]]; then
+        if [[ $(git diff --stat) != '' || $(git diff --staged --stat) != '' ]]; then
+            git commit -am "${MESSAGE}"
+        fi
+    fi
+}
+
+function switch() {
+    if [[ $DO_SWITCH == "1" ]]; then
+        echo "Will switch: " "${hosts[@]}"
+        git add .
+
+        for HOST in "${hosts[@]}"; do
+            re="^([a-z0-9]+)[[:space:]]+([A-Za-z0-9]+)[[:space:]]+(.+)$"
+            host_data=${known_hosts["$HOST"]}
+            [[ "${host_data}" =~ $re ]] && HOST_PLATFORM="${BASH_REMATCH[1]}" && HOST_OWNER="${BASH_REMATCH[2]}" && HOST_FQN="${BASH_REMATCH[3]}"
+
+            if [[ "$HOST_FQN" == "!" ]]; then
+                HOST_FQN=$HOST
+            fi
+
+            case "${HOST_PLATFORM}" in
+            darwin)
+                CLOSURE=$(readlink -f "${ROOTS}/${HOST}")
+                set -x
+                if [[ "$THISHOST" == "$HOST" ]]; then
+                    "${CLOSURE}/sw/bin/darwin-rebuild" switch --flake .
+                else
+                    nix copy --to "ssh://${HOST_FQN}" "${ROOTS}/${HOST}" --extra-experimental-features 'nix-command flakes'
+                    # full disk access must be enabled for ssh users (same pref pane where you enable ssh)
+                    ssh -t "${HOST_FQN}" sudo -H --preserve-env=PATH env nix-env -p /nix/var/nix/profiles/system --set "$CLOSURE"
+                    ssh -t "${HOST_FQN}" "${CLOSURE}/sw/bin/darwin-rebuild" activate
+                fi
+                set +x
+                ;;
+            linux)
+                CLOSURE=$(readlink -f "${ROOTS}/${HOST}")
+                set -x
+                #nixos-rebuild --flake ".#${HOST}" --target-host "root@${HOST}" --option --out-link "./retain/${HOST}" --build-host localhost switch
+                if [[ "$THISHOST" == "$HOST" ]]; then
+                    sudo nix-env -p /nix/var/nix/profiles/system --set "$CLOSURE"
+                    sudo /nix/var/nix/profiles/system/bin/switch-to-configuration switch
+                else
+                    nix copy --to "ssh://${HOST_FQN}" "${ROOTS}/${HOST}" --extra-experimental-features 'nix-command flakes'
+                    ssh "root@$HOST_FQN" nix-env -p /nix/var/nix/profiles/system --set "$CLOSURE"
+                    ssh "root@$HOST_FQN" /nix/var/nix/profiles/system/bin/switch-to-configuration switch
+                fi
+                ;;
+            esac
+        done
+
+        if [[ $DO_GIT == "1" ]]; then
+            if [[ $(git diff --stat) != '' || $(git diff --staged --stat) != '' ]]; then
+                git commit -am "${MESSAGE}"
+            fi
+            git push
+        fi
+    fi
+}
+
+for i in "$@"; do
+    case $i in
+    -r | --refresh)
+        DO_REFRESH=1
+        ;;
+    -s | --switch)
+        DO_SWITCH=1
+        ;;
+    -ng | --no-git)
+        DO_GIT=0
+        ;;
+    -m=*)
+        MESSAGE="${i#*=}"
+        ;;
+    *)
+        HOSTS+=("$i")
+        ;;
+    esac
+    shift
+done
+
+variables
+sethosts "${HOSTS[@]}"
+workdir
+refresh
+rebuild
+switch
+popd
