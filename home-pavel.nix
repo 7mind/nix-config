@@ -5,6 +5,7 @@
 
   smind.hm = {
     roles.desktop = true;
+    firefox.sync-username = "pshirshov@gmail.com";
     autostart.programs = with pkgs; [
       {
         name = "element";

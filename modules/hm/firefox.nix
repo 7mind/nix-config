@@ -7,6 +7,11 @@
       default = false;
       description = "";
     };
+    smind.hm.firefox.sync-username = lib.mkOption {
+      type = lib.types.str;
+      default = "";
+      description = "";
+    };
   };
 
   config = lib.mkIf config.smind.hm.firefox.enable {
@@ -17,6 +22,8 @@
           name = "main";
           isDefault = true;
           settings = {
+            "services.sync.username" = lib.mkIf (config.smind.hm.firefox.sync-username != "") config.smind.hm.firefox.sync-username;
+
             "browser.startup.homepage" = "about:home";
             "browser.startup.page" = 3; # Restore previous session
 
