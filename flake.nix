@@ -33,6 +33,10 @@
 
         smind-nix-imports = [
           ./modules/nix/_desktop.nix
+          ./modules/nix/alien-filesystems.nix
+          ./modules/nix/email.nix
+          ./modules/nix/cups.nix
+          ./modules/nix/env-settings-linux.nix
           ./modules/nix/env-settings.nix
           ./modules/nix/fonts-apple.nix
           ./modules/nix/fonts-nerd.nix
@@ -48,6 +52,7 @@
           ./modules/nix/power.nix
           ./modules/nix/realtek-kernel-hack.nix
           ./modules/nix/router.nix
+          ./modules/nix/smartd.nix
           ./modules/nix/ssh-permissive.nix
           ./modules/nix/ssh-safe.nix
           ./modules/nix/sudo.nix

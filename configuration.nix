@@ -45,8 +45,8 @@
     security.sudo.wheel-passwordless = true;
 
     zfs.email.enable = false;
-    zfs.email.to = "team@7mind.io";
-    zfs.email.sender = "zed-vm@home.7mind.io";
+    host.email.to = "team@7mind.io";
+    host.email.sender = "${config.networking.hostName}@home.7mind.io";
 
     zfs.initrd-unlock.enable = true;
     zfs.initrd-unlock.interface = "enp8s0";

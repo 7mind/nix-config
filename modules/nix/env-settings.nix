@@ -10,45 +10,78 @@
   };
 
   config = lib.mkIf config.smind.environment.sane-defaults.enable {
-    boot = {
-      tmp.useTmpfs = true;
-      tmp.cleanOnBoot = true;
-    };
-
-    security.pam = {
-      loginLimits = [
-        {
-          domain = "*";
-          item = "nofile";
-          type = "hard";
-          value = "524288";
-        }
-        {
-          domain = "*";
-          item = "nofile";
-          type = "soft";
-          value = "524288";
-        }
-      ];
-    };
-
-    environment = {
-      enableDebugInfo = true;
-    };
-    
     environment.systemPackages = with pkgs; [
+
+      # file managers
+      far2l
       mc
+      nnn
+
+      # editors
       nano
 
-      gptfdisk
-      parted
-      nvme-cli
-      efibootmgr
+      # networking
+      wget
+      curl
+      rsync
+      ipcalc
+      nmap
+      bind.dnsutils
+      tcpdump
+      whois
+      wakelan
+      miniupnpc
+      ookla-speedtest
+      iperf
+      wireguard-tools
+      rsync
 
-      kitty.terminfo
-      nixpkgs-fmt
+      # disk tools
+      file
+      ncdu
+      du-dust
+      tree
+      lsd
+      rename
+      ripgrep
+      fd # TODO:
 
-      nix-ld-rs
+      # monitoring
+      htop
+      bandwhich
+
+      # terminal
+      tmux
+      zellij
+      lsix # show thumbnails in the terminal
+      spacer
+      viddy
+      tealdeer
+
+      # arc
+      unar
+      zip
+      unzip
+      p7zip
+
+      # system tools
+      killall
+      coreutils
+
+      # pipe tools
+      pv
+      gnused
+      sd # TODO
+      mdcat
+      bat
+
+      # security
+      age
+      gnupg
+
+      # benchmark
+      stress
+      hyperfine
     ];
   };
 }

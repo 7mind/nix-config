@@ -13,16 +13,6 @@
       default = false;
       description = "Enable ZFS mailer";
     };
-
-    smind.zfs.email.to = lib.mkOption {
-      type = lib.types.str;
-      description = "ZFS mailer email recepient";
-    };
-
-    smind.zfs.email.sender = lib.mkOption {
-      type = lib.types.str;
-      description = "ZFS mailer email sender";
-    };
   };
 
   config = lib.mkIf config.smind.zfs.enable {
@@ -57,9 +47,9 @@
     services.zfs.zed.enableMail = false;
     services.zfs.zed.settings = lib.mkIf config.smind.zfs.email.enable {
       ZED_DEBUG_LOG = "/tmp/zed.debug.log";
-      ZED_EMAIL_ADDR = [ config.smind.zfs.email.to ];
+      ZED_EMAIL_ADDR = [ config.smind.host.email.to ];
       ZED_EMAIL_PROG = "${pkgs.msmtp}/bin/msmtp";
-      ZED_EMAIL_OPTS = "-s @SUBJECT@ -r ${config.smind.zfs.email.sender} @ADDRESS@";
+      ZED_EMAIL_OPTS = "-s @SUBJECT@ -r ${config.smind.host.email.sender} @ADDRESS@";
 
       ZED_NOTIFY_INTERVAL_SECS = 1;
       ZED_NOTIFY_VERBOSE = true;

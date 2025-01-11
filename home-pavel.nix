@@ -37,9 +37,6 @@
 
     vlc
     telegram-desktop
-
-    pstree
-    pciutils
   ];
 
 }

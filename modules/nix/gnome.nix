@@ -60,6 +60,9 @@
       # '';
     };
 
+
+    services.gvfs.enable = true;
+    
     services.udev.packages = [ pkgs.gnome-settings-daemon ];
 
     services.xserver.enable = true;
