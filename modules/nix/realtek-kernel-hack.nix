@@ -10,7 +10,7 @@
   };
 
   config = lib.mkIf config.smind.kernel.hack-rtl8125.enable {
-    boot.kernelPackages = pkgs.linuxKernel.packages.linux_6_12;
+    boot.kernelPackages = lib.mkForce pkgs.linuxKernel.packages.linux_6_12;
 
     boot.kernelPatches = [
       {

@@ -10,7 +10,7 @@
 
     smind.vm.virt-manager.amd.enable = lib.mkOption {
       type = lib.types.bool;
-      default = false;
+      default = config.smind.vm.virt-manager.enable && config.smind.hw.cpu.isAmd;
       description = "";
     };
   };

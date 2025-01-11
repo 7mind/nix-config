@@ -11,6 +11,8 @@
 
   config = lib.mkIf config.smind.kernel.sane-defaults.enable {
     boot = {
+      kernelPackages = pkgs.linuxKernel.packageAliases.linux_latest;
+
       kernel.sysctl = {
         "kernel.sysrq" = 1;
         "net.core.somaxconn" = 65536;

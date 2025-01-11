@@ -59,6 +59,6 @@
     hw.trezor.enable = true;
     hw.ledger.enable = true;
 
-    vm.virt-manager.amd.enable = true;
+    hw.cpu.isAmd = true;
   };
 }

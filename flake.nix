@@ -34,6 +34,7 @@
         smind-nix-imports = [
           ./modules/nix/_desktop.nix
           ./modules/nix/alien-filesystems.nix
+          ./modules/nix/cpu.nix
           ./modules/nix/email.nix
           ./modules/nix/cups.nix
           ./modules/nix/env-settings-linux.nix
