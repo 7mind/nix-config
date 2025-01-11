@@ -10,7 +10,6 @@
   };
 
   config = lib.mkIf config.smind.grub.efi.enable {
-    assertions = [ ];
     boot.loader.efi = {
       canTouchEfiVariables = false;
     };

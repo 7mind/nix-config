@@ -10,7 +10,6 @@
   };
 
   config = lib.mkIf config.smind.power-management.enable {
-    assertions = [ ];
     boot = {
       # TODO: we need to verify if that's completely safe or not
       extraModprobeConfig = ''

@@ -1,219 +1,234 @@
-{ pkgs, config, cfgnix, cfgmeta, ... }: {
-  home.packages = with pkgs; [
-  ];
+{ config, lib, pkgs, cfgnix, cfgmeta, ... }:
 
-  # sometimes vscodium borks extensions.json so it's better to make sure there is nothing before deployment
-  home.activation.vscode-extensions-cleanup = config.lib.dag.entryBefore [ "writeBoundary" ] ''
-    echo >&2 "Removing vscodium extensions directory..."
-    rm -rf "${config.home.homeDirectory}/.vscode-oss" # we generate extensions
-  '';
+{
+  options = {
+    smind.hm.vscodium.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "";
+    };
+  };
 
-  programs.vscode = {
-    enable = true;
-    package = pkgs.vscodium;
-    extensions = with pkgs.vscode-extensions; [
-      github.github-vscode-theme
+  config = lib.mkIf config.smind.hm.vscodium.enable {
+    home.packages = with pkgs; [
+    ];
 
-      codezombiech.gitignore
+    # sometimes vscodium borks extensions.json so it's better to make sure there is nothing before deployment
+    home.activation.vscode-extensions-cleanup = config.lib.dag.entryBefore [ "writeBoundary" ] ''
+      echo >&2 "Removing vscodium extensions directory..."
+      rm -rf "${config.home.homeDirectory}/.vscode-oss" # we generate extensions
+    '';
 
-      mhutchie.git-graph
-      donjayamanne.githistory
-      eamodio.gitlens
+    programs.vscode = {
+      enable = true;
+      package = pkgs.vscodium;
+      extensions = with pkgs.vscode-extensions; [
+        github.github-vscode-theme
 
-      scalameta.metals
-      scala-lang.scala
+        codezombiech.gitignore
 
-      jnoortheen.nix-ide
-      mkhl.direnv
-      # arrterian.nix-env-selector # legacy nix envs
+        mhutchie.git-graph
+        donjayamanne.githistory
+        eamodio.gitlens
 
-      mads-hartmann.bash-ide-vscode
+        scalameta.metals
+        scala-lang.scala
 
-      dbaeumer.vscode-eslint
+        jnoortheen.nix-ide
+        mkhl.direnv
+        # arrterian.nix-env-selector # legacy nix envs
 
-      # dart-code.dart-code
-      # dart-code.flutter
+        mads-hartmann.bash-ide-vscode
 
-      #ms-vscode.powershell
-      ms-vscode.hexeditor
+        dbaeumer.vscode-eslint
 
-      ms-azuretools.vscode-docker
-      ms-python.python
+        # dart-code.dart-code
+        # dart-code.flutter
 
-      # ms-vscode.anycode # real extensions are not nixified
+        #ms-vscode.powershell
+        ms-vscode.hexeditor
 
-      ms-vscode.cmake-tools
-      ms-vscode.makefile-tools
-      twxs.cmake
+        ms-azuretools.vscode-docker
+        ms-python.python
 
-      # https://github.com/VSCodium/vscodium/blob/master/docs/index.md#proprietary-extensions
-      # ms-vscode-remote.remote-wsl
-      # ms-vscode-remote.remote-ssh
+        # ms-vscode.anycode # real extensions are not nixified
 
-      ms-dotnettools.csharp
-      ms-dotnettools.csdevkit
-      ms-dotnettools.vscode-dotnet-runtime
+        ms-vscode.cmake-tools
+        ms-vscode.makefile-tools
+        twxs.cmake
 
-      redhat.vscode-xml
-      redhat.vscode-yaml
-      redhat.java
+        # https://github.com/VSCodium/vscodium/blob/master/docs/index.md#proprietary-extensions
+        # ms-vscode-remote.remote-wsl
+        # ms-vscode-remote.remote-ssh
 
-      # vscjava.vscode-java-pack
-      # missing: anycode*,
-    ] ++ pkgs.vscode-utils.extensionsFromVscodeMarketplace [
-      {
-        name = "baboon-vscode";
-        publisher = "SeptimalMind";
-        version = "0.0.7";
-        sha256 = "sha256-ilRSjlYdfMGkDS6ROWxQZvhDXjm9BWM9qAm1i+oaRrc=";
-      }
-      {
-        name = "idealingua1";
-        publisher = "SeptimalMind";
-        version = "0.0.5";
-        sha256 = "sha256-9vxtMNTf7VCGwesjGD6oxxsKZzqCBRPRjBXRkA3U/SA=";
-      }
-    ] ++ (if cfgmeta.isDarwin then [ ] else [
-      ms-vscode.cpptools
-    ]);
-    userSettings = {
-      "window.titleBarStyle" = "native";
-      "workbench.startupEditor" = "newUntitledFile";
-      "editor.fontSize" = 14;
-      "editor.fontFamily" =
-        "'FiraMono Nerd Font', 'Fira Code Nerd Font Mono', 'Fira Code', monospace";
-      "terminal.integrated.fontFamily" =
-        "'Hack Nerd Font Mono', 'FiraMono Nerd Font', monospace";
-      "editor.fontLigatures" = true;
-      "editor.dragAndDrop" = false;
-      "editor.wordWrap" = "on";
-      "editor.renderWhitespace" = "trailing";
-      "editor.find.autoFindInSelection" = "multiline";
+        ms-dotnettools.csharp
+        ms-dotnettools.csdevkit
+        ms-dotnettools.vscode-dotnet-runtime
 
-      "files.autoSave" = "afterDelay";
-      "files.autoSaveDelay" = 500;
-      "files.exclude" = {
-        "/.git" = true;
-        "/.svn" = true;
-        "/.hg" = true;
-        "/CVS" = true;
-        "/.DS_Store" = true;
-        "/.history" = true;
-        "/.github" = true;
-        "/.vscode" = true;
-        "*.aux" = true;
-        "*.nav" = true;
-        "*.out" = true;
-        "*.snm" = true;
-        "*.toc" = true;
-        "**/node_modules" = false;
-      };
-      "files.insertFinalNewline" = true;
-      "files.trimTrailingWhitespace" = true;
-      "terminal.integrated.fontSize" = 14;
-      "editor.multiCursorModifier" = "ctrlCmd";
+        redhat.vscode-xml
+        redhat.vscode-yaml
+        redhat.java
 
-      "git.autofetch" = true;
+        # vscjava.vscode-java-pack
+        # missing: anycode*,
+      ] ++ pkgs.vscode-utils.extensionsFromVscodeMarketplace [
+        {
+          name = "baboon-vscode";
+          publisher = "SeptimalMind";
+          version = "0.0.7";
+          sha256 = "sha256-ilRSjlYdfMGkDS6ROWxQZvhDXjm9BWM9qAm1i+oaRrc=";
+        }
+        {
+          name = "idealingua1";
+          publisher = "SeptimalMind";
+          version = "0.0.5";
+          sha256 = "sha256-9vxtMNTf7VCGwesjGD6oxxsKZzqCBRPRjBXRkA3U/SA=";
+        }
+      ] ++ (if cfgmeta.isDarwin then [ ] else [
+        ms-vscode.cpptools
+      ]);
 
-      "window.restoreWindows" = "all";
-      "window.menuBarVisibility" = "visible";
-      "window.newWindowDimensions" = "offset";
-      "window.enableMenuBarMnemonics" = false;
-      "window.openFoldersInNewWindow" = "on";
+      userSettings = {
+        "window.titleBarStyle" = "native";
+        "workbench.startupEditor" = "newUntitledFile";
+        "editor.fontSize" = 14;
+        "editor.fontFamily" =
+          "'FiraMono Nerd Font', 'Fira Code Nerd Font Mono', 'Fira Code', monospace";
+        "terminal.integrated.fontFamily" =
+          "'Hack Nerd Font Mono', 'FiraMono Nerd Font', monospace";
+        "editor.fontLigatures" = true;
+        "editor.dragAndDrop" = false;
+        "editor.wordWrap" = "on";
+        "editor.renderWhitespace" = "trailing";
+        "editor.find.autoFindInSelection" = "multiline";
 
-      "workbench.colorCustomizations" = {
-        "sideBar.background" = "#3c3f41";
-        "editor.background" = "#293134";
-        "editorGutter.background" = "#3f4b4e";
-        "contrastBorder" = "#323232";
-      };
-      "workbench.colorTheme" = "GitHub Dark Dimmed";
-
-      "workbench.settings.editor" = "json";
-      "workbench.tree.indent" = 16;
-      "workbench.editor.highlightModifiedTabs" = true;
-      "workbench.settings.openDefaultSettings" = true;
-      "workbench.iconTheme" = "vs-seti";
-      "workbench.tree.enableStickyScroll" = false;
-      "workbench.reduceMotion" = "on";
-
-      "editor.cursorSmoothCaretAnimation" = "off";
-      "editor.smoothScrolling" = true;
-      "editor.matchBrackets" = "never";
-      "editor.bracketPairColorization.enabled" = true;
-      "editor.guides.bracketPairs" = "active";
-      "editor.formatOnSave" = true;
-      "editor.formatOnPaste" = false;
-      "editor.stickyScroll.enabled" = false;
-
-      "files.watcherExclude" = {
-        "**/.git" = true;
-        "**/.bloop" = true;
-        "**/.metals" = true;
-        "**/.ammonite" = true;
-        "**/target" = true;
-      };
-
-      "editor.inlineSuggest.enabled" = true;
-      "security.workspace.trust.banner" = "always";
-      "telemetry.enableTelemetry" = false;
-      "telemetry.enableCrashReporter" = false;
-      "security.workspace.trust.untrustedFiles" = "open";
-
-      "docker.showStartPage" = false;
-
-
-
-      # nix
-      "nix.enableLanguageServer" = true;
-      "nix.formatterPath" = "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt";
-      "nix.serverPath" = "${pkgs.nil}/bin/nil";
-      "nix.serverSettings" = {
-        "nil" = {
-          "formatting" = { "command" = [ "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt" ]; };
-          "nix" = { "flake" = { autoArchive = true; autoEvalInputs = true; }; };
+        "files.autoSave" = "afterDelay";
+        "files.autoSaveDelay" = 500;
+        "files.exclude" = {
+          "/.git" = true;
+          "/.svn" = true;
+          "/.hg" = true;
+          "/CVS" = true;
+          "/.DS_Store" = true;
+          "/.history" = true;
+          "/.github" = true;
+          "/.vscode" = true;
+          "*.aux" = true;
+          "*.nav" = true;
+          "*.out" = true;
+          "*.snm" = true;
+          "*.toc" = true;
+          "**/node_modules" = false;
         };
-        "nixd" = {
-          "eval" = { };
-          "formatting" = {
-            "command" = "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt";
+        "files.insertFinalNewline" = true;
+        "files.trimTrailingWhitespace" = true;
+        "terminal.integrated.fontSize" = 14;
+        "editor.multiCursorModifier" = "ctrlCmd";
+
+        "git.autofetch" = true;
+
+        "window.restoreWindows" = "all";
+        "window.menuBarVisibility" = "visible";
+        "window.newWindowDimensions" = "offset";
+        "window.enableMenuBarMnemonics" = false;
+        "window.openFoldersInNewWindow" = "on";
+
+        "workbench.colorCustomizations" = {
+          "sideBar.background" = "#3c3f41";
+          "editor.background" = "#293134";
+          "editorGutter.background" = "#3f4b4e";
+          "contrastBorder" = "#323232";
+        };
+        "workbench.colorTheme" = "GitHub Dark Dimmed";
+
+        "workbench.settings.editor" = "json";
+        "workbench.tree.indent" = 16;
+        "workbench.editor.highlightModifiedTabs" = true;
+        "workbench.settings.openDefaultSettings" = true;
+        "workbench.iconTheme" = "vs-seti";
+        "workbench.tree.enableStickyScroll" = false;
+        "workbench.reduceMotion" = "on";
+
+        "editor.cursorSmoothCaretAnimation" = "off";
+        "editor.smoothScrolling" = true;
+        "editor.matchBrackets" = "never";
+        "editor.bracketPairColorization.enabled" = true;
+        "editor.guides.bracketPairs" = "active";
+        "editor.formatOnSave" = true;
+        "editor.formatOnPaste" = false;
+        "editor.stickyScroll.enabled" = false;
+
+        "files.watcherExclude" = {
+          "**/.git" = true;
+          "**/.bloop" = true;
+          "**/.metals" = true;
+          "**/.ammonite" = true;
+          "**/target" = true;
+        };
+
+        "editor.inlineSuggest.enabled" = true;
+        "security.workspace.trust.banner" = "always";
+        "telemetry.enableTelemetry" = false;
+        "telemetry.enableCrashReporter" = false;
+        "security.workspace.trust.untrustedFiles" = "open";
+
+        "docker.showStartPage" = false;
+
+
+
+        # nix
+        "nix.enableLanguageServer" = true;
+        "nix.formatterPath" = "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt";
+        "nix.serverPath" = "${pkgs.nil}/bin/nil";
+        "nix.serverSettings" = {
+          "nil" = {
+            "formatting" = { "command" = [ "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt" ]; };
+            "nix" = { "flake" = { autoArchive = true; autoEvalInputs = true; }; };
           };
-          "options" = {
-            "enable" = true;
-            "target" = {
-              "args" = [ ];
-              "installable" = "<flakeref>#nixosConfigurations.<name>.options";
+          "nixd" = {
+            "eval" = { };
+            "formatting" = {
+              "command" = "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt";
+            };
+            "options" = {
+              "enable" = true;
+              "target" = {
+                "args" = [ ];
+                "installable" = "<flakeref>#nixosConfigurations.<name>.options";
+              };
             };
           };
         };
+        "[nix]" = { };
+
+        # scala
+        "metals.enableIndentOnPaste" = true;
+        "metals.enableSemanticHighlighting" = true;
+        "metals.enableStripMarginOnTypeFormatting" = true;
+        "metals.showInferredType" = true;
+        "metals.showImplicitConversionsAndClasses" = false;
+        "metals.showImplicitArguments" = false;
+        "metals.javaHome" = "${pkgs.graalvm-ce}";
+        "metals.serverVersion" = "${pkgs.metals.version}";
+
+        "update.mode" = "none";
+
+        "makefile.configureOnOpen" = true;
+
+        "java.configuration.runtimes" = let graal-legacy = cfgnix.pkgs7mind.graalvm-legacy-packages; in [
+          {
+            "name" = "Main JDK";
+            "path" = "${cfgmeta.jdk-main}";
+            default = true;
+          }
+          {
+            "name" = "GraalVM 19 CE+JS";
+            "path" = "${graal-legacy.graalvm19-ce-js.out}";
+          }
+        ];
       };
-      "[nix]" = { };
-
-      # scala
-      "metals.enableIndentOnPaste" = true;
-      "metals.enableSemanticHighlighting" = true;
-      "metals.enableStripMarginOnTypeFormatting" = true;
-      "metals.showInferredType" = true;
-      "metals.showImplicitConversionsAndClasses" = false;
-      "metals.showImplicitArguments" = false;
-      "metals.javaHome" = "${pkgs.graalvm-ce}";
-      "metals.serverVersion" = "${pkgs.metals.version}";
-
-      "update.mode" = "none";
-
-      "makefile.configureOnOpen" = true;
-
-      "java.configuration.runtimes" = let graal-legacy = cfgnix.pkgs7mind.graalvm-legacy-packages; in [
-        {
-          "name" = "Main JDK";
-          "path" = "${cfgmeta.jdk-main}";
-          default = true;
-        }
-        {
-          "name" = "GraalVM 19 CE+JS";
-          "path" = "${graal-legacy.graalvm19-ce-js.out}";
-        }
-      ];
     };
+
   };
 }
+

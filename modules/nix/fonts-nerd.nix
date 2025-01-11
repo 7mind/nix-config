@@ -10,8 +10,6 @@
   };
 
   config = lib.mkIf config.smind.fonts.nerd.enable {
-    assertions = [ ];
-
     fonts = {
       # optimizeForVeryHighDPI = true;
       fontconfig = {

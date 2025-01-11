@@ -6,26 +6,11 @@
       ./hardware-configuration.nix
     ];
 
-  programs.nix-ld = {
-    enable = true;
-    package = pkgs.nix-ld-rs;
-    libraries = with pkgs; [ ];
-  };
-
-  system.stateVersion = "25.05";
-
-  #environment.variables = {COSMIC_DISABLE_DIRECT_SCANOUT = "1";};
-  #{
-  #            nix.settings = {
-  #              substituters = [ "https://cosmic.cachix.org/" ];
-  #              trusted-public-keys = [ "cosmic.cachix.org-1:Dya9IyXD4xdBehWjrkPv6rtxpmMdRel02smYzA85dPE=" ];
-  #            };
-  #                          services.desktopManager.cosmic.enable = true;
-  #            services.displayManager.cosmic-greeter.enable = true;
-  #          }
-
   networking.hostId = "8a9c7614";
   networking.hostName = "pavel-am5";
+
+  networking.networkmanager.enable = true;
+  programs.virt-manager.enable = true;
 
   boot.initrd = {
     network = {
@@ -35,8 +20,6 @@
       };
     };
   };
-
-  networking.networkmanager.enable = true;
 
   users = {
     users.root.password = "nixos";
@@ -49,28 +32,11 @@
     };
   };
 
-  environment.systemPackages = with pkgs; [
-    mc
-    nano
-
-    gptfdisk
-    parted
-    nvme-cli
-    efibootmgr
-
-    kitty.terminfo
-    nixpkgs-fmt
-
-    nix-ld-rs
-  ];
-
-  programs.virt-manager.enable = true;
-
-  home-manager.useGlobalPkgs = true;
-  home-manager.useUserPackages = true;
-
   home-manager.users.pavel = import ./home-pavel.nix;
   home-manager.users.root = import ./home-root.nix;
+
+  environment.systemPackages = with pkgs; [
+  ];
 
   smind = {
     roles.desktop.generic-gnome = true;

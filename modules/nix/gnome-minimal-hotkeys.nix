@@ -210,7 +210,7 @@
               maximize = empty;
               maximize-horizontally = empty;
               maximize-vertically = empty;
-              minimize = empty;
+              minimize = [ "<Primary><Alt>m" ];
               move-to-center = empty;
               move-to-corner-ne = empty;
               move-to-corner-nw = empty;

@@ -1,4 +1,4 @@
-{ config, lib, ... }:
+{ config, lib, pkgs, ... }:
 
 {
   options = {
@@ -10,8 +10,6 @@
   };
 
   config = lib.mkIf config.smind.environment.sane-defaults.enable {
-    assertions = [ ];
-
     boot = {
       tmp.useTmpfs = true;
       tmp.cleanOnBoot = true;
@@ -37,6 +35,20 @@
     environment = {
       enableDebugInfo = true;
     };
+    
+    environment.systemPackages = with pkgs; [
+      mc
+      nano
 
+      gptfdisk
+      parted
+      nvme-cli
+      efibootmgr
+
+      kitty.terminfo
+      nixpkgs-fmt
+
+      nix-ld-rs
+    ];
   };
 }

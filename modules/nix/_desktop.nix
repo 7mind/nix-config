@@ -10,8 +10,6 @@
   };
 
   config = lib.mkIf config.smind.roles.desktop.generic-gnome {
-    assertions = [ ];
-
     smind = {
       zram-swap = true;
       zsh.enable = true;
@@ -29,8 +27,10 @@
       fonts.nerd.enable = true;
       fonts.apple.enable = true;
 
+      nix-ld.enable = true;
       desktop.gnome.enable = true;
       desktop.gnome.minimal-hotkeys = true;
+      home-manager.enable = true;
     };
   };
 }

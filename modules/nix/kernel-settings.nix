@@ -10,8 +10,6 @@
   };
 
   config = lib.mkIf config.smind.kernel.sane-defaults.enable {
-    assertions = [ ];
-
     boot = {
       kernel.sysctl = {
         "kernel.sysrq" = 1;

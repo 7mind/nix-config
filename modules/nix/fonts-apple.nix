@@ -10,7 +10,6 @@
   };
 
   config = lib.mkIf config.smind.fonts.apple.enable {
-    assertions = [ ];
     nixpkgs.overlays = [
       (self: super: {
         menlo = pkgs.callPackage "${cfgmeta.paths.pkg}/menlo/menlo.nix" { };

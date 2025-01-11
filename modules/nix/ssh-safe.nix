@@ -10,6 +10,5 @@
   };
 
   config = lib.mkIf config.smind.ssh.safe {
-    assertions = [ ];
   };
 }
