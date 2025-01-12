@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, cfgmeta, ... }:
 
 {
   imports =
@@ -11,7 +11,6 @@
   networking.domain = "home.7mind.io";
 
   networking.networkmanager.enable = true;
-  programs.virt-manager.enable = true;
 
   boot.initrd = {
     network = {
@@ -28,7 +27,27 @@
     users.pavel = {
       isNormalUser = true;
       home = "/home/pavel";
-      extraGroups = [ "wheel" "libvirtd" "plugdev" "disk" ];
+      extraGroups = [
+        "wheel"
+        "audio"
+        "video"
+        "render"
+        "cdrom"
+        "disk"
+        "networkmanager"
+        "plugdev"
+        "input"
+        "libvirtd"
+        "qemu"
+        "qemu-libvirtd"
+        "kvm"
+        "uinput"
+        # "adbusers"
+        # "docker"
+        # "corectrl"
+        # "wireshark"
+        # "ssh-users"
+      ];
       openssh.authorizedKeys.keys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKA1LYgjfuWSxa1lZRCebvo3ghtSAtEQieGlVCknF8f pshirshov@7mind.io" ];
     };
   };
@@ -37,7 +56,14 @@
   home-manager.users.root = import ./home-root.nix;
 
   environment.systemPackages = with pkgs; [
+    gnome-boxes
   ];
+
+  nixpkgs.overlays = [
+    (self: super: {
+    })
+  ];
+
 
   smind = {
     roles.desktop.generic-gnome = true;

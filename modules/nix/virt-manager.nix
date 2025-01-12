@@ -18,32 +18,54 @@
   config = {
     assertions = [ ];
 
-    virtualisation = lib.mkIf config.smind.vm.virt-manager.enable (
-      let
-        ovmf = (pkgs.OVMF.override {
-          secureBoot = true;
-          # csmSupport = false;
-          httpSupport = true;
-          tpmSupport = true;
-        }).fd;
-      in
-      {
-        spiceUSBRedirection.enable = true;
+    programs = lib.mkIf config.smind.vm.virt-manager.enable {
+      virt-manager.enable = true;
+    };
 
-        libvirtd = {
-          enable = true;
-          onBoot = "ignore";
-          qemu = {
-            ovmf.packages = [ ovmf ];
-            swtpm.enable = true;
+    virtualisation = lib.mkIf config.smind.vm.virt-manager.enable
+      (
+        let
+          ovmf = (pkgs.OVMF.override {
+            secureBoot = true;
+            # csmSupport = false;
+            httpSupport = true;
+            tpmSupport = true;
+          }).fd;
+        in
+        {
+          spiceUSBRedirection.enable = true;
+
+          libvirtd = {
+            enable = true;
+            onBoot = "ignore";
+            qemu = {
+              runAsRoot = true;
+              ovmf.packages = [ ovmf ];
+              swtpm.enable = true;
+            };
+            allowedBridges = [
+              config.smind.net.main-bridge
+            ];
           };
-          allowedBridges = [
-            config.smind.net.main-bridge
-          ];
-        };
-
-      }
-    );
+        }
+        # {
+        #   enable = true;
+        #   qemu = {
+        #     package = pkgs.qemu_kvm;
+        #     runAsRoot = true;
+        #     swtpm.enable = true;
+        #     ovmf = {
+        #       enable = true;
+        #       packages = [
+        #         (pkgs.OVMF.override {
+        #           secureBoot = true;
+        #           tpmSupport = true;
+        #         }).fd
+        #       ];
+        #     };
+        #   };
+        # }
+      );
 
     boot = lib.mkIf config.smind.vm.virt-manager.amd.enable {
       kernelParams = [

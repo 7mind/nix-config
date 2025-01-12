@@ -28,7 +28,7 @@
 
         paths = {
           root = "${self}";
-          pkg = "${self}/pkgs";
+          pkg = "${self}/pkg";
         };
 
         smind-nix-imports = [
@@ -52,6 +52,7 @@
           ./modules/nix/networking.nix
           ./modules/nix/nix-ld.nix
           ./modules/nix/nix.nix
+          ./modules/nix/overlay.nix
           ./modules/nix/power.nix
           ./modules/nix/realtek-kernel-hack.nix
           ./modules/nix/router.nix

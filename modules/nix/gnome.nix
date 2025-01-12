@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, cfgmeta, ... }:
 
 {
   options = {
@@ -60,9 +60,12 @@
       # '';
     };
 
+    xdg.portal.enable = true;
+    xdg.portal.xdgOpenUsePortal = true;
+    # xdg.portal.configPackages = [ pkgs.gnome-session ];
 
     services.gvfs.enable = true;
-    
+
     services.udev.packages = [ pkgs.gnome-settings-daemon ];
 
     services.xserver.enable = true;
@@ -80,6 +83,7 @@
 
     environment.systemPackages = (with pkgs.gnomeExtensions; [
       appindicator
+      # tray-icons-reloaded
     ]) ++ (with pkgs; [
       dconf-editor
       seahorse

@@ -1,0 +1,14 @@
+Source: gnome-shell-extension-quiet-shortcuts
+Section: gnome
+Priority: extra
+Maintainer: Debian GNOME Maintainers <pkg-gnome-maintainers@lists.alioth.debian.org>
+Build-Depends: debhelper (>= 9)
+Standards-Version: 3.9.6
+Homepage: https://gitlab.gnome.org/ofourdan/quiet-shortcuts-gnome-shell-extension
+
+Package: gnome-shell-extension-quiet-shortcuts
+Architecture: all
+Depends: ${misc:Depends}, gnome-shell (>= 3.30)
+Recommends: gnome-tweaks
+Description: Disable the shortcut inhibitor dialog.
+  Disable the shortcut inhibitor dialog.

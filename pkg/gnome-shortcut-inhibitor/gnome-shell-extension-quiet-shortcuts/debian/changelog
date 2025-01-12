@@ -1,0 +1,11 @@
+gnome-shell-extension-quiet-shortcuts (2) lernstick-13; urgency=medium
+
+  * prepare for trixie
+
+ -- Thore Sommer <mail@thson.de>  Fri, 02 Aug 2024 10:00:00 +0300
+
+gnome-shell-extension-quiet-shortcuts (1) lernstick-12; urgency=medium
+
+  * Initial release
+
+ -- Thore Sommer <mail@thson.de>  Tue, 12 Sep 2023 14:38:49 +0300

@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, cfgmeta, ... }:
 
 {
   options = {
@@ -10,6 +10,11 @@
   };
 
   config = lib.mkIf config.smind.desktop.gnome.minimal-hotkeys {
+
+    environment.systemPackages = with pkgs; [
+      gnome-shortcut-inhibitor
+    ];
+
     programs.dconf = {
       enable = true;
       profiles.user.databases = [
@@ -20,17 +25,19 @@
             # sclk mapped by keyd
             "org/gnome/desktop/input-sources" = {
               xkb-options = [
-                  "terminate:ctrl_alt_bksp"
-                  "grp:sclk_toggle"
-                  "lv3:ralt_switch"
-                  "eurosign:4"
-                ];
+                "terminate:ctrl_alt_bksp"
+                "grp:sclk_toggle"
+                "lv3:ralt_switch"
+                "eurosign:4"
+              ];
             };
 
             "org/gnome/shell" = {
               disable-user-extensions = false;
-              enabled-extensions = [
-                pkgs.gnomeExtensions.appindicator.extensionUuid
+              enabled-extensions = with pkgs; [
+                gnomeExtensions.appindicator.extensionUuid
+                gnome-shortcut-inhibitor.extensionUuid
+                # pkgs.gnomeExtensions.tray-icons-reloaded.extensionUuid
               ];
             };
 
@@ -45,7 +52,7 @@
               ];
             };
             "org/gnome/mutter/wayland" = {
-              xwayland-allow-grabs = true;
+              #xwayland-allow-grabs = true;
               #xwayland-grab-access-rules=['parsecd']
             };
             "org/gnome/desktop/interface" = {

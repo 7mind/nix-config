@@ -67,6 +67,7 @@
       # system tools
       killall
       coreutils
+      d-spy
 
       # pipe tools
       pv
