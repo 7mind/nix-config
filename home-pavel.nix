@@ -1,4 +1,36 @@
-{ pkgs, smind-hm, ... }:
+{ pkgs, smind-hm, lib, extended_pkg, ... }:
+
+let
+  extend_pkg = { pkg, path, defs, ... }:
+    let
+      attrs = builtins.attrNames defs;
+      mapper = name:
+        "--suffix \"${name}\" : \"${defs."${name}"}\"";
+      mapped = (map mapper (builtins.trace attrs attrs));
+      more = lib.concatStringsSep " \\\n" mapped;
+    in
+    pkgs.symlinkJoin {
+      name = "clion";
+      paths = [ pkg ];
+      buildInputs = [ pkgs.makeWrapper ];
+      postBuild = ''
+        wrapProgram $out/${path} \
+          ${builtins.trace more more}
+      '';
+    };
+
+  extended_pkg = input@{ pkg, path, ... }:
+    extend_pkg rec {
+      inherit pkg;
+      inherit path;
+      defs = {
+        LD_LIBRARY_PATH = lib.makeLibraryPath (input.ld-libs or [ ]);
+        PATH = lib.strings.makeBinPath (input.paths or [ ]);
+        COREFONTS_PATH = "${pkgs.corefonts}/share/fonts/truetype";
+        FONTCONFIG_PATH = "/etc/fonts";
+      } // (input.defs or { });
+    };
+in
 
 {
   imports = smind-hm.imports;
@@ -32,11 +64,74 @@
     element-desktop
     bitwarden-desktop
 
-    jetbrains.idea-ultimate
     visualvm
 
     vlc
     telegram-desktop
+
+
+    (extended_pkg {
+      pkg = jetbrains.idea-ultimate;
+      path = "bin/idea-ultimate";
+      ld-libs = [
+        libmediainfo
+        xorg.libX11
+        xorg.libX11.dev
+        xorg.libICE
+        xorg.libSM
+
+        libGL
+        icu
+        fontconfig
+        gccStdenv.cc.cc.lib
+      ];
+      #defs = { TEST = "1"; };
+    })
+
+    (extended_pkg {
+      pkg = jetbrains.rider;
+      path = "bin/rider";
+      ld-libs = [
+        libmediainfo
+        xorg.libX11
+        xorg.libX11.dev
+        xorg.libICE
+        xorg.libSM
+
+        libGL
+        icu
+        fontconfig
+      ];
+    })
+
+    (extended_pkg rec {
+      pkg = jetbrains.clion;
+      path = "bin/clion";
+      ld-libs = [
+        libGL
+        libglvnd
+        libGLU
+        qt6.full
+        vulkan-headers
+        boost
+
+        libxkbcommon
+
+        libmediainfo
+        xorg.libX11
+        xorg.libX11.dev
+        xorg.libICE
+        xorg.libSM
+
+        icu
+        fontconfig
+      ];
+      defs = {
+        CMAKE_LIBRARY_PATH = lib.makeLibraryPath ld-libs;
+        CMAKE_INCLUDE_PATH = lib.makeIncludePath ld-libs;
+        CMAKE_PREFIX_PATH = "${qt6.full}";
+      };
+    })
   ];
 
 }

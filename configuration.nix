@@ -56,6 +56,7 @@
   home-manager.users.root = import ./home-root.nix;
 
   environment.systemPackages = with pkgs; [
+
   ];
 
   smind = {

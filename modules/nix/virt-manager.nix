@@ -27,8 +27,9 @@
         let
           ovmf = (pkgs.OVMF.override {
             secureBoot = true;
-            # csmSupport = false;
             httpSupport = true;
+            # see also: https://github.com/virt-manager/virt-manager/issues/819
+            # TPM should be removed when you create the VM, then it can be added
             tpmSupport = true;
           }).fd;
         in
@@ -39,6 +40,7 @@
             enable = true;
             onBoot = "ignore";
             qemu = {
+              package = pkgs.qemu_kvm;
               runAsRoot = true;
               ovmf.packages = [ ovmf ];
               swtpm.enable = true;
@@ -48,23 +50,6 @@
             ];
           };
         }
-        # {
-        #   enable = true;
-        #   qemu = {
-        #     package = pkgs.qemu_kvm;
-        #     runAsRoot = true;
-        #     swtpm.enable = true;
-        #     ovmf = {
-        #       enable = true;
-        #       packages = [
-        #         (pkgs.OVMF.override {
-        #           secureBoot = true;
-        #           tpmSupport = true;
-        #         }).fd
-        #       ];
-        #     };
-        #   };
-        # }
       );
 
     boot = lib.mkIf config.smind.vm.virt-manager.amd.enable {
@@ -78,7 +63,12 @@
         "vfio_iommu_type1.allow_unsafe_interrupts=1"
       ];
 
-      kernelModules = [ "vfio_virqfd" "vfio_pci" "vfio_iommu_type1" "vfio" ];
+      kernelModules = [
+        "vfio_virqfd"
+        "vfio_pci"
+        "vfio_iommu_type1"
+        "vfio"
+      ];
 
       extraModprobeConfig =
         lib.concatStringsSep "\n" [

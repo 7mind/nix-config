@@ -48,6 +48,7 @@
           ./modules/nix/kernel-settings.nix
           ./modules/nix/keyd-super-remap.nix
           ./modules/nix/ledger.nix
+          ./modules/nix/lib.nix
           ./modules/nix/locale-ie.nix
           ./modules/nix/networking.nix
           ./modules/nix/nix-ld.nix

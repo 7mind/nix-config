@@ -22,6 +22,4 @@
       gnome-shortcut-inhibitor = pkgs.callPackage "${cfgmeta.paths.pkg}/gnome-shortcut-inhibitor/default.nix" { };
     })
   ];
-
-
 }
