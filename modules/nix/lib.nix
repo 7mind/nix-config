@@ -6,7 +6,7 @@
       attrs = builtins.attrNames defs;
       mapper = name:
         "--suffix \"${name}\" : \"${defs."${name}"}\"";
-      mapped = (map mapper (builtins.trace attrs attrs));
+      mapped = (map mapper attrs);
       more = lib.concatStringsSep " \\\n" mapped;
     in
     pkgs.symlinkJoin {
