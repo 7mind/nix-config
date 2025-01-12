@@ -10,6 +10,45 @@
   };
 
   config = lib.mkIf config.smind.desktop.gnome.enable {
+    programs.dconf = {
+      enable = true;
+      profiles.user.databases = [
+        {
+          lockAll = true; # prevents overriding
+          settings = {
+            "org/gnome/desktop/wm/preferences" = {
+              button-layout = ":minimize,maximize,close";
+            };
+            "org/gnome/mutter/wayland" = {
+              #xwayland-allow-grabs = true;
+              #xwayland-grab-access-rules=['parsecd']
+            };
+            "org/gnome/desktop/interface" = {
+              #gtk-theme = "Breeze";
+              #cursor-theme = "breeze_cursors";
+              #icon-theme = "breeze-dark";
+              document-font-name = "Noto Sans 11";
+              monospace-font-name = "Hack Nerd Font Mono 12";
+              cursor-size = lib.gvariant.mkInt32 36;
+              font-antialising = "rgba";
+              clock-show-weekday = true;
+              color-scheme = "prefer-dark";
+            };
+            "org/gnome/mutter" = {
+              dynamic-workspaces = false;
+              edge-tiling = true;
+              overlay-key = "";
+              #workspaces-only-on-primary = true;
+              experimental-features = [
+                "scale-monitor-framebuffer"
+                "xwayland-native-scaling"
+              ];
+            };
+          };
+        }
+      ];
+    };
+
     environment.sessionVariables = {
       GTK_THEME = "Adwaita:dark";
 
