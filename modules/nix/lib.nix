@@ -15,7 +15,7 @@
       buildInputs = [ pkgs.makeWrapper ];
       postBuild = ''
         wrapProgram $out/${path} \
-          ${builtins.trace more more}
+          ${more}
       '';
     };
 
