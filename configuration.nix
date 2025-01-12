@@ -56,14 +56,7 @@
   home-manager.users.root = import ./home-root.nix;
 
   environment.systemPackages = with pkgs; [
-    gnome-boxes
   ];
-
-  nixpkgs.overlays = [
-    (self: super: {
-    })
-  ];
-
 
   smind = {
     roles.desktop.generic-gnome = true;
