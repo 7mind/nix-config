@@ -163,6 +163,8 @@
       gnome-tour
       gnome-user-docs
       simple-scan
+      geary
+      gnome-terminal
     ];
   };
 }
