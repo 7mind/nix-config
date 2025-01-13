@@ -1,6 +1,7 @@
-{ config, lib, ... }:
+{ config, lib, specialArgsSelfRef, ... }:
 
 {
+
   options = {
     smind.home-manager.enable = lib.mkOption {
       type = lib.types.bool;
@@ -12,5 +13,6 @@
   config = lib.mkIf config.smind.home-manager.enable {
     home-manager.useGlobalPkgs = true;
     home-manager.useUserPackages = true;
+    home-manager.extraSpecialArgs = specialArgsSelfRef;
   };
 }

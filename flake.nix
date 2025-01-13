@@ -17,65 +17,60 @@
     };
   };
 
-  outputs = inputs@{ self, ... }: {
-    nixosConfigurations =
-      let
-        arch = "x86_64-linux";
-        pkgs = inputs.nixpkgs.legacyPackages."${arch}";
+  outputs = inputs@{ self, ... }:
+    let
+      globals = import ./globals.nix;
 
-        state-version-nixpkgs = "25.05";
-        state-version-hm = "25.05";
-
-        paths = {
-          root = "${self}";
-          pkg = "${self}/pkg";
-        };
-
-        smind-nix-imports = import ./modules/nix/_imports.nix ++ import ./lib/_imports.nix;
-
-        smind-hm = {
-          imports = import ./modules/hm/_imports.nix ++ import ./lib/_imports.nix;
-          state-version = state-version-hm;
-        };
-
-        cfgmeta = {
-          isLinux = true;
-          isDarwin = false;
-          paths = paths;
-          jdk-main = pkgs.graalvm-ce;
-          state-version-nixpkgs = state-version-nixpkgs;
-        };
-
-        cfgnix = {
-          pkgs7mind = inputs.smind.legacyPackages."${arch}";
-          nix-apple-fonts = inputs.nix-apple-fonts.packages."${arch}";
-        };
-
-        specialArgs = {
-          cfgmeta = cfgmeta;
-          cfgnix = cfgnix;
-          smind-hm = smind-hm;
-        };
-      in
-      {
-        pavel-am5 = inputs.nixpkgs.lib.nixosSystem {
-          system = "${arch}";
-          modules = [
-            {
-              system.stateVersion = state-version-hm;
-            }
-            inputs.nix-apple-fonts.nixosModules
-            inputs.home-manager.nixosModules.home-manager
-            {
-              home-manager.extraSpecialArgs = specialArgs;
-            }
-            ./configuration.nix
-          ] ++
-          smind-nix-imports
-          ;
-
-          specialArgs = specialArgs;
-        };
+      paths = {
+        root = "${self}";
+        pkg = "${self}/pkg";
+        lib = "${self}/lib";
+        modules = "${self}/modules";
+        modules-hm = "${self}/modules/hm";
+        modules-nix = "${self}/modules/nix";
       };
-  };
+    in
+    {
+      nixosConfigurations =
+        let
+          arch = "x86_64-linux";
+          pkgs = inputs.nixpkgs.legacyPackages."${arch}";
+
+          cfgmeta = {
+            isLinux = true;
+            isDarwin = false;
+            paths = paths;
+            jdk-main = pkgs.graalvm-ce;
+            state-version-nixpkgs = globals.state-version-nixpkgs;
+          };
+
+          cfgnix = {
+            pkgs7mind = inputs.smind.legacyPackages."${arch}";
+            nix-apple-fonts = inputs.nix-apple-fonts.packages."${arch}";
+          };
+
+          specialArgs = pkgs.lib.fix
+            (self: {
+
+              cfgmeta = cfgmeta;
+              cfgnix = cfgnix;
+              smind-hm = globals.smind-hm;
+              specialArgsSelfRef = self;
+            });
+        in
+        {
+          pavel-am5 = inputs.nixpkgs.lib.nixosSystem {
+            system = "${arch}";
+            modules = [
+              inputs.nix-apple-fonts.nixosModules
+              inputs.home-manager.nixosModules.home-manager
+              ./configuration.nix
+            ] ++
+            globals.smind-nix-imports
+            ;
+
+            specialArgs = specialArgs;
+          };
+        };
+    };
 }

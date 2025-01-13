@@ -26,6 +26,7 @@
   ./smartd.nix
   ./ssh-permissive.nix
   ./ssh-safe.nix
+  ./state-version.nix
   ./sudo.nix
   ./trezor.nix
   ./uhk-keyboard.nix
