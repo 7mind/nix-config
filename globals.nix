@@ -8,7 +8,11 @@ rec {
   ];
 
   smind-hm = {
-    imports = import ./modules/hm/_imports.nix ++ import ./lib/_imports.nix;
+    imports = builtins.concatLists [
+      (import ./modules/hm/_imports.nix)
+      (import ./lib/_imports.nix)
+    ];
+
     state-version = state-version-hm;
   };
 
