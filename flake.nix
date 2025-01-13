@@ -22,7 +22,7 @@
       make-nixos-x86_64 = globals.make-nixos-x86_64 { inherit inputs; inherit self; };
     in
     {
-      inherit globals; # 
+      inherit globals; # this makes this flake reusable by other flakes
 
       nixosConfigurations = builtins.listToAttrs
         (map (item: item)
