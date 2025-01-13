@@ -1,4 +1,4 @@
 { smind-hm, ... }: {
-  home.stateVersion = smind-hm.state-version;
+  home.stateVersion = smind-hm.state-version-hm;
 }
 

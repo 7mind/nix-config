@@ -8,12 +8,12 @@ rec {
   ];
 
   smind-hm = {
+    inherit state-version-hm;
+
     imports = builtins.concatLists [
       (import ./modules/hm/_imports.nix)
       (import ./lib/_imports.nix)
     ];
-
-    state-version = state-version-hm;
   };
 
   smconfig = { };
