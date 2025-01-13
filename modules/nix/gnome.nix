@@ -9,6 +9,8 @@
     };
   };
 
+  # display settings are being controlled over dbus (org.gnome.Mutter.DisplayConfig), not dconf
+
   config = lib.mkIf config.smind.desktop.gnome.enable {
     programs.dconf = {
       enable = true;
