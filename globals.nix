@@ -41,6 +41,7 @@ rec {
         inherit paths;
         isLinux = true;
         isDarwin = false;
+        hostname = hostname;
         state-version-nixpkgs = const.state-version-nixpkgs;
       };
 

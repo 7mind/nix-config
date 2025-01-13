@@ -1,4 +1,4 @@
-{ pkgs, lib, config, ... }: {
+{ pkgs, lib, config, cfg-meta, ... }: {
   options = {
     smind.net.enable = lib.mkOption {
       type = lib.types.bool;
@@ -40,11 +40,12 @@
       systemd.network.enable = true;
 
       networking = {
+        hostName = lib.mkDefault cfg-meta.hostname;
+
         enableIPv6 = true;
         useNetworkd = true;
         useDHCP = false;
         dhcpcd.enable = false;
-
         firewall = {
           enable = true;
         };
