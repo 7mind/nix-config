@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+set -xe
+
+function workdir() {
+    ORIGIN="$(cd "$(dirname "$0")" && pwd)"
+    pushd .
+    cd "$ORIGIN"
+}
+
+workdir
+
+git add .
+sudo nixos-rebuild switch --flake ~/cfg
+git commit -am "autosave"
+git push
+
+popd
