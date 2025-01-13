@@ -62,6 +62,8 @@
   smind = {
     roles.desktop.generic-gnome = true;
 
+    locale.ie.enable = true;
+
     security.sudo.wheel-permissive-rules = true;
     security.sudo.wheel-passwordless = true;
 

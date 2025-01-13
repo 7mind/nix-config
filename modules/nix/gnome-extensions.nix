@@ -1,13 +1,7 @@
 { config, lib, pkgs, cfg-meta, ... }:
 
 {
-  options = {
-    smind.desktop.gnome.minimal-hotkeys = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "";
-    };
-  };
+  options = { };
 
   config = lib.mkIf config.smind.desktop.gnome.enable {
 
