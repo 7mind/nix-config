@@ -25,10 +25,9 @@
       inherit globals; # this makes this flake reusable by other flakes
 
       nixosConfigurations = builtins.listToAttrs
-        (map (item: item)
-          [
-            (make-nixos-x86_64 "pavel-am5")
-          ]
-        );
+        [
+          (make-nixos-x86_64 "pavel-am5")
+        ]
+      ;
     };
 }

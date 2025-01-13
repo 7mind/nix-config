@@ -31,11 +31,12 @@ rec {
       };
 
       cfg-meta = {
+        inherit arch;
+        inherit state-version-nixpkgs;
+        inherit paths;
         isLinux = true;
         isDarwin = false;
-        paths = paths;
         jdk-main = pkgs.graalvm-ce;
-        state-version-nixpkgs = state-version-nixpkgs;
       };
 
       cfg-flakes = {
@@ -52,18 +53,15 @@ rec {
     in
     {
       name = "${hostname}";
-
       value = inputs.nixpkgs.lib.nixosSystem
         {
+          inherit specialArgs;
           system = "${arch}";
-
           modules = smind-nix-imports ++ [
             inputs.nix-apple-fonts.nixosModules
             inputs.home-manager.nixosModules.home-manager
             ./hosts/${hostname}/configuration.nix
           ];
-
-          specialArgs = specialArgs;
         };
     };
 
