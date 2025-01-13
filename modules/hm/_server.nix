@@ -11,11 +11,11 @@
 
   config = lib.mkIf config.smind.hm.roles.server {
     smind.hm = {
-      htop.enable = true;
-      ssh.enable = true;
-      tmux.enable = true;
-      zsh.enable = true;
-      cleanups.enable = true;
+      htop.enable = lib.mkDefault true;
+      ssh.enable = lib.mkDefault true;
+      tmux.enable = lib.mkDefault true;
+      zsh.enable = lib.mkDefault true;
+      cleanups.enable = lib.mkDefault true;
     };
   };
 }

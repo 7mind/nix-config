@@ -11,15 +11,18 @@
 
   config = lib.mkIf config.smind.hm.roles.desktop {
     smind.hm = {
-      roles.server = true;
+      roles.server = lib.mkDefault true;
 
-      firefox.enable = true;
-      firefox.no-tabbar = true;
-      dev.generic.enable = true;
-      dev.scala.enable = true;
-      kitty.enable = true;
-      vscodium.enable = true;
-      wezterm.enable = true;
+      firefox.enable = lib.mkDefault true;
+      firefox.no-tabbar = lib.mkDefault true;
+      dev.generic.enable = lib.mkDefault true;
+      dev.scala.enable = lib.mkDefault true;
+      kitty.enable = lib.mkDefault true;
+      vscodium.enable = lib.mkDefault true;
+      wezterm.enable = lib.mkDefault true;
+      autostart.programs = [ ];
+      cleanups.enable = lib.mkDefault true;
+      environment.sane-defaults.enable = lib.mkDefault true;
     };
   };
 }
