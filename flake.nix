@@ -31,44 +31,7 @@
           pkg = "${self}/pkg";
         };
 
-        smind-nix-imports = [
-          ./modules/nix/_desktop.nix
-          ./modules/nix/alien-filesystems.nix
-          ./modules/nix/cpu.nix
-          ./modules/nix/email.nix
-          ./modules/nix/cups.nix
-          ./modules/nix/env-settings-linux.nix
-          ./modules/nix/env-settings.nix
-          ./modules/nix/fonts-apple.nix
-          ./modules/nix/fonts-nerd.nix
-          ./modules/nix/gnome.nix
-          ./modules/nix/gnome-minimal-hotkeys.nix
-          ./modules/nix/grub.nix
-          ./modules/nix/home-manager.nix
-          ./modules/nix/kernel-settings.nix
-          ./modules/nix/keyd-super-remap.nix
-          ./modules/nix/ledger.nix
-          ./modules/nix/lib.nix
-          ./modules/nix/locale-ie.nix
-          ./modules/nix/networking.nix
-          ./modules/nix/nix-ld.nix
-          ./modules/nix/nix.nix
-          ./modules/nix/overlay.nix
-          ./modules/nix/power.nix
-          ./modules/nix/realtek-kernel-hack.nix
-          ./modules/nix/router.nix
-          ./modules/nix/smartd.nix
-          ./modules/nix/ssh-permissive.nix
-          ./modules/nix/ssh-safe.nix
-          ./modules/nix/sudo.nix
-          ./modules/nix/trezor.nix
-          ./modules/nix/uhk-keyboard.nix
-          ./modules/nix/virt-manager.nix
-          ./modules/nix/zfs-ssh-initrd.nix
-          ./modules/nix/zfs.nix
-          ./modules/nix/zsh.nix
-          ./modules/nix/zswap.nix
-        ];
+        smind-nix-imports = import ./modules/nix/_imports.nix;
 
         smind-hm = {
           imports =
