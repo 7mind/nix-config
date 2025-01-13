@@ -1,6 +1,5 @@
 rec {
-  state-version-nixpkgs = "25.05";
-  state-version-hm = "25.05";
+  const = import ./config.nix;
 
   smind-nix-imports = builtins.concatLists [
     (import ./modules/nix/_imports.nix)
@@ -8,7 +7,7 @@ rec {
   ];
 
   smind-hm = {
-    inherit state-version-hm;
+    state-version-hm = const.state-version-hm;
 
     imports = builtins.concatLists [
       (import ./modules/hm/_imports.nix)
@@ -21,6 +20,7 @@ rec {
   make-nixos = { self, inputs, arch }: hostname:
     let
       pkgs = inputs.nixpkgs.legacyPackages."${arch}";
+
       paths = {
         root = "${self}";
         pkg = "${self}/pkg";
@@ -30,13 +30,18 @@ rec {
         modules-nix = "${self}/modules/nix";
       };
 
+      cfg-packages = const.cfg-packages {
+        inherit inputs;
+        inherit pkgs;
+        inherit arch;
+      };
+
       cfg-meta = {
         inherit arch;
-        inherit state-version-nixpkgs;
         inherit paths;
         isLinux = true;
         isDarwin = false;
-        jdk-main = pkgs.graalvm-ce;
+        state-version-nixpkgs = const.state-version-nixpkgs;
       };
 
       cfg-flakes = {
@@ -45,9 +50,10 @@ rec {
       };
 
       specialArgs = pkgs.lib.fix (self: {
-        cfg-meta = cfg-meta;
-        cfg-flakes = cfg-flakes;
-        smind-hm = smind-hm;
+        inherit cfg-meta;
+        inherit cfg-flakes;
+        inherit smind-hm;
+        inherit cfg-packages;
         specialArgsSelfRef = self;
       });
     in

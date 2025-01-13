@@ -1,4 +1,4 @@
-{ config, lib, pkgs, cfg-flakes, cfg-meta, ... }:
+{ config, lib, pkgs, cfg-flakes, cfg-packages, cfg-meta, ... }:
 
 {
   options = {
@@ -218,7 +218,7 @@
         "java.configuration.runtimes" = let graal-legacy = cfg-flakes.pkgs7mind.graalvm-legacy-packages; in [
           {
             "name" = "Main JDK";
-            "path" = "${cfg-meta.jdk-main}";
+            "path" = "${cfg-packages.jdk-main}";
             default = true;
           }
           {
