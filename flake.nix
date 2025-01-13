@@ -73,6 +73,8 @@
         smind-hm = {
           imports =
             [
+              ./modules/nix/lib.nix
+
               ./modules/hm/_desktop.nix
               ./modules/hm/_server.nix
               ./modules/hm/autostart.nix

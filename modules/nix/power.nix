@@ -48,7 +48,8 @@
         ];
       };
       powerManagement = {
-        cpuFreqGovernor = "performance";
+        # amd-pstate always keeps governor as "powersave"
+        cpuFreqGovernor = "powersave";
       };
 
       services.cpupower-gui.enable = true;

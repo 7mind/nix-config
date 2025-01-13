@@ -1,7 +1,7 @@
 { lib, pkgs, ... }:
 
-{
-  _module.args.extend_pkg = { pkg, path, defs, ... }:
+let
+  extend_pkg = { pkg, path, defs, ... }:
     let
       attrs = builtins.attrNames defs;
       mapper = name:
@@ -9,17 +9,18 @@
       mapped = (map mapper attrs);
       more = lib.concatStringsSep " \\\n" mapped;
     in
-    pkgs.symlinkJoin {
-      name = "clion";
-      paths = [ pkg ];
-      buildInputs = [ pkgs.makeWrapper ];
-      postBuild = ''
-        wrapProgram $out/${path} \
-          ${more}
-      '';
-    };
+    pkgs.symlinkJoin
+      {
+        name = "clion";
+        paths = [ pkg ];
+        buildInputs = [ pkgs.makeWrapper ];
+        postBuild = ''
+          wrapProgram $out/${path} \
+            ${more}
+        '';
+      };
 
-  _module.args.extended_pkg = input@{ pkg, path, extend_pkg, ... }:
+  extended_pkg = input@{ pkg, path, ... }:
     extend_pkg {
       inherit pkg;
       inherit path;
@@ -30,4 +31,10 @@
         FONTCONFIG_PATH = "/etc/fonts";
       } // (input.defs or { });
     };
+in
+
+{
+  _module.args.extend_pkg = extend_pkg;
+
+  _module.args.extended_pkg = extended_pkg;
 }
