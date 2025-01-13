@@ -31,30 +31,10 @@
           pkg = "${self}/pkg";
         };
 
-        smind-nix-imports = import ./modules/nix/_imports.nix;
+        smind-nix-imports = import ./modules/nix/_imports.nix ++ import ./lib/_imports.nix;
 
         smind-hm = {
-          imports =
-            [
-              ./modules/nix/lib.nix
-
-              ./modules/hm/_desktop.nix
-              ./modules/hm/_server.nix
-              ./modules/hm/autostart.nix
-              ./modules/hm/cleanups.nix
-              ./modules/hm/dev-generic.nix
-              ./modules/hm/dev-scala.nix
-              ./modules/hm/firefox-notabbar.nix
-              ./modules/hm/firefox.nix
-              ./modules/hm/htop.nix
-              ./modules/hm/kitty.nix
-              ./modules/hm/ssh.nix
-              ./modules/hm/state-version.nix
-              ./modules/hm/tmux.nix
-              ./modules/hm/vscodium.nix
-              ./modules/hm/wezterm.nix
-              ./modules/hm/zsh.nix
-            ];
+          imports = import ./modules/hm/_imports.nix ++ import ./lib/_imports.nix;
           state-version = state-version-hm;
         };
 

@@ -1,0 +1,18 @@
+[
+  ./_desktop.nix
+  ./_server.nix
+  ./autostart.nix
+  ./cleanups.nix
+  ./dev-generic.nix
+  ./dev-scala.nix
+  ./firefox-notabbar.nix
+  ./firefox.nix
+  ./htop.nix
+  ./kitty.nix
+  ./ssh.nix
+  ./state-version.nix
+  ./tmux.nix
+  ./vscodium.nix
+  ./wezterm.nix
+  ./zsh.nix
+]

@@ -15,7 +15,6 @@
   ./kernel-settings.nix
   ./keyd-super-remap.nix
   ./ledger.nix
-  ./lib.nix
   ./locale-ie.nix
   ./networking.nix
   ./nix-ld.nix
