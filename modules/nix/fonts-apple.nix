@@ -1,4 +1,4 @@
-{ config, lib, pkgs, cfgmeta, cfgnix, ... }:
+{ config, lib, pkgs, cfg-meta, cfg-flakes, ... }:
 
 {
   options = {

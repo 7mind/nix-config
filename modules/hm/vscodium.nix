@@ -1,4 +1,4 @@
-{ config, lib, pkgs, cfgnix, cfgmeta, ... }:
+{ config, lib, pkgs, cfg-flakes, cfg-meta, ... }:
 
 {
   options = {
@@ -84,7 +84,7 @@
           version = "0.0.5";
           sha256 = "sha256-9vxtMNTf7VCGwesjGD6oxxsKZzqCBRPRjBXRkA3U/SA=";
         }
-      ] ++ (if cfgmeta.isDarwin then [ ] else [
+      ] ++ (if cfg-meta.isDarwin then [ ] else [
         ms-vscode.cpptools
       ]);
 
@@ -215,10 +215,10 @@
 
         "makefile.configureOnOpen" = true;
 
-        "java.configuration.runtimes" = let graal-legacy = cfgnix.pkgs7mind.graalvm-legacy-packages; in [
+        "java.configuration.runtimes" = let graal-legacy = cfg-flakes.pkgs7mind.graalvm-legacy-packages; in [
           {
             "name" = "Main JDK";
-            "path" = "${cfgmeta.jdk-main}";
+            "path" = "${cfg-meta.jdk-main}";
             default = true;
           }
           {

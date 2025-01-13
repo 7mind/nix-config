@@ -29,14 +29,13 @@
         modules-hm = "${self}/modules/hm";
         modules-nix = "${self}/modules/nix";
       };
-    in
-    {
-      nixosConfigurations =
-        let
-          arch = "x86_64-linux";
-          pkgs = inputs.nixpkgs.legacyPackages."${arch}";
 
-          cfgmeta = {
+
+      make-nixos = cfg:
+        let
+          arch = cfg.arch;
+          pkgs = inputs.nixpkgs.legacyPackages."${arch}";
+          cfg-meta = {
             isLinux = true;
             isDarwin = false;
             paths = paths;
@@ -44,33 +43,77 @@
             state-version-nixpkgs = globals.state-version-nixpkgs;
           };
 
-          cfgnix = {
+          cfg-flakes = {
             pkgs7mind = inputs.smind.legacyPackages."${arch}";
             nix-apple-fonts = inputs.nix-apple-fonts.packages."${arch}";
           };
 
-          specialArgs = pkgs.lib.fix
-            (self: {
-
-              cfgmeta = cfgmeta;
-              cfgnix = cfgnix;
-              smind-hm = globals.smind-hm;
-              specialArgsSelfRef = self;
-            });
+          specialArgs = pkgs.lib.fix (self: {
+            cfg-meta = cfg-meta;
+            cfg-flakes = cfg-flakes;
+            smind-hm = globals.smind-hm;
+            specialArgsSelfRef = self;
+          });
         in
         {
-          pavel-am5 = inputs.nixpkgs.lib.nixosSystem {
-            system = "${arch}";
-            modules = [
-              inputs.nix-apple-fonts.nixosModules
-              inputs.home-manager.nixosModules.home-manager
-              ./configuration.nix
-            ] ++
-            globals.smind-nix-imports
-            ;
+          name = "${cfg.hostname}";
+          value = inputs.nixpkgs.lib.nixosSystem
+            {
+              system = "${arch}";
 
-            specialArgs = specialArgs;
-          };
+              modules = globals.smind-nix-imports ++ [
+                inputs.nix-apple-fonts.nixosModules
+                inputs.home-manager.nixosModules.home-manager
+                ./hosts/pavel-am5/configuration.nix
+              ];
+
+              specialArgs = specialArgs;
+            };
         };
+    in
+    {
+      nixosConfigurations = builtins.listToAttrs
+        (map (item: item) [
+          (make-nixos
+            { arch = "x86_64-linux"; hostname = "pavel-am5"; })
+        ]);
+
+      # let
+      #   arch = "x86_64-linux";
+      #   pkgs = inputs.nixpkgs.legacyPackages."${arch}";
+
+      #   cfg-meta = {
+      #     isLinux = true;
+      #     isDarwin = false;
+      #     paths = paths;
+      #     jdk-main = pkgs.graalvm-ce;
+      #     state-version-nixpkgs = globals.state-version-nixpkgs;
+      #   };
+
+      #   cfg-flakes = {
+      #     pkgs7mind = inputs.smind.legacyPackages."${arch}";
+      #     nix-apple-fonts = inputs.nix-apple-fonts.packages."${arch}";
+      #   };
+
+      #   specialArgs = pkgs.lib.fix (self: {
+      #     cfg-meta = cfg-meta;
+      #     cfg-flakes = cfg-flakes;
+      #     smind-hm = globals.smind-hm;
+      #     specialArgsSelfRef = self;
+      #   });
+      # in
+      # {
+      #   pavel-am5 = inputs.nixpkgs.lib.nixosSystem {
+      #     system = "${arch}";
+
+      #     modules = globals.smind-nix-imports ++ [
+      #       inputs.nix-apple-fonts.nixosModules
+      #       inputs.home-manager.nixosModules.home-manager
+      #       ./hosts/pavel-am5/configuration.nix
+      #     ];
+
+      #     specialArgs = specialArgs;
+      #   };
+      # };
     };
 }

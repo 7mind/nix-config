@@ -1,4 +1,4 @@
-{ config, lib, pkgs, cfgmeta, ... }:
+{ config, lib, pkgs, cfg-meta, ... }:
 
 {
   imports =

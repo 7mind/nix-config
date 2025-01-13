@@ -1,4 +1,4 @@
-{ config, lib, cfgmeta, ... }:
+{ config, lib, cfg-meta, ... }:
 
 {
   options = {
@@ -12,8 +12,8 @@
   config = lib.mkIf config.smind.hm.wezterm.enable {
     programs.wezterm =
       let
-        font_size = if cfgmeta.isDarwin then 14 else 10;
-        initial_rows = if cfgmeta.isDarwin then 40 else 60;
+        font_size = if cfg-meta.isDarwin then 14 else 10;
+        initial_rows = if cfg-meta.isDarwin then 40 else 60;
       in
       {
         # use  wezterm show-keys --lua
