@@ -1,5 +1,4 @@
 [
-  ./_desktop.nix
   ./alien-filesystems.nix
   ./cpu.nix
   ./email.nix

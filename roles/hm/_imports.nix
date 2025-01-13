@@ -1,0 +1,4 @@
+[
+  ./desktop.nix
+  ./server.nix
+]

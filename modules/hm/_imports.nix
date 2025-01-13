@@ -1,6 +1,4 @@
 [
-  ./_desktop.nix
-  ./_server.nix
   ./autostart.nix
   ./cleanups.nix
   ./dev-generic.nix

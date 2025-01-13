@@ -2,16 +2,18 @@ rec {
   const = import ./config.nix;
 
   smind-nix-imports = builtins.concatLists [
-    (import ./modules/nix/_imports.nix)
     (import ./lib/_imports.nix)
+    (import ./modules/nix/_imports.nix)
+    (import ./roles/nix/_imports.nix)
   ];
 
   smind-hm = {
     state-version-hm = const.state-version-hm;
 
     imports = builtins.concatLists [
-      (import ./modules/hm/_imports.nix)
       (import ./lib/_imports.nix)
+      (import ./modules/hm/_imports.nix)
+      (import ./roles/hm/_imports.nix)
     ];
   };
 
