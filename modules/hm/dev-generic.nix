@@ -24,6 +24,7 @@
 
     home.packages = with pkgs; [
       slack
+      zoom-us
       gitFull
 
       websocat
