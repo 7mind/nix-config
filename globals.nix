@@ -60,7 +60,7 @@ rec {
           modules = smind-nix-imports ++ [
             inputs.nix-apple-fonts.nixosModules
             inputs.home-manager.nixosModules.home-manager
-            ./hosts/pavel-am5/configuration.nix
+            ./hosts/${hostname}/configuration.nix
           ];
 
           specialArgs = specialArgs;
