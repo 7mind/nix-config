@@ -7,9 +7,24 @@
       default = true;
       description = "";
     };
+
+    smind.environment.all-docs.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "";
+    };
   };
 
   config = lib.mkIf config.smind.environment.sane-defaults.enable {
+
+    documentation = lib.mkIf config.smind.environment.all-docs.enable {
+      nixos.enable = true;
+      man.enable = true;
+      info.enable = true;
+      doc.enable = true;
+      dev.enable = true;
+    };
+
     environment.systemPackages = with pkgs; [
 
       # file managers

@@ -10,8 +10,6 @@
   };
 
   config = lib.mkIf config.smind.hm.roles.desktop {
-    manual.html.enable = true;
-
     smind.hm = {
       roles.server = true;
 

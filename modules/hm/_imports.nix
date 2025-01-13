@@ -5,6 +5,7 @@
   ./cleanups.nix
   ./dev-generic.nix
   ./dev-scala.nix
+  ./env-settings.nix
   ./firefox-notabbar.nix
   ./firefox.nix
   ./htop.nix
