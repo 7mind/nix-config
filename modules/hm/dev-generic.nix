@@ -26,6 +26,7 @@
       slack
       # zoom-us
       gitFull
+      tig
 
       websocat
       jq
