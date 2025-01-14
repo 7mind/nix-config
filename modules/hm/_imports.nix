@@ -2,6 +2,7 @@
   ./autostart.nix
   ./cleanups.nix
   ./dev-generic.nix
+  ./dev-cs.nix
   ./dev-scala.nix
   ./env-settings.nix
   ./firefox-notabbar.nix

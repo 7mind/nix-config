@@ -59,6 +59,9 @@
     (extended_pkg {
       pkg = jetbrains.rider;
       path = "bin/rider";
+      paths = [
+        dotnet-sdk_9
+      ];
       ld-libs = [
         libmediainfo
         xorg.libX11

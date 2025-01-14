@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, xdg_associate, ... }:
 
 {
   options = {
@@ -405,9 +405,17 @@
         };
 
       };
+    };
 
+    xdg = xdg_associate {
+      schemes = [
+        "x-scheme-handler/http"
+        "application/xhtml+xml"
+        "text/html"
+        "x-scheme-handler/https"
+      ];
+      desktopfile = "firefox.desktop";
     };
 
   };
-
 }

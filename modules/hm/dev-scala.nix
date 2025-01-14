@@ -15,12 +15,13 @@
     };
 
     home.packages = with pkgs; [
-      scala
-      ammonite
-      sbt
       scalafmt
-      mill
-      coursier
+      ammonite
+
+      # scala
+      # sbt
+      # mill
+      # coursier
     ];
 
   };

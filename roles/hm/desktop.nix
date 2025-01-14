@@ -16,6 +16,7 @@
       firefox.enable = lib.mkDefault true;
       firefox.no-tabbar = lib.mkDefault true;
       dev.generic.enable = lib.mkDefault true;
+      dev.cs.enable = lib.mkDefault true;
       dev.scala.enable = lib.mkDefault true;
       kitty.enable = lib.mkDefault true;
       vscodium.enable = lib.mkDefault true;

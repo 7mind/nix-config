@@ -31,10 +31,29 @@ let
         FONTCONFIG_PATH = "/etc/fonts";
       } // (input.defs or { });
     };
+
+  xdg_associations =
+    { schemes, desktopfile }: builtins.listToAttrs
+      (map
+        (item: {
+          name = item;
+          value = desktopfile;
+        })
+        schemes
+      );
 in
 
 {
   _module.args.extend_pkg = extend_pkg;
 
   _module.args.extended_pkg = extended_pkg;
+
+  _module.args.xdg_associations = xdg_associations;
+
+  _module.args.xdg_associate = input: {
+    mimeApps = {
+      enable = lib.mkDefault true;
+      defaultApplications = xdg_associations input;
+    };
+  };
 }

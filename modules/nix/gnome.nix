@@ -46,6 +46,11 @@
                 "xwayland-native-scaling"
               ];
             };
+
+            "org/gnome/shell" = {
+              "remember-mount-password" = true;
+              "always-show-log-out" = true;
+            };
           };
         }
       ];
@@ -101,9 +106,21 @@
       # '';
     };
 
-    xdg.portal.enable = true;
-    xdg.portal.xdgOpenUsePortal = true;
-    # xdg.portal.configPackages = [ pkgs.gnome-session ];
+    xdg = {
+      portal = {
+        enable = true;
+        # xdgOpenUsePortal = true;
+        # configPackages = [ pkgs.gnome-session ];
+        # extraPortals = with pkgs;
+        #   [
+        #     xdg-desktop-portal-gtk
+        #     # kdePackages.xdg-desktop-portal-kde
+        #     # xdg-desktop-portal-gnome
+        #     # lxqt.xdg-desktop-portal-lxqt
+        #   ];
+      };
+    };
+
 
     services.gvfs.enable = true;
 
