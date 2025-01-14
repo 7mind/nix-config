@@ -21,7 +21,15 @@
     };
 
     home.packages = with pkgs; [
+      libreoffice-fresh
 
+      imagemagick
+      vlc
+      mpv
     ];
+
+    programs.chromium.enable = true;
+    programs.librewolf.enable = true;
+    services.megasync.enable = true;
   };
 }

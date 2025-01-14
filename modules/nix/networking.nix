@@ -59,6 +59,13 @@
         llmnr = "false";
       };
 
+      services.avahi = {
+        enable = true;
+        nssmdns4 = true;
+        nssmdns6 = false;
+        openFirewall = true;
+      };
+
       systemd.network = {
         networks = {
           "20-${config.smind.net.main-bridge}" = {
