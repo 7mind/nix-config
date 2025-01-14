@@ -69,7 +69,7 @@ rec {
           modules = smind-nix-imports ++ [
             inputs.nix-apple-fonts.nixosModules
             inputs.home-manager.nixosModules.home-manager
-            ./hosts/${hostname}/configuration.nix
+            ./hosts/${hostname}/cfg-${hostname}.nix
           ];
         };
     };
