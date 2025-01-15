@@ -30,6 +30,9 @@
 
       websocat
       jq
+
+      tokei
+      cloc
     ];
   };
 

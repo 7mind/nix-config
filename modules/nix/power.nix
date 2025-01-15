@@ -24,14 +24,16 @@
       };
       powerManagement = {
         enable = true;
-        powertop.enable = true;
+        # never enable powertop autotuning, it breaks usb inputs
+        powertop.enable = false;
         scsiLinkPolicy = "med_power_with_dipm";
       };
 
       services.udev = {
         extraRules = ''
-          ACTION=="add|change", SUBSYSTEM=="pci", ATTR{power/control}="auto"
-          ACTION=="add|change", SUBSYSTEM=="block", ATTR{device/power/control}="auto"
+          ACTION=="add|change", SUBSYSTEM=="usb", TEST=="power/control", ATTR{power/control}="on"
+          ACTION=="add|change", SUBSYSTEM=="pci", TEST=="power/control", ATTR{power/control}="auto"
+          ACTION=="add|change", SUBSYSTEM=="block", TEST=="power/control", ATTR{device/power/control}="auto"
           ACTION=="add|change", SUBSYSTEM=="ata_port", ATTR{../../power/control}="auto"
         '';
       };
