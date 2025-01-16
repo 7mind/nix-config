@@ -35,7 +35,6 @@
 
     programs.chromium.enable = true;
     programs.librewolf.enable = true;
-    services.megasync.enable = true;
 
     xdg = lib.mkMerge [
       {

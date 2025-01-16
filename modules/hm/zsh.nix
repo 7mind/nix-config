@@ -66,6 +66,10 @@
       sessionVariables = { };
 
       initExtra = ''
+        what() {
+          ls -la `which $1`
+        }
+
         _fzf_comprun () {
           local command = $1
           shift
