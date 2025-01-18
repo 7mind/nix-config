@@ -21,6 +21,14 @@
     };
   };
 
+  boot.loader = {
+    systemd-boot = {
+      windows = {
+        "11".efiDeviceHandle = "HD0b";
+      };
+    };
+  };
+
   users = {
     users.root.password = "nixos";
 

@@ -18,7 +18,7 @@
         enable = true;
         memtest86.enable = true;
         edk2-uefi-shell.enable = true;
-        consoleMode = "max";
+        consoleMode = "keep";
         configurationLimit = 3;
       };
     };
