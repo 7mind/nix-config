@@ -17,6 +17,7 @@
       systemd-boot = {
         enable = true;
         memtest86.enable = true;
+        edk2-uefi-shell.enable = true;
         consoleMode = "max";
         configurationLimit = 3;
       };
