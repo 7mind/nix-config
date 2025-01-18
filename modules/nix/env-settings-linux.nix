@@ -93,7 +93,8 @@
       # security
       spectre-meltdown-checker
       pax-utils
-
+      sbctl
+      
       # system info
       inxi
       lshw

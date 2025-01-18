@@ -30,6 +30,7 @@ rec {
         modules = "${self}/modules";
         modules-hm = "${self}/modules/hm";
         modules-nix = "${self}/modules/nix";
+        users = "${self}/users";
       };
 
       cfg-packages = const.cfg-packages {
@@ -67,6 +68,7 @@ rec {
           inherit specialArgs;
           system = "${arch}";
           modules = smind-nix-imports ++ [
+            inputs.lanzaboote.nixosModules.lanzaboote
             inputs.nix-apple-fonts.nixosModules
             inputs.home-manager.nixosModules.home-manager
             ./hosts/${hostname}/cfg-${hostname}.nix

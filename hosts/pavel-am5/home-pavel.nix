@@ -1,7 +1,9 @@
-{ pkgs, smind-hm, lib, extended_pkg, ... }:
+{ pkgs, smind-hm, lib, extended_pkg, cfg-meta, ... }:
 
 {
-  imports = smind-hm.imports;
+  imports = smind-hm.imports ++ [
+    "${cfg-meta.paths.users}/pavel/hm/git.nix"
+  ];
 
   smind.hm = {
     roles.desktop = true;

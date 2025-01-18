@@ -46,7 +46,9 @@
       kernel.sane-defaults.enable = lib.mkDefault true;
       power-management.enable = lib.mkDefault true;
 
-      grub.efi.enable = lib.mkDefault true;
+      grub.efi.enable = lib.mkDefault false;
+      systemd-boot.enable = lib.mkDefault true;
+
       fonts.nerd.enable = lib.mkDefault true;
       fonts.apple.enable = lib.mkDefault true;
 

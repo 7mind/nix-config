@@ -11,7 +11,7 @@ function workdir() {
 workdir
 
 git add .
-sudo nixos-rebuild switch --flake ~/cfg
+sudo nixos-rebuild switch --flake $PWD
 git commit -am "autosave"
 git push
 

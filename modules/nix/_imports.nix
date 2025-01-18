@@ -1,5 +1,7 @@
 [
   ./alien-filesystems.nix
+  ./bootloader-grub.nix
+  ./bootloader-systemd.nix
   ./cpu.nix
   ./email.nix
   ./cups.nix
@@ -9,7 +11,6 @@
   ./fonts-nerd.nix
   ./gnome.nix
   ./gnome-minimal-hotkeys.nix
-  ./grub.nix
   ./home-manager.nix
   ./kernel-settings.nix
   ./keyd-super-remap.nix
