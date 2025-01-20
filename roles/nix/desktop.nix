@@ -48,6 +48,7 @@
 
       grub.efi.enable = lib.mkDefault false;
       systemd-boot.enable = lib.mkDefault true;
+      lanzaboote.enable = lib.mkDefault false;
 
       fonts.nerd.enable = lib.mkDefault true;
       fonts.apple.enable = lib.mkDefault true;

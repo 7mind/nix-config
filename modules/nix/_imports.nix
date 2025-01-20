@@ -1,6 +1,7 @@
 [
   ./alien-filesystems.nix
   ./bootloader-grub.nix
+  ./bootloader-lanzaboote.nix
   ./bootloader-systemd.nix
   ./cpu.nix
   ./email.nix

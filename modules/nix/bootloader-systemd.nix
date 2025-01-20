@@ -11,7 +11,7 @@
 
   config = lib.mkIf config.smind.systemd-boot.enable {
     boot.loader = {
-      grub.enable = false;
+      grub.enable = lib.mkForce false;
       efi.efiSysMountPoint = "/boot";
       timeout = 2;
       systemd-boot = {

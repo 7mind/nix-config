@@ -23,24 +23,11 @@
 
   boot.loader = {
     systemd-boot = {
-      enable = lib.mkForce false;
       windows = {
         "11".efiDeviceHandle = "HD0b";
       };
     };
   };
-
-  boot.lanzaboote = {
-    enable = true;
-    pkiBundle = "/var/lib/sbctl";
-    settings = {
-      # memtest86.enable = true;
-      # edk2-uefi-shell.enable = true;
-      consoleMode = "keep";
-      configurationLimit = 3;
-    };
-  };
-
 
   users = {
     users.root.password = "nixos";
@@ -179,5 +166,8 @@
 
     isDesktop = true;
     hw.cpu.isAmd = true;
+
+    systemd-boot.enable = false;
+    lanzaboote.enable = true;
   };
 }
