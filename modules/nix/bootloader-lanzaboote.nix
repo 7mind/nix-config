@@ -19,8 +19,8 @@
 
       systemd-boot = {
         enable = lib.mkForce false;
-        memtest86.enable = lib.mkForce false;
-        edk2-uefi-shell.enable = lib.mkForce false;
+        memtest86.enable = true;
+        edk2-uefi-shell.enable = true;
       };
     };
 
