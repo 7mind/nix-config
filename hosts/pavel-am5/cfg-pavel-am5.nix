@@ -167,7 +167,7 @@
     isDesktop = true;
     hw.cpu.isAmd = true;
 
-    systemd-boot.enable = false;
-    lanzaboote.enable = true;
+    systemd-boot.enable = true;
+    lanzaboote.enable = false;
   };
 }
