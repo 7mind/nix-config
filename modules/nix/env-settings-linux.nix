@@ -84,6 +84,7 @@
       # hw tools
       pciutils
       usbutils
+      fwupd
 
       # networking
       bridge-utils
@@ -94,7 +95,7 @@
       spectre-meltdown-checker
       pax-utils
       sbctl
-      
+
       # system info
       inxi
       lshw
@@ -112,5 +113,6 @@
     ];
 
     services.fstrim.enable = true;
+    services.fwupd.enable = true;
   };
 }
