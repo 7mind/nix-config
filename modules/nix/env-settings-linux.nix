@@ -97,6 +97,7 @@
       sbctl
 
       # system info
+      fastfetch
       inxi
       lshw
       hwinfo

@@ -145,6 +145,7 @@
     ]) ++ (with pkgs; [
       dconf-editor
       seahorse
+      gnome-firmware
     ]);
 
     services.gnome = {
