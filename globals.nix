@@ -53,11 +53,17 @@ rec {
         nix-apple-fonts = inputs.nix-apple-fonts.packages."${arch}";
       };
 
+      cfg-hm-modules = [
+        inputs.agenix.homeManagerModules.default
+      ];
+
       specialArgs = pkgs.lib.fix (self: {
+        inherit smind-hm;
         inherit cfg-meta;
         inherit cfg-flakes;
-        inherit smind-hm;
         inherit cfg-packages;
+        inherit cfg-hm-modules;
+        inherit inputs;
         specialArgsSelfRef = self;
       });
     in
@@ -73,7 +79,7 @@ rec {
             inputs.home-manager.nixosModules.home-manager
 
             inputs.agenix.nixosModules.default
-            inputs.agenix-rekey.nixosModules.default
+            # inputs.agenix-rekey.nixosModules.default
 
             ./hosts/${hostname}/cfg-${hostname}.nix
           ];

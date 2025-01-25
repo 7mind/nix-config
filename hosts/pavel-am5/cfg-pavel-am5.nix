@@ -10,7 +10,7 @@
   networking.hostName = cfg-meta.hostname;
   networking.domain = "home.7mind.io";
 
-  networking.networkmanager.enable = true;
+
 
   boot.initrd = {
     network = {
