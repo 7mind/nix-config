@@ -104,7 +104,8 @@
       dmidecode
 
       # monitoring
-      dstat
+      #dstat # unmaintained, dead
+      dool
       iotop
       powertop
 

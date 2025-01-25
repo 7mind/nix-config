@@ -71,6 +71,10 @@ rec {
             inputs.lanzaboote.nixosModules.lanzaboote
             inputs.nix-apple-fonts.nixosModules
             inputs.home-manager.nixosModules.home-manager
+
+            inputs.agenix.nixosModules.default
+            inputs.agenix-rekey.nixosModules.default
+
             ./hosts/${hostname}/cfg-${hostname}.nix
           ];
         };
