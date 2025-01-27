@@ -49,11 +49,23 @@ function refresh() {
     fi
 }
 
-function rebuild() {
-    echo "Will build: ${hosts[*]}"
+function add_all() {
     git add .
     git submodule foreach git add .
+}
+function commit_and_push() {
+    if [[ $DO_GIT == "1" ]]; then
+        if [[ $(git diff --stat) != '' || $(git diff --staged --stat) != '' ]]; then
+            git commit -am "${MESSAGE}"
+        fi
+        git submodule foreach 'git diff-index --quiet HEAD || (git add -A && git commit -m "autosave")'
+        git push --recurse-submodules=on-demand
+    fi
+}
 
+function rebuild() {
+    echo "Will build: ${hosts[*]}"
+    add_all
     for HOST in "${hosts[@]}"; do
         re="^([a-z0-9]+)[[:space:]]+([A-Za-z0-9]+)[[:space:]]+(.+)$"
         host_data=${known_hosts["$HOST"]}
@@ -74,21 +86,13 @@ function rebuild() {
         esac
     done
 
-    if [[ $DO_GIT == "1" ]]; then
-        if [[ $(git diff --stat) != '' || $(git diff --staged --stat) != '' ]]; then
-            git commit -am "${MESSAGE}"
-        fi
-        git submodule foreach 'git diff-index --quiet HEAD || (git add -A && git commit -m "autosave")'
-        git push --recurse-submodules=on-demand
-    fi
+    commit_and_push
 }
 
 function switch() {
     if [[ $DO_SWITCH == "1" ]]; then
         echo "Will switch: " "${hosts[@]}"
-        git add .
-        git submodule foreach git add .
-
+        add_all
         for HOST in "${hosts[@]}"; do
             re="^([a-z0-9]+)[[:space:]]+([A-Za-z0-9]+)[[:space:]]+(.+)$"
             host_data=${known_hosts["$HOST"]}
@@ -127,14 +131,7 @@ function switch() {
                 ;;
             esac
         done
-
-        if [[ $DO_GIT == "1" ]]; then
-            if [[ $(git diff --stat) != '' || $(git diff --staged --stat) != '' ]]; then
-                git commit -am "${MESSAGE}"
-            fi
-            git submodule foreach 'git diff-index --quiet HEAD || (git add -A && git commit -m "autosave")'
-            git push --recurse-submodules=on-demand
-        fi
+        commit_and_push
     fi
 }
 
