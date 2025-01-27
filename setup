@@ -81,7 +81,7 @@ function rebuild() {
             mkdir -p "$ROOTS"
             set -x
             nix build ".?submodules=1#nixosConfigurations.${HOST}.config.system.build.toplevel" --out-link "${ROOTS}/${HOST}" --extra-experimental-features 'nix-command flakes'
-            set +x
+            #set +x
             ;;
         esac
     done
