@@ -32,9 +32,13 @@
       '';
       accounts = {
         default = {
-          host = "smtp.sendgrid.net";
+          host = "mail.smtp2go.com";
+          user = "7mind.io";
+
+          # host = "smtp.sendgrid.net";
+          # user = "apikey";
+
           passwordeval = "cat ${config.age.secrets.msmtp-password.path}";
-          user = "apikey";
           from = "%U.${config.smind.host.email.sender}";
         };
       };
