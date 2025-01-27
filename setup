@@ -55,10 +55,11 @@ function add_all() {
 }
 function commit_and_push() {
     if [[ $DO_GIT == "1" ]]; then
-        if [[ $(git diff --stat) != '' || $(git diff --staged --stat) != '' ]]; then
-            git commit -am "${MESSAGE}"
-        fi
-        git submodule foreach 'git diff-index --quiet HEAD || (git add -A && git commit -m "autosave")'
+        git submodule foreach "git diff-index --quiet HEAD || (git add -A && git commit -m \"${MESSAGE}\")"
+        git diff-index --quiet HEAD || (git add -A && git commit -m "${MESSAGE}")
+        # if [[ $(git diff --stat) != '' || $(git diff --staged --stat) != '' ]]; then
+        #     git commit -am "${MESSAGE}"
+        # fi
         git push --recurse-submodules=on-demand
     fi
 }
