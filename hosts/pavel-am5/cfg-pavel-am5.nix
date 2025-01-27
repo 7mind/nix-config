@@ -160,7 +160,7 @@
     security.sudo.wheel-permissive-rules = true;
     security.sudo.wheel-passwordless = true;
 
-    zfs.email.enable = false;
+    zfs.email.enable = true;
     host.email.to = "team@7mind.io";
     host.email.sender = "${config.networking.hostName}@home.7mind.io";
 

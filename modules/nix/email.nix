@@ -15,7 +15,7 @@
 
   config = {
     programs.msmtp = {
-      #enable = true;
+      enable = true;
       setSendmail = true;
       defaults = {
         aliases = "/etc/aliases";
