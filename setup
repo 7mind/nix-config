@@ -52,6 +52,7 @@ function refresh() {
 function rebuild() {
     echo "Will build: ${hosts[*]}"
     git add .
+    git submodule foreach git add .
 
     for HOST in "${hosts[@]}"; do
         re="^([a-z0-9]+)[[:space:]]+([A-Za-z0-9]+)[[:space:]]+(.+)$"
@@ -77,6 +78,8 @@ function rebuild() {
         if [[ $(git diff --stat) != '' || $(git diff --staged --stat) != '' ]]; then
             git commit -am "${MESSAGE}"
         fi
+        git submodule foreach 'git diff-index --quiet HEAD || (git add -A && git commit -m "autosave")'
+        git push --recurse-submodules=on-demand
     fi
 }
 
@@ -84,6 +87,7 @@ function switch() {
     if [[ $DO_SWITCH == "1" ]]; then
         echo "Will switch: " "${hosts[@]}"
         git add .
+        git submodule foreach git add .
 
         for HOST in "${hosts[@]}"; do
             re="^([a-z0-9]+)[[:space:]]+([A-Za-z0-9]+)[[:space:]]+(.+)$"
@@ -128,7 +132,8 @@ function switch() {
             if [[ $(git diff --stat) != '' || $(git diff --staged --stat) != '' ]]; then
                 git commit -am "${MESSAGE}"
             fi
-            git push
+            git submodule foreach 'git diff-index --quiet HEAD || (git add -A && git commit -m "autosave")'
+            git push --recurse-submodules=on-demand
         fi
     fi
 }
