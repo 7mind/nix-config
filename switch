@@ -11,7 +11,11 @@ function workdir() {
 workdir
 
 git add .
+git submodule foreach git add .
+
 sudo nixos-rebuild switch --flake "${PWD}?submodules=1"
-git commit -am "autosave"
+
+git submodule foreach git commit -am "autosave" || true
+git commit -am "autosave" || true
 
 popd
