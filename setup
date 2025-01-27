@@ -61,13 +61,13 @@ function rebuild() {
         case "${HOST_PLATFORM}" in
         darwin)
             set -x
-            nix build ".#darwinConfigurations.${HOST}.system?submodules=1" --out-link "${ROOTS}/${HOST}" --extra-experimental-features 'nix-command flakes'
+            nix build ".?submodules=1#darwinConfigurations.${HOST}.system" --out-link "${ROOTS}/${HOST}" --extra-experimental-features 'nix-command flakes'
             set +x
             ;;
         linux)
             mkdir -p "$ROOTS"
             set -x
-            nix build ".#nixosConfigurations.${HOST}.config.system.build.toplevel?submodules=1" --out-link "${ROOTS}/${HOST}" --extra-experimental-features 'nix-command flakes'
+            nix build ".?submodules=1#nixosConfigurations.${HOST}.config.system.build.toplevel" --out-link "${ROOTS}/${HOST}" --extra-experimental-features 'nix-command flakes'
             set +x
             ;;
         esac
