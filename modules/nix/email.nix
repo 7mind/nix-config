@@ -1,4 +1,4 @@
-{ pkgs, lib, config, ... }:
+{ pkgs, lib, config, cfg-meta, ... }:
 
 {
   options = {
@@ -32,15 +32,20 @@
       '';
       accounts = {
         default = {
-          #host = "smtp.sendgrid.net";
-          #passwordeval = "cat ${config.age.secrets.ssmtp-password.path}";
-          #user = "apikey";
+          host = "smtp.sendgrid.net";
+          passwordeval = "cat ${config.age.secrets.msmtp-password.path}";
+          user = "apikey";
           from = "%U.${config.smind.host.email.sender}";
         };
       };
     };
+
     environment.etc.aliases.text = "default: ${config.smind.host.email.to}";
 
+    age.secrets.msmtp-password = {
+      rekeyFile = "${cfg-meta.paths.secrets}/generic/msmtp-password.age";
+      mode = "444";
+    };
 
   };
 }

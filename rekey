@@ -16,12 +16,4 @@ function add_all() {
 workdir
 add_all
 
-git add .
-git submodule foreach git add .
-
-sudo nixos-rebuild switch --flake "${PWD}?submodules=1"
-
-git submodule foreach git commit -am "autosave" || true
-git commit -am "autosave" || true
-
-popd
+agenix  --extra-flake-params "?submodules=1" rekey

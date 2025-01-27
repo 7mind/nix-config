@@ -21,8 +21,6 @@
       default = "br-main";
       description = "";
     };
-
-
   };
 
   config = lib.mkMerge [
@@ -48,20 +46,6 @@
         dhcpcd.enable = false;
         firewall = {
           enable = true;
-          # # should allow slaac
-          # allowedICMPTypes = [
-          #   "echo-request"
-          #   "echo-reply"
-          #   "destination-unreachable"
-          #   "packet-too-big"
-          #   "time-exceeded"
-          #   "parameter-problem"
-          #   "router-solicitation"
-          #   "router-advertisement"
-          #   "neighbour-solicitation"
-          #   "neighbour-advertisement"
-          #   "redirect"
-          # ];
           allowedUDPPorts = [ 546 547 ]; # enables dhcpv6
         };
 
