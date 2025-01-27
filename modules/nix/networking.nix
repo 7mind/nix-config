@@ -48,6 +48,21 @@
         dhcpcd.enable = false;
         firewall = {
           enable = true;
+          # # should allow slaac
+          # allowedICMPTypes = [
+          #   "echo-request"
+          #   "echo-reply"
+          #   "destination-unreachable"
+          #   "packet-too-big"
+          #   "time-exceeded"
+          #   "parameter-problem"
+          #   "router-solicitation"
+          #   "router-advertisement"
+          #   "neighbour-solicitation"
+          #   "neighbour-advertisement"
+          #   "redirect"
+          # ];
+          allowedUDPPorts = [ 546 547 ]; # enables dhcpv6
         };
 
         bridges."${config.smind.net.main-bridge}".interfaces = [ config.smind.net.main-interface ];
@@ -66,11 +81,27 @@
         openFirewall = true;
       };
 
+      # boot.kernel.sysctl = {
+      #   "net.ipv6.conf.br-main.accept_ra" = 1;
+      # };
+
       systemd.network = {
         networks = {
           "20-${config.smind.net.main-bridge}" = {
             name = "${config.smind.net.main-bridge}";
             DHCP = "yes";
+
+            linkConfig = {
+              MACAddress = "d0:94:66:55:aa:11";
+              RequiredForOnline = "routable";
+            };
+
+            networkConfig = {
+              IPv6PrivacyExtensions = "no";
+              DHCPPrefixDelegation = "yes";
+              IPv6AcceptRA = "yes";
+              LinkLocalAddressing = "yes";
+            };
 
             dhcpV4Config = {
               SendHostname = true;
@@ -79,9 +110,9 @@
             };
 
             dhcpV6Config = {
-              SendHostname = false;
-              #Hostname = "${config.networking.hostName}-ipv6.${config.networking.domain}";
-              #UseDomains = true;
+              SendHostname = true;
+              Hostname = "${config.networking.hostName}-ipv6.${config.networking.domain}";
+              UseDomains = true;
             };
 
             # routes = [{
@@ -93,6 +124,11 @@
         };
       };
 
+      systemd.network.wait-online = {
+        enable = false;
+        extraArgs =
+          [ "--interface=br-infra" ];
+      };
     })
 
     (lib.mkIf config.smind.net.desktop.enable {
@@ -117,20 +153,19 @@
       };
 
       systemd.services.NetworkManager-wait-online.enable = false;
-      systemd.network.wait-online.enable = false;
 
-      services.opensnitch = {
-        enable = true;
-        settings = {
-          DefaultAction = "allow";
-          Firewall = "nftables";
-          ProcMonitorMethod = "ebpf";
-        };
-      };
+      # services.opensnitch = {
+      #   enable = true;
+      #   settings = {
+      #     DefaultAction = "allow";
+      #     Firewall = "nftables";
+      #     ProcMonitorMethod = "ebpf";
+      #   };
+      # };
 
-      environment.systemPackages = with pkgs; [
-        opensnitch-ui
-      ];
+      # environment.systemPackages = with pkgs; [
+      #   opensnitch-ui
+      # ];
     })
   ];
 }

@@ -26,6 +26,7 @@ rec {
       paths = {
         root = "${self}";
         pkg = "${self}/pkg";
+        secrets = "${self}/private/secrets";
         lib = "${self}/lib";
         modules = "${self}/modules";
         modules-hm = "${self}/modules/hm";
@@ -79,7 +80,7 @@ rec {
             inputs.home-manager.nixosModules.home-manager
 
             inputs.agenix.nixosModules.default
-            # inputs.agenix-rekey.nixosModules.default
+            inputs.agenix-rekey.nixosModules.default
 
             ./hosts/${hostname}/cfg-${hostname}.nix
           ];

@@ -15,5 +15,6 @@
     home-manager.useUserPackages = true;
     home-manager.extraSpecialArgs = specialArgsSelfRef;
     home-manager.sharedModules = specialArgsSelfRef.cfg-hm-modules;
+    home-manager.backupFileExtension = "hmbak";
   };
 }

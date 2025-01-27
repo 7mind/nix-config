@@ -2,6 +2,8 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
+    flake-utils.url = "github:numtide/flake-utils";
+
     lanzaboote.url = "github:nix-community/lanzaboote/v0.4.1";
     lanzaboote.inputs.nixpkgs.follows = "nixpkgs";
 
@@ -9,7 +11,7 @@
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
 
     agenix = {
-      url = "github:yaxitech/ragenix";
+      url = "github:ryantm/agenix";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.home-manager.follows = "home-manager";
     };
@@ -42,5 +44,19 @@
           (make-nixos-x86_64 "pavel-am5")
         ]
       ;
-    };
+      
+      agenix-rekey = inputs.agenix-rekey.configure {
+        userFlake = self;
+        nixosConfigurations = self.nixosConfigurations;
+      };
+    } // inputs.flake-utils.lib.eachDefaultSystem (system: rec {
+      pkgs = import inputs.nixpkgs {
+        inherit system;
+        overlays = [ inputs.agenix-rekey.overlays.default ];
+      };
+      devShells.default = pkgs.mkShell {
+        packages = [ pkgs.agenix-rekey ];
+      };
+    });
+
 }

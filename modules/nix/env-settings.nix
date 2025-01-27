@@ -1,4 +1,4 @@
-{ config, lib, pkgs, inputs, ... }:
+{ config, lib, pkgs, ... }:
 
 {
   options = {
@@ -94,7 +94,7 @@
       # security
       age
       gnupg
-      inputs.agenix.packages."${system}".default
+      #inputs.agenix.packages."${system}".default
 
       # benchmark
       stress

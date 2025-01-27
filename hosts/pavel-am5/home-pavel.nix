@@ -1,30 +1,16 @@
-{ pkgs, smind-hm, lib, extended_pkg, cfg-meta, inputs, ... }:
+{ pkgs, smind-hm, lib, extended_pkg, cfg-meta, inputs, nixosConfig, ... }:
 
 {
   imports = smind-hm.imports ++ [
     "${cfg-meta.paths.users}/pavel/hm/git.nix"
-    # cfg-inputs.agenix-rekey.homeManagerModules.default
+    "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
+    inputs.agenix-rekey.homeManagerModules.default
   ];
 
-  # age.rekey = {
-  #   hostPubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM1VvmTzQX/bvLjKEyDfGWdxGdt+3ZSy7/f6r5YAsvtS";
-  #   # The path to the master identity used for decryption. See the option's description for more information.
-  #   masterIdentities = [ ./your-yubikey-identity.pub ];
-  #   #masterIdentities = [ "/home/myuser/master-key" ]; # External master key
-  #   #masterIdentities = [
-  #   #  # It is possible to specify an identity using the following alternate syntax,
-  #   #  # this can be used to avoid unecessary prompts during encryption.
-  #   #  {
-  #   #    identity = "/home/myuser/master-key.age"; # Password protected external master key
-  #   #    pubkey = "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs3290gq"; # Specify the public key explicitly
-  #   #  }
-  #   #];
-  #   storageMode = "local";
-  #   # Choose a directory to store the rekeyed secrets for this host.
-  #   # This cannot be shared with other hosts. Please refer to this path
-  #   # from your flake's root directory and not by a direct path literal like ./secrets
-  #   localStorageDir = ./. + "/secrets/rekeyed/${config.networking.hostName}";
-  # };
+  home.activation.createSymlinks = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    ln -sfn ${nixosConfig.age.secrets.id_ed25519.path} ~/.ssh/id_ed25519
+    ln -sfn ${nixosConfig.age.secrets."id_ed25519.pub".path} ~/.ssh/id_ed25519.pub
+  '';
 
   smind.hm = {
     roles.desktop = true;

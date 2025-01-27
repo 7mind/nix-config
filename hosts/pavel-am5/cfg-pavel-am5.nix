@@ -4,13 +4,25 @@
   imports =
     [
       ./hardware-configuration.nix
+      "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
     ];
+
+  age.secrets.id_ed25519 = {
+    rekeyFile = "${cfg-meta.paths.secrets}/pavel/id_ed25519.age";
+    owner = "pavel";
+    group = "users";
+  };
+
+  age.secrets."id_ed25519.pub" = {
+    rekeyFile = "${cfg-meta.paths.secrets}/pavel/id_ed25519.pub.age";
+    owner = "pavel";
+    group = "users";
+  };
+
 
   networking.hostId = "8a9c7614";
   networking.hostName = cfg-meta.hostname;
   networking.domain = "home.7mind.io";
-
-
 
   boot.initrd = {
     network = {

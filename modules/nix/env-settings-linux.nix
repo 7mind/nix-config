@@ -116,5 +116,9 @@
 
     services.fstrim.enable = true;
     services.fwupd.enable = true;
+
+    services.journald.extraConfig = ''
+      MaxRetentionSec=1month
+    '';
   };
 }

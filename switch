@@ -11,8 +11,7 @@ function workdir() {
 workdir
 
 git add .
-sudo nixos-rebuild switch --flake $PWD
+sudo nixos-rebuild switch --flake "${PWD}?submodules=1"
 git commit -am "autosave"
-git push
 
 popd

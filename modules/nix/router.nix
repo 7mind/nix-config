@@ -12,7 +12,6 @@
   config = lib.mkIf config.smind.router.enable {
     boot.kernel.sysctl = {
       "net.ipv4.ip_forward" = 1;
-      #"net.ipv6.ip_forward" = 1;
       "net.ipv6.conf.all.forwarding" = 1;
     };
 
