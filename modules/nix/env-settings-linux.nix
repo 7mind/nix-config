@@ -112,6 +112,9 @@
       # benchmark
       stress
 
+      # mail
+      mailutils
+
     ];
 
     services.fstrim.enable = true;
