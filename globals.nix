@@ -26,6 +26,7 @@ rec {
       paths = {
         root = "${self}";
         pkg = "${self}/pkg";
+        private = "${self}/private";
         secrets = "${self}/private/secrets";
         lib = "${self}/lib";
         modules = "${self}/modules";

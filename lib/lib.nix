@@ -56,4 +56,6 @@ in
       defaultApplications = xdg_associations input;
     };
   };
+
+  _module.args.import_if_exists = path: if builtins.pathExists path then import path else { };
 }

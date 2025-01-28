@@ -1,22 +1,35 @@
 { config, lib, pkgs, cfg-meta, ... }:
 
+let
+  import_if_exists = path: if builtins.pathExists path then import path else { };
+in
 {
   imports =
     [
       ./hardware-configuration.nix
       "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
+      (import_if_exists "${cfg-meta.paths.private}/pavel/cfg-nix.nix")
     ];
 
-  age.secrets.id_ed25519 = {
-    rekeyFile = "${cfg-meta.paths.secrets}/pavel/id_ed25519.age";
-    owner = "pavel";
-    group = "users";
-  };
+  age.secrets = {
+    id_ed25519 = {
+      rekeyFile = "${cfg-meta.paths.secrets}/pavel/id_ed25519.age";
+      owner = "pavel";
+      group = "users";
+    };
 
-  age.secrets."id_ed25519.pub" = {
-    rekeyFile = "${cfg-meta.paths.secrets}/pavel/id_ed25519.pub.age";
-    owner = "pavel";
-    group = "users";
+    "id_ed25519.pub" = {
+      rekeyFile = "${cfg-meta.paths.secrets}/pavel/id_ed25519.pub.age";
+      owner = "pavel";
+      group = "users";
+    };
+
+    nexus-oss-sonatype = {
+      rekeyFile = "${cfg-meta.paths.secrets}/pavel/nexus-oss-sonatype.age";
+      owner = "pavel";
+      group = "users";
+      mode = "440";
+    };
   };
 
 
@@ -27,6 +40,7 @@
   boot.initrd = {
     network = {
       ssh = {
+        # `ssh-keygen -t ed25519 -N "" -f /etc/secrets/initrd/ssh_host_ed25519_key`
         hostKeys = [ "/etc/secrets/initrd/ssh_host_ed25519_key" ];
         authorizedKeys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKA1LYgjfuWSxa1lZRCebvo3ghtSAtEQieGlVCknF8f pshirshov@7mind.io" ];
       };
