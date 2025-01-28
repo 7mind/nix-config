@@ -1,37 +1,37 @@
 [
   {
     "key": "shift+escape",
-    "command": "-cancelSelection",
+    "command": "cancelSelection",
     "when": "editorHasSelection && textInputFocus"
   },
   {
     "key": "escape",
-    "command": "-cancelSelection",
+    "command": "cancelSelection",
     "when": "editorHasSelection && textInputFocus"
   },
   {
     "key": "ctrl+end",
-    "command": "-cursorBottom",
+    "command": "cursorBottom",
     "when": "textInputFocus"
   },
   {
     "key": "ctrl+shift+end",
-    "command": "-cursorBottomSelect",
+    "command": "cursorBottomSelect",
     "when": "textInputFocus"
   },
   {
     "key": "down",
-    "command": "-cursorDown",
+    "command": "cursorDown",
     "when": "textInputFocus"
   },
   {
     "key": "shift+down",
-    "command": "-cursorDownSelect",
+    "command": "cursorDownSelect",
     "when": "textInputFocus"
   },
   {
     "key": "end",
-    "command": "-cursorEnd",
+    "command": "cursorEnd",
     "when": "textInputFocus",
     "args": {
       "sticky": false
@@ -39,7 +39,7 @@
   },
   {
     "key": "shift+end",
-    "command": "-cursorEndSelect",
+    "command": "cursorEndSelect",
     "when": "textInputFocus",
     "args": {
       "sticky": false
@@ -47,407 +47,407 @@
   },
   {
     "key": "home",
-    "command": "-cursorHome",
+    "command": "cursorHome",
     "when": "textInputFocus"
   },
   {
     "key": "shift+home",
-    "command": "-cursorHomeSelect",
+    "command": "cursorHomeSelect",
     "when": "textInputFocus"
   },
   {
     "key": "left",
-    "command": "-cursorLeft",
+    "command": "cursorLeft",
     "when": "textInputFocus"
   },
   {
     "key": "shift+left",
-    "command": "-cursorLeftSelect",
+    "command": "cursorLeftSelect",
     "when": "textInputFocus"
   },
   {
     "key": "pagedown",
-    "command": "-cursorPageDown",
+    "command": "cursorPageDown",
     "when": "textInputFocus"
   },
   {
     "key": "shift+pagedown",
-    "command": "-cursorPageDownSelect",
+    "command": "cursorPageDownSelect",
     "when": "textInputFocus"
   },
   {
     "key": "pageup",
-    "command": "-cursorPageUp",
+    "command": "cursorPageUp",
     "when": "textInputFocus"
   },
   {
     "key": "shift+pageup",
-    "command": "-cursorPageUpSelect",
+    "command": "cursorPageUpSelect",
     "when": "textInputFocus"
   },
   {
     "key": "right",
-    "command": "-cursorRight",
+    "command": "cursorRight",
     "when": "textInputFocus"
   },
   {
     "key": "shift+right",
-    "command": "-cursorRightSelect",
+    "command": "cursorRightSelect",
     "when": "textInputFocus"
   },
   {
     "key": "ctrl+home",
-    "command": "-cursorTop",
+    "command": "cursorTop",
     "when": "textInputFocus"
   },
   {
     "key": "ctrl+shift+home",
-    "command": "-cursorTopSelect",
+    "command": "cursorTopSelect",
     "when": "textInputFocus"
   },
   {
     "key": "up",
-    "command": "-cursorUp",
+    "command": "cursorUp",
     "when": "textInputFocus"
   },
   {
     "key": "shift+up",
-    "command": "-cursorUpSelect",
+    "command": "cursorUpSelect",
     "when": "textInputFocus"
   },
   {
     "key": "shift+backspace",
-    "command": "-deleteLeft",
+    "command": "deleteLeft",
     "when": "textInputFocus"
   },
   {
     "key": "backspace",
-    "command": "-deleteLeft",
+    "command": "deleteLeft",
     "when": "textInputFocus"
   },
   {
     "key": "delete",
-    "command": "-deleteRight",
+    "command": "deleteRight",
     "when": "textInputFocus"
   },
   {
     "key": "ctrl+l",
-    "command": "-expandLineSelection",
+    "command": "expandLineSelection",
     "when": "textInputFocus"
   },
   {
     "key": "ctrl+down",
-    "command": "-scrollLineDown",
+    "command": "scrollLineDown",
     "when": "textInputFocus"
   },
   {
     "key": "ctrl+up",
-    "command": "-scrollLineUp",
+    "command": "scrollLineUp",
     "when": "textInputFocus"
   },
   {
     "key": "alt+pagedown",
-    "command": "-scrollPageDown",
+    "command": "scrollPageDown",
     "when": "textInputFocus"
   },
   {
     "key": "alt+pageup",
-    "command": "-scrollPageUp",
+    "command": "scrollPageUp",
     "when": "textInputFocus"
   },
   {
     "key": "shift+down",
-    "command": "-cursorColumnSelectDown",
+    "command": "cursorColumnSelectDown",
     "when": "editorColumnSelection && textInputFocus"
   },
   {
     "key": "shift+left",
-    "command": "-cursorColumnSelectLeft",
+    "command": "cursorColumnSelectLeft",
     "when": "editorColumnSelection && textInputFocus"
   },
   {
     "key": "shift+pagedown",
-    "command": "-cursorColumnSelectPageDown",
+    "command": "cursorColumnSelectPageDown",
     "when": "editorColumnSelection && textInputFocus"
   },
   {
     "key": "shift+pageup",
-    "command": "-cursorColumnSelectPageUp",
+    "command": "cursorColumnSelectPageUp",
     "when": "editorColumnSelection && textInputFocus"
   },
   {
     "key": "shift+right",
-    "command": "-cursorColumnSelectRight",
+    "command": "cursorColumnSelectRight",
     "when": "editorColumnSelection && textInputFocus"
   },
   {
     "key": "shift+up",
-    "command": "-cursorColumnSelectUp",
+    "command": "cursorColumnSelectUp",
     "when": "editorColumnSelection && textInputFocus"
   },
   {
     "key": "shift+escape",
-    "command": "-removeSecondaryCursors",
+    "command": "removeSecondaryCursors",
     "when": "editorHasMultipleSelections && textInputFocus"
   },
   {
     "key": "escape",
-    "command": "-removeSecondaryCursors",
+    "command": "removeSecondaryCursors",
     "when": "editorHasMultipleSelections && textInputFocus"
   },
   {
     "key": "shift+escape",
-    "command": "-closeBreakpointWidget",
+    "command": "closeBreakpointWidget",
     "when": "breakpointWidgetVisible && textInputFocus"
   },
   {
     "key": "escape",
-    "command": "-closeBreakpointWidget",
+    "command": "closeBreakpointWidget",
     "when": "breakpointWidgetVisible && textInputFocus"
   },
   {
     "key": "ctrl+u",
-    "command": "-cursorUndo",
+    "command": "cursorUndo",
     "when": "textInputFocus"
   },
   {
     "key": "ctrl+right",
-    "command": "-cursorWordEndRight",
+    "command": "cursorWordEndRight",
     "when": "textInputFocus"
   },
   {
     "key": "ctrl+shift+right",
-    "command": "-cursorWordEndRightSelect",
+    "command": "cursorWordEndRightSelect",
     "when": "textInputFocus"
   },
   {
     "key": "ctrl+left",
-    "command": "-cursorWordLeft",
+    "command": "cursorWordLeft",
     "when": "textInputFocus"
   },
   {
     "key": "ctrl+shift+left",
-    "command": "-cursorWordLeftSelect",
+    "command": "cursorWordLeftSelect",
     "when": "textInputFocus"
   },
   {
     "key": "ctrl+backspace",
-    "command": "-deleteWordLeft",
+    "command": "deleteWordLeft",
     "when": "textInputFocus && !editorReadonly"
   },
   {
     "key": "ctrl+delete",
-    "command": "-deleteWordRight",
+    "command": "deleteWordRight",
     "when": "textInputFocus && !editorReadonly"
   },
   {
     "key": "shift+alt+[IntlBackslash]",
-    "command": "-editor.action.autoFix",
+    "command": "editor.action.autoFix",
     "when": "textInputFocus && !editorReadonly && supportedCodeAction =~ /(\\s|^)quickfix\\b/"
   },
   {
     "key": "shift+alt+.",
-    "command": "-editor.action.autoFix",
+    "command": "editor.action.autoFix",
     "when": "textInputFocus && !editorReadonly && supportedCodeAction =~ /(\\s|^)quickfix\\b/"
   },
   {
     "key": "ctrl+shift+k",
-    "command": "-editor.action.deleteLines",
+    "command": "editor.action.deleteLines",
     "when": "textInputFocus && !editorReadonly"
   },
   {
     "key": "shift+alt+o",
-    "command": "-editor.action.organizeImports",
+    "command": "editor.action.organizeImports",
     "when": "textInputFocus && !editorReadonly && supportedCodeAction =~ /(\\s|^)source\\.organizeImports\\b/"
   },
   {
     "key": "ctrl+.",
-    "command": "-editor.action.quickFix",
+    "command": "editor.action.quickFix",
     "when": "editorHasCodeActionsProvider && textInputFocus && !editorReadonly"
   },
   {
     "key": "ctrl+shift+r",
-    "command": "-editor.action.refactor",
+    "command": "editor.action.refactor",
     "when": "editorHasCodeActionsProvider && textInputFocus && !editorReadonly"
   },
   {
     "key": "shift+f10",
-    "command": "-editor.action.showContextMenu",
+    "command": "editor.action.showContextMenu",
     "when": "textInputFocus"
   },
   {
     "key": "ctrl+i",
-    "command": "-editor.action.triggerSuggest",
+    "command": "editor.action.triggerSuggest",
     "when": "editorHasCompletionItemProvider && textInputFocus && !editorReadonly && !suggestWidgetVisible"
   },
   {
     "key": "ctrl+space",
-    "command": "-editor.action.triggerSuggest",
+    "command": "editor.action.triggerSuggest",
     "when": "editorHasCompletionItemProvider && textInputFocus && !editorReadonly && !suggestWidgetVisible"
   },
   {
     "key": "enter",
-    "command": "-repl.action.acceptInput",
+    "command": "repl.action.acceptInput",
     "when": "inDebugRepl && textInputFocus"
   },
   {
     "key": "ctrl+f",
-    "command": "-repl.action.filter",
+    "command": "repl.action.filter",
     "when": "inDebugRepl && textInputFocus"
   },
   {
     "key": "tab",
-    "command": "-jumpToNextSnippetPlaceholder",
+    "command": "jumpToNextSnippetPlaceholder",
     "when": "hasNextTabstop && inSnippetMode && textInputFocus"
   },
   {
     "key": "shift+tab",
-    "command": "-jumpToPrevSnippetPlaceholder",
+    "command": "jumpToPrevSnippetPlaceholder",
     "when": "hasPrevTabstop && inSnippetMode && textInputFocus"
   },
   {
     "key": "shift+escape",
-    "command": "-leaveSnippet",
+    "command": "leaveSnippet",
     "when": "inSnippetMode && textInputFocus"
   },
   {
     "key": "escape",
-    "command": "-leaveSnippet",
+    "command": "leaveSnippet",
     "when": "inSnippetMode && textInputFocus"
   },
   {
     "key": "shift+tab",
-    "command": "-acceptAlternativeSelectedSuggestion",
+    "command": "acceptAlternativeSelectedSuggestion",
     "when": "suggestWidgetHasFocusedSuggestion && suggestWidgetVisible && textInputFocus"
   },
   {
     "key": "shift+enter",
-    "command": "-acceptAlternativeSelectedSuggestion",
+    "command": "acceptAlternativeSelectedSuggestion",
     "when": "suggestWidgetHasFocusedSuggestion && suggestWidgetVisible && textInputFocus"
   },
   {
     "key": "tab",
-    "command": "-acceptSelectedSuggestion",
+    "command": "acceptSelectedSuggestion",
     "when": "suggestWidgetHasFocusedSuggestion && suggestWidgetVisible && textInputFocus"
   },
   {
     "key": "enter",
-    "command": "-acceptSelectedSuggestion",
+    "command": "acceptSelectedSuggestion",
     "when": "acceptSuggestionOnEnter && suggestWidgetHasFocusedSuggestion && suggestWidgetVisible && suggestionMakesTextEdit && textInputFocus"
   },
   {
     "key": "ctrl+i",
-    "command": "-focusSuggestion",
+    "command": "focusSuggestion",
     "when": "suggestWidgetVisible && textInputFocus && !suggestWidgetHasFocusedSuggestion"
   },
   {
     "key": "ctrl+space",
-    "command": "-focusSuggestion",
+    "command": "focusSuggestion",
     "when": "suggestWidgetVisible && textInputFocus && !suggestWidgetHasFocusedSuggestion"
   },
   {
     "key": "shift+escape",
-    "command": "-hideSuggestWidget",
+    "command": "hideSuggestWidget",
     "when": "suggestWidgetVisible && textInputFocus"
   },
   {
     "key": "escape",
-    "command": "-hideSuggestWidget",
+    "command": "hideSuggestWidget",
     "when": "suggestWidgetVisible && textInputFocus"
   },
   {
     "key": "tab",
-    "command": "-insertBestCompletion",
+    "command": "insertBestCompletion",
     "when": "atEndOfWord && textInputFocus && !hasOtherSuggestions && !inSnippetMode && !suggestWidgetVisible && config.editor.tabCompletion == 'on'"
   },
   {
     "key": "tab",
-    "command": "-insertNextSuggestion",
+    "command": "insertNextSuggestion",
     "when": "hasOtherSuggestions && textInputFocus && !inSnippetMode && !suggestWidgetVisible && config.editor.tabCompletion == 'on'"
   },
   {
     "key": "shift+tab",
-    "command": "-insertPrevSuggestion",
+    "command": "insertPrevSuggestion",
     "when": "hasOtherSuggestions && textInputFocus && !inSnippetMode && !suggestWidgetVisible && config.editor.tabCompletion == 'on'"
   },
   {
     "key": "ctrl+pagedown",
-    "command": "-selectNextPageSuggestion",
+    "command": "selectNextPageSuggestion",
     "when": "suggestWidgetMultipleSuggestions && suggestWidgetVisible && textInputFocus || suggestWidgetVisible && textInputFocus && !suggestWidgetHasFocusedSuggestion"
   },
   {
     "key": "pagedown",
-    "command": "-selectNextPageSuggestion",
+    "command": "selectNextPageSuggestion",
     "when": "suggestWidgetMultipleSuggestions && suggestWidgetVisible && textInputFocus || suggestWidgetVisible && textInputFocus && !suggestWidgetHasFocusedSuggestion"
   },
   {
     "key": "ctrl+down",
-    "command": "-selectNextSuggestion",
+    "command": "selectNextSuggestion",
     "when": "suggestWidgetMultipleSuggestions && suggestWidgetVisible && textInputFocus || suggestWidgetVisible && textInputFocus && !suggestWidgetHasFocusedSuggestion"
   },
   {
     "key": "down",
-    "command": "-selectNextSuggestion",
+    "command": "selectNextSuggestion",
     "when": "suggestWidgetMultipleSuggestions && suggestWidgetVisible && textInputFocus || suggestWidgetVisible && textInputFocus && !suggestWidgetHasFocusedSuggestion"
   },
   {
     "key": "ctrl+pageup",
-    "command": "-selectPrevPageSuggestion",
+    "command": "selectPrevPageSuggestion",
     "when": "suggestWidgetMultipleSuggestions && suggestWidgetVisible && textInputFocus || suggestWidgetVisible && textInputFocus && !suggestWidgetHasFocusedSuggestion"
   },
   {
     "key": "pageup",
-    "command": "-selectPrevPageSuggestion",
+    "command": "selectPrevPageSuggestion",
     "when": "suggestWidgetMultipleSuggestions && suggestWidgetVisible && textInputFocus || suggestWidgetVisible && textInputFocus && !suggestWidgetHasFocusedSuggestion"
   },
   {
     "key": "ctrl+up",
-    "command": "-selectPrevSuggestion",
+    "command": "selectPrevSuggestion",
     "when": "suggestWidgetMultipleSuggestions && suggestWidgetVisible && textInputFocus || suggestWidgetVisible && textInputFocus && !suggestWidgetHasFocusedSuggestion"
   },
   {
     "key": "up",
-    "command": "-selectPrevSuggestion",
+    "command": "selectPrevSuggestion",
     "when": "suggestWidgetMultipleSuggestions && suggestWidgetVisible && textInputFocus || suggestWidgetVisible && textInputFocus && !suggestWidgetHasFocusedSuggestion"
   },
   {
     "key": "ctrl+i",
-    "command": "-toggleSuggestionDetails",
+    "command": "toggleSuggestionDetails",
     "when": "suggestWidgetHasFocusedSuggestion && suggestWidgetVisible && textInputFocus"
   },
   {
     "key": "ctrl+space",
-    "command": "-toggleSuggestionDetails",
+    "command": "toggleSuggestionDetails",
     "when": "suggestWidgetHasFocusedSuggestion && suggestWidgetVisible && textInputFocus"
   },
   {
     "key": "ctrl+alt+space",
-    "command": "-toggleSuggestionFocus",
+    "command": "toggleSuggestionFocus",
     "when": "suggestWidgetVisible && textInputFocus"
   },
   {
     "key": "ctrl+left",
-    "command": "-cursorWordAccessibilityLeft",
+    "command": "cursorWordAccessibilityLeft",
     "when": "accessibilityModeEnabled && isWindows && textInputFocus && focusedView == 'workbench.panel.output'"
   },
   {
     "key": "ctrl+shift+left",
-    "command": "-cursorWordAccessibilityLeftSelect",
+    "command": "cursorWordAccessibilityLeftSelect",
     "when": "accessibilityModeEnabled && isWindows && textInputFocus && focusedView == 'workbench.panel.output'"
   },
   {
     "key": "ctrl+right",
-    "command": "-cursorWordAccessibilityRight",
+    "command": "cursorWordAccessibilityRight",
     "when": "accessibilityModeEnabled && isWindows && textInputFocus && focusedView == 'workbench.panel.output'"
   },
   {
     "key": "ctrl+shift+right",
-    "command": "-cursorWordAccessibilityRightSelect",
+    "command": "cursorWordAccessibilityRightSelect",
     "when": "accessibilityModeEnabled && isWindows && textInputFocus && focusedView == 'workbench.panel.output'"
   },
   {
     "key": "ctrl+i",
-    "command": "-inlineChat.holdForSpeech",
+    "command": "inlineChat.holdForSpeech",
     "when": "hasSpeechProvider && inlineChatHasProvider && inlineChatVisible && textInputFocus"
   }
 ]
