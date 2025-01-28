@@ -1,8 +1,5 @@
-{ config, lib, pkgs, cfg-meta, ... }:
+{ config, lib, pkgs, cfg-meta, import_if_exists, ... }:
 
-let
-  import_if_exists = path: if builtins.pathExists path then import path else { };
-in
 {
   imports =
     [
