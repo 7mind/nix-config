@@ -1,25 +1,12 @@
 { pkgs, smind-hm, lib, extended_pkg, cfg-meta, inputs, nixosConfig, import_if_exists, ... }:
 
-# let
-#   import_if_exists = path: if builtins.pathExists path then import path else { };
-# in
 {
   imports = smind-hm.imports ++ [
     "${cfg-meta.paths.users}/pavel/hm/git.nix"
     "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
     inputs.agenix-rekey.homeManagerModules.default
     (import_if_exists "${cfg-meta.paths.private}/pavel/cfg-hm.nix")
-
   ];
-
-  home.activation.createSymlinks = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    mkdir -p .ssh/
-    ln -sfn ${nixosConfig.age.secrets.id_ed25519.path} ~/.ssh/id_ed25519
-    ln -sfn ${nixosConfig.age.secrets."id_ed25519.pub".path} ~/.ssh/id_ed25519.pub
-
-    mkdir -p .sbt/secrets/
-    ln -sfn ${nixosConfig.age.secrets.nexus-oss-sonatype.path} ~/.sbt/secrets/credentials.sonatype-nexus.properties
-  '';
 
   smind.hm = {
     roles.desktop = true;
@@ -39,6 +26,23 @@
       }
     ];
   };
+
+  programs.zsh.shellAliases = {
+    rmj = "find . -depth -type d \\( -name target -or -name .bloop -or -name .bsp -or -name .metals \\) -exec rm -rf {} \\;";
+    rmgpucache = "find ~ -name GPUCache -type d -exec rm -rf {} \\;";
+    open =
+      lib.mkIf cfg-meta.isLinux "xdg-open";
+  };
+
+  home.activation.createSymlinks = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    mkdir -p .ssh/
+    ln -sfn ${nixosConfig.age.secrets.id_ed25519.path} ~/.ssh/id_ed25519
+    ln -sfn ${nixosConfig.age.secrets."id_ed25519.pub".path} ~/.ssh/id_ed25519.pub
+
+    mkdir -p .sbt/secrets/
+    ln -sfn ${nixosConfig.age.secrets.nexus-oss-sonatype.path} ~/.sbt/secrets/credentials.sonatype-nexus.properties
+  '';
+
 
   programs.direnv = {
     config = {
