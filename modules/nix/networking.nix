@@ -134,6 +134,12 @@
 
         wireless.iwd.enable = true;
         wireless.enable = false;
+
+        firewall = {
+          allowedUDPPorts = [
+            1900 # UPnP service discovery
+          ];
+        };
       };
 
       systemd.services.NetworkManager-wait-online.enable = false;

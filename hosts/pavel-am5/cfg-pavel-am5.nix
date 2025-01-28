@@ -24,9 +24,8 @@
 
     net.main-interface = "enp8s0";
 
-    ssh.permissive = true;
-
-    kernel.hack-rtl8125.enable = true;
+    ssh.permissive = false;
+    ssh.safe = true;
 
     hw.uhk-keyboard.enable = true;
     hw.trezor.enable = true;
@@ -38,6 +37,9 @@
 
     systemd-boot.enable = true;
     lanzaboote.enable = false;
+
+    kernel.hack-rtl8125.enable = true;
+    llm.enable = false;
   };
 
   age.secrets = {
@@ -109,7 +111,7 @@
         # "docker"
         # "corectrl"
         # "wireshark"
-        # "ssh-users"
+        "ssh-users"
       ];
       openssh.authorizedKeys.keys = cfg-const.ssh-keys-pavel;
     };

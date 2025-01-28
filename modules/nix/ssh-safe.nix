@@ -10,5 +10,21 @@
   };
 
   config = lib.mkIf config.smind.ssh.safe {
+    users.groups.ssh-users = { };
+
+    services.openssh = {
+      enable = true;
+      settings = {
+        PermitRootLogin = lib.mkDefault "prohibit-password";
+        PasswordAuthentication = false;
+        KbdInteractiveAuthentication = false;
+        AllowUsers = [ "root" ];
+      };
+      extraConfig = ''
+        Match group ssh-users
+          AllowUsers *
+      '';
+      openFirewall = true;
+    };
   };
 }
