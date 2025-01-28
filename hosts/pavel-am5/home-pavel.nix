@@ -39,7 +39,9 @@
       (builtins.fromJSON (builtins.readFile ./vscode-gitlens-negate.json)) ++
       (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-nocontext.json)) ++
       (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-textInputFocus.json)) ++
-      (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-editorHoverFocused.json))
+      (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-editorHoverFocused.json)) ++
+      (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-stickyScrollFocused.json)) ++
+      [ ]
     else
       if cfg-meta.isDarwin then [ ] else
       [ ];

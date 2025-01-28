@@ -1,0 +1,197 @@
+[
+  {
+    "key": "enter",
+    "command": "editor.action.goToFocusedStickyScrollLine",
+    "when": "stickyScrollFocused"
+  },
+  {
+    "key": "escape",
+    "command": "editor.action.selectEditor",
+    "when": "stickyScrollFocused"
+  },
+  {
+    "key": "down",
+    "command": "editor.action.selectNextStickyScrollLine",
+    "when": "stickyScrollFocused"
+  },
+  {
+    "key": "up",
+    "command": "editor.action.selectPreviousStickyScrollLine",
+    "when": "stickyScrollFocused"
+  },
+  {
+    "key": "ctrl+enter",
+    "command": "openReferenceToSide",
+    "when": "listFocus && referenceSearchVisible && !inputFocus && !treeElementCanCollapse && !treeElementCanExpand && !treestickyScrollFocused"
+  },
+  {
+    "key": "ctrl+enter",
+    "command": "breadcrumbs.revealFocusedFromTreeAside",
+    "when": "breadcrumbsActive && breadcrumbsVisible && listFocus && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "escape",
+    "command": "list.clear",
+    "when": "listFocus && listHasSelectionOrFocus && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "left",
+    "command": "list.collapse",
+    "when": "listFocus && treeElementCanCollapse && !inputFocus && !treestickyScrollFocused || listFocus && treeElementHasParent && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "ctrl+left",
+    "command": "list.collapseAll",
+    "when": "listFocus && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "right",
+    "command": "list.expand",
+    "when": "listFocus && treeElementCanExpand && !inputFocus && !treestickyScrollFocused || listFocus && treeElementHasChild && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "shift+down",
+    "command": "list.expandSelectionDown",
+    "when": "listFocus && listSupportsMultiselect && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "shift+up",
+    "command": "list.expandSelectionUp",
+    "when": "listFocus && listSupportsMultiselect && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "alt+down",
+    "command": "list.focusAnyDown",
+    "when": "listFocus && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "alt+home",
+    "command": "list.focusAnyFirst",
+    "when": "listFocus && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "alt+end",
+    "command": "list.focusAnyLast",
+    "when": "listFocus && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "alt+up",
+    "command": "list.focusAnyUp",
+    "when": "listFocus && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "down",
+    "command": "list.focusDown",
+    "when": "listFocus && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "home",
+    "command": "list.focusFirst",
+    "when": "listFocus && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "end",
+    "command": "list.focusLast",
+    "when": "listFocus && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "pagedown",
+    "command": "list.focusPageDown",
+    "when": "listFocus && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "pageup",
+    "command": "list.focusPageUp",
+    "when": "listFocus && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "up",
+    "command": "list.focusUp",
+    "when": "listFocus && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "ctrl+down",
+    "command": "list.scrollDown",
+    "when": "listFocus && !inputFocus && !treestickyScrollFocused && listScrollAtBoundary != 'both' && listScrollAtBoundary != 'bottom'"
+  },
+  {
+    "key": "ctrl+up",
+    "command": "list.scrollUp",
+    "when": "listFocus && !inputFocus && !treestickyScrollFocused && listScrollAtBoundary != 'both' && listScrollAtBoundary != 'top'"
+  },
+  {
+    "key": "enter",
+    "command": "list.select",
+    "when": "listFocus && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "ctrl+a",
+    "command": "list.selectAll",
+    "when": "listFocus && listSupportsMultiselect && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "ctrl+k ctrl+i",
+    "command": "list.showHover",
+    "when": "listFocus && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "space",
+    "command": "list.toggleExpand",
+    "when": "listFocus && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "ctrl+shift+enter",
+    "command": "list.toggleSelection",
+    "when": "listFocus && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "space",
+    "command": "refactorPreview.toggleCheckedState",
+    "when": "listFocus && refactorPreview.enabled && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "enter",
+    "command": "revealReference",
+    "when": "listFocus && referenceSearchVisible && !inputFocus && !treeElementCanCollapse && !treeElementCanExpand && !treestickyScrollFocused"
+  },
+  {
+    "key": "escape",
+    "command": "search.action.cancel",
+    "when": "listFocus && searchViewletVisible && !inputFocus && !treestickyScrollFocused && searchState != '0'"
+  },
+  {
+    "key": "ctrl+down",
+    "command": "widgetNavigation.focusNext",
+    "when": "inputFocus && navigableContainerFocused || navigableContainerFocused && treestickyScrollFocused || navigableContainerFocused && !listFocus || navigableContainerFocused && listScrollAtBoundary == 'both' || navigableContainerFocused && listScrollAtBoundary == 'bottom'"
+  },
+  {
+    "key": "ctrl+up",
+    "command": "widgetNavigation.focusPrevious",
+    "when": "inputFocus && navigableContainerFocused || navigableContainerFocused && treestickyScrollFocused || navigableContainerFocused && !listFocus || navigableContainerFocused && listScrollAtBoundary == 'both' || navigableContainerFocused && listScrollAtBoundary == 'top'"
+  },
+  {
+    "key": "ctrl+right",
+    "command": "breadcrumbs.focusNextWithPicker",
+    "when": "breadcrumbsActive && breadcrumbsVisible && listFocus && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "ctrl+left",
+    "command": "breadcrumbs.focusPreviousWithPicker",
+    "when": "breadcrumbsActive && breadcrumbsVisible && listFocus && !inputFocus && !treestickyScrollFocused"
+  },
+  {
+    "key": "left",
+    "command": "list.stickyScroll.collapse",
+    "when": "treestickyScrollFocused"
+  },
+  {
+    "key": "enter",
+    "command": "list.stickyScrollselect",
+    "when": "treestickyScrollFocused"
+  },
+  {
+    "key": "space",
+    "command": "list.stickyScrolltoggleExpand",
+    "when": "treestickyScrollFocused"
+  }
+]
