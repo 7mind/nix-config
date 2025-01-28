@@ -8,8 +8,9 @@
     ];
   };
 
-
   cfg-packages = { inputs, pkgs, arch }: {
     jdk-main = pkgs.graalvm-ce;
+    linux-kernel = pkgs.linuxKernel.packageAliases.linux_latest;
+    # linux-kernel = pkgs.linuxKernel.packages.linux_6_13;
   };
 }

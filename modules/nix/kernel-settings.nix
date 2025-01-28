@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, cfg-packages, ... }:
 
 {
   options = {
@@ -11,7 +11,7 @@
 
   config = lib.mkIf config.smind.kernel.sane-defaults.enable {
     boot = {
-      kernelPackages = pkgs.linuxKernel.packageAliases.linux_latest;
+      kernelPackages = cfg-packages.linux-kernel;
 
       kernel.sysctl = {
         "kernel.sysrq" = 1;
