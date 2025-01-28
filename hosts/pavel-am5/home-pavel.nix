@@ -27,6 +27,11 @@
     ];
   };
 
+  programs.vscode.keybindings =
+    if cfg-meta.isLinux then (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux.json)) else
+    if cfg-meta.isDarwin then (builtins.fromJSON (builtins.readFile ./vscode-keymap-mac.json)) else
+    [ ];
+
   programs.zsh.shellAliases = {
     rmj = "find . -depth -type d \\( -name target -or -name .bloop -or -name .bsp -or -name .metals \\) -exec rm -rf {} \\;";
     rmgpucache = "find ~ -name GPUCache -type d -exec rm -rf {} \\;";

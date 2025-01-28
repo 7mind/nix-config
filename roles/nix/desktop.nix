@@ -31,6 +31,7 @@
 
       environment.sane-defaults.enable = lib.mkDefault true;
       environment.linux.sane-defaults.enable = lib.mkDefault true;
+      environment.linux.sane-defaults.desktop.enable = lib.mkDefault true;
       environment.alien-filesystems.enable = lib.mkDefault true;
       environment.cups.enable = lib.mkDefault true;
       environment.all-docs.enable = lib.mkDefault true;
