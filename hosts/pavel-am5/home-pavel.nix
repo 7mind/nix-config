@@ -41,6 +41,7 @@
       (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-textInputFocus.json)) ++
       (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-editorHoverFocused.json)) ++
       (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-listFocus.json)) ++
+      (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-inQuickInput.json)) ++
       #(builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-stickyScrollFocused.json)) ++
       [ ]
     else
