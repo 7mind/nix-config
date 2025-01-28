@@ -46,6 +46,8 @@
             "listFocus"
             "inQuickInput"
             "editorTextFocus"
+            "editorFocus"
+            "editorIsOpen"
           ];
         in
         builtins.concatLists (builtins.map (f: (builtins.fromJSON (builtins.readFile  ./vscode-keymap/linux/vscode-keymap-linux-${f}.json))) imports)
