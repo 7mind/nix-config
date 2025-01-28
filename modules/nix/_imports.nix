@@ -23,6 +23,7 @@
   ./overlay.nix
   ./power.nix
   ./realtek-kernel-hack.nix
+  ./rocm.nix
   ./router.nix
   ./smartd.nix
   ./ssh-permissive.nix
