@@ -30,9 +30,9 @@
   # https://github.com/jbro/vscode-default-keybindings
   # https://github.com/codebling/vs-code-default-keybindings
   # negate all defaults:
-  # - sed 's/\/\/.*//' ./reference-keymap/linux.negative.keybindings.json > ./vscode-keymap-linux-negate.json
+  # - sed 's/\/\/.*//' ./vscode-keymap/reference-keymap/linux.negative.keybindings.json > ./vscode-keymap/linux/vscode-keymap-linux-negate.json
   # select defaults where .when is unset or contains
-  # - sed 's/\/\/.*//' ./reference-keymap/linux.keybindings.raw.json | jq '[ .[] | select( ((.when? and (.when | contains("textInputFocus"))) or (.when? | not) )) ]' > vscode-keymap-linux.json
+  # - sed 's/\/\/.*//' ./vscode-keymap/reference-keymap/linux.keybindings.raw.json | jq '[ .[] | select( ((.when? and (.when | contains("textInputFocus"))) or (.when? | not) )) ]' > ./vscode-keymap/linux/vscode-keymap-linux-.json
   programs.vscode.keybindings =
     if cfg-meta.isLinux then
       (
@@ -45,6 +45,7 @@
             "editorHoverFocused"
             "listFocus"
             "inQuickInput"
+            "editorTextFocus"
           ];
         in
         builtins.concatLists (builtins.map (f: (builtins.fromJSON (builtins.readFile  ./vscode-keymap/linux/vscode-keymap-linux-${f}.json))) imports)
