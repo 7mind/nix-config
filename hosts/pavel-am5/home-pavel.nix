@@ -29,14 +29,20 @@
 
   # https://github.com/jbro/vscode-default-keybindings
   # https://github.com/codebling/vs-code-default-keybindings
-  # - sed 's/\/\/.*//' ./reference-keymap/linux.keybindings.raw.json > ./vscode-keymap-linux-negate.json
-  # filters:
-  # - sed 's/\/\/.*//' ./reference-keymap/linux.negative.keybindings.json | jq '[ .[] | select( (.when? and (.when | contains("textInputFocus")) | not) or (.when? | not) ) ]' > vscode-keymap-linux-negate.json
-  # - sed 's/\/\/.*//' ./reference-keymap/linux.negative.keybindings.json | jq '[ .[] | select( ((.when? and (.when | contains("textInputFocus"))) or (not .when?) )) ]' > vscode-keymap-linux.json
+  # negate all defaults:
+  # - sed 's/\/\/.*//' ./reference-keymap/linux.negative.keybindings.json > ./vscode-keymap-linux-negate.json
+  # select defaults where .when is unset or contains
+  # - sed 's/\/\/.*//' ./reference-keymap/linux.keybindings.raw.json | jq '[ .[] | select( ((.when? and (.when | contains("textInputFocus"))) or (.when? | not) )) ]' > vscode-keymap-linux.json
   programs.vscode.keybindings =
-    if cfg-meta.isLinux then (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-negate.json)) ++ builtins.fromJSON (builtins.readFile ./vscode-gitlens-negate.json) ++ (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux.json)) else
-    if cfg-meta.isDarwin then (builtins.fromJSON (builtins.readFile ./vscode-keymap-mac-negate.json)) ++ (builtins.fromJSON (builtins.readFile ./vscode-keymap-mac.json)) else
-    [ ];
+    if cfg-meta.isLinux then
+      (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-negate.json)) ++
+      (builtins.fromJSON (builtins.readFile ./vscode-gitlens-negate.json)) ++
+      (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-nocontext.json)) ++
+      (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-textInputFocus.json)) ++
+      (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-editorHoverFocused.json))
+    else
+      if cfg-meta.isDarwin then [ ] else
+      [ ];
 
   programs.zsh.shellAliases = {
     rmj = "find . -depth -type d \\( -name target -or -name .bloop -or -name .bsp -or -name .metals \\) -exec rm -rf {} \\;";

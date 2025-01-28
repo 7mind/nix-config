@@ -1,0 +1,77 @@
+[
+  {
+    "key": "ctrl+down",
+    "command": "editor.action.goToBottomHover",
+    "when": "editorHoverFocused"
+  },
+  {
+    "key": "end",
+    "command": "editor.action.goToBottomHover",
+    "when": "editorHoverFocused"
+  },
+  {
+    "key": "ctrl+up",
+    "command": "editor.action.goToTopHover",
+    "when": "editorHoverFocused"
+  },
+  {
+    "key": "home",
+    "command": "editor.action.goToTopHover",
+    "when": "editorHoverFocused"
+  },
+  {
+    "key": "alt+down",
+    "command": "editor.action.pageDownHover",
+    "when": "editorHoverFocused"
+  },
+  {
+    "key": "pagedown",
+    "command": "editor.action.pageDownHover",
+    "when": "editorHoverFocused"
+  },
+  {
+    "key": "alt+up",
+    "command": "editor.action.pageUpHover",
+    "when": "editorHoverFocused"
+  },
+  {
+    "key": "pageup",
+    "command": "editor.action.pageUpHover",
+    "when": "editorHoverFocused"
+  },
+  {
+    "key": "down",
+    "command": "editor.action.scrollDownHover",
+    "when": "editorHoverFocused"
+  },
+  {
+    "key": "left",
+    "command": "editor.action.scrollLeftHover",
+    "when": "editorHoverFocused"
+  },
+  {
+    "key": "right",
+    "command": "editor.action.scrollRightHover",
+    "when": "editorHoverFocused"
+  },
+  {
+    "key": "up",
+    "command": "editor.action.scrollUpHover",
+    "when": "editorHoverFocused"
+  },
+  {
+    "key": "tab",
+    "command": "editor.action.inlineSuggest.commit",
+    "when": "inlineEditIsVisible && tabShouldAcceptInlineEdit && !editorHoverFocused && !editorTabMovesFocus && !suggestWidgetVisible || inlineSuggestionHasIndentationLessThanTabSize && inlineSuggestionVisible && !editorHoverFocused && !editorTabMovesFocus && !suggestWidgetVisible || inlineEditIsVisible && inlineSuggestionHasIndentationLessThanTabSize && inlineSuggestionVisible && !editorHoverFocused && !editorTabMovesFocus && !suggestWidgetVisible || inlineEditIsVisible && inlineSuggestionVisible && tabShouldAcceptInlineEdit && !editorHoverFocused && !editorTabMovesFocus && !suggestWidgetVisible"
+  },
+  {
+    "key": "enter",
+    "command": "notebook.cell.edit",
+    "when": "notebookCellListFocused && !editorHoverFocused && !inputFocus && !notebookOutputInputFocused"
+  },
+  {
+    "key": "tab",
+    "command": "editor.action.inlineSuggest.jump",
+    "when": "inlineEditIsVisible && tabShouldJumpToInlineEdit && !editorHoverFocused && !editorTabMovesFocus && !suggestWidgetVisible"
+  }
+]
