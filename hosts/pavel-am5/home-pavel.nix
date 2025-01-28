@@ -1,8 +1,8 @@
-{ pkgs, smind-hm, lib, extended_pkg, cfg-meta, inputs, nixosConfig, ... }:
+{ pkgs, smind-hm, lib, extended_pkg, cfg-meta, inputs, nixosConfig, import_if_exists, ... }:
 
-let
-  import_if_exists = path: if builtins.pathExists path then import path else { };
-in
+# let
+#   import_if_exists = path: if builtins.pathExists path then import path else { };
+# in
 {
   imports = smind-hm.imports ++ [
     "${cfg-meta.paths.users}/pavel/hm/git.nix"

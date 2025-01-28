@@ -67,6 +67,7 @@ rec {
         inherit cfg-hm-modules;
         inherit inputs;
         specialArgsSelfRef = self;
+        import_if_exists = path: if builtins.pathExists path then import path else { }; # for some reason I can't add this into lib
       });
     in
     {
