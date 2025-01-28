@@ -35,15 +35,20 @@
   # - sed 's/\/\/.*//' ./reference-keymap/linux.keybindings.raw.json | jq '[ .[] | select( ((.when? and (.when | contains("textInputFocus"))) or (.when? | not) )) ]' > vscode-keymap-linux.json
   programs.vscode.keybindings =
     if cfg-meta.isLinux then
-      (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-negate.json)) ++
-      (builtins.fromJSON (builtins.readFile ./vscode-gitlens-negate.json)) ++
-      (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-nocontext.json)) ++
-      (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-textInputFocus.json)) ++
-      (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-editorHoverFocused.json)) ++
-      (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-listFocus.json)) ++
-      (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-inQuickInput.json)) ++
-      #(builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-stickyScrollFocused.json)) ++
-      [ ]
+      (
+        let
+          imports = [
+            "negate"
+            "gitlens-negate"
+            "nocontext"
+            "textInputFocus"
+            "editorHoverFocused"
+            "listFocus"
+            "inQuickInput"
+          ];
+        in
+        builtins.concatLists (builtins.map (f: (builtins.fromJSON (builtins.readFile  ./vscode-keymap/linux/vscode-keymap-linux-${f}.json))) imports)
+      )
     else
       if cfg-meta.isDarwin then [ ] else
       [ ];
