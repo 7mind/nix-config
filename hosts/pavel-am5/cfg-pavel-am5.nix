@@ -1,4 +1,4 @@
-{ config, lib, pkgs, cfg-meta, import_if_exists, ... }:
+{ config, lib, pkgs, cfg-meta, import_if_exists, cfg-const, ... }:
 
 {
   imports =
@@ -39,7 +39,7 @@
       ssh = {
         # `ssh-keygen -t ed25519 -N "" -f /etc/secrets/initrd/ssh_host_ed25519_key`
         hostKeys = [ "/etc/secrets/initrd/ssh_host_ed25519_key" ];
-        authorizedKeys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKA1LYgjfuWSxa1lZRCebvo3ghtSAtEQieGlVCknF8f pshirshov@7mind.io" ];
+        authorizedKeys = cfg-const.ssh-keys-pavel;
       };
     };
   };
@@ -79,7 +79,7 @@
         # "wireshark"
         # "ssh-users"
       ];
-      openssh.authorizedKeys.keys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKA1LYgjfuWSxa1lZRCebvo3ghtSAtEQieGlVCknF8f pshirshov@7mind.io" ];
+      openssh.authorizedKeys.keys = cfg-const.ssh-keys-pavel;
     };
   };
 

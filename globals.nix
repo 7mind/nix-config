@@ -7,8 +7,10 @@ rec {
     (import ./roles/nix/_imports.nix)
   ];
 
+  cfg-const = const.const;
+
   smind-hm = {
-    state-version-hm = const.state-version-hm;
+    state-version-hm = cfg-const.state-version-hm;
 
     imports = builtins.concatLists [
       (import ./lib/_imports.nix)
@@ -35,6 +37,7 @@ rec {
         users = "${self}/users";
       };
 
+
       cfg-packages = const.cfg-packages {
         inherit inputs;
         inherit pkgs;
@@ -47,7 +50,7 @@ rec {
         isLinux = true;
         isDarwin = false;
         hostname = hostname;
-        state-version-nixpkgs = const.state-version-nixpkgs;
+        state-version-nixpkgs = cfg-const.state-version-nixpkgs;
       };
 
       cfg-flakes = {
@@ -59,6 +62,7 @@ rec {
         inputs.agenix.homeManagerModules.default
       ];
 
+
       specialArgs = pkgs.lib.fix (self: {
         inherit smind-hm;
         inherit cfg-meta;
@@ -66,6 +70,7 @@ rec {
         inherit cfg-packages;
         inherit cfg-hm-modules;
         inherit inputs;
+        inherit cfg-const;
         specialArgsSelfRef = self;
         import_if_exists = path: if builtins.pathExists path then import path else { }; # for some reason I can't add this into lib
       });
