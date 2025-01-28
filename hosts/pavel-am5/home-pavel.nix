@@ -29,12 +29,13 @@
 
   # https://github.com/jbro/vscode-default-keybindings
   # https://github.com/codebling/vs-code-default-keybindings
+  # - sed 's/\/\/.*//' ./reference-keymap/linux.keybindings.raw.json > ./vscode-keymap-linux-negate.json
   # filters:
   # - sed 's/\/\/.*//' ./reference-keymap/linux.negative.keybindings.json | jq '[ .[] | select( (.when? and (.when | contains("textInputFocus")) | not) or (.when? | not) ) ]' > vscode-keymap-linux-negate.json
   # - sed 's/\/\/.*//' ./reference-keymap/linux.negative.keybindings.json | jq '[ .[] | select( ((.when? and (.when | contains("textInputFocus"))) or (not .when?) )) ]' > vscode-keymap-linux.json
   programs.vscode.keybindings =
-    if cfg-meta.isLinux then (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux.json)) ++ (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-negate.json)) else
-    if cfg-meta.isDarwin then (builtins.fromJSON (builtins.readFile ./vscode-keymap-mac.json)) ++ (builtins.fromJSON (builtins.readFile ./vscode-keymap-mac-negate.json)) else
+    if cfg-meta.isLinux then (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-negate.json)) ++ (builtins.fromJSON (builtins.readFile ./vscode-keymap-linux.json)) else
+    if cfg-meta.isDarwin then (builtins.fromJSON (builtins.readFile ./vscode-keymap-mac-negate.json)) ++ (builtins.fromJSON (builtins.readFile ./vscode-keymap-mac.json)) else
     [ ];
 
   programs.zsh.shellAliases = {
