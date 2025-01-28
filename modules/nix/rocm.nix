@@ -8,6 +8,8 @@
   };
 
   config = lib.mkIf config.smind.hw.rocm.enable {
+    nixpkgs.config.rocmSupport = true;
+
     hardware.amdgpu = {
       opencl.enable = true;
       initrd.enable = true;
@@ -16,7 +18,24 @@
       amdvlk.support32Bit.enable = true;
     };
 
-    boot.kernelParams = "amdgpu.ppfeaturemask=0xffffffff";
+    hardware.graphics = {
+      enable32Bit = true;
+      enable = true;
+      extraPackages = [
+        pkgs.rocmPackages.clr
+      ];
+    };
+
+    boot.kernelParams = [ "amdgpu.ppfeaturemask=0xffffffff" ];
+
+    systemd.tmpfiles.rules = [
+      "L+    /opt/rocm/hip   -    -    -     -    ${pkgs.rocmPackages.clr}"
+    ];
+
+    environment.systemPackages = with pkgs; [
+      clinfo
+      rocmPackages.rocminfo
+    ];
   };
 
 }
