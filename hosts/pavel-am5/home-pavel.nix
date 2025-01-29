@@ -40,6 +40,13 @@
     if cfg-meta.isLinux then
       (
         let
+          attempt = path: if builtins.pathExists path then (builtins.readFile path) else null;
+          readCfg = f:
+            let
+              maybeCfg1 = (attempt ./vscode-keymap/linux/vscode-keymap-linux-${f}.json);
+              maybeCfg2 = (attempt ./vscode-keymap/linux/negate/vscode-keymap-linux-${f}.json);
+            in
+            if (maybeCfg1 != null) then maybeCfg1 else maybeCfg2;
           imports = [
             "!negate-all"
             "!negate-gitlens"
@@ -52,7 +59,7 @@
             "editorFocus"
           ];
         in
-        builtins.concatLists (builtins.map (f: (builtins.fromJSON (builtins.readFile  ./vscode-keymap/linux/vscode-keymap-linux-${f}.json))) imports)
+        builtins.concatLists (builtins.map builtins.fromJSON ((builtins.map readCfg) imports))
       )
     else
       if cfg-meta.isDarwin then [ ] else
