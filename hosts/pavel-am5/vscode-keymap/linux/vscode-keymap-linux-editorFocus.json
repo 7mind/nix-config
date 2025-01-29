@@ -5,14 +5,9 @@
     "when": "editorFocus || editorIsOpen"
   },
   {
-    "key": "alt+f5",
-    "command": "chatEditor.action.navigateNext",
-    "when": "chat.hasEditorModifications && editorFocus || chat.hasNotebookEditorModifications && editorFocus"
-  },
-  {
-    "key": "shift+alt+f5",
-    "command": "chatEditor.action.navigatePrevious",
-    "when": "chat.hasEditorModifications && editorFocus || chat.hasNotebookEditorModifications && editorFocus"
+    "key": "ctrl+h",
+    "command": "editor.action.startFindReplaceAction",
+    "when": "editorFocus || editorIsOpen"
   },
   {
     "key": "ctrl+d",
@@ -60,11 +55,6 @@
     "when": "editorFocus"
   },
   {
-    "key": "ctrl+k ctrl+alt+down",
-    "command": "editor.action.nextCommentingRange",
-    "when": "accessibilityModeEnabled && commentFocused || accessibilityModeEnabled && editorFocus || accessibilityHelpIsShown && accessibilityModeEnabled && accessibleViewCurrentProviderId == 'comments'"
-  },
-  {
     "key": "f3",
     "command": "editor.action.nextMatchFindAction",
     "when": "editorFocus"
@@ -78,11 +68,6 @@
     "key": "ctrl+f3",
     "command": "editor.action.nextSelectionMatchFindAction",
     "when": "editorFocus"
-  },
-  {
-    "key": "ctrl+k ctrl+alt+up",
-    "command": "editor.action.previousCommentingRange",
-    "when": "accessibilityModeEnabled && commentFocused || accessibilityModeEnabled && editorFocus || accessibilityHelpIsShown && accessibilityModeEnabled && accessibleViewCurrentProviderId == 'comments'"
   },
   {
     "key": "shift+f3",
@@ -103,46 +88,6 @@
     "key": "ctrl+shift+l",
     "command": "editor.action.selectHighlights",
     "when": "editorFocus"
-  },
-  {
-    "key": "ctrl+h",
-    "command": "editor.action.startFindReplaceAction",
-    "when": "editorFocus || editorIsOpen"
-  },
-  {
-    "key": "enter",
-    "command": "editor.action.webvieweditor.findNext",
-    "when": "webviewFindWidgetFocused && !editorFocus && activeEditor == 'WebviewEditor'"
-  },
-  {
-    "key": "shift+enter",
-    "command": "editor.action.webvieweditor.findPrevious",
-    "when": "webviewFindWidgetFocused && !editorFocus && activeEditor == 'WebviewEditor'"
-  },
-  {
-    "key": "escape",
-    "command": "editor.action.webvieweditor.hideFind",
-    "when": "webviewFindWidgetVisible && !editorFocus && activeEditor == 'WebviewEditor'"
-  },
-  {
-    "key": "ctrl+f",
-    "command": "editor.action.webvieweditor.showFind",
-    "when": "webviewFindWidgetEnabled && !editorFocus && activeEditor == 'WebviewEditor'"
-  },
-  {
-    "key": "alt+f8",
-    "command": "testing.goToNextMessage",
-    "when": "editorFocus && testing.isPeekVisible"
-  },
-  {
-    "key": "shift+alt+f8",
-    "command": "testing.goToPreviousMessage",
-    "when": "editorFocus && testing.isPeekVisible"
-  },
-  {
-    "key": "shift+escape",
-    "command": "closeFindWidget",
-    "when": "editorFocus && findWidgetVisible && !isComposing"
   },
   {
     "key": "escape",
@@ -195,38 +140,18 @@
     "when": "editorFocus"
   },
   {
-    "key": "shift+escape",
-    "command": "closeMarkersNavigation",
-    "when": "editorFocus && markersNavigationVisible"
-  },
-  {
     "key": "escape",
     "command": "closeMarkersNavigation",
     "when": "editorFocus && markersNavigationVisible"
   },
   {
-    "key": "shift+escape",
-    "command": "closeParameterHints",
-    "when": "editorFocus && parameterHintsVisible"
-  },
-  {
     "key": "escape",
     "command": "closeParameterHints",
     "when": "editorFocus && parameterHintsVisible"
-  },
-  {
-    "key": "alt+down",
-    "command": "showNextParameterHint",
-    "when": "editorFocus && parameterHintsMultipleSignatures && parameterHintsVisible"
   },
   {
     "key": "down",
     "command": "showNextParameterHint",
-    "when": "editorFocus && parameterHintsMultipleSignatures && parameterHintsVisible"
-  },
-  {
-    "key": "alt+up",
-    "command": "showPrevParameterHint",
     "when": "editorFocus && parameterHintsMultipleSignatures && parameterHintsVisible"
   },
   {
@@ -245,29 +170,9 @@
     "when": "config.editor.rename.enablePreview && editorFocus && renameInputVisible && !isComposing"
   },
   {
-    "key": "shift+escape",
-    "command": "cancelRenameInput",
-    "when": "editorFocus && renameInputVisible"
-  },
-  {
     "key": "escape",
     "command": "cancelRenameInput",
     "when": "editorFocus && renameInputVisible"
-  },
-  {
-    "key": "ctrl+enter",
-    "command": "chatEditor.action.accept",
-    "when": "chat.hasEditorModifications && editorFocus && hasUndecidedChatEditingResource && !chat.ctxHasRequestInProgress || chat.hasNotebookEditorModifications && editorFocus && hasUndecidedChatEditingResource && !chat.ctxHasRequestInProgress"
-  },
-  {
-    "key": "ctrl+backspace",
-    "command": "chatEditor.action.reject",
-    "when": "chat.hasEditorModifications && editorFocus && hasUndecidedChatEditingResource && !chat.ctxHasRequestInProgress || chat.hasNotebookEditorModifications && editorFocus && hasUndecidedChatEditingResource && !chat.ctxHasRequestInProgress"
-  },
-  {
-    "key": "ctrl+shift+backspace",
-    "command": "chatEditor.action.undoHunk",
-    "when": "editorFocus && hasUndecidedChatEditingResource && !chatSessionRequestInProgress"
   },
   {
     "key": "ctrl+alt+c",
@@ -290,28 +195,8 @@
     "when": "editorFocus"
   },
   {
-    "key": "ctrl+i",
-    "command": "inlineChat.start",
-    "when": "editorFocus && inlineChatHasProvider && inlineChatPossible && !editorReadonly && !editorSimpleInput"
-  },
-  {
-    "key": "ctrl+f",
-    "command": "notebook.find",
-    "when": "notebookEditorFocused && !editorFocus && activeEditor == 'workbench.editor.interactive' || notebookEditorFocused && !editorFocus && activeEditor == 'workbench.editor.notebook'"
-  },
-  {
     "key": "ctrl+alt+r",
     "command": "revealFileInOS",
     "when": "!editorFocus"
-  },
-  {
-    "key": "ctrl+i",
-    "command": "workbench.action.chat.holdToVoiceChatInChatView",
-    "when": "chatIsEnabled && hasSpeechProvider && !chatSessionRequestInProgress && !editorFocus && !inChatInput && !inlineChatFocused && !notebookEditorFocused"
-  },
-  {
-    "key": "ctrl+i",
-    "command": "workbench.action.chat.startVoiceChat",
-    "when": "chatIsEnabled && hasSpeechProvider && inChatInput && !chatSessionRequestInProgress && !editorFocus && !notebookEditorFocused && !scopedVoiceChatGettingReady && !speechToTextInProgress || chatIsEnabled && hasSpeechProvider && inlineChatFocused && !chatSessionRequestInProgress && !editorFocus && !notebookEditorFocused && !scopedVoiceChatGettingReady && !speechToTextInProgress"
   }
 ]

@@ -1,10 +1,5 @@
 [
   {
-    "key": "shift+escape",
-    "command": "cancelSelection",
-    "when": "editorHasSelection && textInputFocus"
-  },
-  {
     "key": "escape",
     "command": "cancelSelection",
     "when": "editorHasSelection && textInputFocus"
@@ -196,11 +191,6 @@
     "when": "editorHasMultipleSelections && textInputFocus"
   },
   {
-    "key": "shift+escape",
-    "command": "closeBreakpointWidget",
-    "when": "breakpointWidgetVisible && textInputFocus"
-  },
-  {
     "key": "escape",
     "command": "closeBreakpointWidget",
     "when": "breakpointWidgetVisible && textInputFocus"
@@ -241,11 +231,6 @@
     "when": "textInputFocus && !editorReadonly"
   },
   {
-    "key": "shift+alt+[IntlBackslash]",
-    "command": "editor.action.autoFix",
-    "when": "textInputFocus && !editorReadonly && supportedCodeAction =~ /(\\s|^)quickfix\\b/"
-  },
-  {
     "key": "shift+alt+.",
     "command": "editor.action.autoFix",
     "when": "textInputFocus && !editorReadonly && supportedCodeAction =~ /(\\s|^)quickfix\\b/"
@@ -275,21 +260,19 @@
     "command": "editor.action.showContextMenu",
     "when": "textInputFocus"
   },
-  {
-    "key": "ctrl+i",
-    "command": "editor.action.triggerSuggest",
-    "when": "editorHasCompletionItemProvider && textInputFocus && !editorReadonly && !suggestWidgetVisible"
-  },
+
   {
     "key": "ctrl+space",
     "command": "editor.action.triggerSuggest",
     "when": "editorHasCompletionItemProvider && textInputFocus && !editorReadonly && !suggestWidgetVisible"
   },
+
   {
     "key": "enter",
     "command": "repl.action.acceptInput",
     "when": "inDebugRepl && textInputFocus"
   },
+
   {
     "key": "ctrl+f",
     "command": "repl.action.filter",
@@ -444,10 +427,5 @@
     "key": "ctrl+shift+right",
     "command": "cursorWordAccessibilityRightSelect",
     "when": "accessibilityModeEnabled && isWindows && textInputFocus && focusedView == 'workbench.panel.output'"
-  },
-  {
-    "key": "ctrl+i",
-    "command": "inlineChat.holdForSpeech",
-    "when": "hasSpeechProvider && inlineChatHasProvider && inlineChatVisible && textInputFocus"
   }
 ]

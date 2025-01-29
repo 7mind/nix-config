@@ -31,23 +31,25 @@
   # https://github.com/codebling/vs-code-default-keybindings
   # negate all defaults:
   # - sed 's/\/\/.*//' ./vscode-keymap/reference-keymap/linux.negative.keybindings.json > ./vscode-keymap/linux/vscode-keymap-linux-negate.json
-  # select defaults where .when is unset or contains
-  # - sed 's/\/\/.*//' ./vscode-keymap/reference-keymap/linux.keybindings.raw.json | jq '[ .[] | select( ((.when? and (.when | contains("textInputFocus"))) or (.when? | not) )) ]' > ./vscode-keymap/linux/vscode-keymap-linux-.json
+  # select defaults where .when is unset
+  # - sed 's/\/\/.*//' ./vscode-keymap/reference-keymap/linux.keybindings.raw.json | jq '[ .[] | select( (.when? | not) ) ]' > ./vscode-keymap/linux/vscode-keymap-linux-.json
+  # select defaults where .when contains
+  # sed 's/\/\/.*//' ./vscode-keymap/reference-keymap/linux.keybindings.raw.json | jq '[ .[] | select( ((.when? and (.when | contains("editorTextFocus"))) )) ]' > ./vscode-keymap/linux/vscode-keymap-linux-.json
+
   programs.vscode.keybindings =
     if cfg-meta.isLinux then
       (
         let
           imports = [
-            "negate"
-            "gitlens-negate"
+            "!negate-all"
+            "!negate-gitlens"
             "nocontext"
             "textInputFocus"
-            "editorHoverFocused"
+            # "editorHoverFocused"
             "listFocus"
             "inQuickInput"
             "editorTextFocus"
             "editorFocus"
-            "editorIsOpen"
           ];
         in
         builtins.concatLists (builtins.map (f: (builtins.fromJSON (builtins.readFile  ./vscode-keymap/linux/vscode-keymap-linux-${f}.json))) imports)

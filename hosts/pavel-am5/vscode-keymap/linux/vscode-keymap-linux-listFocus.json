@@ -5,11 +5,6 @@
     "when": "listFocus && referenceSearchVisible && !inputFocus && !treeElementCanCollapse && !treeElementCanExpand && !treestickyScrollFocused"
   },
   {
-    "key": "ctrl+enter",
-    "command": "breadcrumbs.revealFocusedFromTreeAside",
-    "when": "breadcrumbsActive && breadcrumbsVisible && listFocus && !inputFocus && !treestickyScrollFocused"
-  },
-  {
     "key": "escape",
     "command": "list.clear",
     "when": "listFocus && listHasSelectionOrFocus && !inputFocus && !treestickyScrollFocused"
@@ -163,15 +158,5 @@
     "key": "ctrl+up",
     "command": "widgetNavigation.focusPrevious",
     "when": "inputFocus && navigableContainerFocused || navigableContainerFocused && treestickyScrollFocused || navigableContainerFocused && !listFocus || navigableContainerFocused && listScrollAtBoundary == 'both' || navigableContainerFocused && listScrollAtBoundary == 'top'"
-  },
-  {
-    "key": "ctrl+right",
-    "command": "breadcrumbs.focusNextWithPicker",
-    "when": "breadcrumbsActive && breadcrumbsVisible && listFocus && !inputFocus && !treestickyScrollFocused"
-  },
-  {
-    "key": "ctrl+left",
-    "command": "breadcrumbs.focusPreviousWithPicker",
-    "when": "breadcrumbsActive && breadcrumbsVisible && listFocus && !inputFocus && !treestickyScrollFocused"
   }
 ]
