@@ -40,6 +40,7 @@ in
         "llama3.3"
         "mistral"
         "qwen"
+        "deepseek-r1:14b"
       ];
     };
 
