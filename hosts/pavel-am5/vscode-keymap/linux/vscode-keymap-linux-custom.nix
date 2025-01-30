@@ -148,7 +148,7 @@ in
 
   {
     command = "editor.action.deleteLines";
-    key = "ctrl+[KeyD]";
+    key = "ctrl+backspace";
     when = "textInputFocus && !editorReadonly";
 
   }
@@ -169,5 +169,17 @@ in
     command = "editor.action.refactor";
     key = "ctrl+[KeyT] ctrl+[KeyT]";
     when = "editorHasCodeActionsProvider && textInputFocus && !editorReadonly";
+  }
+
+  #
+  {
+    command = "editor.action.copyLinesDownAction";
+    key = "ctrl+[KeyD]";
+    when = "editorTextFocus && !editorReadonly";
+  }
+  {
+    command = "editor.action.copyLinesDownAction";
+    key = "meta+[KeyD]";
+    when = "editorTextFocus && !editorReadonly";
   }
 ]
