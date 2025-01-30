@@ -47,6 +47,8 @@ in
         "qwen2.5:14b"
 
         "deepseek-r1:14b"
+
+        "starcoder2:15b"
       ];
     };
 
