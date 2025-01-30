@@ -35,6 +35,12 @@ in
       rocmOverrideGfx = "10.3.0";
       acceleration = "rocm";
       port = 11434;
+      loadModels = [
+        "deepseek-r1"
+        "llama3.3"
+        "mistral"
+        "qwen"
+      ];
     };
 
     #services.tabby = {
