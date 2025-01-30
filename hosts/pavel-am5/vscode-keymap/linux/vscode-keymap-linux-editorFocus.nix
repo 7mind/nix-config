@@ -6,14 +6,16 @@
   }
   {
     command = "editor.action.startFindReplaceAction";
-    key = "ctrl+h";
+    key = "ctrl+r";
     when = "editorFocus || editorIsOpen";
   }
-  {
-    command = "editor.action.addSelectionToNextFindMatch";
-    key = "ctrl+d";
-    when = "editorFocus";
-  }
+
+  # {
+  #   command = "editor.action.addSelectionToNextFindMatch";
+  #   key = "ctrl+d";
+  #   when = "editorFocus";
+  # }
+
   {
     command = "editor.action.extensioneditor.findNext";
     key = "enter";
@@ -26,11 +28,13 @@
     when =
       "webviewFindWidgetFocused && !editorFocus && activeEditor == 'workbench.editor.extension'";
   }
+
   {
     command = "editor.action.extensioneditor.showfind";
     key = "ctrl+f";
     when = "!editorFocus && activeEditor == 'workbench.editor.extension'";
   }
+
   {
     command = "editor.action.marker.next";
     key = "alt+f8";
@@ -51,6 +55,7 @@
     key = "shift+f8";
     when = "editorFocus";
   }
+  
   {
     command = "editor.action.moveSelectionToNextFindMatch";
     key = "ctrl+k ctrl+d";

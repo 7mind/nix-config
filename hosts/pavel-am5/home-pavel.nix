@@ -27,6 +27,7 @@
     ];
   };
 
+  # Developer: toggle keyboard shortcuts troubleshootinga
   # https://github.com/jbro/vscode-default-keybindings
   # https://github.com/codebling/vs-code-default-keybindings
   # negate all defaults:
@@ -65,11 +66,10 @@
           imports = [
             "!negate-all"
             "!negate-gitlens"
+            "custom"
             "nocontext"
             "textInputFocus"
-            # "editorHoverFocused"
             "listFocus"
-            "inQuickInput"
             "editorTextFocus"
             "editorFocus"
           ];
@@ -77,31 +77,6 @@
           flattened = builtins.concatLists allKeys;
         in
         flattened
-
-
-        # let
-        #   attemptJson = path: if builtins.pathExists path then (builtins.fromJSON (builtins.readFile path)) else null;
-        #   attemptNix = path: if builtins.pathExists path then (import path) else null;
-        #   readCfg = f:
-        #     let
-        #       maybeCfg1 = (attemptJson ./vscode-keymap/linux/vscode-keymap-linux-${f}.json);
-        #       maybeCfg2 = (attemptNix ./vscode-keymap/linux/vscode-keymap-linux-${f}.nix);
-        #       maybeCfg3 = (attemptJson ./vscode-keymap/linux/negate/vscode-keymap-linux-${f}.json);
-        #     in
-        #     if (maybeCfg1 != null) then maybeCfg1 else (if (maybeCfg2 != null) then maybeCfg2 else maybeCfg3);
-        #   imports = [
-        #     "!negate-all"
-        #     "!negate-gitlens"
-        #     "nocontext"
-        #     "textInputFocus"
-        #     # "editorHoverFocused"
-        #     "listFocus"
-        #     "inQuickInput"
-        #     "editorTextFocus"
-        #     "editorFocus"
-        #   ];
-        # in
-        # builtins.concatLists (builtins.map ((builtins.map readCfg) imports))
       )
     else
       if cfg-meta.isDarwin then [ ] else
