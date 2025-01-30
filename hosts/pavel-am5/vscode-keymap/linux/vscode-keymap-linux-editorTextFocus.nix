@@ -87,34 +87,13 @@
     key = "alt+up";
     when = "editorTextFocus && !editorReadonly";
   }
-  {
-    command = "editor.action.peekDefinition";
-    key = "ctrl+shift+f10";
-    when =
-      "editorHasDefinitionProvider && editorTextFocus && !inReferenceSearchEditor && !isInEmbeddedEditor";
-  }
-  {
-    command = "editor.action.peekImplementation";
-    key = "ctrl+shift+f12";
-    when =
-      "editorHasImplementationProvider && editorTextFocus && !inReferenceSearchEditor && !isInEmbeddedEditor";
-  }
+
   {
     command = "editor.action.rename";
     key = "f2";
     when = "editorHasRenameProvider && editorTextFocus && !editorReadonly";
   }
-  {
-    command = "editor.action.revealDefinition";
-    key = "f12";
-    when = "editorHasDefinitionProvider && editorTextFocus";
-  }
-  {
-    command = "editor.action.revealDefinitionAside";
-    key = "ctrl+k f12";
-    when =
-      "editorHasDefinitionProvider && editorTextFocus && !isInEmbeddedEditor";
-  }
+
   {
     command = "editor.action.selectFromAnchorToCursor";
     key = "ctrl+k ctrl+k";
@@ -190,6 +169,7 @@
     key = "pageup";
     when = "interactivePlaygroundFocus && !editorTextFocus";
   }
+
   {
     command = "closeReferenceSearch";
     key = "escape";

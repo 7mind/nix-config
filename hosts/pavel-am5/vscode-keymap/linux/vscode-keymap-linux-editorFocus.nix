@@ -55,7 +55,7 @@
     key = "shift+f8";
     when = "editorFocus";
   }
-  
+
   {
     command = "editor.action.moveSelectionToNextFindMatch";
     key = "ctrl+k ctrl+d";
@@ -103,7 +103,7 @@
   }
   {
     command = "editor.action.replaceAll";
-    key = "ctrl+alt+enter";
+    key = "shift+alt+enter";
     when = "editorFocus && findWidgetVisible";
   }
   {
@@ -146,6 +146,7 @@
     key = "alt+p";
     when = "editorFocus";
   }
+
   {
     command = "closeMarkersNavigation";
     key = "escape";
@@ -184,29 +185,28 @@
     key = "escape";
     when = "editorFocus && renameInputVisible";
   }
-  {
-    command = "copyFilePath";
-    key = "ctrl+alt+c";
-    when = "!editorFocus";
-  }
-  {
-    command = "copyFilePath";
-    key = "ctrl+k ctrl+alt+c";
-    when = "editorFocus";
-  }
-  {
-    command = "copyRelativeFilePath";
-    key = "ctrl+shift+alt+c";
-    when = "!editorFocus";
-  }
-  {
-    command = "copyRelativeFilePath";
-    key = "ctrl+k ctrl+shift+alt+c";
-    when = "editorFocus";
-  }
-  {
-    command = "revealFileInOS";
-    key = "ctrl+alt+r";
-    when = "!editorFocus";
-  }
+
+  # {
+  #   command = "copyFilePath";
+  #   key = "ctrl+alt+c";
+  #   when = "!editorFocus";
+  # }
+  # {
+  #   command = "copyFilePath";
+  #   key = "ctrl+k ctrl+alt+c";
+  #   when = "editorFocus";
+  # }
+
+  # {
+  #   command = "copyRelativeFilePath";
+  #   key = "ctrl+shift+alt+c";
+  #   when = "!editorFocus";
+  # }
+  # {
+  #   command = "copyRelativeFilePath";
+  #   key = "ctrl+k ctrl+shift+alt+c";
+  #   when = "editorFocus";
+  # }
+
+
 ]

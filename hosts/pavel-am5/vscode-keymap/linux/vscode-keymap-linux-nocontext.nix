@@ -78,6 +78,12 @@
     command = "workbench.action.files.revealActiveFileInWindows";
     key = "ctrl+[KeyK] ctrl+[KeyF]";
   }
+  # {
+  #   command = "revealFileInOS";
+  #   key = "ctrl+alt+r";
+  #   when = "!editorFocus";
+  # }
+
   {
     command = "workbench.action.files.save";
     key = "ctrl+s";

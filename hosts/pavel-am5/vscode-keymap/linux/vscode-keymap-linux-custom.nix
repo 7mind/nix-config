@@ -183,4 +183,30 @@ in
     key = "meta+[KeyD]";
     when = "editorTextFocus && !editorReadonly";
   }
+
+  #
+  {
+    command = "editor.action.revealDefinition";
+    key = "ctrl+[KeyK] ctrl+[KeyD]";
+    when = "editorHasDefinitionProvider && editorTextFocus";
+  }
+  {
+    command = "editor.action.revealDefinitionAside";
+    key = "ctrl+[KeyK] ctrl+[KeyD]";
+    when =
+      "editorHasDefinitionProvider && editorTextFocus && !isInEmbeddedEditor";
+  }
+
+  # {
+  #   command = "editor.action.peekDefinition";
+  #   key = "ctrl+shift+f10";
+  #   when =
+  #     "editorHasDefinitionProvider && editorTextFocus && !inReferenceSearchEditor && !isInEmbeddedEditor";
+  # }
+  # {
+  #   command = "editor.action.peekImplementation";
+  #   key = "ctrl+shift+f12";
+  #   when =
+  #     "editorHasImplementationProvider && editorTextFocus && !inReferenceSearchEditor && !isInEmbeddedEditor";
+  # }
 ]
