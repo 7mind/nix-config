@@ -132,14 +132,15 @@ in
 
   {
     command = "cursorWordEndRightSelect";
-    key = "alt+shift+right";
+    key = "shift+alt+right";
     when = "textInputFocus";
   }
   {
     command = "cursorWordLeftSelect";
-    key = "alt+shift+left";
+    key = "shift+alt+left";
     when = "textInputFocus";
   }
+
   {
     command = "deleteWordLeft";
     key = "alt+backspace";

@@ -130,16 +130,16 @@
     key = "ctrl+k ctrl+i";
     when = "editorTextFocus";
   }
-  {
-    command = "editor.action.smartSelect.expand";
-    key = "shift+alt+right";
-    when = "editorTextFocus";
-  }
-  {
-    command = "editor.action.smartSelect.shrink";
-    key = "shift+alt+left";
-    when = "editorTextFocus";
-  }
+  # {
+  #   command = "editor.action.smartSelect.expand";
+  #   key = "shift+alt+right";
+  #   when = "editorTextFocus";
+  # }
+  # {
+  #   command = "editor.action.smartSelect.shrink";
+  #   key = "shift+alt+left";
+  #   when = "editorTextFocus";
+  # }
   {
     command = "editor.action.triggerParameterHints";
     key = "ctrl+shift+space";
@@ -160,16 +160,16 @@
     key = "alt+f5";
     when = "editorTextFocus && !textCompareEditorActive";
   }
-  {
-    command = "workbench.action.editor.previousChange";
-    key = "shift+alt+f5";
-    when = "editorTextFocus && !textCompareEditorActive";
-  }
-  {
-    command = "editor.detectLanguage";
-    key = "shift+alt+d";
-    when = "editorTextFocus && !notebookEditable";
-  }
+  # {
+  #   command = "workbench.action.editor.previousChange";
+  #   key = "shift+alt+f5";
+  #   when = "editorTextFocus && !textCompareEditorActive";
+  # }
+  # {
+  #   command = "editor.detectLanguage";
+  #   key = "shift+alt+d";
+  #   when = "editorTextFocus && !notebookEditable";
+  # }
   {
     command = "workbench.action.interactivePlayground.arrowDown";
     key = "down";
