@@ -35,8 +35,12 @@
     ];
 
     environment.systemPackages = with pkgs; [
-      clinfo
+      radeon-profile
+      radeontop
+      radeontools
+
       rocmPackages.rocminfo
+      rocmPackages.rocm-smi
     ];
   };
 
