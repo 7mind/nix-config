@@ -48,6 +48,7 @@ in
 
         "deepseek-r1:14b"
 
+        "starcoder2:7b"
         "starcoder2:15b"
       ];
     };
