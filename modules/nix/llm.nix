@@ -36,10 +36,16 @@ in
       acceleration = "rocm";
       port = 11434;
       loadModels = [
-        "deepseek-r1"
         "llama3.3"
         "mistral"
-        "qwen"
+
+        "gemma:7b"
+        "gemma:27b"
+        "qwen2.5-coder:14b"
+
+        "qwen:14b"
+        "qwen2.5:14b"
+
         "deepseek-r1:14b"
       ];
     };
