@@ -37,17 +37,31 @@
   # sed 's/\/\/.*//' ./vscode-keymap/reference-keymap/linux.keybindings.raw.json | jq '[ .[] | select( ((.when? and (.when | contains("editorTextFocus"))) )) ]' > ./vscode-keymap/linux/vscode-keymap-linux-.json
   # json 2 nix:
   # nix eval --impure --expr 'builtins.fromJSON (builtins.readFile ./my-file.json)' --json
+  # nix eval --impure --expr "builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-editorFocus.json)"  > vscode-keymap-linux-editorFocus.nix
+  # nix run nixpkgs#nixfmt-classic ./vscode-keymap-linux-editorFocus.nix
   programs.vscode.keybindings =
     if cfg-meta.isLinux then
       (
         let
-          attempt = path: if builtins.pathExists path then (builtins.readFile path) else null;
-          readCfg = f:
-            let
-              maybeCfg1 = (attempt ./vscode-keymap/linux/vscode-keymap-linux-${f}.json);
-              maybeCfg2 = (attempt ./vscode-keymap/linux/negate/vscode-keymap-linux-${f}.json);
-            in
-            if (maybeCfg1 != null) then maybeCfg1 else maybeCfg2;
+          attemptJson = path:
+            if builtins.pathExists path
+            then builtins.fromJSON (builtins.readFile path)
+            else null;
+
+          attemptNix = path:
+            if builtins.pathExists path
+            then import path
+            else null;
+
+          firstNonNull = list:
+            builtins.foldl' (acc: x: if acc != null then acc else x) null list;
+
+          readCfg = f: firstNonNull [
+            (attemptJson ./vscode-keymap/linux/vscode-keymap-linux-${f}.json)
+            (attemptNix  ./vscode-keymap/linux/vscode-keymap-linux-${f}.nix)
+            (attemptJson ./vscode-keymap/linux/negate/vscode-keymap-linux-${f}.json)
+          ];
+
           imports = [
             "!negate-all"
             "!negate-gitlens"
@@ -59,8 +73,35 @@
             "editorTextFocus"
             "editorFocus"
           ];
+          allKeys = builtins.map readCfg imports;
+          flattened = builtins.concatLists allKeys;
         in
-        builtins.concatLists (builtins.map builtins.fromJSON ((builtins.map readCfg) imports))
+        flattened
+
+
+        # let
+        #   attemptJson = path: if builtins.pathExists path then (builtins.fromJSON (builtins.readFile path)) else null;
+        #   attemptNix = path: if builtins.pathExists path then (import path) else null;
+        #   readCfg = f:
+        #     let
+        #       maybeCfg1 = (attemptJson ./vscode-keymap/linux/vscode-keymap-linux-${f}.json);
+        #       maybeCfg2 = (attemptNix ./vscode-keymap/linux/vscode-keymap-linux-${f}.nix);
+        #       maybeCfg3 = (attemptJson ./vscode-keymap/linux/negate/vscode-keymap-linux-${f}.json);
+        #     in
+        #     if (maybeCfg1 != null) then maybeCfg1 else (if (maybeCfg2 != null) then maybeCfg2 else maybeCfg3);
+        #   imports = [
+        #     "!negate-all"
+        #     "!negate-gitlens"
+        #     "nocontext"
+        #     "textInputFocus"
+        #     # "editorHoverFocused"
+        #     "listFocus"
+        #     "inQuickInput"
+        #     "editorTextFocus"
+        #     "editorFocus"
+        #   ];
+        # in
+        # builtins.concatLists (builtins.map ((builtins.map readCfg) imports))
       )
     else
       if cfg-meta.isDarwin then [ ] else
