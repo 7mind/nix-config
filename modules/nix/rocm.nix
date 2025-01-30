@@ -35,6 +35,8 @@
     ];
 
     environment.systemPackages = with pkgs; [
+      amdgpu_top
+
       radeon-profile
       radeontop
       radeontools
