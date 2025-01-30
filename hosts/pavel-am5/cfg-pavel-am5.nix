@@ -39,7 +39,7 @@
     lanzaboote.enable = false;
 
     kernel.hack-rtl8125.enable = true;
-    llm.enable = false;
+    llm.enable = true;
   };
 
   age.secrets = {
