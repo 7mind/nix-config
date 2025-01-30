@@ -34,11 +34,20 @@ in
       # });
       rocmOverrideGfx = "10.3.0";
       acceleration = "rocm";
+      port = 11434;
     };
 
-    services.tabby = {
+    #services.tabby = {
+    #  enable = true;
+    #  acceleration = "rocm";
+    #};
+
+    services.open-webui = {
       enable = true;
-      acceleration = "rocm";
+      environment = {
+        OLLAMA_API_BASE_URL = "http://127.0.0.1:11434";
+        WEBUI_AUTH = "False";
+      };
     };
   };
 

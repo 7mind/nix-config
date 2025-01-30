@@ -35,7 +35,8 @@
   # - sed 's/\/\/.*//' ./vscode-keymap/reference-keymap/linux.keybindings.raw.json | jq '[ .[] | select( (.when? | not) ) ]' > ./vscode-keymap/linux/vscode-keymap-linux-.json
   # select defaults where .when contains
   # sed 's/\/\/.*//' ./vscode-keymap/reference-keymap/linux.keybindings.raw.json | jq '[ .[] | select( ((.when? and (.when | contains("editorTextFocus"))) )) ]' > ./vscode-keymap/linux/vscode-keymap-linux-.json
-
+  # json 2 nix:
+  # nix eval --impure --expr 'builtins.fromJSON (builtins.readFile ./my-file.json)' --json
   programs.vscode.keybindings =
     if cfg-meta.isLinux then
       (

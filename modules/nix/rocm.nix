@@ -8,7 +8,9 @@
   };
 
   config = lib.mkIf config.smind.hw.rocm.enable {
-    nixpkgs.config.rocmSupport = true;
+    # pytorch is broken:
+    # https://github.com/NixOS/nixpkgs/blob/c8fadee69d99c39795e50754c1d0f4fb9b24cd65/pkgs/development/python-modules/torch/default.nix#L227
+    # nixpkgs.config.rocmSupport = true;
 
     hardware.amdgpu = {
       opencl.enable = true;

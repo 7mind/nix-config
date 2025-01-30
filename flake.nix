@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/master";
 
     flake-utils.url = "github:numtide/flake-utils";
 
@@ -44,7 +44,7 @@
           (make-nixos-x86_64 "pavel-am5")
         ]
       ;
-      
+
       agenix-rekey = inputs.agenix-rekey.configure {
         userFlake = self;
         nixosConfigurations = self.nixosConfigurations;
@@ -55,7 +55,10 @@
         overlays = [ inputs.agenix-rekey.overlays.default ];
       };
       devShells.default = pkgs.mkShell {
-        packages = [ pkgs.agenix-rekey ];
+        packages = [
+          pkgs.agenix-rekey
+          # inputs.json2nix.packages."${system}".json2nix
+        ];
       };
     });
 
