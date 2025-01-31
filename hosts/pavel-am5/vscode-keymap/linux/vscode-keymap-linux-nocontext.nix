@@ -166,6 +166,14 @@
     command = "workbench.action.toggleSidebarVisibility";
     key = "ctrl+[KeyM] ctrl+[KeyS]";
   }
+  {
+    command = "workbench.action.terminal.toggleTerminal";
+    key = "ctrl+`";
+  }
+  {
+    command = "workbench.action.terminal.toggleTerminal";
+    key = "ctrl+[KeyM] ctrl+[KeyT]";
+  }
 
   {
     command = "workbench.action.zoomIn";
