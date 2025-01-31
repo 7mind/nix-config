@@ -139,16 +139,16 @@
         glxinfo
         clinfo
 
-        wl-clipboard-rs
+        wl-clipboard
 
         # vkmark
       ];
 
       environment.shellAliases = {
         pbcopy =
-          "${pkgs.wl-clipboard-rs}/bin/wl-copy";
+          "${pkgs.wl-clipboard}/bin/wl-copy";
         pbpaste =
-          "${pkgs.wl-clipboard-rs}/bin/wl-paste";
+          "${pkgs.wl-clipboard}/bin/wl-paste";
       };
     })
   ];
