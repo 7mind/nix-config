@@ -92,8 +92,9 @@
                         A = builtins.elemAt m1 0;
                         B = builtins.elemAt m1 1;
                         newKey = ''ctrl+${A} ${B}'';
+                        result = [ obj (obj // { key = newKey; }) ];
                       in
-                      [ obj (obj // { key = newKey; }) ]
+                      builtins.trace result result
                     else if m2 != null then
                       let
                         KeyA = builtins.elemAt m2 0;
