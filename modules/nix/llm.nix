@@ -37,6 +37,7 @@ in
       port = 11434;
       loadModels = [
         "llama3.3"
+        "codellama:13b"
         "mistral"
 
         "gemma:7b"
