@@ -235,6 +235,8 @@
 
         "makefile.configureOnOpen" = true;
 
+        "redhat.telemetry.enabled" = false;
+
         "java.configuration.runtimes" = let graal-legacy = cfg-flakes.pkgs7mind.graalvm-legacy-packages; in [
           {
             "name" = "Main JDK";
