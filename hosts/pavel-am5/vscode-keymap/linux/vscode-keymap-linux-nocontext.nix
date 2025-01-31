@@ -184,4 +184,6 @@
     command = "workbench.files.action.compareWithClipboard";
     key = "ctrl+[KeyK] ctrl+[KeyC]";
   }
+
+
 ]

@@ -266,4 +266,11 @@ in
     key = "shift+alt+up";
     when = "editorTextFocus && !editorReadonly";
   }
+
+  #
+  {
+    command = "editor.action.rename";
+    key = "ctrl+[KeyK] ctrl+[KeyR]";
+    when = "editorHasRenameProvider && editorTextFocus && !editorReadonly";
+  }
 ]

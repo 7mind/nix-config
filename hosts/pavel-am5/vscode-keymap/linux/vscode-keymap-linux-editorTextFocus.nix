@@ -44,14 +44,6 @@
 
 
 
-  
-
-  {
-    command = "editor.action.rename";
-    key = "f2";
-    when = "editorHasRenameProvider && editorTextFocus && !editorReadonly";
-  }
-
   # {
   #   command = "editor.action.selectFromAnchorToCursor";
   #   key = "ctrl+k ctrl+k";
