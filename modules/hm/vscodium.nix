@@ -15,8 +15,8 @@
 
     # sometimes vscodium borks extensions.json so it's better to make sure there is nothing before deployment
     home.activation.vscode-extensions-cleanup = config.lib.dag.entryBefore [ "writeBoundary" ] ''
-      echo >&2 "Removing vscodium extensions directory..."
-      rm -rf "${config.home.homeDirectory}/.vscode-oss" # we generate extensions
+      echo >&2 "Removing vscodium extensions.json..."
+      rm -f "${config.home.homeDirectory}/.vscode-oss/extensions/extensions.json"
     '';
 
     programs.vscode = {
