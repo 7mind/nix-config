@@ -67,16 +67,49 @@
             "!negate-all"
             "!negate-gitlens"
             "custom"
-            "nocontext"
             "textInputFocus"
             "listFocus"
-            "editorTextFocus"
             "editorFocus"
           ];
           allKeys = builtins.map readCfg imports;
           flattened = builtins.concatLists allKeys;
+
+          processList = objs:
+            builtins.concatMap
+              (obj:
+                let
+                  key = obj.key;
+
+                  # Match patterns "ctrl+A ctrl+B" where A and B are single characters
+                  m1 = builtins.match ''^ctrl\\+(.)[[:space:]]+ctrl\\+(.)$'' key;
+
+                  # Match patterns "ctrl+[KeyA] ctrl+[KeyB]"
+                  m2 = builtins.match ''^ctrl\\+\\[(.+)\\][[:space:]]+ctrl\\+\\[(.+)\\]$'' key;
+
+                  transformed =
+                    if m1 != null then
+                      let
+                        A = builtins.elemAt m1 0;
+                        B = builtins.elemAt m1 1;
+                        newKey = ''ctrl+${A} ${B}'';
+                      in
+                      [ obj (obj // { key = newKey; }) ]
+                    else if m2 != null then
+                      let
+                        KeyA = builtins.elemAt m2 0;
+                        KeyB = builtins.elemAt m2 1;
+                        newKey = ''ctrl+[${KeyA}] [${KeyB}]'';
+                        result = [ obj (obj // { key = newKey; }) ];
+                      in
+                      builtins.trace result result
+                    else
+                      [ obj ];
+                in
+                transformed
+              )
+              objs;
         in
-        flattened
+        (processList flattened)
       )
     else
       if cfg-meta.isDarwin then [ ] else
