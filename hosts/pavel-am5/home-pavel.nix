@@ -80,10 +80,7 @@
                 let
                   key = obj.key;
 
-                  # Match patterns "ctrl+A ctrl+B" where A and B are single characters
-                  m1 = builtins.match ''^ctrl\\+(.)[[:space:]]+ctrl\\+(.)$'' key;
-
-                  # Match patterns "ctrl+[KeyA] ctrl+[KeyB]"
+                  m1 = builtins.match ''^ctrl\+(.)[[:space:]]+ctrl\+(.)$'' key;
                   m2 = builtins.match ''^ctrl\\+\\[(.+)\\][[:space:]]+ctrl\\+\\[(.+)\\]$'' key;
 
                   transformed =
@@ -106,7 +103,7 @@
                     else
                       [ obj ];
                 in
-                transformed
+                if (lib.hasPrefix "-" obj.command) then [ obj ] else transformed
               )
               objs;
         in
