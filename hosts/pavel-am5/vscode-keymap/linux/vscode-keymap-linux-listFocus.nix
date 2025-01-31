@@ -124,7 +124,7 @@
   }
   {
     command = "list.selectAll";
-    key = "ctrl+a";
+    key = "ctrl+[KeyK] ctrl+[KeyA]";
     when =
       "listFocus && listSupportsMultiselect && !inputFocus && !treestickyScrollFocused";
   }
