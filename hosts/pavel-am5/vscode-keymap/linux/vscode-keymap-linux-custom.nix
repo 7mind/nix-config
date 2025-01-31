@@ -206,11 +206,6 @@ in
 
   #
   {
-    command = "outdent";
-    key = "shift+tab";
-    when = "editorTextFocus && !editorReadonly && !editorTabMovesFocus";
-  }
-  {
     command = "editor.action.cancelSelectionAnchor";
     key = "escape";
     when = "editorTextFocus && selectionAnchorSet";
@@ -221,19 +216,21 @@ in
     key = "ctrl+shift+space";
     when = "editorHasSignatureHelpProvider && editorTextFocus";
   }
-  {
-    command = "editor.action.wordHighlight.next";
-    key = "f7";
-    when = "editorTextFocus && hasWordHighlights";
-  }
-  {
-    command = "editor.action.wordHighlight.prev";
-    key = "shift+f7";
-    when = "editorTextFocus && hasWordHighlights";
-  }
+
+  # {
+  #   command = "editor.action.wordHighlight.next";
+  #   key = "f7";
+  #   when = "editorTextFocus && hasWordHighlights";
+  # }
+  # {
+  #   command = "editor.action.wordHighlight.prev";
+  #   key = "shift+f7";
+  #   when = "editorTextFocus && hasWordHighlights";
+  # }
+
   {
     command = "workbench.action.editor.nextChange";
-    key = "alt+f5";
+    key = "alt+[KeyC]";
     when = "editorTextFocus && !textCompareEditorActive";
   }
 
@@ -601,6 +598,225 @@ in
     key = "shift+tab";
     when = "editorTextFocus && !editorReadonly";
   }
+  {
+    command = "outdent";
+    key = "shift+tab";
+    when = "editorTextFocus && !editorReadonly && !editorTabMovesFocus";
+  }
+
+  # issue navigation
+  {
+    command = "editor.action.marker.next";
+    key = "alt+[KeyN]";
+    when = "editorFocus";
+  }
+  {
+    command = "editor.action.marker.nextInFiles";
+    key = "alt+shift+[KeyN]";
+    when = "editorFocus";
+  }
+  {
+    command = "editor.action.marker.prev";
+    key = "alt+[KeyP]";
+    when = "editorFocus";
+  }
+  {
+    command = "editor.action.marker.prevInFiles";
+    key = "alt+shift+[KeyP]";
+    when = "editorFocus";
+  }
+
+  # find/replace
+  {
+    command = "actions.find";
+    key = "ctrl+[KeyF]";
+    when = "editorFocus || editorIsOpen";
+  }
+  {
+    command = "editor.action.extensioneditor.showfind";
+    key = "ctrl+[KeyF]";
+    when = "!editorFocus && activeEditor == 'workbench.editor.extension'";
+  }
+
+  {
+    command = "editor.action.startFindReplaceAction";
+    key = "ctrl+[KeyR]";
+    when = "editorFocus || editorIsOpen";
+  }
+
+  {
+    command = "editor.action.extensioneditor.findNext";
+    key = "enter";
+    when =
+      "webviewFindWidgetFocused && !editorFocus && activeEditor == 'workbench.editor.extension'";
+  }
+  {
+    command = "editor.action.extensioneditor.findPrevious";
+    key = "shift+enter";
+    when =
+      "webviewFindWidgetFocused && !editorFocus && activeEditor == 'workbench.editor.extension'";
+  }
+  {
+    command = "editor.action.replaceAll";
+    key = "alt+shift+[KeyR]";
+    when = "editorFocus && findWidgetVisible";
+  }
+  {
+    command = "editor.action.replaceOne";
+    key = "alt+[KeyR]";
+    when = "editorFocus && findWidgetVisible";
+  }
 
 
+
+  # {
+  #   command = "editor.action.moveSelectionToNextFindMatch";
+  #   key = "ctrl+[KeyK] ctrl+[KeyD]";
+  #   when = "editorFocus";
+  # }
+
+  {
+    command = "editor.action.nextMatchFindAction";
+    key = "alt+[KeyM]";
+    when = "editorFocus";
+  }
+  {
+    command = "editor.action.nextMatchFindAction";
+    key = "enter";
+    when = "editorFocus && findInputFocussed";
+  }
+
+  {
+    command = "editor.action.previousMatchFindAction";
+    key = "alt+shift+[KeyM]";
+    when = "editorFocus";
+  }
+  {
+    command = "editor.action.previousMatchFindAction";
+    key = "shift+enter";
+    when = "editorFocus && findInputFocussed";
+  }
+
+  # {
+  #   command = "editor.action.nextSelectionMatchFindAction";
+  #   key = "ctrl+f3";
+  #   when = "editorFocus";
+  # }
+  # {
+  #   command = "editor.action.previousSelectionMatchFindAction";
+  #   key = "ctrl+shift+f3";
+  #   when = "editorFocus";
+  # }
+
+  {
+    command = "editor.action.selectHighlights";
+    key = "alt+[KeyH]";
+    when = "editorFocus";
+  }
+  {
+    command = "closeFindWidget";
+    key = "escape";
+    when = "editorFocus && findWidgetVisible && !isComposing";
+  }
+
+
+  {
+    command = "editor.action.replaceOne";
+    key = "enter";
+    when = "editorFocus && findWidgetVisible && replaceInputFocussed";
+  }
+  {
+    command = "editor.action.selectAllMatches";
+    key = "alt+enter";
+    when = "editorFocus && findWidgetVisible";
+  }
+
+  # find options
+  {
+    command = "toggleFindCaseSensitive";
+    key = "alt+c";
+    when = "editorFocus";
+  }
+  {
+    command = "toggleFindInSelection";
+    key = "alt+l";
+    when = "editorFocus";
+  }
+  {
+    command = "toggleFindRegex";
+    key = "alt+r";
+    when = "editorFocus";
+  }
+  {
+    command = "toggleFindWholeWord";
+    key = "alt+w";
+    when = "editorFocus";
+  }
+  {
+    command = "togglePreserveCase";
+    key = "alt+p";
+    when = "editorFocus";
+  }
+
+  {
+    command = "closeMarkersNavigation";
+    key = "escape";
+    when = "editorFocus && markersNavigationVisible";
+  }
+  {
+    command = "closeParameterHints";
+    key = "escape";
+    when = "editorFocus && parameterHintsVisible";
+  }
+
+  {
+    command = "showNextParameterHint";
+    key = "down";
+    when =
+      "editorFocus && parameterHintsMultipleSignatures && parameterHintsVisible";
+  }
+  {
+    command = "showPrevParameterHint";
+    key = "up";
+    when =
+      "editorFocus && parameterHintsMultipleSignatures && parameterHintsVisible";
+  }
+  {
+    command = "acceptRenameInput";
+    key = "enter";
+    when = "editorFocus && renameInputVisible && !isComposing";
+  }
+  {
+    command = "acceptRenameInputWithPreview";
+    key = "ctrl+enter";
+    when =
+      "config.editor.rename.enablePreview && editorFocus && renameInputVisible && !isComposing";
+  }
+  {
+    command = "cancelRenameInput";
+    key = "escape";
+    when = "editorFocus && renameInputVisible";
+  }
+
+  # {
+  #   command = "copyFilePath";
+  #   key = "ctrl+alt+c";
+  #   when = "!editorFocus";
+  # }
+  # {
+  #   command = "copyFilePath";
+  #   key = "ctrl+[KeyK] ctrl+alt+c";
+  #   when = "editorFocus";
+  # }
+
+  # {
+  #   command = "copyRelativeFilePath";
+  #   key = "ctrl+shift+alt+c";
+  #   when = "!editorFocus";
+  # }
+  # {
+  #   command = "copyRelativeFilePath";
+  #   key = "ctrl+[KeyK] ctrl+shift+alt+c";
+  #   when = "editorFocus";
+  # }
 ]

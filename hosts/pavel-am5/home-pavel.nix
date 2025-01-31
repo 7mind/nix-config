@@ -69,7 +69,6 @@
             "custom"
             "textInputFocus"
             "listFocus"
-            "editorFocus"
           ];
           allKeys = builtins.map readCfg imports;
           flattened = builtins.concatLists allKeys;

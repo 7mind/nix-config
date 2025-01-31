@@ -1,4 +1,4 @@
-{ config, lib, pkgs, cfg-meta, import_if_exists, cfg-const, ... }:
+{ config, cfg-meta, import_if_exists, cfg-const, ... }:
 
 {
   imports =
@@ -120,9 +120,9 @@
   home-manager.users.pavel = import ./home-pavel.nix;
   home-manager.users.root = import ./home-root.nix;
 
-  environment.systemPackages = with pkgs; [
+  # environment.systemPackages = with pkgs; [
 
-  ];
+  # ];
 
   # doesn't work
   # systemd.tmpfiles.rules =
