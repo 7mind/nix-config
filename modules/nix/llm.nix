@@ -24,7 +24,7 @@ in
 
   config = lib.mkIf config.smind.llm.enable {
     environment.systemPackages = with pkgs; [
-      gpt4all
+      jan
     ];
 
     services.ollama = {
