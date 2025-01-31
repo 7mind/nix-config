@@ -2,11 +2,11 @@ let
   PageUp = "meta+[ArrowUp]";
   PageDown = "meta+[ArrowDown]";
 
-  FullHome = "meta+[ArrowLeft]";
-  Begin2 = "ctrl+[KeyA]";
+  FullBegin = "meta+[ArrowLeft]";
+  Begin = "ctrl+[KeyA]";
 
   FullEnd = "meta+[ArrowRight]";
-  End2 = "ctrl+[KeyE]";
+  End = "ctrl+[KeyE]";
 in
 [
   #
@@ -348,7 +348,7 @@ in
   }
   {
     command = "quickInput.first";
-    key = FullHome;
+    key = FullBegin;
     when = "inQuickInput && quickInputType == 'quickPick'";
   }
 
@@ -411,7 +411,7 @@ in
   }
   {
     command = "cursorHome";
-    key = Begin2;
+    key = Begin;
     when = "textInputFocus";
   }
 
@@ -424,7 +424,7 @@ in
   {
     args = { sticky = false; };
     command = "cursorEnd";
-    key = End2;
+    key = End;
     when = "textInputFocus";
   }
 
@@ -869,42 +869,40 @@ in
   #   when = "editorFocus";
   # }
 
-  #
-  {
-    command = "editor.action.toggleColumnSelection";
-    key = "ctrl+[KeyK] ctrl+[KeyC]";
-    when = "editorFocus";
-
-  }
-
-  {
-    key = "shift+down";
-    command = "cursorColumnSelectDown";
-    when = "editorColumnSelection && textInputFocus";
-  }
-  {
-    key = "shift+left";
-    command = "cursorColumnSelectLeft";
-    when = "editorColumnSelection && textInputFocus";
-  }
-  {
-    key = "shift+pagedown";
-    command = "cursorColumnSelectPageDown";
-    when = "editorColumnSelection && textInputFocus";
-  }
-  {
-    key = "shift+pageup";
-    command = "cursorColumnSelectPageUp";
-    when = "editorColumnSelection && textInputFocus";
-  }
-  {
-    key = "shift+right";
-    command = "cursorColumnSelectRight";
-    when = "editorColumnSelection && textInputFocus";
-  }
-  {
-    key = "shift+up";
-    command = "cursorColumnSelectUp";
-    when = "editorColumnSelection && textInputFocus";
-  }
+  # Unfortunately, column selection is permanent, this option attempts to change the config, and the config is immutable
+  # {
+  #   command = "editor.action.toggleColumnSelection";
+  #   key = "ctrl+[KeyK] ctrl+[KeyC]";
+  #   when = "editorFocus";
+  # }
+  # {
+  #   key = "shift+down";
+  #   command = "cursorColumnSelectDown";
+  #   when = "editorColumnSelection && textInputFocus";
+  # }
+  # {
+  #   key = "shift+left";
+  #   command = "cursorColumnSelectLeft";
+  #   when = "editorColumnSelection && textInputFocus";
+  # }
+  # {
+  #   key = "shift+pagedown";
+  #   command = "cursorColumnSelectPageDown";
+  #   when = "editorColumnSelection && textInputFocus";
+  # }
+  # {
+  #   key = "shift+pageup";
+  #   command = "cursorColumnSelectPageUp";
+  #   when = "editorColumnSelection && textInputFocus";
+  # }
+  # {
+  #   key = "shift+right";
+  #   command = "cursorColumnSelectRight";
+  #   when = "editorColumnSelection && textInputFocus";
+  # }
+  # {
+  #   key = "shift+up";
+  #   command = "cursorColumnSelectUp";
+  #   when = "editorColumnSelection && textInputFocus";
+  # }
 ]
