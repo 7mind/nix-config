@@ -1,4 +1,4 @@
-{ config, lib, pkgs, cfg-flakes, cfg-packages, cfg-meta, extended_pkg, ... }:
+{ config, lib, pkgs, cfg-flakes, cfg-packages, cfg-meta, override_pkg, ... }:
 
 {
   options = {
@@ -21,26 +21,11 @@
 
     programs.vscode = {
       enable = true;
-      package =
-        # (extended_pkg {
-        #   pkg = pkgs.vscodium;
-        #   path = "bin/vscodium";
-        #   ld-libs = with pkgs; [
-        #     icu
-        #     openssl
-        #   ];
-        # });
-
-        pkgs.vscodium.overrideAttrs
-          (oldAttrs:
-            let deps = [ pkgs.icu pkgs.openssl ]; in
-            rec {
-              buildInputs = (oldAttrs.buildInputs or [ ]) ++ deps;
-              nativeBuildInputs = (oldAttrs.nativeBuildInputs or [ ]) ++ [ pkgs.makeWrapper ];
-              postFixup = ''
-                wrapProgram $out/bin/codium --set LD_LIBRARY_PATH ${lib.makeLibraryPath deps}
-              '';
-            });
+      package = override_pkg {
+        pkg = pkgs.vscodium;
+        path = "bin/codium";
+        ld-libs = [ pkgs.icu pkgs.openssl ];
+      };
 
       extensions = with pkgs.vscode-extensions; [
         github.github-vscode-theme

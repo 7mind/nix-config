@@ -41,6 +41,15 @@ let
         })
         schemes
       );
+
+  override_pkg = { pkg, path, ld-libs, ... }: pkg.overrideAttrs
+    (oldAttrs: {
+      buildInputs = (oldAttrs.buildInputs or [ ]) ++ ld-libs;
+      nativeBuildInputs = (oldAttrs.nativeBuildInputs or [ ]) ++ [ pkgs.makeWrapper ];
+      postFixup = ''
+        wrapProgram $out/${path} --set LD_LIBRARY_PATH ${lib.makeLibraryPath ld-libs}
+      '';
+    });
 in
 
 {
@@ -49,6 +58,8 @@ in
   _module.args.extended_pkg = extended_pkg;
 
   _module.args.xdg_associations = xdg_associations;
+
+  _module.args.override_pkg = override_pkg;
 
   _module.args.xdg_associate = input: {
     mimeApps = {
