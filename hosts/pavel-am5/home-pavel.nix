@@ -87,7 +87,7 @@
                         newKey = ''ctrl+${A} ${B}'';
                         result = [ obj (obj // { key = newKey; }) ];
                       in
-                      builtins.trace result result
+                      result
                     else
                       [ obj ];
                 in

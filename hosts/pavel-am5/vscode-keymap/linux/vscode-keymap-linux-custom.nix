@@ -461,6 +461,16 @@ in
     key = "alt+left";
     when = "textInputFocus";
   }
+  {
+    command = "cursorWordEndRight";
+    key = "ctrl+right";
+    when = "textInputFocus";
+  }
+  {
+    command = "cursorWordLeft";
+    key = "ctrl+left";
+    when = "textInputFocus";
+  }
 
   {
     command = "cursorWordEndRightSelect";
@@ -472,13 +482,22 @@ in
     key = "shift+alt+left";
     when = "textInputFocus";
   }
+  {
+    command = "cursorWordEndRightSelect";
+    key = "shift+ctrl+right";
+    when = "textInputFocus";
+  }
+  {
+    command = "cursorWordLeftSelect";
+    key = "shift+ctrl+left";
+    when = "textInputFocus";
+  }
 
   {
     command = "deleteWordLeft";
     key = "alt+backspace";
     when = "textInputFocus && !editorReadonly";
   }
-
   {
     command = "editor.action.deleteLines";
     key = "ctrl+backspace";
@@ -817,6 +836,15 @@ in
     command = "cancelRenameInput";
     key = "escape";
     when = "editorFocus && renameInputVisible";
+  }
+
+  {
+    command = "workbench.action.openNextRecentlyUsedEditor";
+    key = "meta+[BracketRight]";
+  }
+  {
+    command = "workbench.action.openPreviousRecentlyUsedEditor";
+    key = "meta+[BracketLeft]";
   }
 
   # {
