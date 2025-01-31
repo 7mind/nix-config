@@ -4,11 +4,12 @@
     key = "shift+tab";
     when = "editorTextFocus && !editorReadonly && !editorTabMovesFocus";
   }
-  {
-    command = "tab";
-    key = "tab";
-    when = "editorTextFocus && !editorReadonly && !editorTabMovesFocus";
-  }
+
+  # {
+  #   command = "tab";
+  #   key = "tab";
+  #   when = "editorTextFocus && !editorReadonly && !editorTabMovesFocus";
+  # }
 
 
 
@@ -31,16 +32,7 @@
     when =
       "editorHasReferenceProvider && editorTextFocus && !inReferenceSearchEditor && !isInEmbeddedEditor";
   }
-  {
-    command = "editor.action.indentLines";
-    key = "ctrl+]";
-    when = "editorTextFocus && !editorReadonly";
-  }
-  {
-    command = "editor.action.outdentLines";
-    key = "ctrl+[";
-    when = "editorTextFocus && !editorReadonly";
-  }
+
 
 
 

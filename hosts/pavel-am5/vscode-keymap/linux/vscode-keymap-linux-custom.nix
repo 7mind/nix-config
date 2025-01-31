@@ -270,7 +270,19 @@ in
   #
   {
     command = "editor.action.rename";
-    key = "ctrl+[KeyK] ctrl+[KeyR]";
+    key = "ctrl+[KeyT] ctrl+[KeyR]";
     when = "editorHasRenameProvider && editorTextFocus && !editorReadonly";
+  }
+
+  #
+  {
+    command = "editor.action.indentLines";
+    key = "tab";
+    when = "editorTextFocus && !editorReadonly";
+  }
+  {
+    command = "editor.action.outdentLines";
+    key = "shift+tab";
+    when = "editorTextFocus && !editorReadonly";
   }
 ]
