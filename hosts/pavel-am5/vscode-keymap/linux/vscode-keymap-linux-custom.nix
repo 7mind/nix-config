@@ -220,7 +220,7 @@ in
 
   {
     command = "workbench.files.action.compareWithClipboard";
-    key = "ctrl+[KeyK] ctrl+[KeyC]";
+    key = "ctrl+[KeyT] ctrl+[KeyC]";
   }
 
   #
@@ -868,4 +868,43 @@ in
   #   key = "ctrl+[KeyK] ctrl+shift+alt+c";
   #   when = "editorFocus";
   # }
+
+  #
+  {
+    command = "editor.action.toggleColumnSelection";
+    key = "ctrl+[KeyK] ctrl+[KeyC]";
+    when = "editorFocus";
+
+  }
+
+  {
+    key = "shift+down";
+    command = "cursorColumnSelectDown";
+    when = "editorColumnSelection && textInputFocus";
+  }
+  {
+    key = "shift+left";
+    command = "cursorColumnSelectLeft";
+    when = "editorColumnSelection && textInputFocus";
+  }
+  {
+    key = "shift+pagedown";
+    command = "cursorColumnSelectPageDown";
+    when = "editorColumnSelection && textInputFocus";
+  }
+  {
+    key = "shift+pageup";
+    command = "cursorColumnSelectPageUp";
+    when = "editorColumnSelection && textInputFocus";
+  }
+  {
+    key = "shift+right";
+    command = "cursorColumnSelectRight";
+    when = "editorColumnSelection && textInputFocus";
+  }
+  {
+    key = "shift+up";
+    command = "cursorColumnSelectUp";
+    when = "editorColumnSelection && textInputFocus";
+  }
 ]
