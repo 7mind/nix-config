@@ -21,7 +21,14 @@
 
     programs.vscode = {
       enable = true;
-      package = pkgs.vscodium;
+      package = pkgs.vscodium.overrideAttrs (oldAttrs: rec {
+        buildInputs = (oldAttrs.buildInputs or [ ]) ++ [ pkgs.icu ];
+        nativeBuildInputs = (oldAttrs.nativeBuildInputs or [ ]) ++ [ pkgs.makeWrapper ];
+        postFixup = ''
+          wrapProgram $out/bin/codium --set LD_LIBRARY_PATH ${pkgs.icu}/lib
+        '';
+      });
+
       extensions = with pkgs.vscode-extensions; [
         github.github-vscode-theme
 
