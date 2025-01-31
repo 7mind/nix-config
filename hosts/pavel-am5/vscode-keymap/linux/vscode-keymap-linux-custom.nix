@@ -118,6 +118,13 @@ in
     command = "workbench.action.navigateToLastEditLocation";
     key = "ctrl+[KeyN] ctrl+[KeyP]";
   }
+
+  {
+    command = "editor.action.jumpToBracket";
+    key = "ctrl+[KeyN] ctrl+[KeyB]";
+    when = "editorTextFocus";
+  }
+
   # {
   #   command = "workbench.action.newWindow";
   #   key = "ctrl+shift+n";
@@ -166,9 +173,21 @@ in
   }
 
   {
-    command = "workbench.action.splitEditor";
+    command = "workbench.action.splitEditorRight";
     key = "ctrl+[KeyK] ctrl+[KeyV]";
   }
+
+  {
+    command = "workbench.action.pinEditor";
+    key = "ctrl+[KeyK] ctrl+[KeyP]";
+    when = "!activeEditorIsPinned";
+  }
+  {
+    command = "workbench.action.unpinEditor";
+    key = "ctrl+[KeyK] ctrl+[KeyP]";
+    when = "activeEditorIsPinned";
+  }
+
   {
     command = "workbench.action.togglePanel";
     key = "ctrl+[KeyM] ctrl+[KeyP]";
@@ -499,12 +518,14 @@ in
 
   #
   {
-    command = "editor.action.copyLinesDownAction";
+    #command = "editor.action.copyLinesDownAction";
+    command = "editor.action.duplicateSelection";
     key = "ctrl+[KeyD]";
     when = "editorTextFocus && !editorReadonly";
   }
   {
-    command = "editor.action.copyLinesDownAction";
+    # command = "editor.action.copyLinesDownAction";
+    command = "editor.action.duplicateSelection";
     key = "meta+[KeyD]";
     when = "editorTextFocus && !editorReadonly";
   }
