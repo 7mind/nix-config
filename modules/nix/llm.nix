@@ -40,11 +40,12 @@ in
         "mistral"
 
         "gemma:7b"
-        "gemma:27b"
-        "qwen2.5-coder:14b"
 
+        "qwen2.5-coder:14b"
         "qwen:14b"
         "qwen2.5:14b"
+
+        "aratan/qwen2.5-14bu:latest"
 
         "deepseek-r1:14b"
 
