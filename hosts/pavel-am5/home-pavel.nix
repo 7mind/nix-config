@@ -81,7 +81,7 @@
                   key = obj.key;
 
                   m1 = builtins.match ''^ctrl\+(.)[[:space:]]+ctrl\+(.)$'' key;
-                  m2 = builtins.match ''^ctrl\\+\\[(.+)\\][[:space:]]+ctrl\\+\\[(.+)\\]$'' key;
+                  m2 = builtins.match ''^ctrl\+\\[(.+)\\][[:space:]]+ctrl\+\\[(.+)\\]$'' key;
 
                   transformed =
                     if m1 != null then
