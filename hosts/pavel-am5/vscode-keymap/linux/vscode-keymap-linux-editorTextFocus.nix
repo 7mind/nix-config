@@ -9,33 +9,17 @@
     key = "tab";
     when = "editorTextFocus && !editorReadonly && !editorTabMovesFocus";
   }
-  {
-    command = "editor.action.blockComment";
-    key = "ctrl+shift+a";
-    when = "editorTextFocus && !editorReadonly";
-  }
+
+
+
   {
     command = "editor.action.cancelSelectionAnchor";
     key = "escape";
     when = "editorTextFocus && selectionAnchorSet";
   }
-  {
-    command = "editor.action.commentLine";
-    key = "ctrl+/";
-    when = "editorTextFocus && !editorReadonly";
-  }
-  {
-    command = "editor.action.formatDocument";
-    key = "ctrl+shift+i";
-    when =
-      "editorHasDocumentFormattingProvider && editorTextFocus && !editorReadonly && !inCompositeEditor";
-  }
-  {
-    command = "editor.action.formatDocument.none";
-    key = "ctrl+shift+i";
-    when =
-      "editorTextFocus && !editorHasDocumentFormattingProvider && !editorReadonly";
-  }
+
+
+
   {
     command = "editor.action.goToImplementation";
     key = "ctrl+f12";
@@ -57,36 +41,10 @@
     key = "ctrl+[";
     when = "editorTextFocus && !editorReadonly";
   }
-  {
-    command = "editor.action.insertCursorAbove";
-    key = "ctrl+shift+up";
-    when = "editorTextFocus";
-  }
-  {
-    command = "editor.action.insertCursorBelow";
-    key = "ctrl+shift+down";
-    when = "editorTextFocus";
-  }
-  {
-    command = "editor.action.insertLineAfter";
-    key = "ctrl+enter";
-    when = "editorTextFocus && !editorReadonly";
-  }
-  {
-    command = "editor.action.insertLineBefore";
-    key = "ctrl+shift+enter";
-    when = "editorTextFocus && !editorReadonly";
-  }
-  {
-    command = "editor.action.moveLinesDownAction";
-    key = "alt+down";
-    when = "editorTextFocus && !editorReadonly";
-  }
-  {
-    command = "editor.action.moveLinesUpAction";
-    key = "alt+up";
-    when = "editorTextFocus && !editorReadonly";
-  }
+
+
+
+  
 
   {
     command = "editor.action.rename";
@@ -94,21 +52,23 @@
     when = "editorHasRenameProvider && editorTextFocus && !editorReadonly";
   }
 
-  {
-    command = "editor.action.selectFromAnchorToCursor";
-    key = "ctrl+k ctrl+k";
-    when = "editorTextFocus && selectionAnchorSet";
-  }
-  {
-    command = "editor.action.setSelectionAnchor";
-    key = "ctrl+k ctrl+b";
-    when = "editorTextFocus";
-  }
-  {
-    command = "editor.action.showHover";
-    key = "ctrl+k ctrl+i";
-    when = "editorTextFocus";
-  }
+  # {
+  #   command = "editor.action.selectFromAnchorToCursor";
+  #   key = "ctrl+k ctrl+k";
+  #   when = "editorTextFocus && selectionAnchorSet";
+  # }
+  # {
+  #   command = "editor.action.setSelectionAnchor";
+  #   key = "ctrl+k ctrl+b";
+  #   when = "editorTextFocus";
+  # }
+
+  # {
+  #   command = "editor.action.showHover";
+  #   key = "ctrl+k ctrl+i";
+  #   when = "editorTextFocus";
+  # }
+
   # {
   #   command = "editor.action.smartSelect.expand";
   #   key = "shift+alt+right";

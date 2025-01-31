@@ -171,6 +171,18 @@ in
     key = "ctrl+[KeyT] ctrl+[KeyT]";
     when = "editorHasCodeActionsProvider && textInputFocus && !editorReadonly";
   }
+  {
+    command = "editor.action.formatDocument";
+    key = "ctrl+[KeyT] ctrl+[KeyF]";
+    when =
+      "editorHasDocumentFormattingProvider && editorTextFocus && !editorReadonly && !inCompositeEditor";
+  }
+  {
+    command = "editor.action.formatDocument.none";
+    key = "ctrl+[KeyT] ctrl+[KeyF]";
+    when =
+      "editorTextFocus && !editorHasDocumentFormattingProvider && !editorReadonly";
+  }
 
   #
   {
@@ -187,7 +199,7 @@ in
   #
   {
     command = "editor.action.revealDefinition";
-    key = "ctrl+[KeyK] ctrl+[KeyD]";
+    key = "ctrl+[KeyN] ctrl+[KeyD]";
     when = "editorHasDefinitionProvider && editorTextFocus";
   }
   {
@@ -197,16 +209,61 @@ in
       "editorHasDefinitionProvider && editorTextFocus && !isInEmbeddedEditor";
   }
 
-  # {
-  #   command = "editor.action.peekDefinition";
-  #   key = "ctrl+shift+f10";
-  #   when =
-  #     "editorHasDefinitionProvider && editorTextFocus && !inReferenceSearchEditor && !isInEmbeddedEditor";
-  # }
-  # {
-  #   command = "editor.action.peekImplementation";
-  #   key = "ctrl+shift+f12";
-  #   when =
-  #     "editorHasImplementationProvider && editorTextFocus && !inReferenceSearchEditor && !isInEmbeddedEditor";
-  # }
+  #
+  {
+    command = "editor.action.blockComment";
+    key = "ctrl+shift+[Slash]";
+    when = "editorTextFocus && !editorReadonly";
+  }
+  {
+    command = "editor.action.blockComment";
+    key = "meta+shift+[Slash]";
+    when = "editorTextFocus && !editorReadonly";
+  }
+  {
+    command = "editor.action.commentLine";
+    key = "ctrl+/";
+    when = "editorTextFocus && !editorReadonly";
+  }
+  {
+    command = "editor.action.commentLine";
+    key = "meta+[Slash]";
+    when = "editorTextFocus && !editorReadonly";
+  }
+
+  #
+  {
+    command = "editor.action.insertCursorAbove";
+    key = "ctrl+shift+up";
+    when = "editorTextFocus";
+  }
+  {
+    command = "editor.action.insertCursorBelow";
+    key = "ctrl+shift+down";
+    when = "editorTextFocus";
+  }
+
+  #
+  {
+    command = "editor.action.insertLineAfter";
+    key = "ctrl+enter";
+    when = "editorTextFocus && !editorReadonly";
+  }
+  {
+    command = "editor.action.insertLineBefore";
+    key = "ctrl+shift+enter";
+    when = "editorTextFocus && !editorReadonly";
+  }
+
+  #
+  {
+    command = "editor.action.moveLinesDownAction";
+    key = "shift+alt+down";
+    when = "editorTextFocus && !editorReadonly";
+  }
+  {
+    command = "editor.action.moveLinesUpAction";
+    key = "shift+alt+up";
+    when = "editorTextFocus && !editorReadonly";
+  }
 ]

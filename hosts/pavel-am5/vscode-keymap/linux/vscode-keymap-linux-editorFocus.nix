@@ -56,11 +56,11 @@
     when = "editorFocus";
   }
 
-  {
-    command = "editor.action.moveSelectionToNextFindMatch";
-    key = "ctrl+k ctrl+d";
-    when = "editorFocus";
-  }
+  # {
+  #   command = "editor.action.moveSelectionToNextFindMatch";
+  #   key = "ctrl+k ctrl+d";
+  #   when = "editorFocus";
+  # }
   {
     command = "editor.action.nextMatchFindAction";
     key = "f3";

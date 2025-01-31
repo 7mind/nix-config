@@ -128,11 +128,13 @@
     when =
       "listFocus && listSupportsMultiselect && !inputFocus && !treestickyScrollFocused";
   }
-  {
-    command = "list.showHover";
-    key = "ctrl+k ctrl+i";
-    when = "listFocus && !inputFocus && !treestickyScrollFocused";
-  }
+
+  # {
+  #   command = "list.showHover";
+  #   key = "ctrl+k ctrl+i";
+  #   when = "listFocus && !inputFocus && !treestickyScrollFocused";
+  # }
+
   {
     command = "list.toggleExpand";
     key = "space";

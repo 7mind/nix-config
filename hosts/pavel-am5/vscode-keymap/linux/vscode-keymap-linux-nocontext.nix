@@ -139,7 +139,7 @@
 
   {
     command = "workbench.action.showAllEditors";
-    key = "ctrl+k ctrl+p";
+    key = "ctrl+[KeyN] ctrl+[KeyE]";
   }
   # {
   #   command = "workbench.action.showAllSymbols";
