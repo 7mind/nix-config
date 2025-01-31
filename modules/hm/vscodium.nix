@@ -231,6 +231,9 @@
         "metals.javaHome" = "${pkgs.graalvm-ce}";
         "metals.serverVersion" = "${pkgs.metals.version}";
 
+        "xml.java.home" = "${pkgs.graalvm-ce}";
+        "xml.server.workDir" = "~/.cache/lemminx";
+
         "update.mode" = "none";
 
         "makefile.configureOnOpen" = true;
