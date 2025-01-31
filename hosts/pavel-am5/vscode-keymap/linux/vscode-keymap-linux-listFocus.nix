@@ -131,7 +131,7 @@
 
   # {
   #   command = "list.showHover";
-  #   key = "ctrl+k ctrl+i";
+  #   key = "ctrl+[KeyK] ctrl+[KeyI]";
   #   when = "listFocus && !inputFocus && !treestickyScrollFocused";
   # }
 

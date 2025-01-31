@@ -1,18 +1,18 @@
 [
   {
     command = "actions.find";
-    key = "ctrl+f";
+    key = "ctrl+[KeyF]";
     when = "editorFocus || editorIsOpen";
   }
   {
     command = "editor.action.startFindReplaceAction";
-    key = "ctrl+r";
+    key = "ctrl+[KeyR]";
     when = "editorFocus || editorIsOpen";
   }
 
   # {
   #   command = "editor.action.addSelectionToNextFindMatch";
-  #   key = "ctrl+d";
+  #   key = "ctrl+[KeyD]";
   #   when = "editorFocus";
   # }
 
@@ -31,7 +31,7 @@
 
   {
     command = "editor.action.extensioneditor.showfind";
-    key = "ctrl+f";
+    key = "ctrl+[KeyF]";
     when = "!editorFocus && activeEditor == 'workbench.editor.extension'";
   }
 
@@ -58,7 +58,7 @@
 
   # {
   #   command = "editor.action.moveSelectionToNextFindMatch";
-  #   key = "ctrl+k ctrl+d";
+  #   key = "ctrl+[KeyK] ctrl+[KeyD]";
   #   when = "editorFocus";
   # }
   {
@@ -193,7 +193,7 @@
   # }
   # {
   #   command = "copyFilePath";
-  #   key = "ctrl+k ctrl+alt+c";
+  #   key = "ctrl+[KeyK] ctrl+alt+c";
   #   when = "editorFocus";
   # }
 
@@ -204,7 +204,7 @@
   # }
   # {
   #   command = "copyRelativeFilePath";
-  #   key = "ctrl+k ctrl+shift+alt+c";
+  #   key = "ctrl+[KeyK] ctrl+shift+alt+c";
   #   when = "editorFocus";
   # }
 

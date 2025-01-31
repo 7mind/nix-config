@@ -12,7 +12,7 @@ in
   #
   {
     command = "editor.action.selectAll";
-    key = "ctrl-k ctrl+a";
+    key = "ctrl+[KeyK] ctrl+[KeyA]";
   }
   {
     command = "redo";
@@ -20,28 +20,28 @@ in
   }
   {
     command = "redo";
-    key = "ctrl+y";
+    key = "ctrl+[KeyY]";
   }
   {
     command = "undo";
-    key = "ctrl+z";
+    key = "ctrl+[KeyZ]";
   }
   {
     command = "editor.action.clipboardCopyAction";
-    key = "ctrl+c";
+    key = "ctrl+[KeyC]";
   }
   {
     command = "editor.action.clipboardCutAction";
-    key = "ctrl+x";
+    key = "ctrl+[KeyX]";
   }
   {
     command = "editor.action.clipboardPasteAction";
-    key = "ctrl+v";
+    key = "ctrl+[KeyV]";
   }
 
   # {
   #   command = "editor.action.toggleTabFocusMode";
-  #   key = "ctrl+m";
+  #   key = "ctrl+[KeyM]";
   # }
 
   {
@@ -65,7 +65,7 @@ in
   {
 
     command = "workbench.action.closeActiveEditor";
-    key = "ctrl+w";
+    key = "ctrl+[KeyW]";
   }
   {
     command = "workbench.action.closeAllEditors";
@@ -78,7 +78,7 @@ in
 
   # {
   #   command = "workbench.action.files.copyPathOfActiveFile";
-  #   key = "ctrl+k p";
+  #   key = "ctrl+[KeyK] p";
   # }
   {
     command = "workbench.action.files.newUntitledFile";
@@ -97,7 +97,7 @@ in
 
   {
     command = "workbench.action.files.save";
-    key = "ctrl+s";
+    key = "ctrl+[KeyS]";
   }
 
   {
@@ -140,7 +140,7 @@ in
 
   {
     command = "workbench.action.quit";
-    key = "ctrl+q";
+    key = "ctrl+[KeyQ]";
   }
 
   {
@@ -154,7 +154,7 @@ in
   }
   # {
   #   command = "workbench.action.showAllSymbols";
-  #   key = "ctrl+t";
+  #   key = "ctrl+[KeyT]";
   # }
   {
     command = "workbench.action.showCommands";
@@ -196,7 +196,7 @@ in
   }
   {
     command = "workbench.action.zoomReset";
-    key = "ctrl+0";
+    key = "ctrl+[Key0]";
   }
 
   {
@@ -287,18 +287,18 @@ in
 
   # {
   #   command = "editor.action.selectFromAnchorToCursor";
-  #   key = "ctrl+k ctrl+k";
+  #   key = "ctrl+[KeyK] ctrl+[KeyK]";
   #   when = "editorTextFocus && selectionAnchorSet";
   # }
   # {
   #   command = "editor.action.setSelectionAnchor";
-  #   key = "ctrl+k ctrl+b";
+  #   key = "ctrl+[KeyK] ctrl+[KeyB]";
   #   when = "editorTextFocus";
   # }
 
   # {
   #   command = "editor.action.showHover";
-  #   key = "ctrl+k ctrl+i";
+  #   key = "ctrl+[KeyK] ctrl+[KeyI]";
   #   when = "editorTextFocus";
   # }
 

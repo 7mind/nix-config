@@ -108,7 +108,7 @@
   }
   {
     command = "expandLineSelection";
-    key = "ctrl+l";
+    key = "ctrl+[KeyL]";
     when = "textInputFocus";
   }
 
@@ -180,7 +180,7 @@
   }
   # {
   #   command = "cursorUndo";
-  #   key = "ctrl+u";
+  #   key = "ctrl+[KeyU]";
   #   when = "textInputFocus";
   # }
 
@@ -223,7 +223,7 @@
   }
   {
     command = "repl.action.filter";
-    key = "ctrl+f";
+    key = "ctrl+[KeyF]";
     when = "inDebugRepl && textInputFocus";
   }
   {
@@ -272,7 +272,7 @@
   }
   # {
   #   command = "focusSuggestion";
-  #   key = "ctrl+i";
+  #   key = "ctrl+[KeyI]";
   #   when =
   #     "suggestWidgetVisible && textInputFocus && !suggestWidgetHasFocusedSuggestion";
   # }
@@ -360,7 +360,7 @@
   }
   # {
   #   command = "toggleSuggestionDetails";
-  #   key = "ctrl+i";
+  #   key = "ctrl+[KeyI]";
   #   when =
   #     "suggestWidgetHasFocusedSuggestion && suggestWidgetVisible && textInputFocus";
   # }
