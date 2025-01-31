@@ -23,6 +23,10 @@ in
   };
 
   config = lib.mkIf config.smind.llm.enable {
+    environment.systemPackages = with pkgs; [
+      gpt4all
+    ];
+
     services.ollama = {
       enable = true;
       # https://github.com/NixOS/nixpkgs/issues/375910
