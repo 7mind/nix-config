@@ -61,6 +61,9 @@
         terminal = {
           font_family = "Hack Nerd Font Mono";
         };
+        project_panel = {
+          entry_spacing = "standard";
+        };
         auto_signature_help = true;
         show_signature_help_after_edits = true;
       };
