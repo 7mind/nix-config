@@ -39,7 +39,6 @@
             milliseconds = 250;
           };
         };
-
         features = {
           copilot = false;
         };
@@ -48,15 +47,22 @@
           metrics = false;
         };
         vim_mode = false;
-        ui_font_size = 13;
-        buffer_font_size = 13;
+        ui_font_size = 14;
+        buffer_font_size = 12;
         auto_update = false;
+        buffer_font_family = "FiraMono Nerd Font";
+        terminal = {
+          font_family = "Hack Nerd Font Mono";
+        };
       };
+
       userKeymaps =
         [ ];
+
       extraPackages = with pkgs; [
         omnisharp-roslyn
       ];
+
     };
 
   };
