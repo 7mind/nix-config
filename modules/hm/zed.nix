@@ -31,6 +31,9 @@
         "basher"
         "haskell"
         "ini"
+        "scala"
+        "pylsp"
+        "python-refactoring"
       ];
 
       userSettings = {
@@ -50,11 +53,16 @@
         vim_mode = false;
         ui_font_size = 14;
         buffer_font_size = 14;
+        buffer_line_height = "standard";
+        # ui_font_family = "";
+        # buffer_font_fallbacks
         auto_update = false;
         buffer_font_family = "FiraMono Nerd Font";
         terminal = {
           font_family = "Hack Nerd Font Mono";
         };
+        auto_signature_help = true;
+        show_signature_help_after_edits = true;
       };
 
       userKeymaps =
