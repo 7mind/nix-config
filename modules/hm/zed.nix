@@ -54,7 +54,9 @@
       };
       userKeymaps =
         [ ];
-      extraPackages = [ ];
+      extraPackages = with pkgs; [
+        omnisharp-roslyn
+      ];
     };
 
   };
