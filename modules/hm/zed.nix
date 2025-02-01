@@ -48,8 +48,8 @@
           metrics = false;
         };
         vim_mode = false;
-        ui_font_size = 12;
-        buffer_font_size = 12;
+        ui_font_size = 13;
+        buffer_font_size = 13;
         auto_update = false;
       };
       userKeymaps =
