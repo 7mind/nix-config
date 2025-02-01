@@ -15,5 +15,6 @@
   ./tmux.nix
   ./vscodium.nix
   ./wezterm.nix
+  ./zed.nix
   ./zsh.nix
 ]
