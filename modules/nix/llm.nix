@@ -71,7 +71,7 @@
       environment = {
         OLLAMA_API_BASE_URL = "http://127.0.0.1:11434";
         OLLAMA_SCHED_SPREAD = "true";
-        
+        ROCR_VISIBLE_DEVICES = "1,0";
         WEBUI_AUTH = "False";
       };
     };
