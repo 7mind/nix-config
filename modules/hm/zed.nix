@@ -34,6 +34,7 @@
       ];
 
       userSettings = {
+        #  base_keymap = "None";
         autosave = {
           after_delay = {
             milliseconds = 250;
@@ -48,7 +49,7 @@
         };
         vim_mode = false;
         ui_font_size = 14;
-        buffer_font_size = 12;
+        buffer_font_size = 14;
         auto_update = false;
         buffer_font_family = "FiraMono Nerd Font";
         terminal = {
