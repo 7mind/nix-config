@@ -73,6 +73,7 @@
 
       extraPackages = with pkgs; [
         omnisharp-roslyn
+        metals
       ];
 
     };
