@@ -67,6 +67,7 @@
             "!negate-all"
             "!negate-gitlens"
             "custom"
+            "fileExplorer"
             "textInputFocus"
             "listFocus"
           ];
