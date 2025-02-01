@@ -70,6 +70,8 @@
       enable = true;
       environment = {
         OLLAMA_API_BASE_URL = "http://127.0.0.1:11434";
+        OLLAMA_SCHED_SPREAD = "true";
+        
         WEBUI_AUTH = "False";
       };
     };
