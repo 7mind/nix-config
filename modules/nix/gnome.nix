@@ -139,10 +139,18 @@
       };
     };
 
-    environment.systemPackages = (with pkgs.gnomeExtensions; [
-      appindicator
-      # tray-icons-reloaded
-    ]) ++ (with pkgs; [
+    programs.kdeconnect =
+      {
+        enable = true;
+        package = pkgs.gnomeExtensions.gsconnect;
+      };
+
+    environment.systemPackages = (with pkgs.gnomeExtensions;
+      [
+        appindicator
+        gsconnect
+        # tray-icons-reloaded
+      ]) ++ (with pkgs; [
       dconf-editor
       seahorse
       gnome-firmware
