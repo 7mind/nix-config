@@ -64,7 +64,7 @@
       # "ctrl-\"" = "editor::ExpandAllHunkDiffs";
       # ctrl-' = "editor::ToggleHunkDiff";
       # "ctrl-;" = "editor::ToggleLineNumbers";
-      "ctrl+k ctrl-a" = "editor::SelectAll";
+      "ctrl-k ctrl-a" = "editor::SelectAll";
       ctrl-alt-space = "editor::ShowCharacterPalette";
       ctrl-backspace = "editor::DeleteToPreviousWordStart";
       # ctrl-delete = "editor::DeleteToNextWordEnd";
@@ -165,7 +165,7 @@
       shift-tab = "editor::Outdent";
       tab = "editor::Indent";
 
-      "ctrl-k ctrl+v" = "pane::SplitRight";
+      "ctrl-k ctrl-v" = "pane::SplitRight";
 
       # ctrl-alt-shift-c = "editor::DisplayCursorNames";
       super-d = "editor::DuplicateLineDown";
@@ -196,7 +196,7 @@
         [ "editor::SelectPrevious" { replace_newest = true; } ];
 
       "ctrl-k p" = "editor::CopyPath";
-      "ctrl-k ctrl+f" = "editor::RevealInFileManager";
+      "ctrl-k ctrl-f" = "editor::RevealInFileManager";
       # "ctrl-k v" = "markdown::OpenPreviewToTheSide";
 
       "ctrl-n ctrl+b" = "editor::MoveToEnclosingBracket";
@@ -218,7 +218,7 @@
       ctrl-space = "editor::ShowCompletions";
       ctrl-u = "editor::UndoSelection";
       # f12 = "editor::GoToDefinition";
-      "ctrl+t ctrl+r" = "editor::Rename";
+      "ctrl-t ctrl-r" = "editor::Rename";
       # f8 = "editor::GoToDiagnostic";
       shift-alt-down = "editor::AddSelectionBelow";
       # shift-alt-up = "editor::AddSelectionAbove";
@@ -454,7 +454,7 @@
       "ctrl-k shift-left" = [ "workspace::SwapPaneInDirection" "Left" ];
       "ctrl-k shift-right" = [ "workspace::SwapPaneInDirection" "Right" ];
       "ctrl-k shift-up" = [ "workspace::SwapPaneInDirection" "Up" ];
-      ctrl-n = "workspace::NewFile";
+      "ctrl-k ctrl-n" = "workspace::NewFile";
       ctrl-p = "file_finder::Toggle";
       ctrl-s = "workspace::Save";
       ctrl-shift-b = "outline_panel::ToggleFocus";
@@ -463,7 +463,7 @@
       ctrl-shift-h = [ "pane::DeploySearch" { replace_enabled = true; } ];
       ctrl-shift-m = "diagnostics::Deploy";
       ctrl-shift-n = "workspace::NewWindow";
-      "ctrl+n ctrl+n" = "command_palette::Toggle";
+      "ctrl-n ctrl-n" = "command_palette::Toggle";
 
       ctrl-shift-r = "task::Rerun";
       ctrl-shift-s = "workspace::SaveAs";
@@ -686,7 +686,7 @@
       ctrl-x = "project_panel::Cut";
       cut = "project_panel::Cut";
       delete = [ "project_panel::Trash" { skip_prompt = false; } ];
-      "ctrl+t ctrl+r" = "project_panel::Rename";
+      "ctrl-t ctrl-r" = "project_panel::Rename";
       escape = "menu::Cancel";
       # f2 = "project_panel::Rename";
       left = "project_panel::CollapseSelectedEntry";
