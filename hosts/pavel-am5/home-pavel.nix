@@ -88,7 +88,7 @@
               (obj:
                 let
                   key = obj.key;
-                  m1 = builtins.match ''^(.+)\+(.+)[[:space:]]+\\0\+(.+)$'' key;
+                  m1 = builtins.match ''^(.+)\+(.+)[[:space:]]+\\1\+(.+)$'' key;
                   transformed =
                     if m1 != null then
                       let
