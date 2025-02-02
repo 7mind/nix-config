@@ -46,7 +46,10 @@
 
         "gemma:7b"
 
+        "llama3.1:8b"
         "qwen2.5-coder:14b"
+        "nomic-embed-text"
+
         "qwen:14b"
         "qwen2.5:14b"
 
