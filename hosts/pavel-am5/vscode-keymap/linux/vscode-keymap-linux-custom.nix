@@ -182,7 +182,7 @@ in
   }
   {
     command = "workbench.action.showCommands";
-    key = "ctrl+[KeyN] ctrl+[KeyA]";
+    key = "ctrl+[KeyN] ctrl+[KeyN]";
   }
   {
     command = "editor.action.revealDefinition";
@@ -212,7 +212,7 @@ in
     command = "editor.action.goToDeclaration";
   }
   {
-    key = "ctrl+[KeyN] ctrl+[KeyA]";
+    key = "ctrl+[KeyN] shift+[KeyD]";
     command = "editor.action.goToDeclaration";
   }
 

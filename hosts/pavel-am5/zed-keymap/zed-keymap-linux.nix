@@ -168,7 +168,7 @@
       "ctrl-k ctrl+v" = "pane::SplitRight";
 
       # ctrl-alt-shift-c = "editor::DisplayCursorNames";
-      meta-d = "editor::DuplicateLineDown";
+      super-d = "editor::DuplicateLineDown";
       # ctrl-alt-shift-up = "editor::DuplicateLineUp";
 
       ctrl-d = [ "editor::SelectNext" { replace_newest = false; } ];
@@ -199,26 +199,31 @@
       "ctrl-k ctrl+f" = "editor::RevealInFileManager";
       # "ctrl-k v" = "markdown::OpenPreviewToTheSide";
 
-      ctrl-m = "editor::MoveToEnclosingBracket";
-      "ctrl-shift-[" = "editor::Fold";
-      "ctrl-shift-\\" = "editor::MoveToEnclosingBracket";
-      "ctrl-shift-]" = "editor::UnfoldLines";
+      "ctrl-n ctrl+b" = "editor::MoveToEnclosingBracket";
+      # "ctrl-shift-[" = "editor::Fold";
+      # "ctrl-shift-\\" = "editor::MoveToEnclosingBracket";
+      # "ctrl-shift-]" = "editor::UnfoldLines";
+
       ctrl-shift-down = [ "editor::SelectNext" { replace_newest = false; } ];
-      ctrl-shift-f10 = "editor::GoToDefinitionSplit";
-      ctrl-shift-k = "editor::DeleteLine";
+      # ctrl-shift-f10 = "editor::GoToDefinitionSplit";
+      ctrl-backspace = "editor::DeleteLine";
+
       ctrl-shift-l = "editor::SelectAllMatches";
       ctrl-shift-u = "editor::RedoSelection";
+
       ctrl-shift-up = [ "editor::SelectPrevious" { replace_newest = false; } ];
-      ctrl-shift-v = "markdown::OpenPreview";
+
+      # ctrl-shift-v = "markdown::OpenPreview";
+
       ctrl-space = "editor::ShowCompletions";
       ctrl-u = "editor::UndoSelection";
-      f12 = "editor::GoToDefinition";
-      f2 = "editor::Rename";
-      f8 = "editor::GoToDiagnostic";
+      # f12 = "editor::GoToDefinition";
+      "ctrl+t ctrl+r" = "editor::Rename";
+      # f8 = "editor::GoToDiagnostic";
       shift-alt-down = "editor::AddSelectionBelow";
-      shift-alt-up = "editor::AddSelectionAbove";
-      shift-f12 = "editor::GoToImplementation";
-      shift-f8 = "editor::GoToPrevDiagnostic";
+      # shift-alt-up = "editor::AddSelectionAbove";
+      # shift-f12 = "editor::GoToImplementation";
+      # shift-f8 = "editor::GoToPrevDiagnostic";
     };
     context = "Editor";
   }
@@ -680,9 +685,9 @@
       ctrl-x = "project_panel::Cut";
       cut = "project_panel::Cut";
       delete = [ "project_panel::Trash" { skip_prompt = false; } ];
-      enter = "project_panel::Rename";
+      "ctrl+t ctrl+r" = "project_panel::Rename";
       escape = "menu::Cancel";
-      f2 = "project_panel::Rename";
+      # f2 = "project_panel::Rename";
       left = "project_panel::CollapseSelectedEntry";
       new = "project_panel::NewFile";
       paste = "project_panel::Paste";
