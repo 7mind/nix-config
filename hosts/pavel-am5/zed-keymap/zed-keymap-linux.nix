@@ -22,8 +22,10 @@
       ctrl-c = "menu::Cancel";
       ctrl-enter = "menu::SecondaryConfirm";
       ctrl-escape = "menu::Cancel";
-      ctrl-n = "menu::SelectNext";
-      ctrl-p = "menu::SelectPrev";
+
+      # ctrl-n = "menu::SelectNext";
+      # ctrl-p = "menu::SelectPrev";
+
       end = "menu::SelectLast";
       enter = "menu::Confirm";
       escape = "menu::Cancel";
@@ -37,7 +39,7 @@
 
       # ctrl-shift-i = "inline_completion::ToggleMenu";
       # f11 = "zed::ToggleFullScreen";
-      open = "workspace::Open";
+      # open = "workspace::Open";
       # shift-escape = "workspace::ToggleZoom";
     };
   }
@@ -58,24 +60,24 @@
   {
     bindings = {
       # "alt-g b" = "editor::ToggleGitBlame";
-      alt-pagedown = "editor::PageDown";
-      alt-pageup = "editor::PageUp";
+      # alt-pagedown = "editor::PageDown";
+      # alt-pageup = "editor::PageUp";
       backspace = "editor::Backspace";
       copy = "editor::Copy";
       # "ctrl-\"" = "editor::ExpandAllHunkDiffs";
       # ctrl-' = "editor::ToggleHunkDiff";
       # "ctrl-;" = "editor::ToggleLineNumbers";
       "ctrl-k ctrl-a" = "editor::SelectAll";
-      ctrl-alt-space = "editor::ShowCharacterPalette";
+      # ctrl-alt-space = "editor::ShowCharacterPalette";
       ctrl-backspace = "editor::DeleteToPreviousWordStart";
       # ctrl-delete = "editor::DeleteToNextWordEnd";
 
       ctrl-c = "editor::Copy";
 
-      ctrl-down = "editor::LineDown";
+      # ctrl-down = "editor::LineDown";
       ctrl-end = "editor::MoveToEnd";
-
       ctrl-home = "editor::MoveToBeginning";
+
       "ctrl-i ctrl-i" = "editor::ShowSignatureHelp";
       ctrl-insert = "editor::Copy";
       # ctrl-k = "editor::CutToEndOfLine";
@@ -112,12 +114,20 @@
       delete = "editor::Delete";
       down = "editor::MoveDown";
       end = "editor::MoveToEndOfLine";
+      ctrl-e = "editor::MoveToBeginningOfLine";
       escape = "editor::Cancel";
       home = "editor::MoveToBeginningOfLine";
+      ctrl-a = "editor::MoveToBeginningOfLine";
       left = "editor::MoveLeft";
       menu = "editor::OpenContextMenu";
+
       pagedown = "editor::MovePageDown";
       pageup = "editor::MovePageUp";
+      super-down = "editor::MovePageDown";
+      super-up = "editor::MovePageUp";
+
+
+
       paste = "editor::Paste";
       redo = "editor::Redo";
       right = "editor::MoveRight";
@@ -150,14 +160,16 @@
 
   {
     bindings = {
-      # "ctrl+k ctrl+d" = "editor::GoToTypeDefinitionSplit";
       alt-shift-down = "editor::MoveLineDown";
-      # alt-f12 = "editor::GoToDefinitionSplit";
+      alt-shift-up = "editor::MoveLineUp";
 
-      alt-shift-f12 = "editor::FindAllReferences";
+      # alt-f12 = "editor::GoToDefinitionSplit";
+      # "ctrl+k ctrl+d" = "editor::GoToTypeDefinitionSplit";
+      # alt-shift-f12 = "editor::FindAllReferences";
+      # ctrl-f12 = "editor::GoToTypeDefinition";
+
       # alt-shift-left = "editor::SelectSmallerSyntaxNode";
       # alt-shift-right = "editor::SelectLargerSyntaxNode";
-      alt-shift-up = "editor::MoveLineUp";
 
       "ctrl-." = "editor::ToggleCodeActions";
 
@@ -172,9 +184,11 @@
       super-d = "editor::DuplicateLineDown";
       # ctrl-alt-shift-up = "editor::DuplicateLineUp";
 
-      ctrl-d = [ "editor::SelectNext" { replace_newest = false; } ];
-      ctrl-f12 = "editor::GoToTypeDefinition";
-      ctrl-f2 = "editor::SelectAllMatches";
+      # ctrl-d = [ "editor::SelectNext" { replace_newest = false; } ];
+      # "ctrl-k ctrl-shift-d" =
+      #   [ "editor::SelectPrevious" { replace_newest = true; } ];
+
+      # ctrl-f2 = "editor::SelectAllMatches";
 
       # "ctrl-k ctrl-0" = "editor::FoldAll";
       # "ctrl-k ctrl-1" = [ "editor::FoldAtLevel" { level = 1; } ];
@@ -193,10 +207,8 @@
       # "ctrl-k ctrl-j" = "editor::UnfoldAll";
       # "ctrl-k ctrl-l" = "editor::ToggleFold";
 
-      "ctrl-k ctrl-shift-d" =
-        [ "editor::SelectPrevious" { replace_newest = true; } ];
 
-      "ctrl-k p" = "editor::CopyPath";
+      # "ctrl-k p" = "editor::CopyPath";
       "ctrl-k ctrl-f" = "editor::RevealInFileManager";
       # "ctrl-k v" = "markdown::OpenPreviewToTheSide";
 
@@ -208,9 +220,11 @@
       ctrl-shift-down = [ "editor::SelectNext" { replace_newest = false; } ];
       # ctrl-shift-f10 = "editor::GoToDefinitionSplit";
       ctrl-backspace = "editor::DeleteLine";
+      super-backspace = "editor::DeleteLine";
 
-      ctrl-shift-l = "editor::SelectAllMatches";
-      ctrl-shift-u = "editor::RedoSelection";
+      alt-h = "editor::SelectAllMatches";
+      # ctrl-shift-l = "editor::SelectAllMatches";
+      # ctrl-shift-u = "editor::RedoSelection";
 
       ctrl-shift-up = [ "editor::SelectPrevious" { replace_newest = false; } ];
 
@@ -546,6 +560,9 @@
       down = "editor::ContextMenuNext";
       pagedown = "editor::ContextMenuLast";
       pageup = "editor::ContextMenuFirst";
+      super-down = "editor::ContextMenuLast";
+      super-up = "editor::ContextMenuFirst";
+
       up = "editor::ContextMenuPrev";
     };
     context = "Editor && (showing_code_actions || showing_completions)";
@@ -786,6 +803,10 @@
       find = "buffer_search::Deploy";
       pagedown = [ "terminal::SendKeystroke" "pagedown" ];
       pageup = [ "terminal::SendKeystroke" "pageup" ];
+
+      super-down = [ "terminal::SendKeystroke" "pagedown" ];
+      super-up = [ "terminal::SendKeystroke" "pageup" ];
+
       paste = "terminal::Paste";
       shift-down = "terminal::ScrollLineDown";
       shift-end = "terminal::ScrollToBottom";

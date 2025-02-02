@@ -564,7 +564,11 @@ in
     command = "editor.action.deleteLines";
     key = "ctrl+backspace";
     when = "textInputFocus && !editorReadonly";
-
+  }
+  {
+    command = "editor.action.deleteLines";
+    key = "meta+backspace";
+    when = "textInputFocus && !editorReadonly";
   }
 
   #
@@ -825,27 +829,27 @@ in
   # find options
   {
     command = "toggleFindCaseSensitive";
-    key = "alt+c";
+    key = "alt+[KeyO] alt+[KeyC]";
     when = "editorFocus";
   }
   {
     command = "toggleFindInSelection";
-    key = "alt+l";
+    key = "alt+[KeyO] alt+[KeyL]";
     when = "editorFocus";
   }
   {
     command = "toggleFindRegex";
-    key = "alt+r";
+    key = "alt+[KeyO] alt+[KeyR]";
     when = "editorFocus";
   }
   {
     command = "toggleFindWholeWord";
-    key = "alt+w";
+    key = "alt+[KeyO] alt+[KeyW]";
     when = "editorFocus";
   }
   {
     command = "togglePreserveCase";
-    key = "alt+p";
+    key = "alt+[KeyO] alt+[KeyP]";
     when = "editorFocus";
   }
 

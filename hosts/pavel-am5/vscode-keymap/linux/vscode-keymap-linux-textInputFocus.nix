@@ -50,17 +50,28 @@
     key = "shift+pagedown";
     when = "textInputFocus";
   }
+  {
+    command = "cursorPageUpSelect";
+    key = "shift+pageup";
+    when = "textInputFocus";
+  }
+  {
+    command = "cursorPageDownSelect";
+    key = "meta+shift+down";
+    when = "textInputFocus";
+  }
+  {
+    command = "cursorPageUpSelect";
+    key = "meta+shift+up";
+    when = "textInputFocus";
+  }
 
   {
     command = "cursorLeftSelect";
     key = "shift+left";
     when = "textInputFocus";
   }
-  {
-    command = "cursorPageUpSelect";
-    key = "shift+pageup";
-    when = "textInputFocus";
-  }
+
   {
     command = "cursorRight";
     key = "right";
