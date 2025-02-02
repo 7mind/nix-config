@@ -207,10 +207,10 @@ in
     key = "ctrl+[KeyN] ctrl+[KeyT]";
     command = "editor.action.goToTypeDefinition";
   }
-  {
-    key = "ctrl+[KeyN] ctrl+[Semicolon]";
-    command = "editor.action.goToDeclaration";
-  }
+  # {
+  #   key = "ctrl+[KeyN] ctrl+[Semicolon]";
+  #   command = "editor.action.goToDeclaration";
+  # }
   {
     key = "ctrl+[KeyN] shift+[KeyD]";
     command = "editor.action.goToDeclaration";
