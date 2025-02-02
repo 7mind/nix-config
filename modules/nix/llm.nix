@@ -64,7 +64,7 @@
       ];
       environmentVariables = {
         OLLAMA_SCHED_SPREAD = "true";
-        #ROCR_VISIBLE_DEVICES = "1,0";
+        ROCR_VISIBLE_DEVICES = "1";
       };
     };
 
