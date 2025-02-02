@@ -55,8 +55,9 @@
         overlays = [ inputs.agenix-rekey.overlays.default ];
       };
       devShells.default = pkgs.mkShell {
-        packages = [
-          pkgs.agenix-rekey
+        packages = with pkgs; [
+          agenix-rekey
+          nixfmt-classic
           # inputs.json2nix.packages."${system}".json2nix
         ];
       };

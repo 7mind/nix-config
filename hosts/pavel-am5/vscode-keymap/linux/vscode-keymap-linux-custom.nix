@@ -208,7 +208,7 @@ in
     command = "editor.action.goToTypeDefinition";
   }
   {
-    key = "ctrl+[KeyN] ctrl+[KeyA]";
+    key = "ctrl+[KeyN] ctrl+[Semicolon]";
     command = "editor.action.goToDeclaration";
   }
   {

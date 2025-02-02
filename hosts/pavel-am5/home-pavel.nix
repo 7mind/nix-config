@@ -27,6 +27,14 @@
     ];
   };
 
+  programs.zed-editor =
+    {
+      userSettings = {
+        base_keymap = "None";
+      };
+      userKeymaps = import ./zed-keymap/zed-keymap-linux.nix;
+    };
+
   # Developer: toggle keyboard shortcuts troubleshootinga
   # https://github.com/jbro/vscode-default-keybindings
   # https://github.com/codebling/vs-code-default-keybindings
