@@ -69,7 +69,7 @@ in
   }
 
   {
-    command = "workbench.action.closeAllEditors";
+    command = "workbench.action.closeOtherEditors";
     key = "ctrl+[KeyK] ctrl+[KeyW]";
   }
   {

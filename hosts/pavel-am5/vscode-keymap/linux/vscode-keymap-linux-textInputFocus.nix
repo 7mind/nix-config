@@ -106,11 +106,11 @@
     key = "delete";
     when = "textInputFocus";
   }
-  {
-    command = "expandLineSelection";
-    key = "ctrl+[KeyL]";
-    when = "textInputFocus";
-  }
+  # {
+  #   command = "expandLineSelection";
+  #   key = "ctrl+[KeyL]";
+  #   when = "textInputFocus";
+  # }
 
   # {
   #   command = "scrollLineDown";

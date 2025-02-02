@@ -1,37 +1,43 @@
 [
   {
     bindings = {
-      alt-enter = [ "picker::ConfirmInput" { secondary = false; } ];
-      alt-shift-enter = "menu::Restart";
-      "ctrl-+" = "zed::IncreaseBufferFontSize";
+      # alt-enter = [ "picker::ConfirmInput" { secondary = false; } ];
+      # ctrl-alt-enter = [ "picker::ConfirmInput" { secondary = true; } ];
+      # alt-shift-enter = "menu::Restart";
+      # "ctrl-+" = "zed::IncreaseBufferFontSize";
+
       "ctrl-," = "zed::OpenSettings";
+
       ctrl-- = "zed::DecreaseBufferFontSize";
       ctrl-0 = "zed::ResetBufferFontSize";
       "ctrl-=" = "zed::IncreaseBufferFontSize";
-      ctrl-alt-enter = [ "picker::ConfirmInput" { secondary = true; } ];
-      ctrl-alt-z = "zeta::RateCompletions";
+      ctrl-q = "zed::Quit";
+
+      # ctrl-alt-z = "zeta::RateCompletions";
+      ctrl-o = "workspace::Open";
+      ctrl-shift-w = "workspace::CloseWindow";
+
+
       ctrl-c = "menu::Cancel";
       ctrl-enter = "menu::SecondaryConfirm";
       ctrl-escape = "menu::Cancel";
       ctrl-n = "menu::SelectNext";
-      ctrl-o = "workspace::Open";
       ctrl-p = "menu::SelectPrev";
-      ctrl-q = "zed::Quit";
-      ctrl-shift-i = "inline_completion::ToggleMenu";
-      ctrl-shift-w = "workspace::CloseWindow";
       end = "menu::SelectLast";
       enter = "menu::Confirm";
       escape = "menu::Cancel";
-      f11 = "zed::ToggleFullScreen";
       home = "menu::SelectFirst";
-      open = "workspace::Open";
       pagedown = "menu::SelectLast";
       pageup = "menu::SelectFirst";
-      shift-escape = "workspace::ToggleZoom";
       shift-pagedown = "menu::SelectLast";
       shift-pageup = "menu::SelectFirst";
       shift-tab = "menu::SelectPrev";
       tab = "menu::SelectNext";
+
+      # ctrl-shift-i = "inline_completion::ToggleMenu";
+      # f11 = "zed::ToggleFullScreen";
+      open = "workspace::Open";
+      # shift-escape = "workspace::ToggleZoom";
     };
   }
   {
@@ -50,42 +56,57 @@
   }
   {
     bindings = {
-      "alt-g b" = "editor::ToggleGitBlame";
+      # "alt-g b" = "editor::ToggleGitBlame";
       alt-pagedown = "editor::PageDown";
       alt-pageup = "editor::PageUp";
       backspace = "editor::Backspace";
       copy = "editor::Copy";
-      "ctrl-\"" = "editor::ExpandAllHunkDiffs";
-      ctrl-' = "editor::ToggleHunkDiff";
-      "ctrl-;" = "editor::ToggleLineNumbers";
-      ctrl-a = "editor::SelectAll";
+      # "ctrl-\"" = "editor::ExpandAllHunkDiffs";
+      # ctrl-' = "editor::ToggleHunkDiff";
+      # "ctrl-;" = "editor::ToggleLineNumbers";
+      "ctrl+k ctrl-a" = "editor::SelectAll";
       ctrl-alt-space = "editor::ShowCharacterPalette";
       ctrl-backspace = "editor::DeleteToPreviousWordStart";
+      # ctrl-delete = "editor::DeleteToNextWordEnd";
+
       ctrl-c = "editor::Copy";
-      ctrl-delete = "editor::DeleteToNextWordEnd";
+
       ctrl-down = "editor::LineDown";
       ctrl-end = "editor::MoveToEnd";
+
       ctrl-home = "editor::MoveToBeginning";
-      ctrl-i = "editor::ShowSignatureHelp";
+      "ctrl-i ctrl-i" = "editor::ShowSignatureHelp";
       ctrl-insert = "editor::Copy";
-      ctrl-k = "editor::CutToEndOfLine";
-      "ctrl-k ctrl-q" = "editor::Rewrap";
-      "ctrl-k ctrl-r" = "editor::RevertSelectedHunks";
-      "ctrl-k q" = "editor::Rewrap";
-      ctrl-l = "editor::SelectLine";
+      # ctrl-k = "editor::CutToEndOfLine";
+
+      # "ctrl-k ctrl-q" = "editor::Rewrap";
+      # "ctrl-k ctrl-r" = "editor::RevertSelectedHunks";
+
+      # "ctrl-k q" = "editor::Rewrap";
+      # ctrl-l = "editor::SelectLine";
       ctrl-left = "editor::MoveToPreviousWordStart";
       ctrl-right = "editor::MoveToNextWordEnd";
-      ctrl-shift-end = "editor::SelectToEnd";
-      ctrl-shift-home = "editor::SelectToBeginning";
-      ctrl-shift-i = "editor::Format";
+      alt-left = "editor::MoveToPreviousWordStart";
+      alt-right = "editor::MoveToNextWordEnd";
+
       ctrl-shift-left = "editor::SelectToPreviousWordStart";
       ctrl-shift-right = "editor::SelectToNextWordEnd";
+      alt-shift-left = "editor::SelectToPreviousWordStart";
+      alt-shift-right = "editor::SelectToNextWordEnd";
+
+      ctrl-shift-end = "editor::SelectToEnd";
+      ctrl-shift-home = "editor::SelectToBeginning";
+
+      ctrl-shift-i = "editor::Format";
+
       ctrl-shift-z = "editor::Redo";
-      ctrl-up = "editor::LineUp";
+      # ctrl-up = "editor::LineUp";
+
       ctrl-v = "editor::Paste";
       ctrl-x = "editor::Cut";
       ctrl-y = "editor::Redo";
       ctrl-z = "editor::Undo";
+
       cut = "editor::Cut";
       delete = "editor::Delete";
       down = "editor::MoveDown";
@@ -99,14 +120,18 @@
       paste = "editor::Paste";
       redo = "editor::Redo";
       right = "editor::MoveRight";
+
       shift-backspace = "editor::Backspace";
       shift-delete = "editor::Cut";
+
       shift-down = "editor::SelectDown";
       shift-end =
         [ "editor::SelectToEndOfLine" { stop_at_soft_wraps = true; } ];
       shift-f10 = "editor::OpenContextMenu";
+
       shift-home =
         [ "editor::SelectToBeginningOfLine" { stop_at_soft_wraps = true; } ];
+
       shift-insert = "editor::Paste";
       shift-left = "editor::SelectLeft";
       shift-pagedown = "editor::SelectPageDown";
@@ -114,16 +139,102 @@
       shift-right = "editor::SelectRight";
       shift-tab = "editor::TabPrev";
       shift-up = "editor::SelectUp";
-      tab = "editor::Tab";
+
+      # tab = "editor::Tab";
       undo = "editor::Undo";
       up = "editor::MoveUp";
     };
     context = "Editor";
   }
+
   {
     bindings = {
-      "ctrl-<" = "assistant::InsertIntoEditor";
-      "ctrl->" = "assistant::QuoteSelection";
+      # "ctrl+k ctrl+d" = "editor::GoToTypeDefinitionSplit";
+      alt-shift-down = "editor::MoveLineDown";
+      # alt-f12 = "editor::GoToDefinitionSplit";
+
+      alt-shift-f12 = "editor::FindAllReferences";
+      # alt-shift-left = "editor::SelectSmallerSyntaxNode";
+      # alt-shift-right = "editor::SelectLargerSyntaxNode";
+      alt-shift-up = "editor::MoveLineUp";
+
+      "ctrl-." = "editor::ToggleCodeActions";
+
+      "ctrl-/" = [ "editor::ToggleComments" { advance_downwards = false; } ];
+
+      shift-tab = "editor::Outdent";
+      tab = "editor::Indent";
+
+      "ctrl-k ctrl+v" = "pane::SplitRight";
+
+      # ctrl-alt-shift-c = "editor::DisplayCursorNames";
+      meta-d = "editor::DuplicateLineDown";
+      # ctrl-alt-shift-up = "editor::DuplicateLineUp";
+
+      ctrl-d = [ "editor::SelectNext" { replace_newest = false; } ];
+      ctrl-f12 = "editor::GoToTypeDefinition";
+      ctrl-f2 = "editor::SelectAllMatches";
+
+      # "ctrl-k ctrl-0" = "editor::FoldAll";
+      # "ctrl-k ctrl-1" = [ "editor::FoldAtLevel" { level = 1; } ];
+      # "ctrl-k ctrl-2" = [ "editor::FoldAtLevel" { level = 2; } ];
+      # "ctrl-k ctrl-3" = [ "editor::FoldAtLevel" { level = 3; } ];
+      # "ctrl-k ctrl-4" = [ "editor::FoldAtLevel" { level = 4; } ];
+      # "ctrl-k ctrl-5" = [ "editor::FoldAtLevel" { level = 5; } ];
+      # "ctrl-k ctrl-6" = [ "editor::FoldAtLevel" { level = 6; } ];
+      # "ctrl-k ctrl-7" = [ "editor::FoldAtLevel" { level = 7; } ];
+      # "ctrl-k ctrl-8" = [ "editor::FoldAtLevel" { level = 8; } ];
+      # "ctrl-k ctrl-9" = [ "editor::FoldAtLevel" { level = 9; } ];
+      # "ctrl-k ctrl-[" = "editor::FoldRecursive";
+      # "ctrl-k ctrl-]" = "editor::UnfoldRecursive";
+      # "ctrl-k ctrl-d" = [ "editor::SelectNext" { replace_newest = true; } ];
+      # "ctrl-k ctrl-i" = "editor::Hover";
+      # "ctrl-k ctrl-j" = "editor::UnfoldAll";
+      # "ctrl-k ctrl-l" = "editor::ToggleFold";
+
+      "ctrl-k ctrl-shift-d" =
+        [ "editor::SelectPrevious" { replace_newest = true; } ];
+
+      "ctrl-k p" = "editor::CopyPath";
+      "ctrl-k ctrl+f" = "editor::RevealInFileManager";
+      # "ctrl-k v" = "markdown::OpenPreviewToTheSide";
+
+      ctrl-m = "editor::MoveToEnclosingBracket";
+      "ctrl-shift-[" = "editor::Fold";
+      "ctrl-shift-\\" = "editor::MoveToEnclosingBracket";
+      "ctrl-shift-]" = "editor::UnfoldLines";
+      ctrl-shift-down = [ "editor::SelectNext" { replace_newest = false; } ];
+      ctrl-shift-f10 = "editor::GoToDefinitionSplit";
+      ctrl-shift-k = "editor::DeleteLine";
+      ctrl-shift-l = "editor::SelectAllMatches";
+      ctrl-shift-u = "editor::RedoSelection";
+      ctrl-shift-up = [ "editor::SelectPrevious" { replace_newest = false; } ];
+      ctrl-shift-v = "markdown::OpenPreview";
+      ctrl-space = "editor::ShowCompletions";
+      ctrl-u = "editor::UndoSelection";
+      f12 = "editor::GoToDefinition";
+      f2 = "editor::Rename";
+      f8 = "editor::GoToDiagnostic";
+      shift-alt-down = "editor::AddSelectionBelow";
+      shift-alt-up = "editor::AddSelectionAbove";
+      shift-f12 = "editor::GoToImplementation";
+      shift-f8 = "editor::GoToPrevDiagnostic";
+    };
+    context = "Editor";
+  }
+
+  # {
+  #   bindings = {
+  #     ctrl-g = "go_to_line::Toggle";
+  #     ctrl-shift-o = "outline::Toggle";
+  #   };
+  #   context = "Editor && mode == full";
+  # }
+
+  {
+    bindings = {
+      # "ctrl-<" = "assistant::InsertIntoEditor";
+      # "ctrl->" = "assistant::QuoteSelection";
       ctrl-alt-e = "editor::SelectEnclosingSymbol";
       ctrl-enter = "editor::NewlineAbove";
       ctrl-f = "buffer_search::Deploy";
@@ -296,77 +407,7 @@
     };
     context = "Pane";
   }
-  {
-    bindings = {
-      alt-ctrl-f12 = "editor::GoToTypeDefinitionSplit";
-      alt-down = "editor::MoveLineDown";
-      alt-f12 = "editor::GoToDefinitionSplit";
-      alt-shift-f12 = "editor::FindAllReferences";
-      alt-shift-left = "editor::SelectSmallerSyntaxNode";
-      alt-shift-right = "editor::SelectLargerSyntaxNode";
-      alt-up = "editor::MoveLineUp";
-      "ctrl-." = "editor::ToggleCodeActions";
-      "ctrl-/" = [ "editor::ToggleComments" { advance_downwards = false; } ];
-      "ctrl-[" = "editor::Outdent";
-      "ctrl-\\" = "pane::SplitRight";
-      "ctrl-]" = "editor::Indent";
-      ctrl-alt-shift-c = "editor::DisplayCursorNames";
-      ctrl-alt-shift-down = "editor::DuplicateLineDown";
-      ctrl-alt-shift-up = "editor::DuplicateLineUp";
-      ctrl-d = [ "editor::SelectNext" { replace_newest = false; } ];
-      ctrl-f12 = "editor::GoToTypeDefinition";
-      ctrl-f2 = "editor::SelectAllMatches";
-      "ctrl-k ctrl-0" = "editor::FoldAll";
-      "ctrl-k ctrl-1" = [ "editor::FoldAtLevel" { level = 1; } ];
-      "ctrl-k ctrl-2" = [ "editor::FoldAtLevel" { level = 2; } ];
-      "ctrl-k ctrl-3" = [ "editor::FoldAtLevel" { level = 3; } ];
-      "ctrl-k ctrl-4" = [ "editor::FoldAtLevel" { level = 4; } ];
-      "ctrl-k ctrl-5" = [ "editor::FoldAtLevel" { level = 5; } ];
-      "ctrl-k ctrl-6" = [ "editor::FoldAtLevel" { level = 6; } ];
-      "ctrl-k ctrl-7" = [ "editor::FoldAtLevel" { level = 7; } ];
-      "ctrl-k ctrl-8" = [ "editor::FoldAtLevel" { level = 8; } ];
-      "ctrl-k ctrl-9" = [ "editor::FoldAtLevel" { level = 9; } ];
-      "ctrl-k ctrl-[" = "editor::FoldRecursive";
-      "ctrl-k ctrl-]" = "editor::UnfoldRecursive";
-      "ctrl-k ctrl-d" = [ "editor::SelectNext" { replace_newest = true; } ];
-      "ctrl-k ctrl-i" = "editor::Hover";
-      "ctrl-k ctrl-j" = "editor::UnfoldAll";
-      "ctrl-k ctrl-l" = "editor::ToggleFold";
-      "ctrl-k ctrl-shift-d" =
-        [ "editor::SelectPrevious" { replace_newest = true; } ];
-      "ctrl-k p" = "editor::CopyPath";
-      "ctrl-k r" = "editor::RevealInFileManager";
-      "ctrl-k v" = "markdown::OpenPreviewToTheSide";
-      ctrl-m = "editor::MoveToEnclosingBracket";
-      "ctrl-shift-[" = "editor::Fold";
-      "ctrl-shift-\\" = "editor::MoveToEnclosingBracket";
-      "ctrl-shift-]" = "editor::UnfoldLines";
-      ctrl-shift-down = [ "editor::SelectNext" { replace_newest = false; } ];
-      ctrl-shift-f10 = "editor::GoToDefinitionSplit";
-      ctrl-shift-k = "editor::DeleteLine";
-      ctrl-shift-l = "editor::SelectAllMatches";
-      ctrl-shift-u = "editor::RedoSelection";
-      ctrl-shift-up = [ "editor::SelectPrevious" { replace_newest = false; } ];
-      ctrl-shift-v = "markdown::OpenPreview";
-      ctrl-space = "editor::ShowCompletions";
-      ctrl-u = "editor::UndoSelection";
-      f12 = "editor::GoToDefinition";
-      f2 = "editor::Rename";
-      f8 = "editor::GoToDiagnostic";
-      shift-alt-down = "editor::AddSelectionBelow";
-      shift-alt-up = "editor::AddSelectionAbove";
-      shift-f12 = "editor::GoToImplementation";
-      shift-f8 = "editor::GoToPrevDiagnostic";
-    };
-    context = "Editor";
-  }
-  {
-    bindings = {
-      ctrl-g = "go_to_line::Toggle";
-      ctrl-shift-o = "outline::Toggle";
-    };
-    context = "Editor && mode == full";
-  }
+
   {
     bindings = {
       alt-1 = [ "workspace::ActivatePane" 0 ];
@@ -690,11 +731,11 @@
   }
   {
     bindings = {
-      ctrl-h = "pane::SplitLeft";
-      ctrl-j = "pane::SplitDown";
-      ctrl-k = "pane::SplitUp";
-      ctrl-l = "pane::SplitRight";
-      ctrl-shift-p = "file_finder::SelectPrev";
+      # ctrl-h = "pane::SplitLeft";
+      # ctrl-j = "pane::SplitDown";
+      # ctrl-k = "pane::SplitUp";
+      "ctrl-k ctrl-v" = "pane::SplitRight";
+      #ctrl-shift-p = "file_finder::SelectPrev";
     };
     context = "FileFinder && !menu_open";
   }
