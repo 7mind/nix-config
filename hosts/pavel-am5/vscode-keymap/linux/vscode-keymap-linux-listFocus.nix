@@ -47,11 +47,6 @@
   }
   {
     command = "list.find";
-    key = "f3";
-    when = "listFocus && listSupportsFind";
-  }
-  {
-    command = "list.find";
     key = "ctrl+f";
     when = "listFocus && listSupportsFind";
   }

@@ -109,6 +109,12 @@ in
     key = "ctrl+shift+[KeyR]";
   }
 
+  # {
+  #   command = "workbench.action.newWindow";
+  #   key = "ctrl+shift+n";
+  # }
+
+  # navigation
   {
     command = "workbench.action.gotoLine";
     key = "ctrl+[KeyN] ctrl+[KeyL]";
@@ -124,11 +130,6 @@ in
     key = "ctrl+[KeyN] ctrl+[KeyB]";
     when = "editorTextFocus";
   }
-
-  # {
-  #   command = "workbench.action.newWindow";
-  #   key = "ctrl+shift+n";
-  # }
   {
     command = "workbench.action.openRecent";
     key = "ctrl+[KeyN] ctrl+[KeyR]";
@@ -137,7 +138,52 @@ in
     command = "workbench.action.quickOpen";
     key = "ctrl+[KeyN] ctrl+[KeyF]";
   }
+  {
+    command = "workbench.action.showAllEditors";
+    key = "ctrl+[KeyN] ctrl+[KeyE]";
+  }
+  {
+    command = "workbench.action.showCommands";
+    key = "ctrl+[KeyN] ctrl+[KeyA]";
+  }
+  {
+    command = "editor.action.revealDefinition";
+    key = "ctrl+[KeyN] ctrl+[KeyD]";
+    when = "editorHasDefinitionProvider && editorTextFocus";
+  }
+  {
+    command = "editor.action.revealDefinitionAside";
+    key = "ctrl+[KeyK] ctrl+[KeyD]";
+    when =
+      "editorHasDefinitionProvider && editorTextFocus && !isInEmbeddedEditor";
+  }
+  {
+    key = "ctrl+[KeyN] ctrl+[KeyS]";
+    command = "workbench.action.showAllSymbols";
+  }
+  {
+    key = "ctrl+[KeyN] ctrl+[KeyT]";
+    command = "editor.action.goToTypeDefinition";
+  }
 
+
+  # info
+  {
+    command = "editor.action.goToImplementation";
+    key = "ctrl+[KeyI] ctrl+[KeyI]";
+    when = "editorHasImplementationProvider && editorTextFocus";
+  }
+  {
+    command = "editor.action.goToReferences";
+    key = "ctrl+[KeyI] ctrl+[KeyR]";
+    when =
+      "editorHasReferenceProvider && editorTextFocus && !inReferenceSearchEditor && !isInEmbeddedEditor";
+  }
+  {
+    command = "editor.action.triggerParameterHints";
+    key = "ctrl+[KeyI] ctrl+[KeyP]";
+    when = "editorHasSignatureHelpProvider && editorTextFocus";
+  }
 
   {
     command = "workbench.action.openSettings";
@@ -155,10 +201,7 @@ in
     key = "ctrl+shift+t";
   }
 
-  {
-    command = "workbench.action.showAllEditors";
-    key = "ctrl+[KeyN] ctrl+[KeyE]";
-  }
+
   # {
   #   command = "workbench.action.showAllSymbols";
   #   key = "ctrl+[KeyT]";
@@ -167,10 +210,7 @@ in
     command = "workbench.action.showCommands";
     key = "ctrl+shift+p";
   }
-  {
-    command = "workbench.action.showCommands";
-    key = "ctrl+[KeyN] ctrl+[KeyA]";
-  }
+
 
   {
     command = "workbench.action.splitEditorRight";
@@ -230,11 +270,7 @@ in
     when = "editorTextFocus && selectionAnchorSet";
   }
 
-  {
-    command = "editor.action.triggerParameterHints";
-    key = "ctrl+shift+space";
-    when = "editorHasSignatureHelpProvider && editorTextFocus";
-  }
+
 
   # {
   #   command = "editor.action.wordHighlight.next";
@@ -253,17 +289,7 @@ in
     when = "editorTextFocus && !textCompareEditorActive";
   }
 
-  {
-    command = "editor.action.goToImplementation";
-    key = "ctrl+f12";
-    when = "editorHasImplementationProvider && editorTextFocus";
-  }
-  {
-    command = "editor.action.goToReferences";
-    key = "shift+f12";
-    when =
-      "editorHasReferenceProvider && editorTextFocus && !inReferenceSearchEditor && !isInEmbeddedEditor";
-  }
+
 
   {
     command = "closeReferenceSearch";
@@ -549,18 +575,7 @@ in
     when = "editorTextFocus && !editorReadonly";
   }
 
-  #
-  {
-    command = "editor.action.revealDefinition";
-    key = "ctrl+[KeyN] ctrl+[KeyD]";
-    when = "editorHasDefinitionProvider && editorTextFocus";
-  }
-  {
-    command = "editor.action.revealDefinitionAside";
-    key = "ctrl+[KeyK] ctrl+[KeyD]";
-    when =
-      "editorHasDefinitionProvider && editorTextFocus && !isInEmbeddedEditor";
-  }
+
 
   #
   {
