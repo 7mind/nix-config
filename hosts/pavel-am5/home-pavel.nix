@@ -88,15 +88,16 @@
               (obj:
                 let
                   key = obj.key;
-                  m1 = builtins.match ''^(.+)\+(.+)[[:space:]]+\\1\+(.+)$'' key;
+                  m1 = builtins.match ''^(.+)\+(.+)[[:space:]]+(.+)\+(.+)$'' key;
                   transformed =
                     if m1 != null then
                       let
-                        M = builtins.elemAt m1 0;
+                        M1 = builtins.elemAt m1 0;
                         A = builtins.elemAt m1 1;
-                        B = builtins.elemAt m1 2;
-                        newKey = ''${M}+${A} ${B}'';
-                        result = [ obj (obj // { key = newKey; }) ];
+                        M2 = builtins.elemAt m1 2;
+                        B = builtins.elemAt m1 3;
+                        newKey = ''${M1}+${A} ${B}'';
+                        result = if M1 == M2 then [ obj (obj // { key = newKey; }) ] else [ obj ];
                       in
                       result
                     else
