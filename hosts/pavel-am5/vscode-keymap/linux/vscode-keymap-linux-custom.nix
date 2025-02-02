@@ -67,28 +67,71 @@ in
     command = "workbench.action.closeActiveEditor";
     key = "ctrl+[KeyW]";
   }
+
   {
     command = "workbench.action.closeAllEditors";
     key = "ctrl+[KeyK] ctrl+[KeyW]";
   }
   {
+    command = "workbench.action.files.newUntitledFile";
+    key = "ctrl+[KeyK] ctrl+[KeyN]";
+  }
+  {
+    command = "workbench.action.newWindow";
+    key = "ctrl+[KeyK] ctrl+[KeyC]";
+  }
+  {
+    command = "workbench.action.files.revealActiveFileInWindows";
+    key = "ctrl+[KeyK] ctrl+[KeyF]";
+  }
+
+  {
     command = "workbench.action.closeWindow";
     key = "ctrl+shift+w";
   }
+  {
+    command = "workbench.action.splitEditorRight";
+    key = "ctrl+[KeyK] ctrl+[KeyV]";
+  }
+
+  {
+    command = "workbench.action.pinEditor";
+    key = "ctrl+[KeyK] ctrl+[KeyP]";
+    when = "!activeEditorIsPinned";
+  }
+  {
+    command = "workbench.action.unpinEditor";
+    key = "ctrl+[KeyK] ctrl+[KeyP]";
+    when = "activeEditorIsPinned";
+  }
+  # end
 
   # {
   #   command = "workbench.action.files.copyPathOfActiveFile";
   #   key = "ctrl+[KeyK] p";
   # }
-  {
-    command = "workbench.action.files.newUntitledFile";
-    key = "ctrl+[KeyK] ctrl+[KeyN]";
-  }
+  # {
+  #   command = "copyFilePath";
+  #   key = "ctrl+alt+c";
+  #   when = "!editorFocus";
+  # }
+  # {
+  #   command = "copyFilePath";
+  #   key = "ctrl+[KeyK] ctrl+alt+c";
+  #   when = "editorFocus";
+  # }
 
-  {
-    command = "workbench.action.files.revealActiveFileInWindows";
-    key = "ctrl+[KeyK] ctrl+[KeyF]";
-  }
+  # {
+  #   command = "copyRelativeFilePath";
+  #   key = "ctrl+shift+alt+c";
+  #   when = "!editorFocus";
+  # }
+  # {
+  #   command = "copyRelativeFilePath";
+  #   key = "ctrl+[KeyK] ctrl+shift+alt+c";
+  #   when = "editorFocus";
+  # }
+
   # {
   #   command = "revealFileInOS";
   #   key = "ctrl+alt+r";
@@ -109,10 +152,7 @@ in
     key = "ctrl+shift+[KeyR]";
   }
 
-  # {
-  #   command = "workbench.action.newWindow";
-  #   key = "ctrl+shift+n";
-  # }
+
 
   # navigation
   {
@@ -218,21 +258,7 @@ in
   }
 
 
-  {
-    command = "workbench.action.splitEditorRight";
-    key = "ctrl+[KeyK] ctrl+[KeyV]";
-  }
 
-  {
-    command = "workbench.action.pinEditor";
-    key = "ctrl+[KeyK] ctrl+[KeyP]";
-    when = "!activeEditorIsPinned";
-  }
-  {
-    command = "workbench.action.unpinEditor";
-    key = "ctrl+[KeyK] ctrl+[KeyP]";
-    when = "activeEditorIsPinned";
-  }
 
   {
     command = "workbench.action.togglePanel";
@@ -868,27 +894,7 @@ in
     key = "meta+[BracketLeft]";
   }
 
-  # {
-  #   command = "copyFilePath";
-  #   key = "ctrl+alt+c";
-  #   when = "!editorFocus";
-  # }
-  # {
-  #   command = "copyFilePath";
-  #   key = "ctrl+[KeyK] ctrl+alt+c";
-  #   when = "editorFocus";
-  # }
 
-  # {
-  #   command = "copyRelativeFilePath";
-  #   key = "ctrl+shift+alt+c";
-  #   when = "!editorFocus";
-  # }
-  # {
-  #   command = "copyRelativeFilePath";
-  #   key = "ctrl+[KeyK] ctrl+shift+alt+c";
-  #   when = "editorFocus";
-  # }
 
   # Unfortunately, column selection is permanent, this option attempts to change the config, and the config is immutable
   # {
