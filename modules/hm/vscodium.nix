@@ -74,6 +74,8 @@
         redhat.vscode-yaml
         redhat.java
 
+        continue.continue
+
         # vscjava.vscode-java-pack
         # missing: anycode*,
       ] ++ pkgs.vscode-utils.extensionsFromVscodeMarketplace [

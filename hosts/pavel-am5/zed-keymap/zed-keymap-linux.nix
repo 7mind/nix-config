@@ -463,7 +463,8 @@
       ctrl-shift-h = [ "pane::DeploySearch" { replace_enabled = true; } ];
       ctrl-shift-m = "diagnostics::Deploy";
       ctrl-shift-n = "workspace::NewWindow";
-      ctrl-shift-p = "command_palette::Toggle";
+      "ctrl+n ctrl+n" = "command_palette::Toggle";
+
       ctrl-shift-r = "task::Rerun";
       ctrl-shift-s = "workspace::SaveAs";
       ctrl-shift-t = "pane::ReopenClosedItem";
