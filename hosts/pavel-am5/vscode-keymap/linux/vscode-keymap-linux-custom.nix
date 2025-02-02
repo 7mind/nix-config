@@ -119,12 +119,10 @@ in
     command = "workbench.action.gotoLine";
     key = "ctrl+[KeyN] ctrl+[KeyL]";
   }
-
   {
     command = "workbench.action.navigateToLastEditLocation";
     key = "ctrl+[KeyN] ctrl+[KeyP]";
   }
-
   {
     command = "editor.action.jumpToBracket";
     key = "ctrl+[KeyN] ctrl+[KeyB]";
@@ -158,14 +156,25 @@ in
       "editorHasDefinitionProvider && editorTextFocus && !isInEmbeddedEditor";
   }
   {
-    key = "ctrl+[KeyN] ctrl+[KeyS]";
+    key = "ctrl+[KeyN] ctrl+[KeyG]";
     command = "workbench.action.showAllSymbols";
+  }
+  {
+    key = "ctrl+[KeyN] ctrl+[KeyS]";
+    command = "workbench.action.gotoSymbol";
   }
   {
     key = "ctrl+[KeyN] ctrl+[KeyT]";
     command = "editor.action.goToTypeDefinition";
   }
-
+  {
+    key = "ctrl+[KeyN] ctrl+[KeyA]";
+    command = "editor.action.goToDeclaration";
+  }
+  {
+    key = "ctrl+[KeyN] ctrl+[KeyA]";
+    command = "editor.action.goToDeclaration";
+  }
 
   # info
   {
@@ -190,7 +199,7 @@ in
     key = "ctrl+,";
   }
 
-
+  # end
   {
     command = "workbench.action.quit";
     key = "ctrl+[KeyQ]";
@@ -202,10 +211,7 @@ in
   }
 
 
-  # {
-  #   command = "workbench.action.showAllSymbols";
-  #   key = "ctrl+[KeyT]";
-  # }
+
   {
     command = "workbench.action.showCommands";
     key = "ctrl+shift+p";
