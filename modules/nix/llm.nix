@@ -41,17 +41,13 @@
       port = 11434;
       loadModels = [
         "llama3.3"
-        "codellama:13b"
-        "mistral"
-
-        "gemma:7b"
-
         "llama3.1:8b"
-        "qwen2.5-coder:14b"
+
         "nomic-embed-text"
 
         "qwen:14b"
         "qwen2.5:14b"
+        "qwen2.5-coder:14b"
 
         "aratan/qwen2.5-14bu:latest"
 
@@ -59,8 +55,10 @@
 
         # "starcoder2:7b"
         # "starcoder2:15b"
-
-        "dolphincoder:15b"
+        # "dolphincoder:15b"
+        # "mistral"
+        # "gemma:7b"
+        # "codellama:13b"
       ];
       environmentVariables = {
         OLLAMA_SCHED_SPREAD = "true";

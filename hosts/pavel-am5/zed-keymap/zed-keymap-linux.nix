@@ -14,8 +14,9 @@
       ctrl-q = "zed::Quit";
 
       # ctrl-alt-z = "zeta::RateCompletions";
-      ctrl-o = "workspace::Open";
+      #ctrl-o = "workspace::Open";
       ctrl-shift-w = "workspace::CloseWindow";
+      super-shift-w = "workspace::CloseWindow";
 
 
       ctrl-c = "menu::Cancel";

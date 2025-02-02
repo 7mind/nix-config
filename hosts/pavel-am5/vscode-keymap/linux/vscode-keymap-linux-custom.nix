@@ -87,7 +87,11 @@ in
 
   {
     command = "workbench.action.closeWindow";
-    key = "ctrl+shift+w";
+    key = "ctrl+shift+[KeyW]";
+  }
+  {
+    command = "workbench.action.closeWindow";
+    key = "meta+shift+[KeyW]";
   }
   {
     command = "workbench.action.splitEditorRight";
