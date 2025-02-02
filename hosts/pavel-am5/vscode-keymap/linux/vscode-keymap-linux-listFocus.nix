@@ -52,7 +52,7 @@
   }
   {
     command = "list.find";
-    key = "ctrl+alt+f";
+    key = "ctrl+f";
     when = "listFocus && listSupportsFind";
   }
   {
