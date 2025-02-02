@@ -1,0 +1,63 @@
+[
+  {
+    "key": "ctrl+l",
+    "command": "-continue.focusContinueInput"
+  },
+  {
+    "key": "ctrl+shift+l",
+    "command": "-continue.focusContinueInputWithoutClear"
+  },
+  {
+    "key": "ctrl+shift+enter",
+    "command": "-continue.acceptDiff"
+  },
+  {
+    "key": "ctrl+shift+backspace",
+    "command": "-continue.rejectDiff"
+  },
+  {
+    "key": "ctrl+z",
+    "command": "-continue.rejectDiff",
+    "when": "continue.diffVisible"
+  },
+  {
+    "key": "up",
+    "command": "-continue.quickEditHistoryUp",
+    "when": "false"
+  },
+  {
+    "key": "down",
+    "command": "-continue.quickEditHistoryDown",
+    "when": "false"
+  },
+  {
+    "key": "ctrl+alt+y",
+    "command": "-continue.acceptVerticalDiffBlock"
+  },
+  {
+    "key": "ctrl+alt+n",
+    "command": "-continue.rejectVerticalDiffBlock"
+  },
+  {
+    "key": "ctrl+i",
+    "command": "-continue.quickEdit"
+  },
+  {
+    "key": "ctrl+shift+r",
+    "command": "-continue.debugTerminal"
+  },
+  {
+    "key": "ctrl+k ctrl+m",
+    "command": "-continue.toggleFullScreen",
+    "when": "!terminalFocus"
+  },
+  {
+    "key": "ctrl+k ctrl+a",
+    "command": "-continue.toggleTabAutocompleteEnabled",
+    "when": "!terminalFocus"
+  },
+  {
+    "key": "alt+a",
+    "command": "-continue.applyCodeFromChat"
+  }
+]

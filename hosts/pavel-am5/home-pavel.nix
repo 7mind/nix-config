@@ -74,6 +74,7 @@
           imports = [
             "!negate-all"
             "!negate-gitlens"
+            "!negate-continue"
             "custom"
             "fileExplorer"
             "textInputFocus"
