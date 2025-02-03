@@ -167,6 +167,8 @@
       # "ctrl+k ctrl+d" = "editor::GoToTypeDefinitionSplit";
       # alt-shift-f12 = "editor::FindAllReferences";
       # ctrl-f12 = "editor::GoToTypeDefinition";
+      # shift-f12 = "editor::GoToImplementation";
+      # shift-f8 = "editor::GoToPrevDiagnostic";
 
       # alt-shift-left = "editor::SelectSmallerSyntaxNode";
       # alt-shift-right = "editor::SelectLargerSyntaxNode";
@@ -208,7 +210,8 @@
       # "ctrl-k ctrl-l" = "editor::ToggleFold";
 
 
-      # "ctrl-k p" = "editor::CopyPath";
+      "alc-c alt-p" = "editor::CopyPath";
+      "alc-c alt-r" = "editor::CopyRelativePath";
       "ctrl-k ctrl-f" = "editor::RevealInFileManager";
       # "ctrl-k v" = "markdown::OpenPreviewToTheSide";
 
@@ -217,7 +220,6 @@
       # "ctrl-shift-\\" = "editor::MoveToEnclosingBracket";
       # "ctrl-shift-]" = "editor::UnfoldLines";
 
-      ctrl-shift-down = [ "editor::SelectNext" { replace_newest = false; } ];
       # ctrl-shift-f10 = "editor::GoToDefinitionSplit";
       ctrl-backspace = "editor::DeleteLine";
       super-backspace = "editor::DeleteLine";
@@ -226,19 +228,21 @@
       # ctrl-shift-l = "editor::SelectAllMatches";
       # ctrl-shift-u = "editor::RedoSelection";
 
-      ctrl-shift-up = [ "editor::SelectPrevious" { replace_newest = false; } ];
+      # ctrl-shift-down = [ "editor::SelectNext" { replace_newest = false; } ];
+      # ctrl-shift-up = [ "editor::SelectPrevious" { replace_newest = false; } ];
 
       # ctrl-shift-v = "markdown::OpenPreview";
 
       ctrl-space = "editor::ShowCompletions";
-      ctrl-u = "editor::UndoSelection";
+      # ctrl-u = "editor::UndoSelection";
       # f12 = "editor::GoToDefinition";
       "ctrl-t ctrl-r" = "editor::Rename";
       # f8 = "editor::GoToDiagnostic";
-      shift-alt-down = "editor::AddSelectionBelow";
+
+      # shift-alt-down = "editor::AddSelectionBelow";
       # shift-alt-up = "editor::AddSelectionAbove";
-      # shift-f12 = "editor::GoToImplementation";
-      # shift-f8 = "editor::GoToPrevDiagnostic";
+
+
     };
     context = "Editor";
   }
@@ -255,13 +259,14 @@
     bindings = {
       # "ctrl-<" = "assistant::InsertIntoEditor";
       # "ctrl->" = "assistant::QuoteSelection";
-      ctrl-alt-e = "editor::SelectEnclosingSymbol";
-      ctrl-enter = "editor::NewlineAbove";
+      # ctrl-alt-e = "editor::SelectEnclosingSymbol";
       ctrl-f = "buffer_search::Deploy";
-      ctrl-h = [ "buffer_search::Deploy" { replace_enabled = true; } ];
-      "ctrl-k ctrl-z" = "editor::ToggleSoftWrap";
-      "ctrl-k z" = "editor::ToggleSoftWrap";
-      ctrl-shift-enter = "editor::NewlineBelow";
+      ctrl-r = [ "buffer_search::Deploy" { replace_enabled = true; } ];
+      # "ctrl-k ctrl-z" = "editor::ToggleSoftWrap";
+      # "ctrl-k z" = "editor::ToggleSoftWrap";
+      ctrl-enter = "editor::NewlineBelow";
+      ctrl-shift-enter = "editor::NewlineAbove";
+
       enter = "editor::Newline";
       find = "buffer_search::Deploy";
       shift-enter = "editor::Newline";
@@ -320,20 +325,25 @@
   {
     bindings = {
       alt-enter = "search::SelectAllMatches";
+
       ctrl-f = "search::FocusSearch";
-      ctrl-h = "search::ToggleReplace";
-      ctrl-l = "search::ToggleSelection";
+
+      ctrl-r = "search::ToggleReplace";
+      "alt-o alt-l" = "search::ToggleSelection";
+
       enter = "search::SelectNextMatch";
+      shift-enter = "search::SelectPrevMatch";
+
       escape = "buffer_search::Dismiss";
       find = "search::FocusSearch";
-      shift-enter = "search::SelectPrevMatch";
-      tab = "buffer_search::FocusEditor";
+
+      # tab = "buffer_search::FocusEditor";
     };
     context = "BufferSearchBar";
   }
   {
     bindings = {
-      ctrl-enter = "search::ReplaceAll";
+      alt-shift-r = "search::ReplaceAll";
       enter = "search::ReplaceNext";
     };
     context = "BufferSearchBar && in_replace > Editor";
@@ -666,13 +676,16 @@
   }
   {
     bindings = {
-      alt-copy = "outline_panel::CopyPath";
-      alt-ctrl-r = "outline_panel::RevealInFileManager";
+      # alt-copy = "outline_panel::CopyPath";
+      # ctrl-alt-c = "outline_panel::CopyPath";
+      # alt-ctrl-r = "outline_panel::RevealInFileManager";
+
       alt-ctrl-shift-c = "outline_panel::CopyRelativePath";
-      alt-enter = "editor::OpenExcerpts";
       alt-shift-copy = "outline_panel::CopyRelativePath";
-      ctrl-alt-c = "outline_panel::CopyPath";
-      "ctrl-k enter" = "editor::OpenExcerptsSplit";
+
+      # alt-enter = "editor::OpenExcerpts";
+      # "ctrl-k enter" = "editor::OpenExcerptsSplit";
+
       escape = "menu::Cancel";
       left = "outline_panel::CollapseSelectedEntry";
       right = "outline_panel::ExpandSelectedEntry";
@@ -685,12 +698,15 @@
   {
     bindings = {
       alt-copy = "project_panel::CopyPath";
+      alt-ctrl-shift-c = "project_panel::CopyRelativePath";
+      alt-shift-copy = "project_panel::CopyRelativePath";
+
       alt-ctrl-n = "project_panel::NewDirectory";
       alt-ctrl-r = "project_panel::RevealInFileManager";
-      alt-ctrl-shift-c = "project_panel::CopyRelativePath";
+
       alt-new = "project_panel::NewDirectory";
-      alt-shift-copy = "project_panel::CopyRelativePath";
       backspace = [ "project_panel::Trash" { skip_prompt = false; } ];
+
       copy = "project_panel::Copy";
       ctrl-alt-c = "project_panel::CopyPath";
       ctrl-backspace = [ "project_panel::Delete" { skip_prompt = false; } ];

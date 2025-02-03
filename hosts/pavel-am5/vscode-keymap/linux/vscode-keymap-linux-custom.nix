@@ -81,11 +81,6 @@ in
     key = "ctrl+[KeyK] ctrl+[KeyC]";
   }
   {
-    command = "workbench.action.files.revealActiveFileInWindows";
-    key = "ctrl+[KeyK] ctrl+[KeyF]";
-  }
-
-  {
     command = "workbench.action.closeWindow";
     key = "ctrl+shift+[KeyW]";
   }
@@ -110,10 +105,14 @@ in
   }
   # end
 
-  # {
-  #   command = "workbench.action.files.copyPathOfActiveFile";
-  #   key = "ctrl+[KeyK] p";
-  # }
+  {
+    command = "copyFilePath";
+    key = "alt+[KeyC] alt+[KeyP]";
+  }
+  {
+    command = "copyRelativeFilePath";
+    key = "alt+[KeyC] alt+[KeyR]";
+  }
   # {
   #   command = "copyFilePath";
   #   key = "ctrl+alt+c";
@@ -136,11 +135,16 @@ in
   #   when = "editorFocus";
   # }
 
+  {
+    command = "revealFileInOS";
+    key = "ctrl+[KeyK] ctrl+[KeyF]";
+    # when = "!editorFocus";
+  }
   # {
-  #   command = "revealFileInOS";
-  #   key = "ctrl+alt+r";
-  #   when = "!editorFocus";
+  #   command = "workbench.action.files.revealActiveFileInWindows";
+  #   key = "ctrl+[KeyK] ctrl+[KeyF]";
   # }
+
 
   {
     command = "workbench.action.files.save";
@@ -319,12 +323,16 @@ in
   #   when = "editorTextFocus && hasWordHighlights";
   # }
 
-  {
-    command = "workbench.action.editor.nextChange";
-    key = "alt+[KeyC]";
-    when = "editorTextFocus && !textCompareEditorActive";
-  }
-
+  # {
+  #   command = "workbench.action.editor.nextChange";
+  #   key = "alt+[KeyC]";
+  #   when = "editorTextFocus && !textCompareEditorActive";
+  # }
+  # {
+  #   command = "workbench.action.editor.previousChange";
+  #   key = "shift+alt+f5";
+  #   when = "editorTextFocus && !textCompareEditorActive";
+  # }
 
 
   {
@@ -391,11 +399,7 @@ in
   #   when = "editorTextFocus";
   # }
 
-  # {
-  #   command = "workbench.action.editor.previousChange";
-  #   key = "shift+alt+f5";
-  #   when = "editorTextFocus && !textCompareEditorActive";
-  # }
+
   # {
   #   command = "editor.detectLanguage";
   #   key = "shift+alt+d";
@@ -761,6 +765,11 @@ in
     key = "alt+[KeyR]";
     when = "editorFocus && findWidgetVisible";
   }
+  # {
+  #   command = "workbench.action.focusActiveEditorGroup";
+  #   key = "tab";
+  #   when = "editorFocus && findWidgetVisible && findInputFocussed";
+  # }
 
 
 
