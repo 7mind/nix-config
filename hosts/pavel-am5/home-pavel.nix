@@ -122,7 +122,7 @@ in
     mkdir -p .ssh/
     ln -sfn ${nixosConfig.age.secrets.id_ed25519.path} ~/.ssh/id_ed25519
     ln -sfn ${nixosConfig.age.secrets."id_ed25519.pub".path} ~/.ssh/id_ed25519.pub
-    ln -sfn ${pkgs.writeText "output.json" (builtins.toJSON everythingJson)} ~/out.json
+    ln -sfn ${pkgs.writeText "output.json" everythingJson} ~/out.json
     mkdir -p .sbt/secrets/
     ln -sfn ${nixosConfig.age.secrets.nexus-oss-sonatype.path} ~/.sbt/secrets/credentials.sonatype-nexus.properties
   '';
