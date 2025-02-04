@@ -25,6 +25,8 @@
               disable-user-extensions = false;
               enabled-extensions = with pkgs; [
                 gnomeExtensions.appindicator.extensionUuid
+                gnomeExtensions.gsconnect.extensionUuid
+                gnomeExtensions.native-window-placement.extensionUuid
                 gnome-shortcut-inhibitor.extensionUuid
                 # pkgs.gnomeExtensions.tray-icons-reloaded.extensionUuid
               ];

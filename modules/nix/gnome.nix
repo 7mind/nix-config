@@ -149,6 +149,7 @@
       [
         appindicator
         gsconnect
+        native-window-placement
         # tray-icons-reloaded
       ]) ++ (with pkgs; [
       dconf-editor
