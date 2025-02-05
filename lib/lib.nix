@@ -11,7 +11,7 @@ let
     in
     pkgs.symlinkJoin
       {
-        name = pkg.name;
+        name = "${pkg.name}-custom";
         paths = [ pkg ];
         buildInputs = [ pkgs.makeWrapper ];
         postBuild = ''
