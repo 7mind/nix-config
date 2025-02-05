@@ -173,7 +173,7 @@ in
         gccStdenv.cc.cc.lib
       ];
       #defs = { TEST = "1"; };
-    })
+    })   
 
     (extended_pkg {
       pkg = jetbrains.rider;

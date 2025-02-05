@@ -160,6 +160,10 @@ in
     key = "ctrl+shift+[KeyR]";
   }
 
+  {
+    command = "insertSnippet";
+    key = "ctrl+[KeyL]";
+  }
 
 
   # navigation
