@@ -161,7 +161,7 @@ in
   }
 
   {
-    command = "insertSnippet";
+    command = "editor.action.insertSnippet";
     key = "ctrl+[KeyL]";
     when = "editorTextFocus && hasSnippetCompletions && !editorTabMovesFocus && !inSnippetMode";
   }
