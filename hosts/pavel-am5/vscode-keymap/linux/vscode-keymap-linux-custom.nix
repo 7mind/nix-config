@@ -165,9 +165,7 @@ in
     key = "ctrl+[KeyL]";
     # when = "editorTextFocus && hasSnippetCompletions && !editorTabMovesFocus && !inSnippetMode";
     when = "editorTextFocus && !editorTabMovesFocus && !inSnippetMode";
-    # when = "editorTextFocus";
   }
-if  then  else 
 
   # navigation
   {
