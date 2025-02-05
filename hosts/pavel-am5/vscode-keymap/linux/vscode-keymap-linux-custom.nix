@@ -163,7 +163,8 @@ in
   {
     command = "editor.action.insertSnippet";
     key = "ctrl+[KeyL]";
-    when = "editorTextFocus && hasSnippetCompletions && !editorTabMovesFocus && !inSnippetMode";
+    #when = "editorTextFocus && hasSnippetCompletions && !editorTabMovesFocus && !inSnippetMode";
+    when = "editorTextFocus";
   }
 
 
