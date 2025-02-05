@@ -163,6 +163,7 @@ in
   {
     command = "insertSnippet";
     key = "ctrl+[KeyL]";
+    when = "editorTextFocus && hasSnippetCompletions && !editorTabMovesFocus && !inSnippetMode";
   }
 
 
