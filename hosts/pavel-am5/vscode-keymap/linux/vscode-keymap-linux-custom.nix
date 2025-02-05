@@ -167,7 +167,7 @@ in
     when = "editorTextFocus && !editorTabMovesFocus && !inSnippetMode";
     # when = "editorTextFocus";
   }
-
+if  then  else 
 
   # navigation
   {
