@@ -11,7 +11,7 @@ let
     in
     pkgs.symlinkJoin
       {
-        name = "clion";
+        name = pkg.name;
         paths = [ pkg ];
         buildInputs = [ pkgs.makeWrapper ];
         postBuild = ''
