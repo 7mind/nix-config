@@ -1,0 +1,937 @@
+<keymap version="1" name="Magen" parent="$default">
+  <action id="EditorPreviousWord">
+    <!--cursorWordLeft-->
+    <keyboard-shortcut first-keystroke="ctrl left"/>
+    <!--cursorWordLeft-->
+    <keyboard-shortcut first-keystroke="alt left"/>
+  </action>
+  <action id="Refactorings.QuickListPopupAction">
+    <!--editor.action.refactor-->
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="ctrl t"/>
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="t"/>
+  </action>
+  <action id="EditorToggleUseSoftWraps">
+    <!--editor.action.toggleWordWrap-->
+    <keyboard-shortcut first-keystroke="ctrl m" second-keystroke="ctrl w"/>
+    <keyboard-shortcut first-keystroke="ctrl m" second-keystroke="w"/>
+  </action>
+  <action id="EditorLeft">
+    <!--cursorLeft-->
+    <keyboard-shortcut first-keystroke="left"/>
+  </action>
+  <action id="ShowIntentionActions">
+    <!--editor.action.quickFix-->
+    <keyboard-shortcut first-keystroke="ctrl period"/>
+  </action>
+  <action id="GotoDeclaration">
+    <!--editor.action.goToDeclaration-->
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="shift d"/>
+    <!--editor.action.goToDeclaration-->
+    <mouse-shortcut keystroke="ctrl button1"/>
+  </action>
+  <action id="PinActiveTab">
+    <!--workbench.action.pinEditor-->
+    <keyboard-shortcut first-keystroke="ctrl k" second-keystroke="ctrl p"/>
+    <keyboard-shortcut first-keystroke="ctrl k" second-keystroke="p"/>
+  </action>
+  <action id="EditorDeleteToWordStart">
+    <!--deleteWordLeft-->
+    <keyboard-shortcut first-keystroke="alt back_space"/>
+  </action>
+  <action id="ChooseDebugConfiguration">
+    <!--workbench.action.debug.selectandstart-->
+    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="ctrl d"/>
+    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="d"/>
+  </action>
+  <action id="EditorPageDown">
+    <!--cursorPageDown-->
+    <keyboard-shortcut first-keystroke="meta arrowdown"/>
+    <!--cursorPageDown-->
+    <keyboard-shortcut first-keystroke="page_down"/>
+  </action>
+  <action id="ReplaceInPath">
+    <!--workbench.action.replaceInFiles-->
+    <keyboard-shortcut first-keystroke="ctrl shift r"/>
+  </action>
+  <action id="GotoImplementation">
+    <!--editor.action.goToImplementation-->
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="ctrl i"/>
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="i"/>
+    <!--editor.action.goToImplementation-->
+    <mouse-shortcut keystroke="ctrl alt button1"/>
+  </action>
+  <action id="EditorStartNewLine">
+    <!--editor.action.insertLineAfter-->
+    <keyboard-shortcut first-keystroke="ctrl enter"/>
+  </action>
+  <action id="CommentByBlockComment">
+    <!--editor.action.blockComment-->
+    <keyboard-shortcut first-keystroke="meta shift slash"/>
+    <!--editor.action.blockComment-->
+    <keyboard-shortcut first-keystroke="ctrl shift slash"/>
+  </action>
+  <action id="ReopenClosedTab">
+    <!--workbench.action.reopenClosedEditor-->
+    <keyboard-shortcut first-keystroke="ctrl shift t"/>
+  </action>
+  <action id="EditorTextStart">
+    <!--cursorTop-->
+    <keyboard-shortcut first-keystroke="ctrl home"/>
+  </action>
+  <action id="CompileProject">
+    <!--build.rebuild-->
+    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="ctrl r"/>
+    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="r"/>
+  </action>
+  <action id="EditorUnindentSelection">
+    <!--EditorUnindentSelection-->
+    <keyboard-shortcut first-keystroke="shift tab"/>
+  </action>
+  <action id="Debug">
+    <!--workbench.action.debug.start-->
+    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="ctrl s"/>
+    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="s"/>
+  </action>
+  <action id="OpenInRightSplit">
+    <!--openReferenceToSide-->
+    <keyboard-shortcut first-keystroke="ctrl enter"/>
+  </action>
+  <action id="EditorLineStart">
+    <!--cursorHome-->
+    <keyboard-shortcut first-keystroke="ctrl a"/>
+    <!--cursorHome-->
+    <keyboard-shortcut first-keystroke="home"/>
+  </action>
+  <action id="EditorNextWord">
+    <!--cursorWordEndRight-->
+    <keyboard-shortcut first-keystroke="ctrl right"/>
+    <!--cursorWordEndRight-->
+    <keyboard-shortcut first-keystroke="alt right"/>
+  </action>
+  <action id="EditorTextEnd">
+    <!--cursorBottom-->
+    <keyboard-shortcut first-keystroke="ctrl end"/>
+  </action>
+  <action id="EditorTextEndWithSelection">
+    <!--cursorBottomSelect-->
+    <keyboard-shortcut first-keystroke="ctrl shift end"/>
+  </action>
+  <action id="Replace">
+    <!--editor.action.startFindReplaceAction-->
+    <keyboard-shortcut first-keystroke="ctrl r"/>
+    <!--editor.action.startFindReplaceAction-->
+    <keyboard-shortcut first-keystroke="meta r"/>
+  </action>
+  <action id="EditorUnindentLineOrSelection">
+    <!--editor.action.outdentLines-->
+    <keyboard-shortcut first-keystroke="shift tab"/>
+  </action>
+  <action id="EditorPageDownWithSelection">
+    <!--cursorPageDownSelect-->
+    <keyboard-shortcut first-keystroke="shift page_down"/>
+    <!--cursorPageDownSelect-->
+    <keyboard-shortcut first-keystroke="meta shift down"/>
+  </action>
+  <action id="Run">
+    <!--workbench.action.debug.run-->
+    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="ctrl e"/>
+    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="e"/>
+  </action>
+  <action id="FindNext">
+    <!--editor.action.nextMatchFindAction:find-widget-focused-->
+    <keyboard-shortcut first-keystroke="alt m"/>
+  </action>
+  <action id="EditorLineEnd">
+    <!--cursorEnd-->
+    <keyboard-shortcut first-keystroke="ctrl e"/>
+    <!--cursorEnd-->
+    <keyboard-shortcut first-keystroke="end"/>
+  </action>
+  <action id="ActivateDebugToolWindow">
+    <!--workbench.view.debug-->
+    <keyboard-shortcut first-keystroke="ctrl shift d"/>
+  </action>
+  <action id="JumpToLastChange">
+    <!--workbench.action.navigateToLastEditLocation-->
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="ctrl p"/>
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="p"/>
+  </action>
+  <action id="GotoFile">
+    <!--workbench.action.quickOpen-->
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="ctrl f"/>
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="f"/>
+  </action>
+  <action id="PreviousTab">
+    <!--workbench.action.previousEditor-->
+    <keyboard-shortcut first-keystroke="meta open_bracket"/>
+  </action>
+  <action id="VcsShowPrevChangeMarker">
+    <!--editor.action.marker.prev-->
+    <keyboard-shortcut first-keystroke="alt p"/>
+  </action>
+  <action id="EditorDown">
+    <!--cursorDown-->
+    <keyboard-shortcut first-keystroke="down"/>
+  </action>
+  <action id="ParameterInfo">
+    <!--editor.action.triggerParameterHints-->
+    <keyboard-shortcut first-keystroke="ctrl i" second-keystroke="ctrl p"/>
+    <keyboard-shortcut first-keystroke="ctrl i" second-keystroke="p"/>
+  </action>
+  <action id="ExtractMethod">
+    <!--ExtractMethod-->
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="ctrl m"/>
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="m"/>
+  </action>
+  <action id="InsertLiveTemplate">
+    <!--insertSnippet-->
+    <keyboard-shortcut first-keystroke="ctrl l"/>
+  </action>
+  <action id="EditorChooseLookupItem">
+    <!--list.select-->
+    <keyboard-shortcut first-keystroke="enter"/>
+  </action>
+  <action id="EditorUp">
+    <!--cursorUp-->
+    <keyboard-shortcut first-keystroke="up"/>
+  </action>
+  <action id="GotoNextError">
+    <!--editor.action.marker.nextInFiles-->
+    <keyboard-shortcut first-keystroke="alt shift n"/>
+  </action>
+  <action id="HideSideWindows">
+    <!--workbench.action.toggleSidebarVisibility-->
+    <keyboard-shortcut first-keystroke="ctrl m" second-keystroke="ctrl s"/>
+    <keyboard-shortcut first-keystroke="ctrl m" second-keystroke="s"/>
+  </action>
+  <action id="Forward">
+    <!--workbench.action.navigateForward-->
+    <keyboard-shortcut first-keystroke="ctrl close_bracket"/>
+  </action>
+  <action id="ShowSettings">
+    <!--workbench.action.openSettings-->
+    <keyboard-shortcut first-keystroke="ctrl comma"/>
+  </action>
+  <action id="MoveStatementDown">
+    <!--editor.action.moveLinesDownAction-->
+    <keyboard-shortcut first-keystroke="shift alt down"/>
+  </action>
+  <action id="ChooseRunConfiguration">
+    <!--workbench.action.tasks.runTask-->
+    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="ctrl r"/>
+    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="r"/>
+  </action>
+  <action id="EditorNextWordWithSelection">
+    <!--cursorWordEndRightSelect-->
+    <keyboard-shortcut first-keystroke="shift alt right"/>
+    <!--cursorWordEndRightSelect-->
+    <keyboard-shortcut first-keystroke="shift ctrl right"/>
+  </action>
+  <action id="EditorDecreaseFontSize">
+    <!--workbench.action.zoomOut-->
+    <keyboard-shortcut first-keystroke="ctrl minus"/>
+  </action>
+  <action id="EditorIndentLineOrSelection">
+    <!--editor.action.indentLines-->
+    <keyboard-shortcut first-keystroke="tab"/>
+  </action>
+  <action id="$Redo">
+    <!--redo-->
+    <keyboard-shortcut first-keystroke="ctrl shift z"/>
+    <!--redo-->
+    <keyboard-shortcut first-keystroke="ctrl y"/>
+  </action>
+  <action id="GotoSymbol">
+    <!--workbench.action.gotoSymbol-->
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="ctrl s"/>
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="s"/>
+  </action>
+  <action id="$Paste">
+    <!--editor.action.clipboardPasteAction-->
+    <keyboard-shortcut first-keystroke="ctrl v"/>
+    <!--editor.action.clipboardPasteAction-->
+    <keyboard-shortcut first-keystroke="meta v"/>
+  </action>
+  <action id="EditorRight">
+    <!--cursorRight-->
+    <keyboard-shortcut first-keystroke="right"/>
+  </action>
+  <action id="FindInPath">
+    <!--workbench.action.findInFiles-->
+    <keyboard-shortcut first-keystroke="ctrl shift f"/>
+  </action>
+  <action id="VcsShowNextChangeMarker">
+    <!--editor.action.marker.next-->
+    <keyboard-shortcut first-keystroke="alt n"/>
+  </action>
+  <action id="GotoClass">
+    <!--workbench.action.showAllSymbols-->
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="ctrl g"/>
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="g"/>
+  </action>
+  <action id="RevealIn">
+    <!--revealFileInOS-->
+    <keyboard-shortcut first-keystroke="ctrl k" second-keystroke="ctrl f"/>
+    <keyboard-shortcut first-keystroke="ctrl k" second-keystroke="f"/>
+  </action>
+  <action id="EditorLineStartWithSelection">
+    <!--cursorHomeSelect-->
+    <keyboard-shortcut first-keystroke="shift home"/>
+  </action>
+  <action id="GotoPreviousError">
+    <!--editor.action.marker.prevInFiles-->
+    <keyboard-shortcut first-keystroke="alt shift p"/>
+  </action>
+  <action id="Rerun">
+    <!--workbench.action.debug.restart-->
+    <keyboard-shortcut first-keystroke="ctrl shift f5"/>
+  </action>
+  <action id="CloseAllEditorsButActive">
+    <!--workbench.action.closeOtherEditors-->
+    <keyboard-shortcut first-keystroke="ctrl k" second-keystroke="ctrl w"/>
+    <keyboard-shortcut first-keystroke="ctrl k" second-keystroke="w"/>
+  </action>
+  <action id="RenameElement">
+    <!--editor.action.rename-->
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="ctrl r"/>
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="r"/>
+  </action>
+  <action id="Git.Pull">
+    <!--git.pullFrom-->
+    <keyboard-shortcut first-keystroke="ctrl u" second-keystroke="ctrl p"/>
+    <keyboard-shortcut first-keystroke="ctrl u" second-keystroke="p"/>
+  </action>
+  <action id="EditorDownWithSelection">
+    <!--cursorDownSelect-->
+    <keyboard-shortcut first-keystroke="shift down"/>
+  </action>
+  <action id="EditorUpWithSelection">
+    <!--cursorUpSelect-->
+    <keyboard-shortcut first-keystroke="shift up"/>
+  </action>
+  <action id="Move">
+    <!--move-->
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="ctrl e"/>
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="e"/>
+  </action>
+  <action id="Find">
+    <!--actions.find-->
+    <keyboard-shortcut first-keystroke="ctrl f"/>
+    <!--actions.find-->
+    <keyboard-shortcut first-keystroke="meta f"/>
+  </action>
+  <action id="EditorStartNewLineBefore">
+    <!--editor.action.insertLineBefore-->
+    <keyboard-shortcut first-keystroke="ctrl shift enter"/>
+  </action>
+  <action id="CommentByLineComment">
+    <!--editor.action.commentLine-->
+    <keyboard-shortcut first-keystroke="ctrl slash"/>
+    <!--editor.action.commentLine-->
+    <keyboard-shortcut first-keystroke="meta slash"/>
+  </action>
+  <action id="CodeCompletion">
+    <!--editor.action.triggerSuggest-->
+    <keyboard-shortcut first-keystroke="ctrl space"/>
+  </action>
+  <action id="GotoLine">
+    <!--workbench.action.gotoLine-->
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="ctrl l"/>
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="l"/>
+  </action>
+  <action id="EditorToggleInsertState">
+    <!--editor.action.toggleOvertypeInsertMode-->
+    <keyboard-shortcut first-keystroke="insert"/>
+    <!--editor.action.toggleOvertypeInsertMode-->
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="ctrl o"/>
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="o"/>
+  </action>
+  <action id="OptimizeImports">
+    <!--editor.action.organizeImports-->
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="ctrl i"/>
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="i"/>
+  </action>
+  <action id="EditorLineEndWithSelection">
+    <!--cursorEndSelect-->
+    <keyboard-shortcut first-keystroke="shift end"/>
+  </action>
+  <action id="CloseContent">
+    <!--workbench.action.closeActiveEditor-->
+    <keyboard-shortcut first-keystroke="ctrl w"/>
+    <!--workbench.action.closeActiveEditor-->
+    <keyboard-shortcut first-keystroke="meta w"/>
+  </action>
+  <action id="CompileDirty">
+    <!--workbench.action.tasks.build-->
+    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="ctrl b"/>
+    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="b"/>
+  </action>
+  <action id="ReformatCode">
+    <!--editor.action.formatDocument-->
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="ctrl f"/>
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="f"/>
+  </action>
+  <action id="$Copy">
+    <!--editor.action.clipboardCopyAction-->
+    <keyboard-shortcut first-keystroke="meta c"/>
+    <!--editor.action.clipboardCopyAction-->
+    <keyboard-shortcut first-keystroke="ctrl c"/>
+  </action>
+  <action id="$Cut">
+    <!--editor.action.clipboardCutAction-->
+    <keyboard-shortcut first-keystroke="ctrl x"/>
+    <!--editor.action.clipboardCutAction-->
+    <keyboard-shortcut first-keystroke="meta x"/>
+  </action>
+  <action id="CompareClipboardWithSelection">
+    <!--workbench.files.action.compareWithClipboard-->
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="ctrl c"/>
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="c"/>
+  </action>
+  <action id="EditorResetFontSize">
+    <!--workbench.action.zoomReset-->
+    <keyboard-shortcut first-keystroke="ctrl 0"/>
+  </action>
+  <action id="Compile">
+    <!--build.file-->
+    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="ctrl f"/>
+    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="f"/>
+  </action>
+  <action id="RecentFiles">
+    <!--workbench.action.openRecent-->
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="ctrl r"/>
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="r"/>
+  </action>
+  <action id="StepInto">
+    <!--workbench.action.debug.stepInto-->
+    <keyboard-shortcut first-keystroke="ctrl f11"/>
+  </action>
+  <action id="EditorCloneCaretBelow">
+    <!--editor.action.insertCursorBelow-->
+    <keyboard-shortcut first-keystroke="ctrl shift down"/>
+  </action>
+  <action id="EditorPageUp">
+    <!--cursorPageUp-->
+    <keyboard-shortcut first-keystroke="page_up"/>
+    <!--cursorPageUp-->
+    <keyboard-shortcut first-keystroke="meta arrowup"/>
+  </action>
+  <action id="EditorLeftWithSelection">
+    <!--cursorLeftSelect-->
+    <keyboard-shortcut first-keystroke="shift left"/>
+  </action>
+  <action id="QuickImplementations">
+    <!--editor.action.peekDefinition-->
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="ctrl d"/>
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="d"/>
+  </action>
+  <action id="EditorCloneCaretAbove">
+    <!--editor.action.insertCursorAbove-->
+    <keyboard-shortcut first-keystroke="ctrl shift up"/>
+  </action>
+  <action id="IntroduceVariable">
+    <!--IntroduceVariable-->
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="ctrl v"/>
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="v"/>
+  </action>
+  <action id="EditorDeleteLine">
+    <!--editor.action.deleteLines-->
+    <keyboard-shortcut first-keystroke="meta back_space"/>
+    <!--editor.action.deleteLines-->
+    <keyboard-shortcut first-keystroke="ctrl back_space"/>
+  </action>
+  <action id="NextTab">
+    <!--workbench.action.nextEditor-->
+    <keyboard-shortcut first-keystroke="meta close_bracket"/>
+  </action>
+  <action id="$Undo">
+    <!--undo-->
+    <keyboard-shortcut first-keystroke="ctrl z"/>
+  </action>
+  <action id="EditorRightWithSelection">
+    <!--cursorRightSelect-->
+    <keyboard-shortcut first-keystroke="shift right"/>
+  </action>
+  <action id="ActivateTerminalToolWindow">
+    <!--workbench.action.terminal.toggleTerminal-->
+    <keyboard-shortcut first-keystroke="ctrl `"/>
+    <!--workbench.action.terminal.toggleTerminal-->
+    <keyboard-shortcut first-keystroke="ctrl m" second-keystroke="ctrl t"/>
+    <keyboard-shortcut first-keystroke="ctrl m" second-keystroke="t"/>
+  </action>
+  <action id="Back">
+    <!--workbench.action.navigateBack-->
+    <keyboard-shortcut first-keystroke="ctrl open_bracket"/>
+  </action>
+  <action id="GotoTypeDeclaration">
+    <!--editor.action.goToTypeDefinition-->
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="ctrl t"/>
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="t"/>
+    <!--editor.action.goToTypeDefinition-->
+    <mouse-shortcut keystroke="ctrl shift button1"/>
+  </action>
+  <action id="EditorTextStartWithSelection">
+    <!--cursorTopSelect-->
+    <keyboard-shortcut first-keystroke="ctrl shift home"/>
+  </action>
+  <action id="SplitVertically">
+    <!--workbench.action.splitEditorRight-->
+    <keyboard-shortcut first-keystroke="ctrl k" second-keystroke="ctrl v"/>
+    <keyboard-shortcut first-keystroke="ctrl k" second-keystroke="v"/>
+  </action>
+  <action id="EditorDuplicate">
+    <!--editor.action.duplicateSelection-->
+    <keyboard-shortcut first-keystroke="meta d"/>
+    <!--editor.action.duplicateSelection-->
+    <keyboard-shortcut first-keystroke="ctrl d"/>
+  </action>
+  <action id="FindPrevious">
+    <!--editor.action.previousMatchFindAction-->
+    <keyboard-shortcut first-keystroke="alt shift m"/>
+    <!--editor.action.previousMatchFindAction-->
+    <keyboard-shortcut first-keystroke="shift enter"/>
+  </action>
+  <action id="GotoAction">
+    <!--workbench.action.showCommands-->
+    <keyboard-shortcut first-keystroke="ctrl shift p"/>
+    <!--workbench.action.showCommands-->
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="ctrl n"/>
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="n"/>
+  </action>
+  <action id="EditorEscape">
+    <!--EditorEscape-->
+    <keyboard-shortcut first-keystroke="escape"/>
+  </action>
+  <action id="SaveAll">
+    <!--workbench.action.files.saveAll-->
+    <keyboard-shortcut first-keystroke="ctrl shift s"/>
+    <!--workbench.action.files.saveAll-->
+    <keyboard-shortcut first-keystroke="meta shift s"/>
+    <!--workbench.action.files.save-->
+    <keyboard-shortcut first-keystroke="ctrl s"/>
+    <!--workbench.action.files.save-->
+    <keyboard-shortcut first-keystroke="meta s"/>
+  </action>
+  <action id="$Delete">
+    <!--deleteRight-->
+    <keyboard-shortcut first-keystroke="delete"/>
+  </action>
+  <action id="$SelectAll">
+    <!--select-all-->
+    <keyboard-shortcut first-keystroke="ctrl k" second-keystroke="ctrl a"/>
+    <keyboard-shortcut first-keystroke="ctrl k" second-keystroke="a"/>
+  </action>
+  <action id="EditorBackSpace">
+    <!--deleteLeft-->
+    <keyboard-shortcut first-keystroke="back_space"/>
+    <!--deleteLeft-->
+    <keyboard-shortcut first-keystroke="shift back_space"/>
+  </action>
+  <action id="CloseProject">
+    <!--workbench.action.closeWindow-->
+    <keyboard-shortcut first-keystroke="meta shift w"/>
+    <!--workbench.action.closeWindow-->
+    <keyboard-shortcut first-keystroke="ctrl shift w"/>
+  </action>
+  <action id="EditorMatchBrace">
+    <!--editor.action.jumpToBracket-->
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="ctrl b"/>
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="b"/>
+  </action>
+  <action id="SearchEverywhere.SelectItem">
+    <!--list.select.search-everywhere-->
+    <keyboard-shortcut first-keystroke="enter"/>
+  </action>
+  <action id="ZoomInIdeAction">
+    <!--workbench.action.zoomIn-->
+    <keyboard-shortcut first-keystroke="ctrl equals"/>
+  </action>
+  <action id="EditorPageUpWithSelection">
+    <!--cursorPageUpSelect-->
+    <keyboard-shortcut first-keystroke="shift page_up"/>
+    <!--cursorPageUpSelect-->
+    <keyboard-shortcut first-keystroke="meta shift up"/>
+  </action>
+  <action id="FileChooser.NewFile">
+    <!--workbench.action.files.newUntitledFile-->
+    <keyboard-shortcut first-keystroke="ctrl k" second-keystroke="ctrl n"/>
+    <keyboard-shortcut first-keystroke="ctrl k" second-keystroke="n"/>
+  </action>
+  <action id="EditorPreviousWordWithSelection">
+    <!--cursorWordLeftSelect-->
+    <keyboard-shortcut first-keystroke="shift alt left"/>
+    <!--cursorWordLeftSelect-->
+    <keyboard-shortcut first-keystroke="shift ctrl left"/>
+  </action>
+  <action id="Resume">
+    <!--workbench.action.debug.continue-->
+    <keyboard-shortcut first-keystroke="f5"/>
+  </action>
+  <action id="Stop">
+    <!--workbench.action.debug.stop-->
+    <keyboard-shortcut first-keystroke="shift f5"/>
+  </action>
+  <action id="EditorEnter">
+    <!--EditorEnter-->
+    <keyboard-shortcut first-keystroke="enter"/>
+  </action>
+  <action id="MoveStatementUp">
+    <!--editor.action.moveLinesUpAction-->
+    <keyboard-shortcut first-keystroke="shift alt up"/>
+  </action>
+  <action id="EditorIndentSelection">
+    <!--EditorIndentSelection-->
+    <keyboard-shortcut first-keystroke="tab"/>
+  </action>
+  <action id="Exit">
+    <!--workbench.action.quit-->
+    <keyboard-shortcut first-keystroke="meta q"/>
+    <!--workbench.action.quit-->
+    <keyboard-shortcut first-keystroke="ctrl q"/>
+  </action>
+  <action id="ShowUsages">
+    <!--editor.action.goToReferences-->
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="ctrl u"/>
+    <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="u"/>
+  </action>
+  <action id="StepOver">
+    <!--workbench.action.debug.stepOver-->
+    <keyboard-shortcut first-keystroke="f10"/>
+  </action>
+  <action id="ToggleLineBreakpoint">
+    <!--editor.debug.action.toggleBreakpoint-->
+    <keyboard-shortcut first-keystroke="f9"/>
+  </action>
+  <action id="StepOut">
+    <!--workbench.action.debug.stepOut-->
+    <keyboard-shortcut first-keystroke="shift f11"/>
+  </action>
+  <action id="SelectAllOccurrences">
+    <!--editor.action.selectAllMatches, editor.action.selectHighlights-->
+    <keyboard-shortcut first-keystroke="alt h"/>
+  </action>
+  <action id="IntroduceParameter">
+    <!--IntroduceParameter-->
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="ctrl p"/>
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="p"/>
+  </action>
+  <action id="CopyPaths">
+    <!--copyFilePath-->
+    <keyboard-shortcut first-keystroke="alt c" second-keystroke="alt p"/>
+    <keyboard-shortcut first-keystroke="alt c" second-keystroke="p"/>
+  </action>
+  <action id="EditorUnSelectWord"/>
+  <action id="NewElementSamePlace"/>
+  <action id="GotoBookmark3"/>
+  <action id="MethodDown"/>
+  <action id="EditorShowGutterIconTooltip"/>
+  <action id="ForceRunToCursor"/>
+  <action id="ActivateCommitToolWindow"/>
+  <action id="ChangeSignature"/>
+  <action id="SmartStepInto"/>
+  <action id="GotoSuperMethod"/>
+  <action id="Diff.FocusOppositePaneAndScroll"/>
+  <action id="ChangesView.GroupBy.Module"/>
+  <action id="Switcher"/>
+  <action id="ActivateStructureToolWindow"/>
+  <action id="EditorDeleteToWordEnd"/>
+  <action id="FileChooser.GotoHome"/>
+  <action id="PopupHector"/>
+  <action id="GotoRelated"/>
+  <action id="EvaluateExpression"/>
+  <action id="SelectIn"/>
+  <action id="CollapseRegion"/>
+  <action id="CollapseExpandableComponent"/>
+  <action id="EditorAddCaretPerSelectedLine"/>
+  <action id="RunInspection"/>
+  <action id="TogglePopupHints"/>
+  <action id="AutoIndentLines"/>
+  <action id="GotoTest"/>
+  <action id="Git.New.Branch.In.Log"/>
+  <action id="ExpandAll"/>
+  <action id="UsageFiltering.WriteAccess"/>
+  <action id="EditorToggleCase"/>
+  <action id="ShowExecutionPoint"/>
+  <action id="ResizeToolWindowUp"/>
+  <action id="ToggleBookmark4"/>
+  <action id="EditorLookupUp"/>
+  <action id="Diff.ShowSettingsPopup"/>
+  <action id="CodeFloatingToolbar.GotoPrevMenu"/>
+  <action id="SwitcherRecentEditedChangedToggleCheckBox"/>
+  <action id="ServiceView.ShowServices"/>
+  <action id="UsageGrouping.FileStructure"/>
+  <action id="ShowTypeBookmarks"/>
+  <action id="FileChooser.GoToParent"/>
+  <action id="MethodHierarchy"/>
+  <action id="Refresh"/>
+  <action id="CollapseTreeNode"/>
+  <action id="GotoBookmark5"/>
+  <action id="MaximizeToolWindow"/>
+  <action id="RerunTests"/>
+  <action id="EditorChooseLookupItemDot"/>
+  <action id="ResizeToolWindowDown"/>
+  <action id="FileStructurePopup"/>
+  <action id="DirDiffMenu.SynchronizeDiff.All"/>
+  <action id="Console.History.Browse"/>
+  <action id="DebugClass"/>
+  <action id="ResizeToolWindowLeft"/>
+  <action id="XDebugger.JumpToTypeSource"/>
+  <action id="FileChooser.TogglePathBar"/>
+  <action id="ToggleReadOnlyAttribute"/>
+  <action id="ExpandLiveTemplateByTab"/>
+  <action id="ActivateProblemsViewToolWindow"/>
+  <action id="TodoViewGroupByFlattenPackage"/>
+  <action id="UsageGrouping.DirectoryStructure"/>
+  <action id="ActivateServicesToolWindow"/>
+  <action id="EditorSplitLine"/>
+  <action id="HideAllWindows"/>
+  <action id="SplitChooser.PreviousWindow"/>
+  <action id="GotoBookmark6"/>
+  <action id="EditorCreateRectangularSelectionOnMouseDrag"/>
+  <action id="RecentChangedFiles"/>
+  <action id="ExpandAllToLevel4"/>
+  <action id="ViewBreakpoints"/>
+  <action id="ForceRefresh"/>
+  <action id="HideActiveWindow"/>
+  <action id="ShowContent"/>
+  <action id="ExpandToLevel2"/>
+  <action id="ShowSettingsAndFindUsages"/>
+  <action id="DirDiffMenu.SynchronizeDiff"/>
+  <action id="SplitChooser"/>
+  <action id="EditorAddOrRemoveCaret"/>
+  <action id="UsageGrouping.Module"/>
+  <action id="Unwrap"/>
+  <action id="CloseActiveTab"/>
+  <action id="PrevParameter"/>
+  <action id="MethodUp"/>
+  <action id="NewScratchFile"/>
+  <action id="Console.Open"/>
+  <action id="Diff.PrevChange"/>
+  <action id="FullyExpandTreeNode"/>
+  <action id="QuickJavaDoc"/>
+  <action id="EditorCreateRectangularSelection"/>
+  <action id="ToggleBookmark8"/>
+  <action id="EditorSelectWord"/>
+  <action id="ShowProjectStructureSettings"/>
+  <action id="ChangesView.Rename"/>
+  <action id="ToggleBookmark0"/>
+  <action id="NextProjectWindow"/>
+  <action id="CodeFloatingToolbar.GotoNextMenu"/>
+  <action id="ActivateProjectToolWindow"/>
+  <action id="DuplicatesForm.SendToLeft"/>
+  <action id="SearchEverywhere.CompleteCommand"/>
+  <action id="SafeDelete"/>
+  <action id="SplitChooser.Split"/>
+  <action id="Git.Rename.Local.Branch"/>
+  <action id="StopBackgroundProcesses"/>
+  <action id="ActivateNuGetToolWindow"/>
+  <action id="EditorCodeBlockStartWithSelection"/>
+  <action id="NextParameter"/>
+  <action id="EditorScrollDown"/>
+  <action id="ResizeToolWindowRight"/>
+  <action id="ShowNavBar"/>
+  <action id="GotoCustomRegion"/>
+  <action id="Console.Execute.Multiline"/>
+  <action id="FileChooser.NewFolder"/>
+  <action id="ShowBookmarks"/>
+  <action id="DuplicatesForm.SendToRight"/>
+  <action id="ToggleBookmark1"/>
+  <action id="EditorScrollToCenter"/>
+  <action id="ExpandAllToLevel5"/>
+  <action id="ExpandTreeNode"/>
+  <action id="GotoBookmark0"/>
+  <action id="ToggleBookmark6"/>
+  <action id="JumpToLastWindow"/>
+  <action id="ToggleBookmark2"/>
+  <action id="MaintenanceAction"/>
+  <action id="CopyElement"/>
+  <action id="DumpLookupElementWeights"/>
+  <action id="EditSourceInNewWindow"/>
+  <action id="Diff.ShowDiff"/>
+  <action id="FileChooser.GotoProject"/>
+  <action id="ToggleBookmark7"/>
+  <action id="ActivateFavoritesToolWindow"/>
+  <action id="Vcs.RollbackChangedLines"/>
+  <action id="SearchEverywhere.NavigateToNextGroup"/>
+  <action id="Diff.NextChange"/>
+  <action id="ExpandAllToLevel3"/>
+  <action id="NextTemplateVariable"/>
+  <action id="ToggleBookmarkWithMnemonic"/>
+  <action id="Synchronize"/>
+  <action id="ActivateVersionControlToolWindow"/>
+  <action id="GotoBookmark9"/>
+  <action id="CollapseBlock"/>
+  <action id="ShowReformatFileDialog"/>
+  <action id="ShowPopupMenu"/>
+  <action id="HighlightUsagesInFile"/>
+  <action id="EditorCodeBlockEndWithSelection"/>
+  <action id="SelectVirtualTemplateElement"/>
+  <action id="EditorFocusGutter"/>
+  <action id="UsageView.Include"/>
+  <action id="ActivateFindToolWindow"/>
+  <action id="PasteMultiple"/>
+  <action id="SurroundWithLiveTemplate"/>
+  <action id="EditorTab"/>
+  <action id="TodoViewGroupByShowPackages"/>
+  <action id="EditSource"/>
+  <action id="ContextHelp"/>
+  <action id="EditorChooseLookupItemReplace"/>
+  <action id="EditorCodeBlockStart"/>
+  <action id="CollapseRegionRecursively"/>
+  <action id="ExternalJavaDoc"/>
+  <action id="MoveLineUp"/>
+  <action id="UnselectPreviousOccurrence"/>
+  <action id="GotoBookmark1"/>
+  <action id="GotoBookmark4"/>
+  <action id="CopyReference"/>
+  <action id="SelectNextOccurrence"/>
+  <action id="PreviousTemplateVariable"/>
+  <action id="ExpandToLevel1"/>
+  <action id="PreviousDiff"/>
+  <action id="MainMenuButton.ShowMenu"/>
+  <action id="ExpandAllToLevel1"/>
+  <action id="Console.History.Next"/>
+  <action id="EditBreakpoint"/>
+  <action id="FindPrevWordAtCaret"/>
+  <action id="NextOccurence"/>
+  <action id="StructuralSearchPlugin.StructuralReplaceAction"/>
+  <action id="GotoBookmark8"/>
+  <action id="StructuralSearchPlugin.StructuralSearchAction"/>
+  <action id="ShowSearchHistory"/>
+  <action id="ExpandRegion"/>
+  <action id="ForceStepInto"/>
+  <action id="ChangesView.Move"/>
+  <action id="ToggleBookmark9"/>
+  <action id="UsageFiltering.ReadAccess"/>
+  <action id="Vcs.ShowMessageHistory"/>
+  <action id="ShelveChanges.UnshelveWithDialog"/>
+  <action id="Diff.ApplyRightSide"/>
+  <action id="EditorToggleColumnMode"/>
+  <action id="ShelvedChanges.Rename"/>
+  <action id="EditorPasteFromX11"/>
+  <action id="EditorIncreaseFontSizeGlobal"/>
+  <action id="ToggleBookmark5"/>
+  <action id="RestoreDefaultLayout"/>
+  <action id="IntroduceField"/>
+  <action id="ChangesView.Revert"/>
+  <action id="ToggleFindInSelection"/>
+  <action id="ForceStepOver"/>
+  <action id="CollapseAllRegions"/>
+  <action id="ExpandExpandableComponent"/>
+  <action id="RunCoverage"/>
+  <action id="ActivateUnitTestsToolWindow"/>
+  <action id="SwitcherIterateItems"/>
+  <action id="ExpandToLevel3"/>
+  <action id="ToggleTemporaryLineBreakpoint"/>
+  <action id="HippieBackwardCompletion"/>
+  <action id="SearchEverywhere.NavigateToPrevGroup"/>
+  <action id="ToggleBookmark3"/>
+  <action id="XDebugger.AttachToProcess"/>
+  <action id="OverrideMethods"/>
+  <action id="Diff.FocusOppositePane"/>
+  <action id="ToggleRenderedDocPresentation"/>
+  <action id="ToggleBookmark"/>
+  <action id="ExpandToLevel5"/>
+  <action id="ShowErrorDescription"/>
+  <action id="SearchEverywhere.PrevTab"/>
+  <action id="EditorMoveToPageTop"/>
+  <action id="GotoBookmark7"/>
+  <action id="SplitChooser.SplitCenter"/>
+  <action id="GotoBookmark2"/>
+  <action id="IntroduceConstant"/>
+  <action id="SearchEverywhere.NextTab"/>
+  <action id="CodeInspection.OnEditor"/>
+  <action id="Console.Execute"/>
+  <action id="HippieCompletion"/>
+  <action id="EditorJoinLines"/>
+  <action id="FileChooser.GotoModule"/>
+  <action id="Console.History.Previous"/>
+  <action id="CloseGotItTooltip"/>
+  <action id="ExpandAllToLevel2"/>
+  <action id="XDebugger.NewWatch"/>
+  <action id="ViewSource"/>
+  <action id="PreviousEditorTab"/>
+  <action id="NextEditorTab"/>
+  <action id="ChangeTypeSignature"/>
+  <action id="MoveElementLeft"/>
+  <action id="XDebugger.SetValue"/>
+  <action id="ExpandAllRegions"/>
+  <action id="CompareTwoFiles"/>
+  <action id="FocusEditor"/>
+  <action id="Git.Reword.Commit"/>
+  <action id="EditorCodeBlockEnd"/>
+  <action id="ExpressionTypeInfo"/>
+  <action id="Vcs.QuickListPopupAction"/>
+  <action id="ChangesView.SetDefault"/>
+  <action id="SplitChooser.NextWindow"/>
+  <action id="UsageFiltering.Imports"/>
+  <action id="QuickActionPopup"/>
+  <action id="ValidateXml"/>
+  <action id="FindUsagesInFile"/>
+  <action id="TypeHierarchy"/>
+  <action id="RunClass"/>
+  <action id="ShowFilterPopup"/>
+  <action id="FindUsages"/>
+  <action id="SmartTypeCompletion"/>
+  <action id="ActivateBookmarksToolWindow"/>
+  <action id="RecentLocations"/>
+  <action id="UsageGrouping.Directory"/>
+  <action id="TextSearchAction"/>
+  <action id="UsageGrouping.FlattenModules"/>
+  <action id="SplitChooser.Duplicate"/>
+  <action id="EditorAddRectangularSelectionOnMouseDrag"/>
+  <action id="FindWordAtCaret"/>
+  <action id="ZoomOutIdeAction"/>
+  <action id="PreviousProjectWindow"/>
+  <action id="SendEOF"/>
+  <action id="BraceOrQuoteOut"/>
+  <action id="ChangesView.GroupBy.Directory"/>
+  <action id="Generate"/>
+  <action id="Vcs.MoveChangedLinesToChangelist"/>
+  <action id="FileChooser.GoToRoot"/>
+  <action id="RunToCursor"/>
+  <action id="MoveLineDown"/>
+  <action id="SurroundWith"/>
+  <action id="ExpandToLevel4"/>
+  <action id="EditorPasteSimple"/>
+  <action id="UsageGrouping.UsageType"/>
+  <action id="EditorLookupDown"/>
+  <action id="EditorCompleteStatement"/>
+  <action id="MethodOverloadSwitchUp"/>
+  <action id="NextDiff"/>
+  <action id="EditorContextInfo"/>
+  <action id="CollapseSelection"/>
+  <action id="ImplementMethods"/>
+  <action id="Diff.ApplyLeftSide"/>
+  <action id="SwitchHeaderSource"/>
+  <action id="QuickEvaluateExpression"/>
+  <action id="ActivateRunToolWindow"/>
+  <action id="GotoChangedFile"/>
+  <action id="ClassNameCompletion"/>
+  <action id="CollapseAll"/>
+  <action id="EditorMoveToPageTopWithSelection"/>
+  <action id="PreviousOccurence"/>
+  <action id="AIAssistant.Chat.AIPopupChat"/>
+  <action id="EditorMoveToPageBottom"/>
+  <action id="ActivateHierarchyToolWindow"/>
+  <action id="SwitchCoverage"/>
+  <action id="ShowFilePath"/>
+  <action id="EditorMoveToPageBottomWithSelection"/>
+  <action id="QuickChangeScheme"/>
+  <action id="FileChooser.GotoDesktop"/>
+  <action id="MethodOverloadSwitchDown"/>
+  <action id="Vcs.ToggleAmendCommitMode"/>
+  <action id="CallHierarchy"/>
+  <action id="GitNewBranchAction"/>
+  <action id="TodoViewGroupByShowModules"/>
+  <action id="ExpandRegionRecursively"/>
+  <action id="Inline"/>
+  <action id="ResetIdeScaleAction"/>
+  <action id="MoveElementRight"/>
+  <action id="NewElement"/>
+  <action id="VcsHistory.ShowAllAffected"/>
+  <action id="EditorScrollUp"/>
+  <action id="ExportToTextFile"/>
+  <action id="EditorDecreaseFontSizeGlobal"/>
+  <action id="ServiceView.GroupByContributor"/>
+</keymap>

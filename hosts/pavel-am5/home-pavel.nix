@@ -1,66 +1,66 @@
 { pkgs, smind-hm, lib, extended_pkg, cfg-meta, inputs, nixosConfig, import_if_exists, ... }:
-let
-  attemptJson = path:
-    if builtins.pathExists path
-    then builtins.fromJSON (builtins.readFile path)
-    else null;
+# let
+#   attemptJson = path:
+#     if builtins.pathExists path
+#     then builtins.fromJSON (builtins.readFile path)
+#     else null;
 
-  attemptNix = path:
-    if builtins.pathExists path
-    then import path
-    else null;
+#   attemptNix = path:
+#     if builtins.pathExists path
+#     then import path
+#     else null;
 
-  firstNonNull = list:
-    builtins.foldl' (acc: x: if acc != null then acc else x) null list;
+#   firstNonNull = list:
+#     builtins.foldl' (acc: x: if acc != null then acc else x) null list;
 
-  readCfg = f: firstNonNull [
-    (attemptJson ./vscode-keymap/linux/vscode-keymap-linux-${f}.json)
-    (attemptNix  ./vscode-keymap/linux/vscode-keymap-linux-${f}.nix)
-    (attemptJson ./vscode-keymap/linux/negate/vscode-keymap-linux-${f}.json)
-  ];
+#   readCfg = f: firstNonNull [
+#     (attemptJson ./vscode-keymap/linux/vscode-keymap-linux-${f}.json)
+#     (attemptNix  ./vscode-keymap/linux/vscode-keymap-linux-${f}.nix)
+#     (attemptJson ./vscode-keymap/linux/negate/vscode-keymap-linux-${f}.json)
+#   ];
 
-  imports = [
-    "!negate-all"
-    "!negate-gitlens"
-    "!negate-continue"
-    "custom"
-    "fileExplorer"
-    "textInputFocus"
-    "listFocus"
-  ];
-  allKeys = builtins.map readCfg imports;
-  flattened = builtins.concatLists allKeys;
+#   imports = [
+#     "!negate-all"
+#     "!negate-gitlens"
+#     "!negate-continue"
+#     "custom"
+#     "fileExplorer"
+#     "textInputFocus"
+#     "listFocus"
+#   ];
+#   allKeys = builtins.map readCfg imports;
+#   flattened = builtins.concatLists allKeys;
 
-  processList = objs:
-    builtins.concatMap
-      (obj:
-        let
-          key = obj.key;
-          m1 = builtins.match ''^(.+)\+(.+)[[:space:]]+(.+)\+(.+)$'' key;
-          transformed =
-            if m1 != null then
-              let
-                M1 = builtins.elemAt m1 0;
-                A = builtins.elemAt m1 1;
-                M2 = builtins.elemAt m1 2;
-                B = builtins.elemAt m1 3;
-                newKey = ''${M1}+${A} ${B}'';
-                result = if M1 == M2 then [ obj (obj // { key = newKey; }) ] else [ obj ];
-              in
-              result
-            else
-              [ obj ];
-        in
-        if (lib.hasPrefix "-" obj.command) then [ obj ] else transformed
-      )
-      objs;
-  everything = (processList flattened);
-  everythingJson = builtins.toJSON everything;
-in
+#   processList = objs:
+#     builtins.concatMap
+#       (obj:
+#         let
+#           key = obj.key;
+#           m1 = builtins.match ''^(.+)\+(.+)[[:space:]]+(.+)\+(.+)$'' key;
+#           transformed =
+#             if m1 != null then
+#               let
+#                 M1 = builtins.elemAt m1 0;
+#                 A = builtins.elemAt m1 1;
+#                 M2 = builtins.elemAt m1 2;
+#                 B = builtins.elemAt m1 3;
+#                 newKey = ''${M1}+${A} ${B}'';
+#                 result = if M1 == M2 then [ obj (obj // { key = newKey; }) ] else [ obj ];
+#               in
+#               result
+#             else
+#               [ obj ];
+#         in
+#         if (lib.hasPrefix "-" obj.command) then [ obj ] else transformed
+#       )
+#       objs;
+#   everything = (processList flattened);
+#   everythingJson = builtins.toJSON everything;
+# in
 #   )
-  # else
-  #   if cfg-meta.isDarwin then [ ] else
-  #   [ ];
+# else
+#   if cfg-meta.isDarwin then [ ] else
+#   [ ];
 {
   imports = smind-hm.imports ++ [
     "${cfg-meta.paths.users}/pavel/hm/git.nix"
@@ -109,7 +109,11 @@ in
   # nix eval --impure --expr 'builtins.fromJSON (builtins.readFile ./my-file.json)' --json
   # nix eval --impure --expr "builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-editorFocus.json)"  > vscode-keymap-linux-editorFocus.nix
   # nix run nixpkgs#nixfmt-classic ./vscode-keymap-linux-editorFocus.nix
-  programs.vscode.keybindings = if cfg-meta.isLinux then everything else [ ];
+  programs.vscode.keybindings =
+    if cfg-meta.isLinux then
+      (builtins.fromJSON (builtins.readFile "${cfg-meta.paths.users}/pavel/hm/keymap-vscode-linux.json"))
+    else
+      [ ];
 
   programs.zsh.shellAliases = {
     rmj = "find . -depth -type d \\( -name target -or -name .bloop -or -name .bsp -or -name .metals \\) -exec rm -rf {} \\;";
@@ -122,9 +126,15 @@ in
     mkdir -p .ssh/
     ln -sfn ${nixosConfig.age.secrets.id_ed25519.path} ~/.ssh/id_ed25519
     ln -sfn ${nixosConfig.age.secrets."id_ed25519.pub".path} ~/.ssh/id_ed25519.pub
-    ln -sfn ${pkgs.writeText "output.json" everythingJson} ~/out.json
     mkdir -p .sbt/secrets/
     ln -sfn ${nixosConfig.age.secrets.nexus-oss-sonatype.path} ~/.sbt/secrets/credentials.sonatype-nexus.properties
+  '';
+
+  home.activation.jetbrains-keymaps = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    find ~/.config/JetBrains \
+      -type d \
+      -wholename '*/JetBrains/*/keymaps' '!' -path '*/settingsSync/*' \
+      -exec cp "${cfg-meta.paths.users}/pavel/hm/keymap-idea-linux.xml" {}/Magen.xml \;
   '';
 
 
@@ -173,7 +183,7 @@ in
         gccStdenv.cc.cc.lib
       ];
       #defs = { TEST = "1"; };
-    })   
+    })
 
     (extended_pkg {
       pkg = jetbrains.rider;
