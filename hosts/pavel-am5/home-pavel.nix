@@ -1,4 +1,4 @@
-{ pkgs, smind-hm, lib, extended_pkg, cfg-meta, inputs, nixosConfig, import_if_exists, ... }:
+{ pkgs, config, smind-hm, lib, extended_pkg, cfg-meta, inputs, nixosConfig, import_if_exists, ... }:
 # let
 #   attemptJson = path:
 #     if builtins.pathExists path
@@ -131,7 +131,7 @@
   '';
 
   home.activation.jetbrains-keymaps = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    find ~/.config/JetBrains \
+    find ${config.home.homeDirectory}/.config/JetBrains \
       -type d \
       -wholename '*/JetBrains/*/keymaps' '!' -path '*/settingsSync/*' \
       -exec cp "${cfg-meta.paths.users}/pavel/hm/keymap-idea-linux.xml" {}/Magen.xml \;
