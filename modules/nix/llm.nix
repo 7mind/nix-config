@@ -48,10 +48,9 @@
 
         "deepseek-r1:32b"
 
-        "qwen:32b"
         "qwen2.5:32b"
         "qwen2.5-coder:32b"
-        
+
         "aratan/qwen2.5-14bu:latest"
 
 
