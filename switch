@@ -19,6 +19,8 @@ add_all
 git add .
 git submodule foreach git add .
 
+rm -f ~/.config/VSCodium/User/*.hmbak
+
 sudo nixos-rebuild switch --flake "${PWD}?submodules=1"
 
 git submodule foreach git commit -am "autosave" || true

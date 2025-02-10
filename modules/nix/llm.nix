@@ -24,6 +24,7 @@
 
   config = lib.mkIf config.smind.llm.enable {
     environment.systemPackages = with pkgs; [
+      lmstudio
       jan
     ];
 
@@ -36,7 +37,7 @@
       #   commit = "d0169965cf1ce1cd68e50a63eabff7c8b8959743";
       #   sha256 = "sha256:1hh0p0p42yqrm69kqlxwzx30m7i7xqw9m8f224i3bm6wsj4dxm05";
       # });
-      rocmOverrideGfx = "10.3.0";
+      rocmOverrideGfx = "11.0.0";
       acceleration = "rocm";
       port = 11434;
       loadModels = [
