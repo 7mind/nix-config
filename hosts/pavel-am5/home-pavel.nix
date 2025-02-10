@@ -134,7 +134,7 @@
     ${pkgs.findutils}/bin/find ${config.home.homeDirectory}/.config/JetBrains \
       -type d \
       -wholename '*/JetBrains/*/keymaps' '!' -path '*/settingsSync/*' \
-      -exec cp "${cfg-meta.paths.users}/pavel/hm/keymap-idea-linux.xml" {}/Magen.xml \;
+      -exec cp -f "${cfg-meta.paths.users}/pavel/hm/keymap-idea-linux.xml" {}/Magen.xml \;
   '';
 
 
