@@ -30,16 +30,19 @@
 
     services.ollama = {
       enable = true;
-      # https://github.com/NixOS/nixpkgs/issues/375910
       package = pkgs.ollama-rocm;
+
+      # https://github.com/NixOS/nixpkgs/issues/375910
       # package = (pinPackage {
       #   name = "ollama";
       #   commit = "d0169965cf1ce1cd68e50a63eabff7c8b8959743";
       #   sha256 = "sha256:1hh0p0p42yqrm69kqlxwzx30m7i7xqw9m8f224i3bm6wsj4dxm05";
       # });
+
       rocmOverrideGfx = "11.0.0";
       acceleration = "rocm";
       port = 11434;
+
       loadModels = [
         "llama3.3"
         "llama3.1:8b"
@@ -51,15 +54,8 @@
         "qwen2.5:32b"
         "qwen2.5-coder:32b"
         "Yinr/qwen2.5-agi:32b" # uncensored
-
-
-        # "starcoder2:7b"
-        # "starcoder2:15b"
-        # "dolphincoder:15b"
-        # "mistral"
-        # "gemma:7b"
-        # "codellama:13b"
       ];
+
       environmentVariables = {
         OLLAMA_SCHED_SPREAD = "true";
         ROCR_VISIBLE_DEVICES = "0";
