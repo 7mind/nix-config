@@ -50,8 +50,7 @@
 
         "qwen2.5:32b"
         "qwen2.5-coder:32b"
-
-        "aratan/qwen2.5-14bu:latest"
+        "Yinr/qwen2.5-agi:32b" # uncensored
 
 
         # "starcoder2:7b"
