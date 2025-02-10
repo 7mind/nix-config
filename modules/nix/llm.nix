@@ -46,14 +46,14 @@
 
         "nomic-embed-text"
 
-        "qwen:14b"
-        "qwen2.5:14b"
-        "qwen2.5-coder:14b"
+        "deepseek-r1:32b"
 
+        "qwen:32b"
+        "qwen2.5:32b"
+        "qwen2.5-coder:32b"
+        
         "aratan/qwen2.5-14bu:latest"
 
-        # "deepseek-r1:14b"
-        "deepseek-r1:32b"
 
         # "starcoder2:7b"
         # "starcoder2:15b"
