@@ -52,7 +52,8 @@
 
         "aratan/qwen2.5-14bu:latest"
 
-        "deepseek-r1:14b"
+        # "deepseek-r1:14b"
+        "deepseek-r1:32b"
 
         # "starcoder2:7b"
         # "starcoder2:15b"
