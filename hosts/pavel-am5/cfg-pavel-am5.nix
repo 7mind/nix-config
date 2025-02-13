@@ -42,7 +42,7 @@
     llm.enable = true;
   };
 
-  # boot.blacklistedKernelModules = [ "r8169" ];
+  boot.blacklistedKernelModules = [ "r8169" ];
   boot.extraModulePackages =
     let
       realnixpkgs = import cfg-meta.inputs.nixpkgs {
