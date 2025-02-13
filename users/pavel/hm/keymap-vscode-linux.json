@@ -5340,6 +5340,62 @@
     "command" : "closeReferenceSearch"
   },
   {
+    "key" : "down",
+    "command" : "continue.quickEditHistoryDown"
+  },
+  {
+    "key" : "up",
+    "command" : "continue.quickEditHistoryUp"
+  },
+  {
+    "key" : "ctrl+shift+enter",
+    "command" : "continue.acceptDiff"
+  },
+  {
+    "key" : "ctrl+[KeyJ] ctrl+[KeyA]",
+    "command" : "continue.focusContinueInput"
+  },
+  {
+    "key" : "ctrl+[KeyJ] [KeyA]",
+    "command" : "continue.focusContinueInput"
+  },
+  {
+    "key" : "ctrl+[KeyJ] ctrl+[KeyB]",
+    "command" : "continue.focusContinueInputWithoutClear"
+  },
+  {
+    "key" : "ctrl+[KeyJ] [KeyB]",
+    "command" : "continue.focusContinueInputWithoutClear"
+  },
+  {
+    "key" : "ctrl+[KeyJ] ctrl+[KeyA]",
+    "command" : "continue.applyCodeFromChat"
+  },
+  {
+    "key" : "ctrl+[KeyJ] [KeyA]",
+    "command" : "continue.applyCodeFromChat"
+  },
+  {
+    "key" : "ctrl+[KeyJ] ctrl+[KeyN]",
+    "command" : "continue.newSession"
+  },
+  {
+    "key" : "ctrl+[KeyJ] [KeyN]",
+    "command" : "continue.newSession"
+  },
+  {
+    "key" : "ctrl+[KeyJ] ctrl+[KeyJ]",
+    "command" : "continue.quickEdit"
+  },
+  {
+    "key" : "ctrl+[KeyJ] [KeyJ]",
+    "command" : "continue.quickEdit"
+  },
+  {
+    "key" : "ctrl+shift+backspace",
+    "command" : "continue.rejectDiff"
+  },
+  {
     "key" : "alt+[KeyC] alt+[KeyP]",
     "command" : "copyFilePath"
   },

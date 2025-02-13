@@ -42,6 +42,10 @@
     llm.enable = true;
   };
 
+  boot.extraModulePackages = with config.boot.kernelPackages; [
+    # r8125
+  ];
+
   age.secrets = {
     id_ed25519 = {
       rekeyFile = "${cfg-meta.paths.secrets}/pavel/id_ed25519.age";

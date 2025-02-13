@@ -33,7 +33,7 @@
       mpv
     ];
 
-    programs.chromium.enable = true;
+    # programs.chromium.enable = true;
     programs.librewolf.enable = true;
 
     xdg = lib.mkMerge [

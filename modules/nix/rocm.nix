@@ -43,6 +43,8 @@
 
       rocmPackages.rocminfo
       rocmPackages.rocm-smi
+
+      # zluda
     ];
   };
 
