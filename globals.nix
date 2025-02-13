@@ -47,6 +47,7 @@ rec {
       cfg-meta = {
         inherit arch;
         inherit paths;
+        inherit inputs;
         isLinux = true;
         isDarwin = false;
         hostname = hostname;

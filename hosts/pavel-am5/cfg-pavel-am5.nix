@@ -42,9 +42,20 @@
     llm.enable = true;
   };
 
-  boot.extraModulePackages = with config.boot.kernelPackages; [
-    # r8125
-  ];
+  # boot.blacklistedKernelModules = [ "r8169" ];
+  # boot.extraModulePackages =
+  #   let
+  #     realnixpkgs = import cfg-meta.inputs.nixpkgs {
+  #       system = cfg-meta.arch;
+
+  #       config = {
+  #         allowBroken = true;
+  #       };
+  #     };
+  #   in
+  #   [
+  #     realnixpkgs.linuxKernel.packages.linux_6_12.r8125
+  #   ];
 
   age.secrets = {
     id_ed25519 = {
