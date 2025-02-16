@@ -390,16 +390,16 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1739468982,
-        "narHash": "sha256-MUPC7AIQwtqP+7/T4Z6HbpuLagB1ytzMY2PmxpvzRWo=",
-        "owner": "NixOS",
+        "lastModified": 1739656280,
+        "narHash": "sha256-cmlbw65yXyDd0/S0nZ9wwdTCN6ysrAh8z0teZiCJMs0=",
+        "owner": "GZGavinZhao",
         "repo": "nixpkgs",
-        "rev": "74b68c6fa478ceacd1e1b520c34b613dbc223c16",
+        "rev": "1fb5b8a1da939b2163f6afa98a40060fef3779cf",
         "type": "github"
       },
       "original": {
-        "owner": "NixOS",
-        "ref": "master",
+        "owner": "GZGavinZhao",
+        "ref": "gzgz-rocm-update",
         "repo": "nixpkgs",
         "type": "github"
       }

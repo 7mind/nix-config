@@ -6101,6 +6101,11 @@
     "command" : "jumpToNextSnippetPlaceholder"
   },
   {
+    "when" : "hasNextTabstop && inSnippetMode && textInputFocus",
+    "key" : "enter",
+    "command" : "jumpToNextSnippetPlaceholder"
+  },
+  {
     "when" : "hasPrevTabstop && inSnippetMode && textInputFocus",
     "key" : "shift+tab",
     "command" : "jumpToPrevSnippetPlaceholder"

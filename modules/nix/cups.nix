@@ -1,4 +1,4 @@
-{ pkgs, lib, config, ... }: {
+{ pkgs, lib, config, cfg-meta, ... }: {
   options = {
     smind.environment.cups.enable = lib.mkOption {
       type = lib.types.bool;
@@ -22,16 +22,28 @@
 
     programs.system-config-printer.enable = true;
 
+
+    # https://github.com/NixOS/nixpkgs/issues/78535#issuecomment-2200268221
+    services.printing.drivers = lib.singleton (pkgs.linkFarm "drivers" [
+      {
+        name = "share/cups/model/BrotherDCP.ppd";
+        path = "${cfg-meta.paths.private}/BrotherDCP.ppd";
+      }
+    ]);
+
     hardware.printers = {
       ensurePrinters = [
         {
           name = "Brother";
           location = "Home";
           deviceUri = "ipp://printer.local:631/ipp/print";
-          model = "everywhere";
-          ppdOptions = {
-            "Duplex" = "DuplexNoTumble";
-          };
+          # offline printer hack
+          model = "BrotherDCP.ppd";
+          # Initial setup
+          # model = "everywhere";
+          # ppdOptions = {
+          #   "Duplex" = "DuplexNoTumble";
+          # };
         }
       ];
       ensureDefaultPrinter = "Brother";

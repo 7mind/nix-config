@@ -1,18 +1,4 @@
 { pkgs, lib, config, ... }:
-# let
-#   pinPackage =
-#     { name
-#     , commit
-#     , sha256
-#     ,
-#     }:
-#     (import
-#       (builtins.fetchTarball {
-#         inherit sha256;
-#         url = "https://github.com/NixOS/nixpkgs/archive/${commit}.tar.gz";
-#       })
-#       { system = pkgs.system; }).${name};
-# in
 {
   options = {
     smind.llm.enable = lib.mkOption {
@@ -24,7 +10,6 @@
 
   config = lib.mkIf config.smind.llm.enable {
     environment.systemPackages = with pkgs; [
-      lmstudio
       jan
     ];
 
@@ -32,28 +17,20 @@
       enable = true;
       package = pkgs.ollama-rocm;
 
-      # https://github.com/NixOS/nixpkgs/issues/375910
-      # package = (pinPackage {
-      #   name = "ollama";
-      #   commit = "d0169965cf1ce1cd68e50a63eabff7c8b8959743";
-      #   sha256 = "sha256:1hh0p0p42yqrm69kqlxwzx30m7i7xqw9m8f224i3bm6wsj4dxm05";
-      # });
-
       rocmOverrideGfx = "11.0.0";
       acceleration = "rocm";
       port = 11434;
 
       loadModels = [
-        "llama3.3"
-        "llama3.1:8b"
+        "llama3.3:70b"
 
         "nomic-embed-text"
 
-        "deepseek-r1:32b"
+        "deepseek-r1:70b"
 
-        "qwen2.5:32b"
+        "qwen2.5:72b"
         "qwen2.5-coder:32b"
-        "Yinr/qwen2.5-agi:32b" # uncensored
+        "huihui_ai/qwen2.5-abliterate:72b" # uncensored
       ];
 
       environmentVariables = {
@@ -62,10 +39,10 @@
       };
     };
 
-    #services.tabby = {
-    #  enable = true;
-    #  acceleration = "rocm";
-    #};
+    # services.tabby = {
+    #   enable = true;
+    #   acceleration = "rocm";
+    # };
 
     services.open-webui = {
       enable = true;

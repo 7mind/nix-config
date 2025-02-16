@@ -32,6 +32,8 @@
 
       tokei
       cloc
+
+      python3
     ];
   };
 

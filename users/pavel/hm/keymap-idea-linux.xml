@@ -78,6 +78,20 @@
     <!--cursorTop-->
     <keyboard-shortcut first-keystroke="ctrl home"/>
   </action>
+  <action id="continue.rejectDiff">
+    <!--continue:reject-diff-->
+    <keyboard-shortcut first-keystroke="ctrl shift back_space"/>
+  </action>
+  <action id="continue.focusContinueInput">
+    <!--continue:add-to-query-->
+    <keyboard-shortcut first-keystroke="ctrl j" second-keystroke="ctrl a"/>
+    <keyboard-shortcut first-keystroke="ctrl j" second-keystroke="a"/>
+  </action>
+  <action id="continue.newContinueSession">
+    <!--continue:new-session-->
+    <keyboard-shortcut first-keystroke="ctrl j" second-keystroke="ctrl n"/>
+    <keyboard-shortcut first-keystroke="ctrl j" second-keystroke="n"/>
+  </action>
   <action id="CompileProject">
     <!--build.rebuild-->
     <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="ctrl r"/>
@@ -240,6 +254,12 @@
     <keyboard-shortcut first-keystroke="ctrl shift z"/>
     <!--redo-->
     <keyboard-shortcut first-keystroke="ctrl y"/>
+  </action>
+  <action id="NextTemplateVariable">
+    <!--jumpToNextSnippetPlaceholder-->
+    <keyboard-shortcut first-keystroke="tab"/>
+    <!--jumpToNextSnippetPlaceholder-->
+    <keyboard-shortcut first-keystroke="enter"/>
   </action>
   <action id="GotoSymbol">
     <!--workbench.action.gotoSymbol-->
@@ -562,6 +582,11 @@
     <keyboard-shortcut first-keystroke="ctrl k" second-keystroke="ctrl n"/>
     <keyboard-shortcut first-keystroke="ctrl k" second-keystroke="n"/>
   </action>
+  <action id="continue.inlineEdit">
+    <!--continue:quick-edit-->
+    <keyboard-shortcut first-keystroke="ctrl j" second-keystroke="ctrl j"/>
+    <keyboard-shortcut first-keystroke="ctrl j" second-keystroke="j"/>
+  </action>
   <action id="EditorPreviousWordWithSelection">
     <!--cursorWordLeftSelect-->
     <keyboard-shortcut first-keystroke="shift alt left"/>
@@ -602,6 +627,15 @@
   <action id="StepOver">
     <!--workbench.action.debug.stepOver-->
     <keyboard-shortcut first-keystroke="f10"/>
+  </action>
+  <action id="continue.acceptDiff">
+    <!--continue:accept-diff-->
+    <keyboard-shortcut first-keystroke="ctrl shift enter"/>
+  </action>
+  <action id="continue.focusContinueInputWithoutClear">
+    <!--continue:add-to-query-no-clear-->
+    <keyboard-shortcut first-keystroke="ctrl j" second-keystroke="ctrl b"/>
+    <keyboard-shortcut first-keystroke="ctrl j" second-keystroke="b"/>
   </action>
   <action id="ToggleLineBreakpoint">
     <!--editor.debug.action.toggleBreakpoint-->
@@ -685,7 +719,11 @@
   <action id="Console.History.Browse"/>
   <action id="DebugClass"/>
   <action id="ResizeToolWindowLeft"/>
+  <action id="com.github.continuedev.continueintellijextension.autocomplete.PartialAcceptAutocompleteAction"/>
+  <action id="continue.rejectVerticalDiffBlock"/>
+  <action id="continue.openMorePage"/>
   <action id="XDebugger.JumpToTypeSource"/>
+  <action id="com.github.continuedev.continueintellijextension.autocomplete.CancelAutocompleteAction"/>
   <action id="FileChooser.TogglePathBar"/>
   <action id="ToggleReadOnlyAttribute"/>
   <action id="ExpandLiveTemplateByTab"/>
@@ -759,13 +797,13 @@
   <action id="EditSourceInNewWindow"/>
   <action id="Diff.ShowDiff"/>
   <action id="FileChooser.GotoProject"/>
+  <action id="continue.acceptVerticalDiffBlock"/>
   <action id="ToggleBookmark7"/>
   <action id="ActivateFavoritesToolWindow"/>
   <action id="Vcs.RollbackChangedLines"/>
   <action id="SearchEverywhere.NavigateToNextGroup"/>
   <action id="Diff.NextChange"/>
   <action id="ExpandAllToLevel3"/>
-  <action id="NextTemplateVariable"/>
   <action id="ToggleBookmarkWithMnemonic"/>
   <action id="Synchronize"/>
   <action id="ActivateVersionControlToolWindow"/>
@@ -831,6 +869,7 @@
   <action id="RunCoverage"/>
   <action id="ActivateUnitTestsToolWindow"/>
   <action id="SwitcherIterateItems"/>
+  <action id="com.github.continuedev.continueintellijextension.autocomplete.AcceptAutocompleteAction"/>
   <action id="ExpandToLevel3"/>
   <action id="ToggleTemporaryLineBreakpoint"/>
   <action id="HippieBackwardCompletion"/>
@@ -854,18 +893,21 @@
   <action id="Console.Execute"/>
   <action id="HippieCompletion"/>
   <action id="EditorJoinLines"/>
-  <action id="FileChooser.GotoModule"/>
   <action id="Console.History.Previous"/>
   <action id="CloseGotItTooltip"/>
   <action id="ExpandAllToLevel2"/>
   <action id="XDebugger.NewWatch"/>
   <action id="ViewSource"/>
+  <action id="continue.openAccountDialog"/>
   <action id="PreviousEditorTab"/>
+  <action id="continue.openConfigPage"/>
+  <action id="FileChooser.GotoModule"/>
   <action id="NextEditorTab"/>
   <action id="ChangeTypeSignature"/>
   <action id="MoveElementLeft"/>
   <action id="XDebugger.SetValue"/>
   <action id="ExpandAllRegions"/>
+  <action id="continue.viewHistory"/>
   <action id="CompareTwoFiles"/>
   <action id="FocusEditor"/>
   <action id="Git.Reword.Commit"/>

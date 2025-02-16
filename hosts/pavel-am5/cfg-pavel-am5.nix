@@ -8,6 +8,47 @@
       (import_if_exists "${cfg-meta.paths.private}/pavel/cfg-nix.nix")
     ];
 
+  nix.buildMachines = [
+    {
+      hostName = "pavel-nix.home.7mind.io";
+      system = "x86_64-linux";
+      protocol = "ssh-ng";
+      sshUser = "root";
+      maxJobs = 2;
+      sshKey = "${config.age.secrets.builder-key.path}";
+      publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSUxqclA0bHIrV1NnTDNrNWVBNis0Q0dZbXR6NlVpdEltWSszUkFSYU0wcnkgcm9vdEBmcmVzaG5peAo=";
+      speedFactor = 32;
+      supportedFeatures = [ "benchmark" "big-parallel" "kvm" ];
+      mandatoryFeatures = [ ];
+    }
+    {
+      hostName = "vm.home.7mind.io";
+      system = "x86_64-linux";
+      protocol = "ssh-ng";
+      sshUser = "root";
+      maxJobs = 1;
+      sshKey = "${config.age.secrets.builder-key.path}";
+      publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSURRWkVOWnVzZUl6aFhrYnZNYnFhVS91ZlM0WExXOTV5WS9EUHJvZG5ZVmIgcm9vdEBuaXhvcwo=";
+      speedFactor = 2;
+      supportedFeatures = [ "nixos-test" "benchmark" "big-parallel" "kvm" ];
+      mandatoryFeatures = [ ];
+    }
+  ];
+
+  nix.distributedBuilds = true;
+  nix.extraOptions = ''
+    	  builders-use-substitutes = true
+    	'';
+
+  nix = {
+    settings = {
+      max-jobs = 4;
+      cores = 16;
+      allowed-users = [ "root" "pavel" ];
+      trusted-users = [ "root" "pavel" ];
+    };
+  };
+
   smind = {
     roles.desktop.generic-gnome = true;
 
@@ -49,6 +90,12 @@
       group = "users";
     };
 
+    builder-key = {
+      rekeyFile = "${cfg-meta.paths.secrets}/pavel/builder-key.age";
+      owner = "pavel";
+      group = "users";
+    };
+
     "id_ed25519.pub" = {
       rekeyFile = "${cfg-meta.paths.secrets}/pavel/id_ed25519.pub.age";
       owner = "pavel";
@@ -57,8 +104,8 @@
 
     nexus-oss-sonatype = {
       rekeyFile = "${cfg-meta.paths.secrets}/pavel/nexus-oss-sonatype.age";
-      owner = "pavel";
-      group = "users";
+      owner = "root";
+      group = "nixbld";
       mode = "440";
     };
   };
