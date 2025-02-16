@@ -2,8 +2,10 @@
   programs.git = {
     userName = "Pavel Shirshov";
     userEmail = "pshirshov@eml.cc";
+
     signing.signByDefault = false;
     signing.key = "FF6A100B";
+    signing.format = "ssh";
 
     difftastic = {
       enable = true;
@@ -26,7 +28,7 @@
       "mergetool \"vscode\"".cmd = "code --wait $MERGED";
       "mergetool \"smerge\"".cmd =
         ''cmd = smerge mergetool "$BASE" "$LOCAL" "$REMOTE" -o "$MERGED"'';
-        
+
       #"mergetool \"p4mergetool\"".cmd =
       #  "p4merge $PWD/$BASE $PWD/$REMOTE $PWD/$LOCAL $PWD/$MERGED";
     };
