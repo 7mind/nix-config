@@ -42,11 +42,18 @@
 
   nix = {
     settings = {
-      max-jobs = 4;
-      cores = 16;
+      max-jobs = 2;
+      cores = 12;
       allowed-users = [ "root" "pavel" ];
       trusted-users = [ "root" "pavel" ];
     };
+  };
+
+  podman = {
+    enable = true;
+    dockerCompat = true;
+    # extraPackages = with pkgs; [ aardvark-dns netavark zfs ];
+    # defaultNetwork.settings.dns_enabled = true;
   };
 
   smind = {

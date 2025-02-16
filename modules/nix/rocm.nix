@@ -11,15 +11,11 @@
     # pytorch is broken:
     # https://github.com/NixOS/nixpkgs/blob/c8fadee69d99c39795e50754c1d0f4fb9b24cd65/pkgs/development/python-modules/torch/default.nix#L227
     # should be unblocked by: https://github.com/NixOS/nixpkgs/pull/367695
-    nixpkgs.config.rocmSupport = true;
-
-    nixpkgs.config.packageOverrides = pkgs: rec {
-      rocmPackages_6 = pkgs.rocmPackages_6.gfx11;
+    # nixpkgs.config.rocmSupport = true;
+    
+    nixpkgs.config.packageOverrides = pkgs: {
+      rocmPackages_6 = pkgs.rocmPackages_6.gfx1100;
     };
-
-    # nixpkgs.config.packageOverrides = pkgs: {
-    #   rocmPackages_6 = pkgs.rocmPackages_6.gfx1100;
-    # };
 
     hardware.amdgpu = {
       opencl.enable = true;
