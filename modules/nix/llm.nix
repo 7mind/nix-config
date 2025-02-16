@@ -11,6 +11,9 @@
   config = lib.mkIf config.smind.llm.enable {
     environment.systemPackages = with pkgs; [
       jan
+      aichat
+      alpaca
+      gollama
     ];
 
     services.ollama = {
