@@ -22,7 +22,9 @@
       enable = true;
       package = pkgs.ollama-rocm;
 
-      rocmOverrideGfx = "11.0.0";
+      # rocmOverrideGfx = "11.0.0";
+      rocmOverrideGfx = "10.0.0";
+
       acceleration = "rocm";
       port = 11434;
 
