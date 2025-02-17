@@ -22,7 +22,7 @@
       enable = true;
       package = pkgs.ollama-rocm;
 
-      # rocmOverrideGfx = "11.0.0";
+      rocmOverrideGfx = "11.0.0";
       # rocmOverrideGfx = "10.3.0";
 
       acceleration = "rocm";
@@ -46,7 +46,7 @@
 
       environmentVariables = {
         OLLAMA_SCHED_SPREAD = "true";
-        HSA_OVERRIDE_GFX_VERSION_0 = "11.0.0";
+        # HSA_OVERRIDE_GFX_VERSION_0 = "11.0.0";
         HSA_OVERRIDE_GFX_VERSION_1 = "10.3.0";
         #ROCR_VISIBLE_DEVICES = "0";
       };
