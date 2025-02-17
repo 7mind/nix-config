@@ -9,18 +9,18 @@
     ];
 
   nix.buildMachines = [
-    {
-      hostName = "pavel-nix.home.7mind.io";
-      system = "x86_64-linux";
-      protocol = "ssh-ng";
-      sshUser = "root";
-      maxJobs = 2;
-      sshKey = "${config.age.secrets.builder-key.path}";
-      publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSUxqclA0bHIrV1NnTDNrNWVBNis0Q0dZbXR6NlVpdEltWSszUkFSYU0wcnkgcm9vdEBmcmVzaG5peAo=";
-      speedFactor = 32;
-      supportedFeatures = [ "benchmark" "big-parallel" "kvm" ];
-      mandatoryFeatures = [ ];
-    }
+    # {
+    #   hostName = "pavel-nix.home.7mind.io";
+    #   system = "x86_64-linux";
+    #   protocol = "ssh-ng";
+    #   sshUser = "root";
+    #   maxJobs = 2;
+    #   sshKey = "${config.age.secrets.builder-key.path}";
+    #   publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSUxqclA0bHIrV1NnTDNrNWVBNis0Q0dZbXR6NlVpdEltWSszUkFSYU0wcnkgcm9vdEBmcmVzaG5peAo=";
+    #   speedFactor = 32;
+    #   supportedFeatures = [ "benchmark" "big-parallel" "kvm" ];
+    #   mandatoryFeatures = [ ];
+    # }
     # {
     #   hostName = "vm.home.7mind.io";
     #   system = "x86_64-linux";
