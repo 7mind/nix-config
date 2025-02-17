@@ -8,6 +8,10 @@
       (import_if_exists "${cfg-meta.paths.private}/pavel/cfg-nix.nix")
     ];
 
+  nixpkgs.config.permittedInsecurePackages = [
+    "fluffychat-linux-1.23.0"
+    "olm-3.2.16"
+  ];
   nix.buildMachines = [
     # {
     #   hostName = "pavel-nix.home.7mind.io";
