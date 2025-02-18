@@ -57,6 +57,12 @@
     #   acceleration = "rocm";
     # };
 
+    networking.firewall = {
+      allowedTCPPorts = [
+        8188 # comfyui
+      ];
+    };
+
     services.open-webui = {
       enable = true;
       environment = {

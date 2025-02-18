@@ -161,7 +161,6 @@
 
   home.packages = with pkgs; [
     element-desktop
-    fluffychat
     cinny-desktop
 
     bitwarden-desktop
