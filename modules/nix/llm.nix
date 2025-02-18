@@ -36,9 +36,12 @@
         "deepseek-r1:32b"
         "deepseek-r1:70b"
 
-        "qwen2.5:32b"
+        "qwen2.5-coder:14b"
         "qwen2.5-coder:32b"
+
+        "qwen2.5:32b"
         "huihui_ai/qwen2.5-abliterate:32b" # uncensored
+
         "qwen2.5:72b"
         "huihui_ai/qwen2.5-abliterate:72b" # uncensored
 
