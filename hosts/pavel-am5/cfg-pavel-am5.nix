@@ -25,8 +25,14 @@
 
   services = {
     samba = {
+      # add user: sudo smbpasswd -a pavel
+      # change password: sudo smbpasswd -U pavel
+      # connect: smbclient //pavel-am5/Home
       enable = true;
       openFirewall = true;
+      securityType = "user";
+
+
       settings = {
         global = {
           security = "user";
@@ -51,6 +57,11 @@
           "comment" = "Home directory";
         };
       };
+    };
+
+    samba-wsdd = {
+      enable = true;
+      openFirewall = true;
     };
   };
 
