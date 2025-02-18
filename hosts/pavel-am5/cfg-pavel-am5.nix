@@ -12,37 +12,7 @@
     "fluffychat-linux-1.23.0"
     "olm-3.2.16"
   ];
-  nix.buildMachines = [
-    # {
-    #   hostName = "pavel-nix.home.7mind.io";
-    #   system = "x86_64-linux";
-    #   protocol = "ssh-ng";
-    #   sshUser = "root";
-    #   maxJobs = 2;
-    #   sshKey = "${config.age.secrets.builder-key.path}";
-    #   publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSUxqclA0bHIrV1NnTDNrNWVBNis0Q0dZbXR6NlVpdEltWSszUkFSYU0wcnkgcm9vdEBmcmVzaG5peAo=";
-    #   speedFactor = 32;
-    #   supportedFeatures = [ "benchmark" "big-parallel" "kvm" ];
-    #   mandatoryFeatures = [ ];
-    # }
-    # {
-    #   hostName = "vm.home.7mind.io";
-    #   system = "x86_64-linux";
-    #   protocol = "ssh-ng";
-    #   sshUser = "root";
-    #   maxJobs = 1;
-    #   sshKey = "${config.age.secrets.builder-key.path}";
-    #   publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSURRWkVOWnVzZUl6aFhrYnZNYnFhVS91ZlM0WExXOTV5WS9EUHJvZG5ZVmIgcm9vdEBuaXhvcwo=";
-    #   speedFactor = 2;
-    #   supportedFeatures = [ "nixos-test" "benchmark" "big-parallel" "kvm" ];
-    #   mandatoryFeatures = [ ];
-    # }
-  ];
 
-  nix.distributedBuilds = true;
-  nix.extraOptions = ''
-    	  builders-use-substitutes = true
-    	'';
 
   nix = {
     settings = {
@@ -53,11 +23,35 @@
     };
   };
 
-  virtualisation.podman = {
-    enable = true;
-    dockerCompat = true;
-    # extraPackages = with pkgs; [ aardvark-dns netavark zfs ];
-    # defaultNetwork.settings.dns_enabled = true;
+  services = {
+    samba = {
+      enable = true;
+      openFirewall = true;
+      settings = {
+        global = {
+          security = "user";
+          "workgroup" = "AD";
+          "guest account" = "nobody";
+          "map to guest" = "bad user";
+        };
+
+        Home = {
+          path = "/home/pavel";
+          "vfs objects" = "streams_xattr";
+          "public" = "no";
+          "browseable" = "yes";
+          "writeable" = "yes";
+          "printable" = "no";
+          "guest ok" = "no";
+          "read list" = "pavel";
+          "write list" = "pavel";
+          "force group" = "users";
+          #"force directory mode" = "0770";
+          #"force create mode" = "0660";
+          "comment" = "Home directory";
+        };
+      };
+    };
   };
 
   smind = {
@@ -92,6 +86,8 @@
 
     kernel.hack-rtl8125.enable = true;
     llm.enable = true;
+    docker.enable = true;
+    infra.nix-build.enable = true;
   };
 
   age.secrets = {

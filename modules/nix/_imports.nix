@@ -3,9 +3,11 @@
   ./bootloader-grub.nix
   ./bootloader-lanzaboote.nix
   ./bootloader-systemd.nix
+  ./builders.nix
   ./cpu.nix
   ./email.nix
   ./cups.nix
+  ./docker.nix
   ./env-settings-linux.nix
   ./env-settings.nix
   ./fonts-apple.nix
