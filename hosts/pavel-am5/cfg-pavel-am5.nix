@@ -87,7 +87,8 @@
     hw.uhk-keyboard.enable = true;
     hw.trezor.enable = true;
     hw.ledger.enable = true;
-
+    hw.bluetooth.enable = true;
+    
     isDesktop = true;
     hw.cpu.isAmd = true;
     hw.rocm.enable = true;

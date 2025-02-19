@@ -1,5 +1,6 @@
 [
   ./alien-filesystems.nix
+  ./bluetooth.nix
   ./bootloader-grub.nix
   ./bootloader-lanzaboote.nix
   ./bootloader-systemd.nix

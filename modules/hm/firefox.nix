@@ -379,6 +379,19 @@
                 definedAliases = [ "@hm" ];
               };
 
+              "Ollama" = {
+                urls = [{
+                  template =
+                    "https://ollama.com/search";
+                  params = [{
+                    name = "q";
+                    value = "{searchTerms}";
+                  }];
+                }];
+                icon = "https://ollama.com/public/icon-32x32.png";
+                definedAliases = [ "@llm" ];
+              };
+
               # missing searches: nur, flakehub
 
               "btdig" = {
