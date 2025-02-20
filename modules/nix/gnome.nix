@@ -155,6 +155,7 @@
       dconf-editor
       seahorse
       gnome-firmware
+      gnome-remote-desktop
     ]);
 
     services.gnome = {
