@@ -155,14 +155,21 @@
       dconf-editor
       seahorse
       gnome-firmware
-      gnome-remote-desktop
+      # gnome-remote-desktop
     ]);
 
-    systemd.services.gnome-remote-desktop = {
-      wantedBy = [ "graphical.target" ];
-    };
+    # systemd.services.gnome-remote-desktop = {
+    #   wantedBy = [ "graphical.target" ];
+    # };
+
+    services.xrdp.enable = true;
+    services.xrdp.defaultWindowManager = "${pkgs.icewm}/bin/icewm";
     networking.firewall.allowedTCPPorts = [ 3389 ];
     networking.firewall.allowedUDPPorts = [ 3389 ];
+  systemd.targets.sleep.enable = false;
+  systemd.targets.suspend.enable = false;
+  systemd.targets.hibernate.enable = false;
+  systemd.targets.hybrid-sleep.enable = false;
 
     services.gnome = {
       gnome-settings-daemon.enable = true;
@@ -171,7 +178,7 @@
       core-shell.enable = true;
       core-developer-tools.enable = true;
       sushi.enable = true;
-      gnome-remote-desktop.enable = true;
+      # gnome-remote-desktop.enable = true;
       gnome-keyring.enable = true;
     };
 
