@@ -162,10 +162,11 @@
     #   wantedBy = [ "graphical.target" ];
     # };
 
-    services.xrdp.enable = true;
-    services.xrdp.defaultWindowManager = "${pkgs.icewm}/bin/icewm";
-    networking.firewall.allowedTCPPorts = [ 3389 ];
-    networking.firewall.allowedUDPPorts = [ 3389 ];
+    #services.xrdp.enable = true;
+    #services.xrdp.defaultWindowManager = "${pkgs.icewm}/bin/icewm";
+    #networking.firewall.allowedTCPPorts = [ 3389 ];
+    #networking.firewall.allowedUDPPorts = [ 3389 ];
+
   systemd.targets.sleep.enable = false;
   systemd.targets.suspend.enable = false;
   systemd.targets.hibernate.enable = false;
