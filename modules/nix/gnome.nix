@@ -115,7 +115,7 @@
         #   [
         #     xdg-desktop-portal-gtk
         #     # kdePackages.xdg-desktop-portal-kde
-        #     # xdg-desktop-portal-gnome
+        #     # xdg-dnesktop-portal-gnome
         #     # lxqt.xdg-desktop-portal-lxqt
         #   ];
       };
@@ -157,6 +157,10 @@
       gnome-firmware
       gnome-remote-desktop
     ]);
+
+    systemd.services.gnome-remote-desktop = {
+      wantedBy = [ "graphical.target" ];
+    };
 
     services.gnome = {
       gnome-settings-daemon.enable = true;
