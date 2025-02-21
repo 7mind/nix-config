@@ -161,6 +161,8 @@
     systemd.services.gnome-remote-desktop = {
       wantedBy = [ "graphical.target" ];
     };
+    networking.firewall.allowedTCPPorts = [ 3389 ];
+    networking.firewall.allowedUDPPorts = [ 3389 ];
 
     services.gnome = {
       gnome-settings-daemon.enable = true;
