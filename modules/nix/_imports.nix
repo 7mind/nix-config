@@ -34,6 +34,7 @@
   ./ssh-safe.nix
   ./state-version.nix
   ./sudo.nix
+  ./tailscale.nix
   ./trezor.nix
   ./uhk-keyboard.nix
   ./virt-manager.nix

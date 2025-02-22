@@ -80,6 +80,7 @@
     zfs.initrd-unlock.enable = true;
 
     net.main-interface = "enp8s0";
+    net.tailscale.enable = true;
 
     ssh.permissive = false;
     ssh.safe = true;
@@ -88,7 +89,7 @@
     hw.trezor.enable = true;
     hw.ledger.enable = true;
     hw.bluetooth.enable = true;
-    
+
     isDesktop = true;
     hw.cpu.isAmd = true;
     hw.rocm.enable = true;
