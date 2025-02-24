@@ -13,6 +13,7 @@
     virtualisation.podman = {
       enable = true;
       dockerCompat = true;
+      dockerSocket.enable = true;
       # extraPackages = with pkgs; [ aardvark-dns netavark zfs ];
       # defaultNetwork.settings.dns_enabled = true;
     };

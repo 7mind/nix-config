@@ -450,6 +450,10 @@
     <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="ctrl d"/>
     <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="d"/>
   </action>
+  <action id="com.github.continuedev.continueintellijextension.autocomplete.AcceptAutocompleteAction">
+    <!--accept-suggestion-->
+    <keyboard-shortcut first-keystroke="ctrl alt enter"/>
+  </action>
   <action id="EditorCloneCaretAbove">
     <!--editor.action.insertCursorAbove-->
     <keyboard-shortcut first-keystroke="ctrl shift up"/>
@@ -869,7 +873,6 @@
   <action id="RunCoverage"/>
   <action id="ActivateUnitTestsToolWindow"/>
   <action id="SwitcherIterateItems"/>
-  <action id="com.github.continuedev.continueintellijextension.autocomplete.AcceptAutocompleteAction"/>
   <action id="ExpandToLevel3"/>
   <action id="ToggleTemporaryLineBreakpoint"/>
   <action id="HippieBackwardCompletion"/>

@@ -5280,6 +5280,10 @@
     "when" : "config.gitlens.views.scm.grouped.views.launchpad && !gitlens:views:scm:grouped:welcome && focusedView == 'gitlens.views.scm.grouped'"
   },
   {
+    "key" : "ctrl+alt+enter",
+    "command" : "editor.action.inlineSuggest.commit"
+  },
+  {
     "when" : "editorFocus && renameInputVisible && !isComposing",
     "key" : "enter",
     "command" : "acceptRenameInput"
