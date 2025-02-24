@@ -179,6 +179,7 @@
         # "corectrl"
         # "wireshark"
         "ssh-users"
+        "podman"
       ];
       openssh.authorizedKeys.keys = cfg-const.ssh-keys-pavel;
     };
