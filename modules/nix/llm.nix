@@ -30,6 +30,10 @@
 
       loadModels = [
         "nomic-embed-text"
+        "mxbai-embed-large"
+
+        "linux6200/bge-reranker-v2-m3"
+
 
         "huihui_ai/llama3.3-abliterated:70b"
         "huihui_ai/deepseek-r1-abliterated:32b"
