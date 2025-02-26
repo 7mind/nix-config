@@ -49,6 +49,8 @@
         "llava-llama3:8b"
         "llama3.2-vision:11b"
         "Drews54/llama3.2-vision-abliterated:11b"
+
+        "phi4:14b"
       ];
 
       environmentVariables = {
