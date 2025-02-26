@@ -49,10 +49,10 @@
       ];
 
       environmentVariables = {
-        OLLAMA_NEW_ENGINE = "true";
+        OLLAMA_NEW_ENGINE = "1";
         OLLAMA_CONTEXT_LENGTH = "8192";
-        OLLAMA_FLASH_ATTENTION = "true";
-        # OLLAMA_SCHED_SPREAD = "true";
+        OLLAMA_FLASH_ATTENTION = "1";
+        OLLAMA_SCHED_SPREAD = "1";
         # HSA_OVERRIDE_GFX_VERSION_0 = "11.0.0";
         # HSA_OVERRIDE_GFX_VERSION_1 = "10.3.0";
         #ROCR_VISIBLE_DEVICES = "0";
