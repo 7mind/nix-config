@@ -35,16 +35,20 @@
 
         "deepseek-r1:32b"
         "deepseek-r1:70b"
+        "r1-1776:72b" # uncensored (basic)
 
         "qwen2.5-coder:14b"
         "qwen2.5-coder:32b"
 
         "qwen2.5:32b"
-        "huihui_ai/qwen2.5-abliterate:32b" # uncensored
+        "huihui_ai/qwen2.5-abliterate:32b" # uncensored (abliterated)
 
         "qwen2.5:72b"
-        "huihui_ai/qwen2.5-abliterate:72b" # uncensored
+        "huihui_ai/qwen2.5-abliterate:72b" # uncensored (abliterated)
 
+        "llava-llama3:8b"
+        "llama3.2-vision:11b"
+        "Drews54/llama3.2-vision-abliterated:11b"
       ];
 
       environmentVariables = {
