@@ -31,27 +31,17 @@
       loadModels = [
         "nomic-embed-text"
 
-        "llama3.3:70b"
-
-        "deepseek-r1:32b"
-        # "deepseek-r1:70b"
-        "r1-1776:72b" # uncensored (basic)
-
+        "huihui_ai/llama3.3-abliterated:70b"
+        "huihui_ai/deepseek-r1-abliterated:32b"
+        "huihui_ai/deepseek-r1-abliterated:70b"
         "huihui_ai/qwen2.5-coder-abliterate:14b"
         "huihui_ai/qwen2.5-coder-abliterate:32b"
-
-        #"qwen2.5:32b"
-        "huihui_ai/qwen2.5-abliterate:32b" # uncensored (abliterated)
-
-        #"qwen2.5:72b"
-        "huihui_ai/qwen2.5-abliterate:72b" # uncensored (abliterated)
+        "huihui_ai/qwen2.5-abliterate:32b"
+        "huihui_ai/qwen2.5-abliterate:72b"
+        "huihui_ai/phi4-abliterated:14b"
 
         "llava-llama3:8b"
-        #"llama3.2-vision:11b"
         "Drews54/llama3.2-vision-abliterated:11b"
-
-        #"phi4:14b"
-        "huihui_ai/phi4-abliterated"
       ];
 
       environmentVariables = {
