@@ -49,7 +49,7 @@
       ];
 
       environmentVariables = {
-        OLLAMA_NEW_ENGINE = "1";
+        OLLAMA_NEW_ENGINE = "0";
         OLLAMA_CONTEXT_LENGTH = "8192";
         OLLAMA_FLASH_ATTENTION = "1";
         OLLAMA_SCHED_SPREAD = "0";
@@ -76,6 +76,9 @@
       environment = {
         OLLAMA_API_BASE_URL = "http://127.0.0.1:11434";
         WEBUI_AUTH = "False";
+        ANONYMIZED_TELEMETRY = "False";
+        DO_NOT_TRACK = "True";
+        SCARF_NO_ANALYTICS = "True";
       };
     };
   };
