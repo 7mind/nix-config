@@ -22,6 +22,10 @@
       enable = true;
       package = pkgs.ollama-rocm;
 
+      user = "ollama";
+      group = "users";
+      home = "/var/lib/ollama";
+
       rocmOverrideGfx = "11.0.0";
       # rocmOverrideGfx = "10.3.0";
 
