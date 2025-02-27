@@ -46,6 +46,7 @@
 
         "llava-llama3:8b"
         "Drews54/llama3.2-vision-abliterated:11b"
+        "jean-luc/big-tiger-gemma:27b-v1c-Q6_K"
       ];
 
       environmentVariables = {
@@ -74,7 +75,7 @@
     services.open-webui = {
       enable = true;
       environment = {
-        OLLAMA_API_BASE_URL = "http://127.0.0.1:11434";
+        OLLAMA_API_BASE_URL = "http://0.0.0.0:11434";
         WEBUI_AUTH = "False";
         ANONYMIZED_TELEMETRY = "False";
         DO_NOT_TRACK = "True";

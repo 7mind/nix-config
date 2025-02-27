@@ -180,6 +180,7 @@
         # "wireshark"
         "ssh-users"
         "podman"
+        "ollama"
       ];
       openssh.authorizedKeys.keys = cfg-const.ssh-keys-pavel;
     };
