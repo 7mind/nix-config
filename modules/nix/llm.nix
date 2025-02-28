@@ -55,7 +55,7 @@
 
       environmentVariables = {
         OLLAMA_NEW_ENGINE = "0";
-        OLLAMA_CONTEXT_LENGTH = "8192";
+        OLLAMA_CONTEXT_LENGTH = "16384";
         OLLAMA_FLASH_ATTENTION = "1";
         OLLAMA_SCHED_SPREAD = "1";
         # HSA_OVERRIDE_GFX_VERSION_0 = "11.0.0";
