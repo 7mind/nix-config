@@ -29,18 +29,19 @@
         supportedFeatures = [ "benchmark" "big-parallel" "kvm" ];
         mandatoryFeatures = [ ];
       }
-      {
-        hostName = "vm.home.7mind.io";
-        system = "x86_64-linux";
-        protocol = "ssh-ng";
-        sshUser = "root";
-        maxJobs = 1;
-        sshKey = "${config.age.secrets.builder-key.path}";
-        publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSURRWkVOWnVzZUl6aFhrYnZNYnFhVS91ZlM0WExXOTV5WS9EUHJvZG5ZVmIgcm9vdEBuaXhvcwo=";
-        speedFactor = 2;
-        supportedFeatures = [ "benchmark" "big-parallel" "kvm" ];
-        mandatoryFeatures = [ ];
-      }
+
+      # {
+      #   hostName = "vm.home.7mind.io";
+      #   system = "x86_64-linux";
+      #   protocol = "ssh-ng";
+      #   sshUser = "root";
+      #   maxJobs = 1;
+      #   sshKey = "${config.age.secrets.builder-key.path}";
+      #   publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSURRWkVOWnVzZUl6aFhrYnZNYnFhVS91ZlM0WExXOTV5WS9EUHJvZG5ZVmIgcm9vdEBuaXhvcwo=";
+      #   speedFactor = 2;
+      #   supportedFeatures = [ "benchmark" "big-parallel" "kvm" ];
+      #   mandatoryFeatures = [ ];
+      # }
 
       {
         hostName = "o1.7mind.io";
