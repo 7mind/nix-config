@@ -83,7 +83,8 @@
       openFirewall = true;
       environment = {
         OLLAMA_API_BASE_URL = "http://0.0.0.0:11434";
-        WEBUI_AUTH = "False";
+        WEBUI_AUTH = "True";
+
         ANONYMIZED_TELEMETRY = "False";
         DO_NOT_TRACK = "True";
         SCARF_NO_ANALYTICS = "True";
