@@ -30,7 +30,6 @@
       # connect: smbclient //pavel-am5/Home
       enable = true;
       openFirewall = true;
-      securityType = "user";
 
 
       settings = {

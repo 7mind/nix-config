@@ -109,7 +109,7 @@
   # nix eval --impure --expr 'builtins.fromJSON (builtins.readFile ./my-file.json)' --json
   # nix eval --impure --expr "builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-editorFocus.json)"  > vscode-keymap-linux-editorFocus.nix
   # nix run nixpkgs#nixfmt-classic ./vscode-keymap-linux-editorFocus.nix
-  programs.vscode.keybindings =
+  programs.vscode.profiles.default.keybindings =
     if cfg-meta.isLinux then
       (builtins.fromJSON (builtins.readFile "${cfg-meta.paths.users}/pavel/hm/keymap-vscode-linux.json"))
     else

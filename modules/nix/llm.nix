@@ -16,6 +16,8 @@
       aichat
       gollama
       oterm
+
+      zluda
     ];
 
     services.ollama = {
@@ -78,6 +80,7 @@
 
     services.open-webui = {
       enable = true;
+      openFirewall = true;
       environment = {
         OLLAMA_API_BASE_URL = "http://0.0.0.0:11434";
         WEBUI_AUTH = "False";

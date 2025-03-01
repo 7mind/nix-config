@@ -27,7 +27,7 @@
         ld-libs = [ pkgs.icu pkgs.openssl ];
       };
 
-      extensions = with pkgs.vscode-extensions; [
+      profiles.default.extensions = with pkgs.vscode-extensions; [
         github.github-vscode-theme
 
         codezombiech.gitignore
@@ -95,7 +95,7 @@
         ms-vscode.cpptools
       ]);
 
-      userSettings = {
+      profiles.default.userSettings = {
         "window.titleBarStyle" = "native";
         "workbench.startupEditor" = "newUntitledFile";
         "editor.fontSize" = 14;
