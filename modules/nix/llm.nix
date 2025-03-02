@@ -17,7 +17,6 @@
       gollama
       oterm
 
-      zluda
     ];
 
     services.ollama = {
