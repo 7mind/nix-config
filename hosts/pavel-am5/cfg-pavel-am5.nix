@@ -123,8 +123,10 @@
 
     nexus-oss-sonatype = {
       rekeyFile = "${cfg-meta.paths.secrets}/pavel/nexus-oss-sonatype.age";
-      owner = "root";
-      group = "nixbld";
+      # owner = "root";
+      # group = "nixbld";
+      owner = "pavel";
+      group = "users";
       mode = "440";
     };
   };
