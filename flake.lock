@@ -390,11 +390,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1740844151,
-        "narHash": "sha256-C2TqqguEgexJTbSo4LY01tvsTWrl7+JKVAPr3ScMoKk=",
+        "lastModified": 1741021928,
+        "narHash": "sha256-aOTtD4DkPiviFRtKNH/oObXZujg7tcCfPR8f48HuTm8=",
         "owner": "LunNova",
         "repo": "nixpkgs",
-        "rev": "bda6bcbbacbd8f48e69b228b91b5541c03f7ab35",
+        "rev": "497bf52674e2587cee0b8b2b22a8706f53a2b038",
         "type": "github"
       },
       "original": {
