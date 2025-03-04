@@ -65,10 +65,10 @@
       };
     };
 
-    # services.tabby = {
-    #   enable = true;
-    #   acceleration = "rocm";
-    # };
+    services.tabby = {
+      enable = true;
+      acceleration = "rocm";
+    };
 
     networking.firewall = {
       allowedTCPPorts = [
