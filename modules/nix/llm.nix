@@ -61,7 +61,7 @@
         OLLAMA_SCHED_SPREAD = "1";
         # HSA_OVERRIDE_GFX_VERSION_0 = "11.0.0";
         # HSA_OVERRIDE_GFX_VERSION_1 = "10.3.0";
-        #ROCR_VISIBLE_DEVICES = "0";
+        ROCR_VISIBLE_DEVICES = "0";
       };
     };
 
