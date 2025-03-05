@@ -10,13 +10,12 @@
 
   config = lib.mkIf config.smind.llm.enable {
     environment.systemPackages = with pkgs; [
-      jan
-      alpaca
-
       aichat
       gollama
       oterm
 
+      jan
+      alpaca
     ];
 
     services.ollama = {
@@ -28,7 +27,6 @@
       home = "/var/lib/ollama";
 
       rocmOverrideGfx = "11.0.0";
-      # rocmOverrideGfx = "10.3.0";
 
       acceleration = "rocm";
       port = 11434;
@@ -65,20 +63,6 @@
       };
     };
 
-    # services.tabby = {
-    #   enable = true;
-    #   acceleration = "rocm";
-    #   # https://github.com/TabbyML/registry-tabby
-    #   model = "Qwen2.5-Coder-14B";
-    # };
-
-    networking.firewall = {
-      allowedTCPPorts = [
-        8188 # comfyui
-        8189 # comfyui
-      ];
-    };
-
     services.open-webui = {
       enable = true;
       openFirewall = true;
@@ -91,6 +75,20 @@
         SCARF_NO_ANALYTICS = "True";
       };
     };
+
+    networking.firewall = {
+      allowedTCPPorts = [
+        8188 # comfyui
+        8189 # comfyui
+      ];
+    };
+
+    # services.tabby = {
+    #   enable = true;
+    #   acceleration = "rocm";
+    #   # https://github.com/TabbyML/registry-tabby
+    #   model = "Qwen2.5-Coder-14B";
+    # };
   };
 
 }
