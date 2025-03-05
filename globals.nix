@@ -127,4 +127,9 @@ rec {
     arch = "x86_64-linux";
   });
 
+  make-darwin-aarch64 = { inputs, self }: (make {
+    inherit inputs;
+    inherit self;
+    arch = "aarch64-darwin";
+  });
 }
