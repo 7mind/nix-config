@@ -3,12 +3,14 @@ rec {
 
   smind-nixos-imports = builtins.concatLists [
     (import ./lib/_imports.nix)
+    (import ./modules/nix-generic/_imports.nix)
     (import ./modules/nixos/_imports.nix)
     (import ./roles/nixos/_imports.nix)
   ];
 
   smind-darwin-imports = builtins.concatLists [
     (import ./lib/_imports.nix)
+    (import ./modules/nix-generic/_imports.nix)
     (import ./modules/darwin/_imports.nix)
     (import ./roles/darwin/_imports.nix)
   ];
@@ -116,7 +118,7 @@ rec {
           inherit specialArgs;
           system = "${arch}";
           modules = cfg-platform.flake-modules ++ [
-            {system.stateVersion = cfg-meta.state-version-system;}
+            { system.stateVersion = cfg-meta.state-version-system; }
             ./hosts/${hostname}/cfg-${hostname}.nix
           ];
         };

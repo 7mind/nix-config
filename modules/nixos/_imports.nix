@@ -10,12 +10,8 @@
   ./cups.nix
   ./docker.nix
   ./env-settings-linux.nix
-  ./env-settings.nix
-  ./fonts-apple.nix
-  ./fonts-nerd.nix
   ./gnome.nix
   ./gnome-minimal-hotkeys.nix
-  ./home-manager.nix
   ./kernel-settings.nix
   ./keyd-super-remap.nix
   ./ledger.nix
@@ -23,7 +19,6 @@
   ./locale-ie.nix
   ./networking.nix
   ./nix-ld.nix
-  ./nix.nix
   ./overlay.nix
   ./power.nix
   ./realtek-kernel-hack.nix
