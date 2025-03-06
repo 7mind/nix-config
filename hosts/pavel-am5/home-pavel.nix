@@ -162,6 +162,7 @@
   home.packages = with pkgs; [
     element-desktop
     cinny-desktop
+    nheko
 
     bitwarden-desktop
 
