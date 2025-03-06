@@ -1,4 +1,5 @@
 [
+  ./agenix-rekey.nix
   ./autostart.nix
   ./cleanups.nix
   ./dev-generic.nix

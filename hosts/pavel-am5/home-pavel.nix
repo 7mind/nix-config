@@ -63,10 +63,10 @@
 #   [ ];
 {
   imports = smind-hm.imports ++ [
-    "${cfg-meta.paths.users}/pavel/hm/git.nix"
     "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
-    inputs.agenix-rekey.homeManagerModules.default
-    (import_if_exists "${cfg-meta.paths.private}/pavel/cfg-hm.nix")
+    "${cfg-meta.paths.private}/pavel/cfg-hm.nix"
+
+    "${cfg-meta.paths.users}/pavel/hm/git.nix"
   ];
 
   age.rekey.hostPubkey = outerConfig.age.rekey.hostPubkey;

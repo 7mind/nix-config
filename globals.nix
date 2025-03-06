@@ -3,6 +3,7 @@ rec {
 
   smind-nixos-imports = builtins.concatLists [
     (import ./lib/_imports.nix)
+    (import ./modules/generic/_imports.nix)
     (import ./modules/nix-generic/_imports.nix)
     (import ./modules/nixos/_imports.nix)
     (import ./roles/nixos/_imports.nix)
@@ -10,6 +11,7 @@ rec {
 
   smind-darwin-imports = builtins.concatLists [
     (import ./lib/_imports.nix)
+    (import ./modules/generic/_imports.nix)
     (import ./modules/nix-generic/_imports.nix)
     (import ./modules/darwin/_imports.nix)
     (import ./roles/darwin/_imports.nix)
@@ -20,6 +22,7 @@ rec {
   smind-hm = {
     imports = builtins.concatLists [
       (import ./lib/_imports.nix)
+      (import ./modules/generic/_imports.nix)
       (import ./modules/hm/_imports.nix)
       (import ./roles/hm/_imports.nix)
     ];
@@ -95,7 +98,9 @@ rec {
 
       cfg-hm-modules = cfg-platform.hm-modules ++ [
         { home.stateVersion = cfg-const.state-version-hm; }
+
         inputs.agenix.homeManagerModules.default
+        inputs.agenix-rekey.homeManagerModules.default
       ];
 
       cfg-args = {

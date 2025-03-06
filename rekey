@@ -16,4 +16,7 @@ function add_all() {
 workdir
 add_all
 
-agenix  --extra-flake-params "?submodules=1" rekey
+export AGENIX_REKEY_PRIMARY_IDENTITY="age1ax4x0pwe00clawkp5zn7qdf5e2tvuu0echvachd0pv5hm8hq9qnswqpzek"
+export AGENIX_REKEY_PRIMARY_IDENTITY_ONLY=true
+
+agenix --extra-flake-params "?submodules=1" rekey
