@@ -98,17 +98,19 @@ rec {
         inputs.agenix.homeManagerModules.default
       ];
 
-      specialArgs = pkgs.lib.fix (self: {
-        inherit smind-hm;
+      cfg-args = {
+        smind-hm = [];
         inherit cfg-meta;
         inherit cfg-flakes;
         inherit cfg-packages;
         inherit cfg-hm-modules;
         inherit inputs;
         inherit cfg-const;
-        specialArgsSelfRef = self;
         import_if_exists = path: if builtins.pathExists path then import path else { }; # for some reason I can't add this into lib
-      });
+      };
+      specialArgs = cfg-args // {
+        specialArgsSelfRef = cfg-args;
+      };
     in
     {
       name = "${hostname}";

@@ -9,6 +9,7 @@
   smind = {
     darwin.sysconfig.enable = true;
     darwin.brew.enable = true;
+    home-manager.enable = true;
   };
 
   # age.secrets = {
@@ -40,7 +41,12 @@
   #   };
   # };
 
+  users.users.pavel = {
+    home = "/Users/pavel";
+    #openssh.authorizedKeys.keys = config.sshkeys.pavel-all;
+  };
 
+  system.defaults.screencapture = { location = "~/Desktop/Screenshots"; };
 
   home-manager.users.pavel = import ./home-pavel.nix;
 }
