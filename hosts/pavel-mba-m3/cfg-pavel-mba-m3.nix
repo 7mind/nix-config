@@ -3,7 +3,7 @@
 {
   imports =
     [
-      # "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
+      "${cfg-meta.paths.secrets}/pavel/age-rekey-pavel-mba-m3.nix"
     ];
 
   smind = {
@@ -43,7 +43,7 @@
 
   users.users.pavel = {
     home = "/Users/pavel";
-    #openssh.authorizedKeys.keys = config.sshkeys.pavel-all;
+    openssh.authorizedKeys.keys = cfg-const.ssh-keys-pavel;
   };
 
   system.defaults.screencapture = { location = "~/Desktop/Screenshots"; };
