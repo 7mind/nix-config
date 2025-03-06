@@ -22,6 +22,7 @@ git submodule foreach git add .
 rm -f ~/.config/VSCodium/User/*.hmbak
 
 nix build ".?submodules=1#darwinConfigurations.$(hostname -s).system" --extra-experimental-features 'nix-command flakes' --show-trace
+sudo -H --preserve-env=PATH env nix-env -p /nix/var/nix/profiles/system --set ./result
 ./result/sw/bin/darwin-rebuild activate
 
 git submodule foreach git commit -am "autosave" || true

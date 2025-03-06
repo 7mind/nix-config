@@ -9,21 +9,24 @@
     };
   };
 
-  config = lib.mkIf config.smind.darwin.brew.enable {
+  config =  {
 
-  homebrew = {
+  homebrew = lib.mkIf config.smind.darwin.brew.enable {
     enable = true;
     onActivation.autoUpdate = true;
     onActivation.upgrade = true;
     onActivation.cleanup = "zap";
     caskArgs.no_quarantine = true;
-    taps = [ "homebrew/cask-fonts" ];
+    taps = [
+      #"homebrew/cask-fonts" # dead
+    ];
+
     brews = [
-      "radare2"
-      "qt@5"
-      "nasm"
-      "bochs"
-      "pandoc"
+      # "radare2"
+      # "qt@5"
+      # "nasm"
+      # "bochs"
+      # "pandoc"
     ];
 
     casks = map (name: { name = name; greedy = true; }) [

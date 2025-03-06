@@ -8,6 +8,7 @@
 
   smind = {
     darwin.sysconfig.enable = true;
+    darwin.brew.enable = true;
   };
 
   # age.secrets = {
