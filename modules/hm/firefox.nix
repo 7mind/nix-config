@@ -1,4 +1,4 @@
-{ config, lib, pkgs, xdg_associate, ... }:
+{ config, lib, pkgs, xdg_associate, cfg-meta, ... }:
 
 {
   options = {
@@ -420,7 +420,7 @@
       };
     };
 
-    xdg = xdg_associate {
+    xdg = lib.mkIf cfg-meta.isLinux (xdg_associate {
       schemes = [
         "x-scheme-handler/http"
         "application/xhtml+xml"
@@ -428,7 +428,7 @@
         "x-scheme-handler/https"
       ];
       desktopfile = "firefox.desktop";
-    };
+    });
 
   };
 }

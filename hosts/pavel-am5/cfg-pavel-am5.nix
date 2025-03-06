@@ -4,7 +4,7 @@
   imports =
     [
       ./hardware-configuration.nix
-      "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
+      "${cfg-meta.paths.secrets}/pavel/age-rekey-pavel-am5.nix"
       (import_if_exists "${cfg-meta.paths.private}/pavel/cfg-nix.nix")
     ];
 

@@ -2,8 +2,8 @@
 
 {
   imports = smind-hm.imports++ [
-    "${cfg-meta.paths.users}/pavel/hm/git.nix"
-    "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
+    #"${cfg-meta.paths.users}/pavel/hm/git.nix"
+    "${cfg-meta.paths.secrets}/pavel/age-rekey-pavel-mba-m3.nix"
     inputs.agenix-rekey.homeManagerModules.default
     # (import_if_exists "${cfg-meta.paths.private}/pavel/cfg-hm.nix")
   ];
@@ -21,7 +21,7 @@
   home.packages = with pkgs; [
   ];
 
-  programs.zed-editor =
+ /* programs.zed-editor =
     {
       userSettings = {
         base_keymap = "None";
@@ -34,7 +34,7 @@
       (builtins.fromJSON (builtins.readFile "${cfg-meta.paths.users}/pavel/hm/keymap-vscode-linux.json"))
     else
       [ ];
-
+*/
   programs.zsh.shellAliases = {
     rmj = "find . -depth -type d \\( -name target -or -name .bloop -or -name .bsp -or -name .metals \\) -exec rm -rf {} \\;";
   };
