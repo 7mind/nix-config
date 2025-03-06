@@ -99,7 +99,7 @@ rec {
       ];
 
       cfg-args = {
-        smind-hm = [];
+        inherit smind-hm;
         inherit cfg-meta;
         inherit cfg-flakes;
         inherit cfg-packages;

@@ -1,4 +1,4 @@
-{ config, lib, pkgs, xdg_associate, ... }:
+{ config, lib, pkgs, xdg_associate, cfg-meta,... }:
 
 {
   options = {
@@ -20,7 +20,7 @@
       html.enable = true;
     };
 
-    home.packages = with pkgs; [
+    home.packages = lib.mkIf cfg-meta.isLinux ( with pkgs; [
       # productivity
       libreoffice-fresh
 
@@ -31,12 +31,12 @@
       # video
       vlc
       mpv
-    ];
+    ]);
 
     # programs.chromium.enable = true;
-    programs.librewolf.enable = true;
+    programs.librewolf.enable = lib.mkIf cfg-meta.isLinux true;
 
-    xdg = lib.mkMerge [
+    xdg = lib.mkIf cfg-meta.isLinux (lib.mkMerge [
       {
         # mimeApps = {
         #   enable = true;
@@ -211,7 +211,7 @@
         ];
         desktopfile = "vlc.desktop";
       })
-    ];
+    ]);
 
   };
 

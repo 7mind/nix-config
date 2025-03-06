@@ -1,17 +1,25 @@
 { pkgs, config, smind-hm, lib, extended_pkg, cfg-meta, inputs, nixosConfig, import_if_exists, ... }:
 
 {
-  imports = smind-hm.imports ++ [
+  imports = smind-hm.imports++ [
     "${cfg-meta.paths.users}/pavel/hm/git.nix"
     "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
     inputs.agenix-rekey.homeManagerModules.default
     (import_if_exists "${cfg-meta.paths.private}/pavel/cfg-hm.nix")
   ];
-
   smind.hm = {
-    roles.desktop = true;
+    # roles.desktop = true;
     firefox.sync-username = "pshirshov@gmail.com";
   };
+
+  programs.direnv = {
+    config = {
+      whitelist.prefix = [ "~/work" ];
+    };
+  };
+
+  home.packages = with pkgs; [
+  ];
 
   programs.zed-editor =
     {
@@ -45,15 +53,5 @@
   #     -wholename '*/JetBrains/*/keymaps' '!' -path '*/settingsSync/*' \
   #     -exec cp -f "${cfg-meta.paths.users}/pavel/hm/keymap-idea-linux.xml" {}/Magen.xml \;
   # '';
-
-
-  programs.direnv = {
-    config = {
-      whitelist.prefix = [ "~/work" ];
-    };
-  };
-
-  home.packages = with pkgs; [
-  ];
 }
 
