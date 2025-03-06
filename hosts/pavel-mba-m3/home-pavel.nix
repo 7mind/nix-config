@@ -5,10 +5,10 @@
     "${cfg-meta.paths.users}/pavel/hm/git.nix"
     "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
     inputs.agenix-rekey.homeManagerModules.default
-    (import_if_exists "${cfg-meta.paths.private}/pavel/cfg-hm.nix")
+    # (import_if_exists "${cfg-meta.paths.private}/pavel/cfg-hm.nix")
   ];
   smind.hm = {
-    # roles.desktop = true;
+    roles.desktop = true;
     firefox.sync-username = "pshirshov@gmail.com";
   };
 
