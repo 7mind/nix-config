@@ -23,7 +23,7 @@ rm -f ~/.config/VSCodium/User/*.hmbak
 
 nix build ".?submodules=1#darwinConfigurations.$(hostname -s).system" --extra-experimental-features 'nix-command flakes'
 sudo -H --preserve-env=PATH env nix-env -p /nix/var/nix/profiles/system --set ./result
-./result/sw/bin/darwin-rebuild activate
+/nix/var/nix/profiles/system/sw/bin/darwin-rebuild activate
 
 git submodule foreach git commit -am "autosave" || true
 git commit -am "autosave" || true
