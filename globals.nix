@@ -48,14 +48,14 @@ rec {
         inherit arch;
       };
 
-      cfg-meta = {
+      cfg-meta = rec {
         inherit arch;
         inherit paths;
         inherit inputs;
         isLinux = pkgs.lib.hasSuffix "-linux" arch;
         isDarwin = pkgs.lib.hasSuffix "-darwin" arch;
         hostname = hostname;
-        state-version-nixpkgs = cfg-const.state-version-nixpkgs;
+        state-version-system = if isLinux then cfg-const.state-version-nixpkgs else cfg-const.state-version-darwin;
       };
 
 
@@ -66,16 +66,19 @@ rec {
           flake-modules = smind-nixos-imports ++ [
             inputs.lanzaboote.nixosModules.lanzaboote
             inputs.nix-apple-fonts.nixosModules
+            inputs.home-manager.nixosModules.home-manager
+            inputs.agenix.nixosModules.default
+            inputs.agenix-rekey.nixosModules.default
           ];
 
           hm-modules = [
 
           ];
         } else {
-          generator = inputs.nixpkgs.lib.nixosSystem;
+          generator = inputs.darwin.lib.darwinSystem;
 
           flake-modules = smind-darwin-imports ++ [
-
+            inputs.home-manager.darwinModules.home-manager
           ];
 
           hm-modules = [
@@ -111,11 +114,7 @@ rec {
           inherit specialArgs;
           system = "${arch}";
           modules = cfg-platform.flake-modules ++ [
-            inputs.home-manager.nixosModules.home-manager
-
-            inputs.agenix.nixosModules.default
-            inputs.agenix-rekey.nixosModules.default
-
+            {system.stateVersion = cfg-meta.state-version-system;}
             ./hosts/${hostname}/cfg-${hostname}.nix
           ];
         };

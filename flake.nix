@@ -47,6 +47,7 @@
     let
       globals = import ./globals.nix;
       make-nixos-x86_64 = globals.make-nixos-x86_64 { inherit inputs; inherit self; };
+      make-darwin-aarch64 = globals.make-darwin-aarch64 { inherit inputs; inherit self; };
     in
     {
       inherit globals; # this makes this flake reusable by other flakes
@@ -54,6 +55,12 @@
       nixosConfigurations = builtins.listToAttrs
         [
           (make-nixos-x86_64 "pavel-am5")
+        ]
+      ;
+
+      darwinConfigurations = builtins.listToAttrs
+        [
+          (make-darwin-aarch64 "pavel-mba-m3")
         ]
       ;
 
