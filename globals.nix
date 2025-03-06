@@ -52,9 +52,9 @@ rec {
         inherit arch;
         inherit paths;
         inherit inputs;
+        inherit hostname;
         isLinux = pkgs.lib.hasSuffix "-linux" arch;
         isDarwin = pkgs.lib.hasSuffix "-darwin" arch;
-        hostname = hostname;
         state-version-system = if isLinux then cfg-const.state-version-nixpkgs else cfg-const.state-version-darwin;
       };
 
@@ -79,6 +79,8 @@ rec {
 
           flake-modules = smind-darwin-imports ++ [
             inputs.home-manager.darwinModules.home-manager
+            inputs.agenix.darwinModules.default
+            # inputs.agenix-rekey.nixosModules.default
           ];
 
           hm-modules = [

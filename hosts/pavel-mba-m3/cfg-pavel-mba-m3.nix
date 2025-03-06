@@ -6,8 +6,9 @@
       # "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
     ];
 
-  # smind = {
-  # };
+  smind = {
+    darwin.sysconfig.enable = true;
+  };
 
   # age.secrets = {
   #   id_ed25519 = {

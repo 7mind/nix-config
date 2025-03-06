@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+
+set -xe
+
+function workdir() {
+    ORIGIN="$(cd "$(dirname "$0")" && pwd)"
+    pushd .
+    cd "$ORIGIN"
+}
+
+function add_all() {
+    git add .
+    git submodule foreach git add .
+}
+
+workdir
+add_all
+
+git add .
+git submodule foreach git add .
+
+rm -f ~/.config/VSCodium/User/*.hmbak
+
+nix build ".?submodules=1#darwinConfigurations.$(hostname -s).system" --extra-experimental-features 'nix-command flakes' --show-trace
+./result/sw/bin/darwin-rebuild activate
+
+git submodule foreach git commit -am "autosave" || true
+git commit -am "autosave" || true
+
+popd
