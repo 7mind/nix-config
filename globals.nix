@@ -18,8 +18,6 @@ rec {
   cfg-const = const.const;
 
   smind-hm = {
-    state-version-hm = cfg-const.state-version-hm;
-
     imports = builtins.concatLists [
       (import ./lib/_imports.nix)
       (import ./modules/hm/_imports.nix)
@@ -96,6 +94,7 @@ rec {
       };
 
       cfg-hm-modules = cfg-platform.hm-modules ++ [
+        { home.stateVersion = cfg-const.state-version-hm; }
         inputs.agenix.homeManagerModules.default
       ];
 

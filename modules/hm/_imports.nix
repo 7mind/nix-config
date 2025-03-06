@@ -11,7 +11,6 @@
   ./htop.nix
   ./kitty.nix
   ./ssh.nix
-  ./state-version.nix
   ./tmux.nix
   ./vscodium.nix
   ./wezterm.nix
