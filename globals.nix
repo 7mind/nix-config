@@ -80,7 +80,7 @@ rec {
           flake-modules = smind-darwin-imports ++ [
             inputs.home-manager.darwinModules.home-manager
             inputs.agenix.darwinModules.default
-            # inputs.agenix-rekey.nixosModules.default
+            inputs.agenix-rekey.nixosModules.default
           ];
 
           hm-modules = [
