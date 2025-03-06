@@ -8,12 +8,6 @@
   };
 
   config = lib.mkIf config.smind.nix.customize {
-    # documentation.nixos.enable = true;
-    # documentation.man.enable = true;
-    # documentation.info.enable = true;
-    # documentation.doc.enable = true;
-    # documentation.dev.enable = true;
-
     nix = {
       package = pkgs.nixVersions.stable;
       gc.automatic = true;

@@ -1,4 +1,5 @@
 [
+  ./builders.nix
   ./env-settings.nix
   ./fonts-apple.nix
   ./fonts-nerd.nix

@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, cfg-meta, ... }:
 
 {
   options = {
@@ -18,12 +18,13 @@
   config = lib.mkIf config.smind.environment.sane-defaults.enable {
 
     documentation = lib.mkIf config.smind.environment.all-docs.enable {
-      # nixos.enable = true;
       man.enable = true;
       info.enable = true;
       doc.enable = true;
-      #dev.enable = true;
-    };
+    } // (if cfg-meta.isLinux then {
+      nixos.enable = true;
+      dev.enable = true;
+    } else {}) ;
 
     environment.systemPackages = with pkgs; [
 
