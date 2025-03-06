@@ -10,21 +10,21 @@
   };
 
   config = lib.mkIf config.smind.fonts.nerd.enable {
-    fonts = {
-      # optimizeForVeryHighDPI = true;
-      fontconfig = {
-        enable = true;
-        antialias = true;
-        subpixel.rgba = "rgb";
-        subpixel.lcdfilter = "light";
-        hinting.style = "slight";
-        hinting.enable = true;
-        defaultFonts.sansSerif = [ "Noto Sans" ];
-        defaultFonts.serif = [ "Noto Serif" ];
-        defaultFonts.monospace = [ "Hack Nerd Font Mono" ];
-        defaultFonts.emoji = [ "Noto Color Emoji" ];
-      };
-    };
+    # fonts = {
+    #   # optimizeForVeryHighDPI = true;
+    #   fontconfig = {
+    #     enable = true;
+    #     antialias = true;
+    #     subpixel.rgba = "rgb";
+    #     subpixel.lcdfilter = "light";
+    #     hinting.style = "slight";
+    #     hinting.enable = true;
+    #     defaultFonts.sansSerif = [ "Noto Sans" ];
+    #     defaultFonts.serif = [ "Noto Serif" ];
+    #     defaultFonts.monospace = [ "Hack Nerd Font Mono" ];
+    #     defaultFonts.emoji = [ "Noto Color Emoji" ];
+    #   };
+    # };
 
     fonts = {
       fontDir.enable = true;
