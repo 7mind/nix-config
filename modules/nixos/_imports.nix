@@ -32,7 +32,6 @@
   ./smartd.nix
   ./ssh-permissive.nix
   ./ssh-safe.nix
-  ./state-version.nix
   ./sudo.nix
   ./tailscale.nix
   ./trezor.nix
