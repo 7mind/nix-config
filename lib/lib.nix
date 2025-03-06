@@ -1,4 +1,4 @@
-{ lib, pkgs, ... }:
+args@{ lib, pkgs, cfg-meta, ... }:
 
 let
   extend_pkg = { pkg, path, defs, ... }:
@@ -50,10 +50,14 @@ let
         wrapProgram $out/${path} --set LD_LIBRARY_PATH ${lib.makeLibraryPath ld-libs}
       '';
     });
+  outerConfig =
+    if (cfg-meta.isLinux) then args.nixosConfig else args.darwinConfig;
 in
 
 {
   _module.args.extend_pkg = extend_pkg;
+
+  _module.args.outerConfig = outerConfig;
 
   _module.args.extended_pkg = extended_pkg;
 

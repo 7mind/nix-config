@@ -1,4 +1,4 @@
-{ pkgs, config, smind-hm, lib, extended_pkg, cfg-meta, inputs, nixosConfig, import_if_exists, ... }:
+{ pkgs, config, smind-hm, lib, extended_pkg, cfg-meta, inputs, outerConfig, import_if_exists, ... }:
 # let
 #   attemptJson = path:
 #     if builtins.pathExists path
@@ -69,9 +69,7 @@
     (import_if_exists "${cfg-meta.paths.private}/pavel/cfg-hm.nix")
   ];
 
-  age.rekey = {
-    hostPubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM1VvmTzQX/bvLjKEyDfGWdxGdt+3ZSy7/f6r5YAsvtS";
-  };
+  age.rekey.hostPubkey = outerConfig.age.rekey.hostPubkey;
 
   smind.hm = {
     roles.desktop = true;
@@ -128,10 +126,10 @@
 
   home.activation.createSymlinks = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     mkdir -p .ssh/
-    ln -sfn ${nixosConfig.age.secrets.id_ed25519.path} ~/.ssh/id_ed25519
-    ln -sfn ${nixosConfig.age.secrets."id_ed25519.pub".path} ~/.ssh/id_ed25519.pub
+    ln -sfn ${outerConfig.age.secrets.id_ed25519.path} ~/.ssh/id_ed25519
+    ln -sfn ${outerConfig.age.secrets."id_ed25519.pub".path} ~/.ssh/id_ed25519.pub
     mkdir -p .sbt/secrets/
-    ln -sfn ${nixosConfig.age.secrets.nexus-oss-sonatype.path} ~/.sbt/secrets/credentials.sonatype-nexus.properties
+    ln -sfn ${outerConfig.age.secrets.nexus-oss-sonatype.path} ~/.sbt/secrets/credentials.sonatype-nexus.properties
   '';
 
   home.activation.jetbrains-keymaps = lib.hm.dag.entryAfter [ "writeBoundary" ] ''

@@ -1,11 +1,11 @@
-{ pkgs, config, smind-hm, lib, extended_pkg, cfg-meta, inputs, darwinConfig, import_if_exists, ... }:
+{ pkgs, config, smind-hm, lib, extended_pkg, cfg-meta, inputs, outerConfig, import_if_exists, ... }:
 
 {
   imports = smind-hm.imports ++ [
     "${cfg-meta.paths.users}/pavel/hm/git.nix"
     "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
     inputs.agenix-rekey.homeManagerModules.default
-    # (import_if_exists "${cfg-meta.paths.private}/pavel/cfg-hm.nix")
+    (import_if_exists "${cfg-meta.paths.private}/pavel/cfg-hm.nix")
   ];
   smind.hm = {
     roles.desktop = true;
@@ -21,9 +21,7 @@
   home.packages = with pkgs; [
   ];
 
-  age.rekey = {
-    hostPubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIEyccdZT7PcV6PpudcAoYsBlQW03L4PAjAwTP/b+rGY";
-  };
+  age.rekey.hostPubkey = outerConfig.age.rekey.hostPubkey;
 
   /* programs.zed-editor =
     {
@@ -45,10 +43,10 @@
 
   home.activation.createSymlinks = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     mkdir -p .ssh/
-    ln -sfn ${darwinConfig.age.secrets.id_ed25519.path} ~/.ssh/id_ed25519
-    ln -sfn ${darwinConfig.age.secrets."id_ed25519.pub".path} ~/.ssh/id_ed25519.pub
+    ln -sfn ${outerConfig.age.secrets.id_ed25519.path} ~/.ssh/id_ed25519
+    ln -sfn ${outerConfig.age.secrets."id_ed25519.pub".path} ~/.ssh/id_ed25519.pub
     mkdir -p .sbt/secrets/
-    ln -sfn ${darwinConfig.age.secrets.nexus-oss-sonatype.path} ~/.sbt/secrets/credentials.sonatype-nexus.properties
+    ln -sfn ${outerConfig.age.secrets.nexus-oss-sonatype.path} ~/.sbt/secrets/credentials.sonatype-nexus.properties
   '';
 
   # home.activation.jetbrains-keymaps = lib.hm.dag.entryAfter [ "writeBoundary" ] ''

@@ -5,7 +5,7 @@
     [
       ./hardware-configuration.nix
       "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
-      (import_if_exists "${cfg-meta.paths.private}/pavel/cfg-nix.nix")
+      "${cfg-meta.paths.secrets}/pavel/age-secrets.nix"
     ];
 
   nixpkgs.config.permittedInsecurePackages = [
@@ -105,36 +105,6 @@
   age.rekey = {
     hostPubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM1VvmTzQX/bvLjKEyDfGWdxGdt+3ZSy7/f6r5YAsvtS";
   };
-
-  age.secrets = {
-    id_ed25519 = {
-      rekeyFile = "${cfg-meta.paths.secrets}/pavel/id_ed25519.age";
-      owner = "pavel";
-      group = "users";
-    };
-
-    builder-key = {
-      rekeyFile = "${cfg-meta.paths.secrets}/pavel/builder-key.age";
-      owner = "pavel";
-      group = "users";
-    };
-
-    "id_ed25519.pub" = {
-      rekeyFile = "${cfg-meta.paths.secrets}/pavel/id_ed25519.pub.age";
-      owner = "pavel";
-      group = "users";
-    };
-
-    nexus-oss-sonatype = {
-      rekeyFile = "${cfg-meta.paths.secrets}/pavel/nexus-oss-sonatype.age";
-      # owner = "root";
-      # group = "nixbld";
-      owner = "pavel";
-      group = "users";
-      mode = "440";
-    };
-  };
-
 
   networking.hostId = "8a9c7614";
   networking.hostName = cfg-meta.hostname;
