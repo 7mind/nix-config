@@ -27,7 +27,6 @@
     } else {}) ;
 
     environment.systemPackages = with pkgs; [
-
       # file managers
       far2l
       mc
@@ -83,7 +82,6 @@
       # system tools
       killall
       coreutils
-      #d-spy
 
       # pipe tools
       pv
@@ -100,6 +98,9 @@
       # benchmark
       stress
       hyperfine
-    ];
+    ] ++ (if cfg-meta.isLinux then with pkgs; [
+      # system tools
+      d-spy
+    ] else []);
   };
 }
