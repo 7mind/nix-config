@@ -66,7 +66,7 @@
 
       agenix-rekey = inputs.agenix-rekey.configure {
         userFlake = self;
-        nixosConfigurations = self.nixosConfigurations;
+        nixosConfigurations = self.nixosConfigurations // self.darwinConfigurations;
       };
     } // inputs.flake-utils.lib.eachDefaultSystem (system: rec {
       pkgs = import inputs.nixpkgs {

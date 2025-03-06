@@ -4,7 +4,7 @@
   imports =
     [
       ./hardware-configuration.nix
-      "${cfg-meta.paths.secrets}/pavel/age-rekey-pavel-am5.nix"
+      "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
       (import_if_exists "${cfg-meta.paths.private}/pavel/cfg-nix.nix")
     ];
 
@@ -100,6 +100,10 @@
     llm.enable = true;
     docker.enable = true;
     infra.nix-build.enable = true;
+  };
+
+  age.rekey = {
+    hostPubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM1VvmTzQX/bvLjKEyDfGWdxGdt+3ZSy7/f6r5YAsvtS";
   };
 
   age.secrets = {

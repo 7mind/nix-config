@@ -4,7 +4,7 @@
     userEmail = "pshirshov@eml.cc";
 
     signing.signByDefault = false;
-    signing.key = "${nixosConfig.age.secrets."id_ed25519.pub".path}";
+    #signing.key = "${nixosConfig.age.secrets."id_ed25519.pub".path}";
     signing.format = "ssh";
 
     difftastic = {

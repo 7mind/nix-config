@@ -64,10 +64,14 @@
 {
   imports = smind-hm.imports ++ [
     "${cfg-meta.paths.users}/pavel/hm/git.nix"
-    "${cfg-meta.paths.secrets}/pavel/age-rekey-pavel-am5.nix"
+    "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
     inputs.agenix-rekey.homeManagerModules.default
     (import_if_exists "${cfg-meta.paths.private}/pavel/cfg-hm.nix")
   ];
+
+  age.rekey = {
+    hostPubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM1VvmTzQX/bvLjKEyDfGWdxGdt+3ZSy7/f6r5YAsvtS";
+  };
 
   smind.hm = {
     roles.desktop = true;
