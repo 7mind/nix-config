@@ -4,7 +4,6 @@
   ./bootloader-grub.nix
   ./bootloader-lanzaboote.nix
   ./bootloader-systemd.nix
-  ./builders.nix
   ./cpu.nix
   ./email.nix
   ./cups.nix

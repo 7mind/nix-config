@@ -17,14 +17,15 @@
 
   config = lib.mkIf config.smind.environment.sane-defaults.enable {
 
-    documentation = lib.mkIf config.smind.environment.all-docs.enable {
-      man.enable = true;
-      info.enable = true;
-      doc.enable = true;
-    } // (if cfg-meta.isLinux then {
+    documentation = lib.mkIf config.smind.environment.all-docs.enable
+      {
+        man.enable = true;
+        info.enable = true;
+        doc.enable = true;
+      } // (if cfg-meta.isLinux then {
       nixos.enable = true;
       dev.enable = true;
-    } else {}) ;
+    } else { });
 
     environment.systemPackages = with pkgs; [
       # file managers
@@ -101,6 +102,6 @@
     ] ++ (if cfg-meta.isLinux then with pkgs; [
       # system tools
       d-spy
-    ] else []);
+    ] else [ ]);
   };
 }
