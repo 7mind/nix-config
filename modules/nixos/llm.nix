@@ -62,7 +62,7 @@
         # HSA_OVERRIDE_GFX_VERSION_1 = "11.0.0";
         # HSA_OVERRIDE_GFX_VERSION_2 = "10.3.0";
         # ROCR_VISIBLE_DEVICES = "0,1";
-        ROCR_VISIBLE_DEVICES = "2";
+        # ROCR_VISIBLE_DEVICES = "2";
       };
     };
 
