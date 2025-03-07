@@ -26,10 +26,18 @@
       group = "users";
       home = "/var/lib/ollama";
 
-      rocmOverrideGfx = "11.0.0";
 
       acceleration = "rocm";
       port = 11434;
+
+      environmentVariables = {
+        OLLAMA_NEW_ENGINE = "0";
+        OLLAMA_CONTEXT_LENGTH = "16384";
+        OLLAMA_FLASH_ATTENTION = "1";
+        OLLAMA_SCHED_SPREAD = "1";
+        HSA_OVERRIDE_GFX_VERSION_3 = "10.3.0";
+        ROCR_VISIBLE_DEVICES = "0,1";
+      };
 
       loadModels = [
         "nomic-embed-text"
@@ -52,14 +60,7 @@
         "jean-luc/big-tiger-gemma:27b-v1c-Q6_K"
       ];
 
-      environmentVariables = {
-        OLLAMA_NEW_ENGINE = "0";
-        OLLAMA_CONTEXT_LENGTH = "16384";
-        OLLAMA_FLASH_ATTENTION = "1";
-        OLLAMA_SCHED_SPREAD = "1";
-        HSA_OVERRIDE_GFX_VERSION_3 = "10.3.0";
-        # ROCR_VISIBLE_DEVICES = "2,1,0";
-      };
+
     };
 
     services.open-webui = {
