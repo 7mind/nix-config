@@ -26,7 +26,8 @@
       group = "users";
       home = "/var/lib/ollama";
 
-      rocmOverrideGfx = "11.0.0";
+      # rocmOverrideGfx = "11.0.0";
+      rocmOverrideGfx = "10.3.0";
 
       acceleration = "rocm";
       port = 11434;
@@ -60,7 +61,8 @@
         # HSA_OVERRIDE_GFX_VERSION_0 = "10.3.0";
         # HSA_OVERRIDE_GFX_VERSION_1 = "11.0.0";
         # HSA_OVERRIDE_GFX_VERSION_2 = "10.3.0";
-        ROCR_VISIBLE_DEVICES = "0,1";
+        # ROCR_VISIBLE_DEVICES = "0,1";
+        ROCR_VISIBLE_DEVICES = "2";
       };
     };
 
