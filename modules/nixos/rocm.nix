@@ -13,9 +13,9 @@
     # should be unblocked by: https://github.com/NixOS/nixpkgs/pull/367695
 
     nixpkgs.config.rocmSupport = true;
-    nixpkgs.config.packageOverrides = pkgs: {
-      rocmPackages_6 = pkgs.rocmPackages_6.gfx1100;
-    };
+    # nixpkgs.config.packageOverrides = pkgs: {
+    #   rocmPackages_6 = pkgs.rocmPackages_6.gfx1100;
+    # };
 
     hardware.amdgpu = {
       opencl.enable = true;
