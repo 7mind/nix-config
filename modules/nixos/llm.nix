@@ -36,7 +36,7 @@
         OLLAMA_FLASH_ATTENTION = "1";
         OLLAMA_SCHED_SPREAD = "1";
         HSA_OVERRIDE_GFX_VERSION_3 = "10.3.0";
-        # ROCR_VISIBLE_DEVICES = "0,1";
+        ROCR_VISIBLE_DEVICES = "0,1";
       };
 
       loadModels = [
