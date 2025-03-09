@@ -16,8 +16,6 @@
 
       jan
       alpaca
-
-      exo
     ];
 
     services.ollama = {
