@@ -33,7 +33,9 @@
       tokei
       cloc
 
-      python3
+      (pkgs.python3.withPackages (python-pkgs: [
+        python-pkgs.torchWithRocm
+      ]))
     ];
   };
 
