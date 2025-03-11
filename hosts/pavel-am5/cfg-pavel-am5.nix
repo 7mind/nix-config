@@ -123,7 +123,7 @@
   boot.loader = {
     systemd-boot = {
       windows = {
-        "11".efiDeviceHandle = "HD0b";
+        "11".efiDeviceHandle = "HD1b";
       };
     };
   };
