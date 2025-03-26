@@ -96,7 +96,7 @@
     systemd-boot.enable = true;
     lanzaboote.enable = false;
 
-    kernel.hack-rtl8125.enable = true;
+    kernel.hack-rtl8125.enable = false;
     llm.enable = true;
     docker.enable = true;
     infra.nix-build.enable = true;
