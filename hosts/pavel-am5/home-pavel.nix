@@ -1,4 +1,4 @@
-{ pkgs, config, smind-hm, lib, extended_pkg, cfg-meta, inputs, outerConfig, import_if_exists, ... }:
+{ pkgs, config, smind-hm, lib, extended_pkg, cfg-meta, xdg_associate, outerConfig, ... }:
 # let
 #   attemptJson = path:
 #     if builtins.pathExists path
@@ -89,6 +89,14 @@
       }
     ];
   };
+
+  xdg =
+    (xdg_associate {
+      schemes = [
+        "application/pdf"
+      ];
+      desktopfile = "org.gnome.Evince.desktop";
+    });
 
   programs.zed-editor =
     {
