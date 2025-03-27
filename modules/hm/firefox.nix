@@ -243,10 +243,10 @@
             engines = {
               "bing".metaData.hidden = true;
               "ebay".metaData.hidden = true;
-              "Amazon.co.uk".metaData.hidden = "@a";
+              "google".metaData.alias = "@g";
 
-              "Google".metaData.alias = "@g";
               "Wikipedia (en)".metaData.alias = "@w";
+              "Amazon.co.uk".metaData.hidden = "@a";
 
               "Kagi" = {
                 id = "kagi";
