@@ -256,7 +256,7 @@
                     value = "{searchTerms}";
                   }];
                 }];
-                iconUpdateURL = "https://kagi.com/favicon.ico";
+                icon = "https://kagi.com/favicon.ico";
                 definedAliases = [ "@k" ];
               };
 
@@ -268,7 +268,7 @@
                     value = "{searchTerms}";
                   }];
                 }];
-                iconUpdateURL = "http://search.maven.org/favicon.ico";
+                icon = "http://search.maven.org/favicon.ico";
                 #icon = "${pkgs.nixos-icons}/share/icons/hicolor/scalable/apps/nix-snowflake.svg";
                 definedAliases = [ "@m2" ];
               };

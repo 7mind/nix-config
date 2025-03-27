@@ -1,4 +1,4 @@
-{ config, lib, ... }:
+{ config, lib, pkgs, cfg-meta, ... }:
 
 {
   options = {
@@ -16,7 +16,7 @@
       timeout = 2;
       systemd-boot = {
         enable = true;
-        memtest86.enable = true;
+        memtest86.enable = pkgs.lib.hasPrefix "x86_64" cfg-meta.arch;
         edk2-uefi-shell.enable = true;
         consoleMode = "max";
         configurationLimit = 3;

@@ -45,8 +45,8 @@
 
     hardware = {
       enableRedistributableFirmware = true;
-      cpu.intel.updateMicrocode = true;
-      cpu.amd.updateMicrocode = true;
+      cpu.intel.updateMicrocode = config.smind.hw.cpu.isIntel;
+      cpu.amd.updateMicrocode = config.smind.hw.cpu.isAmd;
     };
   };
 }

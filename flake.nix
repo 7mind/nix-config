@@ -1,6 +1,6 @@
 {
   inputs = {
-    # nixpkgs.url = "github:NixOS/nixpkgs/staging-next";
+    # nixpkgs.url = "github:NixOS/nixpkgs/staging";
     nixpkgs.url = "github:LunNova/nixpkgs/rocm-update";
 
     flake-utils.url = "github:numtide/flake-utils";
@@ -47,6 +47,7 @@
     let
       globals = import ./globals.nix;
       make-nixos-x86_64 = globals.make-nixos-x86_64 { inherit inputs; inherit self; };
+      make-nixos-aarch64 = globals.make-nixos-aarch64 { inherit inputs; inherit self; };
       make-darwin-aarch64 = globals.make-darwin-aarch64 { inherit inputs; inherit self; };
     in
     {
@@ -55,6 +56,7 @@
       nixosConfigurations = builtins.listToAttrs
         [
           (make-nixos-x86_64 "pavel-am5")
+          (make-nixos-aarch64 "o1")
         ]
       ;
 

@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 
-# set -x
+set -x
 set -e
 
 declare -A known_hosts
 known_hosts["pavel-am5"]="linux pavel !"
-
-infrahosts=("nas" "vm" "o1" "o2")
+known_hosts["o1"]="linux infra o1.7mind.io"
 
 THISHOST="`hostname -s`"
 HOSTS=()

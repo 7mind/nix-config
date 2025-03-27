@@ -1,16 +1,16 @@
-{ config, lib, pkgs, xdg_associate, cfg-meta,... }:
+{ config, lib, pkgs, xdg_associate, cfg-meta, outerConfig, ... }:
 
 {
   options = {
     smind.hm.environment.sane-defaults.enable = lib.mkOption {
       type = lib.types.bool;
-      default = true;
+      default = outerConfig.smind.isDesktop;
       description = "";
     };
 
     smind.hm.environment.all-docs.enable = lib.mkOption {
       type = lib.types.bool;
-      default = true;
+      default = outerConfig.smind.isDesktop;
       description = "";
     };
   };
@@ -20,7 +20,7 @@
       html.enable = true;
     };
 
-    home.packages = lib.mkIf cfg-meta.isLinux ( with pkgs; [
+    home.packages = lib.mkIf cfg-meta.isLinux (with pkgs; [
       # productivity
       libreoffice-fresh
 
