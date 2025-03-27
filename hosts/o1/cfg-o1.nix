@@ -4,8 +4,7 @@
   imports = [
     ./hardware-configuration.nix
     "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
-    # "${cfg-meta.paths.secrets}/pavel/age-secrets.nix"
-    # "${paths.shared}/nix/roles/github-agent.nix"
+    "${cfg-meta.paths.private}/github-agent.nix"
   ];
 
   boot.kernelParams = [
