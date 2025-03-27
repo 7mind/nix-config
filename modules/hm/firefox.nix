@@ -238,17 +238,18 @@
           # https://gitlab.com/kira-bruneau/home-config/-/blob/main/package/firefox/default.nix
           search = {
             force = true;
-            default = "DuckDuckGo";
-            order = [ "DuckDuckGo" "Kagi" "Google" ];
+            default = "ddg";
+            order = [ "ddg" "kagi" "google" ];
             engines = {
-              "Bing".metaData.hidden = true;
-              "eBay".metaData.hidden = true;
+              "bing".metaData.hidden = true;
+              "ebay".metaData.hidden = true;
               "Amazon.co.uk".metaData.hidden = "@a";
 
               "Google".metaData.alias = "@g";
               "Wikipedia (en)".metaData.alias = "@w";
 
               "Kagi" = {
+                id = "kagi";
                 urls = [{
                   template = "https://kagi.com/search";
                   params = [{
@@ -292,7 +293,7 @@
                   ];
                 }];
                 #icon = "${pkgs.nixos-icons}/share/icons/hicolor/scalable/apps/nix-snowflake.svg";
-                iconUpdateURL = "https://github.com/favicon.ico";
+                icon = "https://github.com/favicon.ico";
                 definedAliases = [ "@gh" ];
               };
 
