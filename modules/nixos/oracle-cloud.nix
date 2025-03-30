@@ -19,13 +19,5 @@
 
     boot.loader.systemd-boot.enable = true;
     boot.loader.efi.canTouchEfiVariables = true;
-
-    smind = {
-      hw.cpu.isArm = true;
-      systemd-boot.enable = true;
-      isDesktop = false;
-      roles.desktop.generic-gnome = false;
-
-    };
   };
 }

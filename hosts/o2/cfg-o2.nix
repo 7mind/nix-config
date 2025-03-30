@@ -40,7 +40,7 @@
   home-manager.users.root = import ./home-root.nix;
 
   smind = {
-    hw.oracle-cloud.enable = true;
+    roles.server.oracle-cloud = true;
 
     locale.ie.enable = true;
 
