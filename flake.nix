@@ -57,6 +57,7 @@
         [
           (make-nixos-x86_64 "pavel-am5")
           (make-nixos-aarch64 "o1")
+          (make-nixos-aarch64 "o2")
         ]
       ;
 

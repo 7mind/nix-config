@@ -5,14 +5,19 @@
     ./hardware-configuration.nix
     "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
     "${cfg-meta.paths.private}/modules/nix/github-agent.nix"
+    "${cfg-meta.paths.private}/modules/nix/wg-o2.nix"
   ];
 
   networking = {
-    hostName = "o1";
+    hostName = "o2";
     domain = "7mind.io";
-    hostId = "aabb0001";
+    hostId = "aabb0002";
+
+    useNetworkd = true;
+
     useDHCP = false;
     interfaces.enp0s6.useDHCP = true;
+
     firewall.enable = true;
   };
 
@@ -25,16 +30,12 @@
   };
 
   age.rekey = {
-    hostPubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMrnWmWxAkng1zx6KcQuGaJgCRVaLch9xMvkVzSe+6zI";
+    hostPubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFODTDmFlPuJ3XHW24LYLcJrTZF5+fg6HNUiHKKuJXfD";
   };
+
 
   environment.systemPackages = with pkgs; [
   ];
-
-  # Copy the NixOS configuration file and link it from the resulting system
-  # (/run/current-system/configuration.nix). This is useful in case you
-  # accidentally delete configuration.nix.
-  # system.copySystemConfiguration = true;
 
   home-manager.users.root = import ./home-root.nix;
 
@@ -51,7 +52,6 @@
 
     ssh.permissive = false;
     ssh.safe = true;
-
 
     router.enable = true;
 

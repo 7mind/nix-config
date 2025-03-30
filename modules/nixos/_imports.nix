@@ -18,6 +18,7 @@
   ./locale-ie.nix
   ./networking.nix
   ./nix-ld.nix
+  ./oracle-cloud.nix
   ./overlay.nix
   ./power.nix
   ./realtek-kernel-hack.nix
