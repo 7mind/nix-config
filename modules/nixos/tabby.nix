@@ -89,17 +89,11 @@ in
       wantedBy = [ "multi-user.target" ];
       description = "Self-hosted AI coding assistant using large language models";
       after = [ "network.target" ];
-      environment =
-        {
-          TABBY_ROOT = "%S/tabby";
-          TABBY_DISABLE_USAGE_COLLECTION =
-            if !cfg.usageCollection
-            then "1"
-            else "0";
-        }
-        // lib.optionalAttrs (cfg.acceleration == "sycl") {
-          ZES_ENABLE_SYSMAN = "1";
-        };
+
+      environment.TABBY_ROOT = "%S/tabby";
+      environment.TABBY_DISABLE_USAGE_COLLECTION = if !cfg.usageCollection then "1" else "0";
+      environment.ZES_ENABLE_SYSMAN = lib.optionalString (cfg.acceleration == "sycl") "1";
+
       preStart = "cp -f /etc/tabby/config.toml \${TABBY_ROOT}/config.toml";
       serviceConfig = {
         WorkingDirectory = "/var/lib/tabby";

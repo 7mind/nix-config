@@ -91,6 +91,8 @@
       # https://github.com/TabbyML/registry-tabby
       # model = "Qwen2.5-Coder-14B";
 
+      # TABBY_WEBSERVER_JWT_TOKEN_SECRET
+
       settings = {
         model.chat.http = {
           kind = "openai/chat";
@@ -99,7 +101,7 @@
         };
         model.completion.http = {
           kind = "ollama/completion";
-          model_name = "huihui_ai/qwen2.5-coder-abliterate:14b";
+          model_name = "huihui_ai/qwen2.5-coder-abliterate:32b";
           api_endpoint = "http://localhost:11434";
           prompt_template = "<|fim_prefix|>{prefix}<|fim_suffix|>{suffix}<|fim_middle|>";
         };
