@@ -95,7 +95,7 @@
         model.chat.http = {
           kind = "openai/chat";
           model_name = "huihui_ai/deepseek-r1-abliterated:32b";
-          api_endpoint = "http://localhost:11434/v1";
+          api_endpoint = "http://localhost:11434";
         };
         model.completion.http = {
           kind = "ollama/completion";
