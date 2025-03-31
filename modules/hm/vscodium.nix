@@ -231,6 +231,13 @@
               "path" = "${graal-legacy.graalvm19-ce-js.out}";
             }
           ];
+
+
+          "tabby.endpoint" = "http://localhost:11029";
+          "tabby.config.telemetry" = false;
+          "tabby.inlineCompletion.triggerMode" = "manual";
+
+          "direnv.restart.automatic" = true;
         };
       };
 

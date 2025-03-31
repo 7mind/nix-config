@@ -245,7 +245,7 @@
               "ebay".metaData.hidden = true;
               "google".metaData.alias = "@g";
 
-              "Wikipedia (en)".metaData.alias = "@w";
+              "wikipedia".metaData.alias = "@w";
               "Amazon.co.uk".metaData.hidden = "@a";
 
               "Kagi" = {

@@ -84,12 +84,32 @@
       ];
     };
 
-    # services.tabby = {
-    #   enable = true;
-    #   acceleration = "rocm";
-    #   # https://github.com/TabbyML/registry-tabby
-    #   model = "Qwen2.5-Coder-14B";
-    # };
+    services.tabby-extended = {
+      enable = true;
+      acceleration = "rocm";
+
+      # https://github.com/TabbyML/registry-tabby
+      # model = "Qwen2.5-Coder-14B";
+
+      settings = {
+        model.chat.http = {
+          kind = "openai/chat";
+          model_name = "huihui_ai/deepseek-r1-abliterated:32b";
+          api_endpoint = "http://localhost:11434/v1";
+        };
+        model.completion.http = {
+          kind = "ollama/completion";
+          model_name = "huihui_ai/qwen2.5-coder-abliterate:14b";
+          api_endpoint = "http://localhost:11434";
+          prompt_template = "<|fim_prefix|>{prefix}<|fim_suffix|>{suffix}<|fim_middle|>";
+        };
+        model.embedding.http = {
+          kind = "ollama/embedding";
+          model_name = "mxbai-embed-large";
+          api_endpoint = "http://localhost:11434";
+        };
+      };
+    };
   };
 
 }
