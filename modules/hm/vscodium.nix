@@ -75,7 +75,8 @@
         redhat.java
 
         continue.continue
-
+        rooveterinaryinc.roo-cline
+        
         # vscjava.vscode-java-pack
         # missing: anycode*,
       ] ++ pkgs.vscode-utils.extensionsFromVscodeMarketplace [

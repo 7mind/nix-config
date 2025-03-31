@@ -185,6 +185,10 @@
     (extended_pkg {
       pkg = jetbrains.idea-ultimate;
       path = "bin/idea-ultimate";
+      paths = [
+        nodejs_23
+      ];
+
       ld-libs = [
         libmediainfo
         xorg.libX11
@@ -205,6 +209,7 @@
       path = "bin/rider";
       paths = [
         dotnet-sdk_9
+        nodejs_23
       ];
       ld-libs = [
         libmediainfo
@@ -222,6 +227,10 @@
     (extended_pkg rec {
       pkg = jetbrains.clion;
       path = "bin/clion";
+      paths = [
+        nodejs_23
+      ];
+
       ld-libs = [
         libGL
         libglvnd
