@@ -16,6 +16,7 @@
 
       jan
       alpaca
+      tabby
     ];
 
     services.ollama = {
@@ -83,12 +84,12 @@
       ];
     };
 
-    services.tabby = {
-      enable = true;
-      acceleration = "rocm";
-      # https://github.com/TabbyML/registry-tabby
-      model = "Qwen2.5-Coder-14B";
-    };
+    # services.tabby = {
+    #   enable = true;
+    #   acceleration = "rocm";
+    #   # https://github.com/TabbyML/registry-tabby
+    #   model = "Qwen2.5-Coder-14B";
+    # };
   };
 
 }
