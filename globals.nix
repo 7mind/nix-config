@@ -30,7 +30,11 @@ rec {
 
   make = { self, inputs, arch }: hostname:
     let
-      pkgs = inputs.nixpkgs.legacyPackages."${arch}";
+      # pkgs = inputs.nixpkgs.legacyPackages."${arch}";
+      pkgs = import inputs.nixpkgs {
+        system = arch;
+        config.allowUnfree = true;
+      };
 
       paths = {
         root = "${self}";
@@ -72,6 +76,8 @@ rec {
             inputs.home-manager.nixosModules.home-manager
             inputs.agenix.nixosModules.default
             inputs.agenix-rekey.nixosModules.default
+
+            { nixpkgs.overlays = [ inputs.nix-vscode-extensions.overlays.default ]; }
           ];
 
           hm-modules = [
@@ -84,6 +90,8 @@ rec {
             inputs.home-manager.darwinModules.home-manager
             inputs.agenix.darwinModules.default
             inputs.agenix-rekey.nixosModules.default
+            { nixpkgs.overlays = [ inputs.nix-vscode-extensions.overlays.default ]; }
+
           ];
 
           hm-modules = [
