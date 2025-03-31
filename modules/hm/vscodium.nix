@@ -79,22 +79,11 @@
           rooveterinaryinc.roo-cline
 
           pkgs.open-vsx.tabbyml.vscode-tabby
+          pkgs.open-vsx.septimalmind.baboon-vscode
+          pkgs.open-vsx.septimalmind.idealingua1
 
           # vscjava.vscode-java-pack
           # missing: anycode*,
-        ] ++ pkgs.vscode-utils.extensionsFromVscodeMarketplace [
-          {
-            name = "baboon-vscode";
-            publisher = "SeptimalMind";
-            version = "0.0.7";
-            sha256 = "sha256-ilRSjlYdfMGkDS6ROWxQZvhDXjm9BWM9qAm1i+oaRrc=";
-          }
-          {
-            name = "idealingua1";
-            publisher = "SeptimalMind";
-            version = "0.0.5";
-            sha256 = "sha256-9vxtMNTf7VCGwesjGD6oxxsKZzqCBRPRjBXRkA3U/SA=";
-          }
         ] ++ (if cfg-meta.isDarwin then [ ] else [
           ms-vscode.cpptools
         ]);
