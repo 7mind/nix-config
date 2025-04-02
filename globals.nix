@@ -133,7 +133,8 @@ rec {
           system = "${arch}";
           modules = cfg-platform.flake-modules ++ [
             { system.stateVersion = cfg-meta.state-version-system; }
-            ./hosts/${hostname}/cfg-${hostname}.nix
+            (cfg-args.import_if_exists ./hosts/${hostname}/cfg-${hostname}.nix)
+            (cfg-args.import_if_exists ./private/hosts/${hostname}/cfg-${hostname}.nix)
           ];
         };
     };
