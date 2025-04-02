@@ -112,6 +112,14 @@
         };
       };
     };
+
+
+    systemd.services.tabby = {
+      unitConfig = {
+        Wants = [ "ollama.service" ];
+        After = [ "ollama.service" ];
+      };
+    };
   };
 
 }

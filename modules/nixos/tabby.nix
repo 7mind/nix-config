@@ -95,6 +95,9 @@ in
       environment.ZES_ENABLE_SYSMAN = lib.optionalString (cfg.acceleration == "sycl") "1";
 
       preStart = "cp -f /etc/tabby/config.toml \${TABBY_ROOT}/config.toml";
+      unitConfig = {
+
+      };
       serviceConfig = {
         WorkingDirectory = "/var/lib/tabby";
         StateDirectory = [ "tabby" ];
