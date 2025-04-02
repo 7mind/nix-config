@@ -120,6 +120,7 @@
         After = [ "ollama.service" ];
       };
     };
+
   };
 
 }
