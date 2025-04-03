@@ -79,6 +79,7 @@
     zfs.initrd-unlock.enable = true;
 
     net.main-interface = "enp8s0";
+    net.main-macaddr = "d0:94:66:55:aa:11";
     net.tailscale.enable = true;
 
     ssh.permissive = false;

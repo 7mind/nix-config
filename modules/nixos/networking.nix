@@ -5,7 +5,14 @@
       default = false;
       description = "";
     };
+
     smind.net.desktop.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = config.smind.net.enable && config.smind.isDesktop;
+      description = "";
+    };
+
+    smind.net.upnp.enable = lib.mkOption {
       type = lib.types.bool;
       default = config.smind.net.enable && config.smind.isDesktop;
       description = "";
@@ -21,6 +28,12 @@
       default = "br-main";
       description = "";
     };
+
+    smind.net.main-macaddr = lib.mkOption {
+      type = lib.types.str;
+      default = "";
+      description = "";
+    };
   };
 
   config = lib.mkMerge [
@@ -28,7 +41,12 @@
       assertions =
         [
           ({
-            assertion = config.smind.net.main-interface != "";
+            assertion = !config.smind.net.enable ||
+              (
+                config.smind.net.main-interface != "" &&
+                  config.smind.net.main-macaddr != ""
+              )
+            ;
             message = "set config.smind.net.main-interface";
           })
         ];
@@ -76,7 +94,7 @@
             DHCP = "yes";
 
             linkConfig = {
-              MACAddress = "d0:94:66:55:aa:11";
+              MACAddress = "${config.smind.net.main-macaddr}";
               RequiredForOnline = "routable";
             };
 
@@ -115,6 +133,16 @@
       };
     })
 
+    (lib.mkIf config.smind.net.upnp.enable {
+      networking = {
+        firewall = {
+          allowedUDPPorts = [
+            1900 # UPnP service discovery
+          ];
+        };
+      };
+    })
+
     (lib.mkIf config.smind.net.desktop.enable {
       networking = {
         networkmanager = {
@@ -134,12 +162,6 @@
 
         wireless.iwd.enable = true;
         wireless.enable = false;
-
-        firewall = {
-          allowedUDPPorts = [
-            1900 # UPnP service discovery
-          ];
-        };
       };
 
       systemd.services.NetworkManager-wait-online.enable = false;

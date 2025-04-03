@@ -46,7 +46,7 @@
     host.email.to = "team@7mind.io";
     host.email.sender = "${config.networking.hostName}@home.7mind.io";
 
-    net.main-interface = "enp0s6";
+    #net.main-interface = "enp0s6";
     net.tailscale.enable = true;
 
     ssh.permissive = false;

@@ -59,6 +59,9 @@
       nixosConfigurations = builtins.listToAttrs
         [
           (make-nixos-x86_64 "pavel-am5")
+          (make-nixos-x86_64 "vm")
+          (make-nixos-x86_64 "nas")
+
           (make-nixos-aarch64 "o1")
           (make-nixos-aarch64 "o2")
         ]
