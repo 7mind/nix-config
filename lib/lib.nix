@@ -66,7 +66,7 @@ let
     in
     mergedFunc;
 
-  mk_container = outercfg: offset: deep_merge [
+  mk_container = offset: outercfg: deep_merge [
     {
       autoStart = true;
       privateNetwork = true;
