@@ -181,8 +181,6 @@
     vlc
     telegram-desktop
 
-    tomboy-ng
-
     (extended_pkg {
       pkg = jetbrains.idea-ultimate;
       path = "bin/idea-ultimate";

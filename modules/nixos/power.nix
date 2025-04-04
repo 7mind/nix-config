@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, deep_merge, ... }:
 
 {
   options = {
@@ -14,7 +14,7 @@
     };
   };
 
-  config = lib.mkMerge [
+  config = deep_merge [
     (lib.mkIf config.smind.power-management.enable {
       boot = {
         # TODO: we need to verify if that's completely safe or not

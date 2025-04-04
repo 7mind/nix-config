@@ -1,4 +1,4 @@
-{ config, lib, pkgs, xdg_associate, cfg-meta, outerConfig, ... }:
+{ config, lib, pkgs, xdg_associate, cfg-meta, outerConfig, deep_merge, ... }:
 
 {
   options = {
@@ -36,7 +36,7 @@
     # programs.chromium.enable = true;
     programs.librewolf.enable = lib.mkIf cfg-meta.isLinux true;
 
-    xdg = lib.mkIf cfg-meta.isLinux (lib.mkMerge [
+    xdg = lib.mkIf cfg-meta.isLinux (deep_merge [
       {
         # mimeApps = {
         #   enable = true;

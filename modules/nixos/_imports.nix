@@ -16,6 +16,7 @@
   ./ledger.nix
   ./llm.nix
   ./locale-ie.nix
+  ./metrics.nix
   ./networking.nix
   ./nix-ld.nix
   ./oracle-cloud.nix

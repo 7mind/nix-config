@@ -1,6 +1,4 @@
 rec {
-  const = import ./config.nix;
-
   smind-nixos-imports = builtins.concatLists [
     (import ./lib/_imports.nix)
     (import ./modules/generic/_imports.nix)
@@ -17,7 +15,7 @@ rec {
     (import ./roles/darwin/_imports.nix)
   ];
 
-  cfg-const = const.const;
+
 
   smind-hm = {
     imports = builtins.concatLists [
@@ -30,11 +28,44 @@ rec {
 
   make = { self, inputs, arch }: hostname:
     let
-      # pkgs = inputs.nixpkgs.legacyPackages."${arch}";
+      import_if_exists = path: if builtins.pathExists path then import path else { };
+
+      # deep_merge = modules: pkgs.lib.foldl' pkgs.lib.recursiveUpdate { } modules;
+
+      deep_merge = list:
+        let
+          mergeTwo = a: b:
+            if pkgs.lib.isAttrs a && pkgs.lib.isAttrs b then
+              builtins.foldl'
+                (acc: key:
+                  let
+                    aVal = if builtins.hasAttr key acc then acc.${key} else null;
+                    bVal = b.${key};
+                    newVal = if aVal == null then bVal else mergeTwo aVal bVal;
+                  in
+                  acc // { "${key}" = newVal; }
+                )
+                a
+                (builtins.attrNames b)
+            else if pkgs.lib.isList a && pkgs.lib.isList b then
+              a ++ b
+            else
+            # In all other cases, the right-hand value wins.
+              b;
+        in
+        builtins.foldl' mergeTwo { } list;
+
       pkgs = import inputs.nixpkgs {
         system = arch;
         config.allowUnfree = true;
       };
+
+      const = import ./config.nix;
+
+      cfg-const = deep_merge [
+        const.const
+        (import_if_exists ./private/config.nix)
+      ];
 
       paths = {
         root = "${self}";
@@ -119,7 +150,8 @@ rec {
         inherit cfg-hm-modules;
         inherit inputs;
         inherit cfg-const;
-        import_if_exists = path: if builtins.pathExists path then import path else { }; # for some reason I can't add this into lib
+        inherit import_if_exists;
+        inherit deep_merge;
       };
       specialArgs = cfg-args // {
         specialArgsSelfRef = cfg-args;

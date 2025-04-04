@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, deep_merge, ... }:
 
 {
   options = {
@@ -15,7 +15,7 @@
     };
   };
 
-  config = lib.mkMerge [
+  config = deep_merge [
     (lib.mkIf config.smind.environment.linux.sane-defaults.enable
       {
         boot = {

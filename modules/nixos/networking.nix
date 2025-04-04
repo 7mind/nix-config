@@ -1,4 +1,4 @@
-{ pkgs, lib, config, cfg-meta, ... }: {
+{ lib, config, cfg-meta, deep_merge, ... }: {
   options = {
     smind.net.enable = lib.mkOption {
       type = lib.types.bool;
@@ -36,7 +36,7 @@
     };
   };
 
-  config = lib.mkMerge [
+  config = deep_merge [
     {
       assertions =
         [
