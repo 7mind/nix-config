@@ -66,7 +66,7 @@ let
     in
     mergedFunc;
 
-  mk_container = offset: outercfg: deep_merge [
+  mk_container = outercfg: deep_merge [
     {
       autoStart = true;
       privateNetwork = true;
@@ -75,13 +75,15 @@ let
         inherit cfg-const;
       };
 
+      privateUsers = 65536 * outercfg.privateUsersMultiplier;
+
       extraFlags = [
-        "--private-users=${toString (65536 * offset)}:65536"
+        # "--private-users=${toString (65536 * offset)}:65536"
         "--private-users-ownership=chown"
       ];
     }
 
-    outercfg
+    (builtins.removeAttrs outercfg [ "privateUsersMultiplier" ])
 
     {
       config = merge_nixpkgs_modules [
