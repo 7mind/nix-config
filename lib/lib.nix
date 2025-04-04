@@ -66,7 +66,7 @@ let
     in
     mergedFunc;
 
-  mk_container = outercfg: deep_merge [
+  mk_container = outercfg: offset: deep_merge [
     {
       autoStart = true;
       privateNetwork = true;
@@ -74,6 +74,11 @@ let
         inherit cfg-meta;
         inherit cfg-const;
       };
+
+      extraFlags = [
+        "--private-users=${toString (65536 * offset)}:65536"
+        "--private-users-ownership=chown"
+      ];
     }
 
     outercfg
