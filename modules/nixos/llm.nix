@@ -12,7 +12,7 @@
     environment.systemPackages = with pkgs; [
       aichat
       gollama
-      oterm
+      # oterm
 
       jan
       alpaca

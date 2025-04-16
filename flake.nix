@@ -1,14 +1,14 @@
 {
   inputs = {
-    # nixpkgs.url = "github:NixOS/nixpkgs/staging";
-    nixpkgs.url = "github:LunNova/nixpkgs/rocm-update";
+    nixpkgs.url = "github:NixOS/nixpkgs/master";
+    # nixpkgs.url = "github:LunNova/nixpkgs/rocm-update";
 
     flake-utils.url = "github:numtide/flake-utils";
 
     lanzaboote.url = "github:nix-community/lanzaboote/v0.4.1";
     lanzaboote.inputs.nixpkgs.follows = "nixpkgs";
 
-    home-manager.url = "github:nix-community/home-manager";
+    home-manager.url = "github:nix-community/home-manager/cba2f9ce95c8d10b66cacf05a275e3ad71959638";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
 
     nix-vscode-extensions.url = "github:nix-community/nix-vscode-extensions";
