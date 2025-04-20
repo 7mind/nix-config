@@ -32,6 +32,7 @@
       rocmOverrideGfx = "11.0.0";
 
       environmentVariables = {
+        OLLAMA_DEBUG = "1";
         OLLAMA_NEW_ENGINE = "0";
         OLLAMA_CONTEXT_LENGTH = "16384";
         OLLAMA_FLASH_ATTENTION = "1";
