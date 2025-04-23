@@ -119,11 +119,11 @@
   # nix eval --impure --expr 'builtins.fromJSON (builtins.readFile ./my-file.json)' --json
   # nix eval --impure --expr "builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-editorFocus.json)"  > vscode-keymap-linux-editorFocus.nix
   # nix run nixpkgs#nixfmt-classic ./vscode-keymap-linux-editorFocus.nix
-  # programs.vscode.profiles.default.keybindings =
-  #   if cfg-meta.isLinux then
-  #     (builtins.fromJSON (builtins.readFile "${cfg-meta.paths.users}/pavel/hm/keymap-vscode-linux.json"))
-  #   else
-  #     [ ];
+  programs.vscode.profiles.default.keybindings =
+    if cfg-meta.isLinux then
+      (builtins.fromJSON (builtins.readFile "${cfg-meta.paths.users}/pavel/hm/keymap-vscode-linux.json"))
+    else
+      [ ];
 
   programs.zsh.shellAliases = {
     rmj = "find . -depth -type d \\( -name target -or -name .bloop -or -name .bsp -or -name .metals \\) -exec rm -rf {} \\;";
