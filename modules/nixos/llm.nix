@@ -11,12 +11,14 @@
   config = lib.mkIf config.smind.llm.enable {
     environment.systemPackages = with pkgs; [
       aichat
-      yek
       gollama
       # oterm
 
+      yek
+      gitingest
+
       jan
-      alpaca
+      # alpaca
       tabby
     ];
 

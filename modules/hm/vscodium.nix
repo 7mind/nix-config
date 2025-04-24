@@ -28,7 +28,7 @@
           ld-libs = [ pkgs.icu pkgs.openssl ];
         };
 
-        profiles.default.extensions = with pkgs.vscode-extensions; [
+        profiles.default.extensions = with pkgs.vscode-marketplace; with pkgs.vscode-extensions; [
           github.github-vscode-theme
 
           codezombiech.gitignore
@@ -78,9 +78,14 @@
           continue.continue
           rooveterinaryinc.roo-cline
 
-          pkgs.open-vsx.tabbyml.vscode-tabby
-          pkgs.open-vsx.septimalmind.baboon-vscode
-          pkgs.open-vsx.septimalmind.idealingua1
+          # pkgs.open-vsx.tabbyml.vscode-tabby
+          # pkgs.open-vsx.septimalmind.baboon-vscode
+          # pkgs.open-vsx.septimalmind.idealingua1
+          tabbyml.vscode-tabby
+          septimalmind.baboon-vscode
+          septimalmind.idealingua1
+
+
 
           # vscjava.vscode-java-pack
           # missing: anycode*,

@@ -65,7 +65,7 @@
 
       sessionVariables = { };
 
-      initExtra = ''
+      initContent = ''
         what() {
           ls -la `which $1`
         }
