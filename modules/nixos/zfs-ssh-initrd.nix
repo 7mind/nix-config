@@ -66,7 +66,7 @@
             networks."20-${config.smind.zfs.initrd-unlock.interface}" = {
               enable = true;
               name = config.smind.zfs.initrd-unlock.interface;
-              DHCP = "yes";
+              DHCP = "ipv4";
               dhcpV4Config = {
                 SendHostname = true;
                 Hostname = config.smind.zfs.initrd-unlock.hostname;
