@@ -61,8 +61,9 @@
             enable = true;
             wait-online.enable = true;
             wait-online.timeout = 10;
+            wait-online.extraArgs = [ config.smind.zfs.initrd-unlock.interface ];
 
-            networks.bootnet = {
+            networks."20-${config.smind.zfs.initrd-unlock.interface}" = {
               enable = true;
               name = config.smind.zfs.initrd-unlock.interface;
               DHCP = "yes";
