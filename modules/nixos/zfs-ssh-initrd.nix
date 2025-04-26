@@ -68,6 +68,8 @@
             wait-online.timeout = 10;
             wait-online.extraArgs = [ config.smind.zfs.initrd-unlock.interface ];
 
+            # in fact, main config is being copied there: https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/system/boot/networkd.nix#L3306
+            # though it's mangled
             networks."20-${config.smind.zfs.initrd-unlock.interface}" = {
               enable = true;
               name = config.smind.zfs.initrd-unlock.interface;
