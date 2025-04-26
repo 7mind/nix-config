@@ -10,6 +10,9 @@
   };
 
   config = {
+    home.sessionPath = [
+      "/opt/homebrew/bin"
+    ];
 
     homebrew = lib.mkIf config.smind.darwin.brew.enable {
       enable = true;

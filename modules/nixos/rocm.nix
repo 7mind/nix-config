@@ -17,6 +17,16 @@
     #   rocmPackages_6 = pkgs.rocmPackages_6.gfx1100;
     # };
 
+    nixpkgs.overlays = [
+      (
+        self: super: {
+          python3 = super.python3.withPackages (python-pkgs: [
+            python-pkgs.torchWithRocm
+          ]);
+        }
+      )
+    ];
+
     hardware.amdgpu = {
       opencl.enable = true;
       initrd.enable = true;

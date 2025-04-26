@@ -15,8 +15,6 @@ rec {
     (import ./roles/darwin/_imports.nix)
   ];
 
-
-
   smind-hm = {
     imports = builtins.concatLists [
       (import ./lib/_imports.nix)

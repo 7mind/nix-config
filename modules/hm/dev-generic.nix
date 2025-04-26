@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, cfg-meta, ... }:
 
 {
   options = {
@@ -13,6 +13,21 @@
     home.sessionVariables = {
       DOTNET_CLI_TELEMETRY_OPTOUT = "1";
     };
+
+    home.sessionPath = [
+      "${config.home.homeDirectory}/.rd/bin"
+    ];
+
+    # programs.zsh.envExtra = lib.mkIf cfg-meta.isDarwin ''
+    #   export PATH=$PATH:~/.rd/bin
+    # '';
+
+    # programs.bash = lib.mkIf cfg-meta.isDarwin {
+    #   enable = true;
+    #   initExtra = ''
+    #     export PATH=$PATH:~/.rd/bin
+    #   '';
+    # };
 
     programs.direnv = {
       enable = true;
@@ -33,9 +48,9 @@
       tokei
       cloc
 
-      (pkgs.python3.withPackages (python-pkgs: [
-        python-pkgs.torchWithRocm
-      ]))
+      texlive.combined.scheme-full
+
+
     ];
   };
 

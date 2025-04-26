@@ -16,6 +16,7 @@
 
   config = lib.mkIf config.smind.hm.firefox.enable {
     programs.firefox = {
+      package = lib.mkIf cfg-meta.isDarwin null;
       enable = true;
       # https://github.com/mozilla/policy-templates/blob/master/linux/policies.json
       policies = {

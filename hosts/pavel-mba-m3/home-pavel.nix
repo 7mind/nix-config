@@ -23,6 +23,18 @@
 
   age.rekey.hostPubkey = outerConfig.age.rekey.hostPubkey;
 
+  programs.zsh.shellAliases = {
+    rmj = "find . -depth -type d \\( -name target -or -name .bloop -or -name .bsp -or -name .metals \\) -exec rm -rf {} \\;";
+  };
+
+  home.activation.createSymlinks = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    mkdir -p .ssh/
+    ln -sfn ${outerConfig.age.secrets.id_ed25519.path} ~/.ssh/id_ed25519
+    ln -sfn ${outerConfig.age.secrets."id_ed25519.pub".path} ~/.ssh/id_ed25519.pub
+    mkdir -p .sbt/secrets/
+    ln -sfn ${outerConfig.age.secrets.nexus-oss-sonatype.path} ~/.sbt/secrets/credentials.sonatype-nexus.properties
+  '';
+
   /* programs.zed-editor =
     {
       userSettings = {
@@ -37,17 +49,6 @@
     else
       [ ];
   */
-  programs.zsh.shellAliases = {
-    rmj = "find . -depth -type d \\( -name target -or -name .bloop -or -name .bsp -or -name .metals \\) -exec rm -rf {} \\;";
-  };
-
-  home.activation.createSymlinks = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    mkdir -p .ssh/
-    ln -sfn ${outerConfig.age.secrets.id_ed25519.path} ~/.ssh/id_ed25519
-    ln -sfn ${outerConfig.age.secrets."id_ed25519.pub".path} ~/.ssh/id_ed25519.pub
-    mkdir -p .sbt/secrets/
-    ln -sfn ${outerConfig.age.secrets.nexus-oss-sonatype.path} ~/.sbt/secrets/credentials.sonatype-nexus.properties
-  '';
 
   # home.activation.jetbrains-keymaps = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
   #   ${pkgs.findutils}/bin/find ${config.home.homeDirectory}/.config/JetBrains \
