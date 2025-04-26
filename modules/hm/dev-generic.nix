@@ -14,7 +14,8 @@
       DOTNET_CLI_TELEMETRY_OPTOUT = "1";
     };
 
-    home.sessionPath = [
+    home.sessionPath = lib.mkIf cfg-meta.isDarwin [
+      "/opt/homebrew/bin"
       "${config.home.homeDirectory}/.rd/bin"
     ];
 
