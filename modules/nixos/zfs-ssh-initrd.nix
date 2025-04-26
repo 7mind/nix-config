@@ -59,6 +59,8 @@
 
           network = {
             enable = true;
+            wait-online.enable = true;
+            wait-online.timeout = 10;
 
             networks.bootnet = {
               enable = true;

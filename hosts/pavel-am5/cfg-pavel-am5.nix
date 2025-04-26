@@ -110,6 +110,8 @@
   networking.hostId = "8a9c7614";
   networking.hostName = cfg-meta.hostname;
   networking.domain = "home.7mind.io";
+  networking.useDHCP = false;
+  # networking.interfaces.enp8s0.useDHCP = lib.mkDefault true;
 
   boot.initrd = {
     network = {
