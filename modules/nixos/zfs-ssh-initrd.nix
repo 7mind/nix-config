@@ -15,7 +15,8 @@
 
     smind.zfs.initrd-unlock.hostname = lib.mkOption {
       type = lib.types.str;
-      default = "initrd-${config.networking.hostName}.${config.networking.domain}";
+      # default = "initrd-${config.networking.hostName}.${config.networking.domain}";
+      default = "initrd-${config.networking.hostName}";
       description = "hostname to use (must differ from primary system hostname)";
     };
   };
