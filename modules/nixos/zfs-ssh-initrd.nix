@@ -45,7 +45,11 @@
           services.zfs-remote-unlock = {
             description = "Prepare for ZFS remote unlock";
             wantedBy = [ "initrd.target" ];
-            after = [ "systemd-networkd.service" ];
+            after = [
+              # "systemd-networkd.service"
+              "network-online.target"
+            ];
+            wants = [ "network-online.target" ];
 
             path = with pkgs; [
               zfs
