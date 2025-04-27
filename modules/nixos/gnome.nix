@@ -19,7 +19,8 @@
           lockAll = true; # prevents overriding
           settings = {
             "org/gnome/desktop/wm/preferences" = {
-              button-layout = ":minimize,maximize,close";
+              # button-layout = ":minimize,maximize,close";
+              button-layout = "close,minimize,maximize:";
             };
             "org/gnome/mutter/wayland" = {
               #xwayland-allow-grabs = true;
@@ -167,10 +168,10 @@
     #networking.firewall.allowedTCPPorts = [ 3389 ];
     #networking.firewall.allowedUDPPorts = [ 3389 ];
 
-  systemd.targets.sleep.enable = false;
-  systemd.targets.suspend.enable = false;
-  systemd.targets.hibernate.enable = false;
-  systemd.targets.hybrid-sleep.enable = false;
+    systemd.targets.sleep.enable = false;
+    systemd.targets.suspend.enable = false;
+    systemd.targets.hibernate.enable = false;
+    systemd.targets.hybrid-sleep.enable = false;
 
     services.gnome = {
       gnome-settings-daemon.enable = true;
