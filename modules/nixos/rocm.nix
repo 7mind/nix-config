@@ -41,6 +41,8 @@
     ];
 
     environment.systemPackages = with pkgs; [
+      nvtopPackages.amd
+
       amdgpu_top
 
       radeon-profile
