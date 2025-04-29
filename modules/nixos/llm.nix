@@ -71,6 +71,7 @@
     services.open-webui = {
       enable = true;
       openFirewall = true;
+      host = "0.0.0.0";
       environment = {
         OLLAMA_API_BASE_URL = "http://0.0.0.0:11434";
         WEBUI_AUTH = "True";
