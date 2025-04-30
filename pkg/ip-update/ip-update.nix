@@ -1,8 +1,9 @@
-{ substituteAll, lib }:
+{ substituteAll, lib, pkgs }:
 
 substituteAll {
   name = "ip-update";
   src = ./ip-update.sh;
+  aws = pkgs.awscli2;
 
   dir = "bin";
   isExecutable = true;

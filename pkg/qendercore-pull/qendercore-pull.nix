@@ -1,4 +1,4 @@
-{ substituteAll, lib, coursier }:
+{ substituteAll, lib }:
 
 substituteAll {
   name = "qendercore-pull";
