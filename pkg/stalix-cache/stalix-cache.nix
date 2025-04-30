@@ -1,11 +1,15 @@
-{ substituteAll, lib }:
+{ lib, pkgs, stdenvNoCC }:
 
-substituteAll {
+stdenvNoCC.mkDerivation {
   name = "stalix-cache";
+
   src = ./stalix-cache.sh;
 
-  dir = "bin";
-  isExecutable = true;
+  builder = pkgs.writeText "builder.sh" ''
+    mkdir -p $out/bin
+    cp $src $out/bin/$name
+    chmod +x $out/bin/$name
+  '';
 
   meta = with lib; {
     description = "stalix cache";
