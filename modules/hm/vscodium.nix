@@ -85,7 +85,7 @@
           septimalmind.baboon-vscode
           septimalmind.idealingua1
 
-
+          pkgs.open-vsx.jeanp413.open-remote-ssh
 
           # vscjava.vscode-java-pack
           # missing: anycode*,
