@@ -26,7 +26,7 @@ function set_self_ip4() {
 }
 EOT
 
-  @aws@ route53 change-resource-record-sets --hosted-zone-id "$ZONE" --change-batch file://$TMPFILE
+  @aws@/bin/aws route53 change-resource-record-sets --hosted-zone-id "$ZONE" --change-batch file://$TMPFILE
   rm "$TMPFILE"
 }
 
@@ -53,7 +53,7 @@ function set_self_ip6() {
 }
 EOT
 
-  @aws@ route53 change-resource-record-sets --hosted-zone-id "$ZONE" --change-batch file://$TMPFILE
+  @aws@/bin/aws route53 change-resource-record-sets --hosted-zone-id "$ZONE" --change-batch file://$TMPFILE
   rm "$TMPFILE"
 }
 
