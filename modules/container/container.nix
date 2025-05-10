@@ -24,7 +24,10 @@
   };
 
   networking = {
+    # Use systemd-resolved inside the container
+    # Workaround for bug https://github.com/NixOS/nixpkgs/issues/162686
     useHostResolvConf = false;
+
     enableIPv6 = false;
     useNetworkd = true;
     useDHCP = false;
