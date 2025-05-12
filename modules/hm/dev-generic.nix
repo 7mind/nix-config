@@ -51,6 +51,9 @@
 
       texlive.combined.scheme-full
 
+      # bitwarden-cli
+      rbw
+      bws
 
     ];
   };
