@@ -52,7 +52,7 @@
       texlive.combined.scheme-full
 
       # bitwarden-cli
-      rbw
+      # rbw
       bws
 
     ];
