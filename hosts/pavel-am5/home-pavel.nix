@@ -183,7 +183,7 @@
       pkg = jetbrains.idea-ultimate;
       path = "bin/idea-ultimate";
       paths = [
-        nodejs_23
+        nodejs_24
       ];
 
       ld-libs = [
@@ -206,7 +206,7 @@
       path = "bin/rider";
       paths = [
         dotnet-sdk_9
-        nodejs_23
+        nodejs_24
       ];
       ld-libs = [
         libmediainfo
@@ -225,7 +225,7 @@
       pkg = jetbrains.clion;
       path = "bin/clion";
       paths = [
-        nodejs_23
+        nodejs_24
       ];
 
       ld-libs = [
