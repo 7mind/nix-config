@@ -55,6 +55,7 @@
       }
 
       (xdg_associate {
+        desktopfile = "org.nomacs.ImageLounge.desktop";
         schemes = [
           "image/jpeg"
           "image/png"
@@ -84,10 +85,10 @@
           "image/x-xbitmap"
           "image/x-xpixmap"
         ];
-        desktopfile = "org.nomacs.ImageLounge.desktop";
       })
 
       (xdg_associate {
+        desktopfile = "vlc.desktop";
         schemes = [
           "video/x-ogm+ogg"
           "video/ogg"
@@ -133,10 +134,10 @@
           "video/x-fli"
           "video/x-flv"
         ];
-        desktopfile = "vlc.desktop";
       })
 
       (xdg_associate {
+        desktopfile = "vlc.desktop";
         schemes = [
           "audio/x-vorbis+ogg"
           "audio/ogg"
@@ -209,7 +210,6 @@
           "audio/x-s3m"
           "audio/x-xm"
         ];
-        desktopfile = "vlc.desktop";
       })
     ]);
 
