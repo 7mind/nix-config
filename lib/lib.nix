@@ -1,4 +1,4 @@
-args@{ lib, pkgs, cfg-meta, cfg-const, deep_merge, ... }:
+args@{ lib, pkgs, cfg-meta, cfg-const, ... }:
 
 let
   extend_pkg = { pkg, path, defs, ... }:
@@ -55,6 +55,40 @@ let
     if (cfg-meta.isLinux) then args.nixosConfig else args.darwinConfig;
 
 
+
+  ### shit
+  # deep_merge = modules: pkgs.lib.foldl' pkgs.lib.recursiveUpdate { } modules;
+
+  # be careful:
+  # mkIf false { ... } → { _type = "if"; condition = false; content = { ... }; }
+
+  # deep_merge = with pkgs; defs: builtins.foldl'
+  #   (acc: def: lib.recursiveUpdate acc def)
+  #   { }
+  #   defs;
+  deep_merge = list:
+    let
+      mergeTwo = a: b:
+        if pkgs.lib.isAttrs a && pkgs.lib.isAttrs b then
+          builtins.foldl'
+            (acc: key:
+              let
+                aVal = if builtins.hasAttr key acc then acc.${key} else null;
+                bVal = b.${key};
+                newVal = if aVal == null then bVal else mergeTwo aVal bVal;
+              in
+              acc // { "${key}" = newVal; }
+            )
+            a
+            (builtins.attrNames b)
+        else if pkgs.lib.isList a && pkgs.lib.isList b then
+          a ++ b
+        else
+        # In all other cases, the right-hand value wins.
+          b;
+    in
+    builtins.foldl' mergeTwo { } list;
+
   call_and_merge = funcs: args: deep_merge (map (f: f args) funcs);
 
   merge_nixpkgs_modules = funcs:
@@ -110,8 +144,6 @@ in
   _module.args.override_pkg = override_pkg;
 
   _module.args.mk_container = mk_container;
-
-  _module.args.merge_nixpkgs_modules = merge_nixpkgs_modules;
 
   _module.args.xdg_associate = input: {
     mimeApps = {
