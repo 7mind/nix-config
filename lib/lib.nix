@@ -89,10 +89,9 @@ let
     in
     builtins.foldl' mergeTwo { } list;
 
-  call_and_merge = funcs: args: deep_merge (map (f: f args) funcs);
-
   merge_nixpkgs_modules = funcs:
     let
+      call_and_merge = funcs: args: deep_merge (map (f: f args) funcs);
       argsLists = map lib.functionArgs funcs;
       mergedArgs = deep_merge argsLists;
       mergedFunc = lib.setFunctionArgs (call_and_merge funcs) mergedArgs;
