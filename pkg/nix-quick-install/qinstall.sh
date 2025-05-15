@@ -92,7 +92,7 @@ function mount_filesystems() {
   mount -t zfs zroot/root/home /mnt/home
   swapon "${TGT_SWAP}"
   mount "${TGT_BOOT}" /mnt/boot
-  set+x
+  set +x
 }
 
 function unmount_filesystems() {
