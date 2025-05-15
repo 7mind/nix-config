@@ -124,7 +124,7 @@ function install_nixos() {
 
   sed -i '/canTouchEfiVariables/d' /mnt/etc/nixos/configuration.nix
   sed -i '/systemd-boot/d' /mnt/etc/nixos/configuration.nix
-  
+
   #sed -i 's/# Include the results of the hardware scan./ .\/seed.nix .\/any.nix .\/any-nixos-generic.nix /g' /mnt/etc/nixos/configuration.nix
 
   sed -i 's/# Include the results of the hardware scan./ .\/seed.nix /g' /mnt/etc/nixos/configuration.nix
@@ -135,6 +135,7 @@ function install_nixos() {
   echo "Going to run 'nixos-install --no-root-password' in 3 seconds..."
   sleep 3
 
+  export NIX_CONFIG="experimental-features = nix-command flakes"
   nixos-install --no-root-password
 }
 
