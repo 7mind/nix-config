@@ -118,11 +118,13 @@ function install_nixos() {
   # sed -i '/\}\s*$/d' /mnt/etc/nixos/configuration.nix
   cp "${self_dir}"/../seed.nix /mnt/etc/nixos/
   cp "${self_dir}"/../seed-flake.nix /mnt/etc/nixos/flake.nix
-  cp "${self_dir}"/../any.nix /mnt/etc/nixos/
+
+  #cp "${self_dir}"/../any.nix /mnt/etc/nixos/
   #cp "${self_dir}"/../any-nixos-generic.nix /mnt/etc/nixos/
 
   sed -i '/canTouchEfiVariables/d' /mnt/etc/nixos/configuration.nix
   sed -i '/systemd-boot/d' /mnt/etc/nixos/configuration.nix
+  
   #sed -i 's/# Include the results of the hardware scan./ .\/seed.nix .\/any.nix .\/any-nixos-generic.nix /g' /mnt/etc/nixos/configuration.nix
 
   sed -i 's/# Include the results of the hardware scan./ .\/seed.nix /g' /mnt/etc/nixos/configuration.nix
