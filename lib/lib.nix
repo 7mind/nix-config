@@ -58,7 +58,7 @@ let
 
   # be careful:
   # mkIf false { ... } → { _type = "if"; condition = false; content = { ... }; }
-  # all the 
+  # and etc, all the module system functions produce some hidden fields
 
   deep_merge = list:
     let
