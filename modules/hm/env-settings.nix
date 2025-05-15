@@ -36,7 +36,7 @@
     # programs.chromium.enable = true;
     programs.librewolf.enable = lib.mkIf cfg-meta.isLinux true;
 
-    xdg = lib.mkIf cfg-meta.isLinux (deep_merge [
+    xdg = lib.mkIf cfg-meta.isLinux (lib.mkMerge [
       {
         # mimeApps = {
         #   enable = true;

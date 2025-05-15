@@ -85,17 +85,17 @@ let
 
     (builtins.removeAttrs outercfg [ "privateUsersMultiplier" ])
 
-    # {
-    #   config = merge_nixpkgs_modules [
-    #     ({ ... }: {
-    #       imports = [
-    #         "${cfg-meta.paths.modules}/container/container.nix"
-    #         "${cfg-meta.paths.modules}/nixos/overlay.nix"
-    #       ];
-    #     })
-    #     outercfg.config
-    #   ];
-    # }
+    {
+      config = merge_nixpkgs_modules [
+        ({ ... }: {
+          imports = [
+            "${cfg-meta.paths.modules}/container/container.nix"
+            "${cfg-meta.paths.modules}/nixos/overlay.nix"
+          ];
+        })
+        outercfg.config
+      ];
+    }
   ];
 in
 {

@@ -8,6 +8,7 @@
   ./email.nix
   ./cups.nix
   ./docker.nix
+  ./env-settings-linux-desktop.nix
   ./env-settings-linux.nix
   ./gnome.nix
   ./gnome-minimal-hotkeys.nix
@@ -17,10 +18,12 @@
   ./llm.nix
   ./locale-ie.nix
   ./metrics.nix
+  ./networking-desktop.nix
   ./networking.nix
   ./nix-ld.nix
   ./oracle-cloud.nix
   ./overlay.nix
+  ./power-amd.nix
   ./power.nix
   ./realtek-kernel-hack.nix
   ./rocm.nix
