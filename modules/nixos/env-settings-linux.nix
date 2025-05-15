@@ -10,7 +10,7 @@
 
     smind.environment.linux.sane-defaults.desktop.enable = lib.mkOption {
       type = lib.types.bool;
-      default = config.smind.isDesktop;
+      default = config.smind ? "isDesktop" && config.smind ? "isDesktop";
       description = "";
     };
   };
