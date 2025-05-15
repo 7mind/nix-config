@@ -1,4 +1,4 @@
-{ config, lib, pkgs, xdg_associate, cfg-meta, outerConfig, deep_merge, ... }:
+{ config, lib, pkgs, xdg_associate, cfg-meta, outerConfig, ... }:
 
 {
   options = {

@@ -67,10 +67,8 @@ rec {
 
       const = import ./config.nix;
 
-      cfg-const = deep_merge [
-        const.const
-        (import_if_exists ./private/config.nix)
-      ];
+      cfg-const = pkgs.lib.recursiveUpdate const.const (import_if_exists ./private/config.nix);
+
 
       paths = {
         root = "${self}";
@@ -156,7 +154,6 @@ rec {
         inherit inputs;
         inherit cfg-const;
         inherit import_if_exists;
-        inherit deep_merge;
       };
       specialArgs = cfg-args // {
         specialArgsSelfRef = cfg-args;
