@@ -60,39 +60,57 @@ let
   # mkIf false { ... } → { _type = "if"; condition = false; content = { ... }; }
   # and etc, all the module system functions produce some hidden fields
 
-  deep_merge = list:
-    let
-      mergeTwo = a: b:
-        if pkgs.lib.isAttrs a && pkgs.lib.isAttrs b then
-          builtins.foldl'
-            (acc: key:
-              let
-                aVal = if builtins.hasAttr key acc then acc.${key} else null;
-                bVal = b.${key};
-                newVal = if aVal == null then bVal else mergeTwo aVal bVal;
-              in
-              acc // { "${key}" = newVal; }
-            )
-            a
-            (builtins.attrNames b)
-        else if pkgs.lib.isList a && pkgs.lib.isList b then
-          a ++ b
-        else
-        # In all other cases, the right-hand value wins.
-          b;
-    in
-    builtins.foldl' mergeTwo { } list;
+  # deep_merge = list:
+  #   let
+  #     mergeTwo = a: b:
+  #       if pkgs.lib.isAttrs a && pkgs.lib.isAttrs b then
+  #         builtins.foldl'
+  #           (acc: key:
+  #             let
+  #               aVal = if builtins.hasAttr key acc then acc.${key} else null;
+  #               bVal = b.${key};
+  #               newVal = if aVal == null then bVal else mergeTwo aVal bVal;
+  #             in
+  #             acc // { "${key}" = newVal; }
+  #           )
+  #           a
+  #           (builtins.attrNames b)
+  #       else if pkgs.lib.isList a && pkgs.lib.isList b then
+  #         a ++ b
+  #       else
+  #       # In all other cases, the right-hand value wins.
+  #         b;
+  #   in
+  #   builtins.foldl' mergeTwo { } list;
 
-  merge_nixpkgs_modules = funcs:
-    let
-      mergeWithRecursiveUpdate = modules: pkgs.lib.foldl' pkgs.lib.recursiveUpdate { } modules;
-      call_and_merge = funcs: args: deep_merge (map (f: f args) funcs);
-      argsLists = map lib.functionArgs funcs;
-      mergedArgs = mergeWithRecursiveUpdate argsLists;
-      mergedFunc = lib.setFunctionArgs (call_and_merge funcs) mergedArgs;
+  # merge_nixpkgs_modules = funcs:
+  #   let
+  #     mergeWithRecursiveUpdate = modules: pkgs.lib.foldl' pkgs.lib.recursiveUpdate { } modules;
+  #     call_and_merge = funcs: args: deep_merge (map (f: f args) funcs);
+  #     argsLists = map lib.functionArgs funcs;
+  #     mergedArgs = mergeWithRecursiveUpdate argsLists;
+  #     mergedFunc = lib.setFunctionArgs (call_and_merge funcs) mergedArgs;
 
+  #   in
+  #   mergedFunc;
+
+  #mergeWithRecursiveUpdate = modules: pkgs.lib.foldl' pkgs.lib.recursiveUpdate { } modules;
+
+  extendFuncResultWith = func: attrset:
+    let
+      mergeOneLevel = modules: lib.attrsets.zipAttrsWith
+        (name: values:
+          if builtins.all builtins.isList values then
+            builtins.concatLists values
+          else
+            lib.lists.last values
+        )
+        modules;
+
+      argsList = lib.functionArgs func;
+      ret = args: (mergeOneLevel [ (func args) attrset ]);
     in
-    mergedFunc;
+    lib.setFunctionArgs ret argsList;
 
   mk_container = outercfg: lib.recursiveUpdate (builtins.removeAttrs outercfg [ "privateUsersMultiplier" ])
     {
@@ -110,15 +128,22 @@ let
         "--private-users-ownership=chown"
       ];
 
-      config = merge_nixpkgs_modules [
-        ({ ... }: {
-          imports = [
-            "${cfg-meta.paths.modules}/container/container.nix"
-            "${cfg-meta.paths.modules}/nixos/overlay.nix"
-          ];
-        })
-        outercfg.config
-      ];
+      # config = merge_nixpkgs_modules [
+      #   ({ ... }: {
+      #     imports = [
+      #       "${cfg-meta.paths.modules}/container/container.nix"
+      #       "${cfg-meta.paths.modules}/nixos/overlay.nix"
+      #     ];
+      #   })
+      #   outercfg.config
+      # ];
+
+      config = extendFuncResultWith outercfg.config {
+        imports = [
+          "${cfg-meta.paths.modules}/container/container.nix"
+          "${cfg-meta.paths.modules}/nixos/overlay.nix"
+        ];
+      };
     };
 in
 {
