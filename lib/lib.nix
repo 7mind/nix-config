@@ -60,6 +60,8 @@ let
   # mkIf false { ... } → { _type = "if"; condition = false; content = { ... }; }
   # and etc, all the module system functions produce some hidden fields
 
+  #mergeWithRecursiveUpdate = modules: pkgs.lib.foldl' pkgs.lib.recursiveUpdate { } modules;
+
   # deep_merge = list:
   #   let
   #     mergeTwo = a: b:
@@ -94,7 +96,6 @@ let
   #   in
   #   mergedFunc;
 
-  #mergeWithRecursiveUpdate = modules: pkgs.lib.foldl' pkgs.lib.recursiveUpdate { } modules;
 
   extendFuncResultWith = func: attrset:
     let
@@ -127,16 +128,6 @@ let
         # "--private-users=${toString (65536 * offset)}:65536"
         "--private-users-ownership=chown"
       ];
-
-      # config = merge_nixpkgs_modules [
-      #   ({ ... }: {
-      #     imports = [
-      #       "${cfg-meta.paths.modules}/container/container.nix"
-      #       "${cfg-meta.paths.modules}/nixos/overlay.nix"
-      #     ];
-      #   })
-      #   outercfg.config
-      # ];
 
       config = extendFuncResultWith outercfg.config {
         imports = [
