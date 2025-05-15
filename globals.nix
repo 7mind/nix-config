@@ -30,28 +30,35 @@ rec {
 
       # deep_merge = modules: pkgs.lib.foldl' pkgs.lib.recursiveUpdate { } modules;
 
-      deep_merge = list:
-        let
-          mergeTwo = a: b:
-            if pkgs.lib.isAttrs a && pkgs.lib.isAttrs b then
-              builtins.foldl'
-                (acc: key:
-                  let
-                    aVal = if builtins.hasAttr key acc then acc.${key} else null;
-                    bVal = b.${key};
-                    newVal = if aVal == null then bVal else mergeTwo aVal bVal;
-                  in
-                  acc // { "${key}" = newVal; }
-                )
-                a
-                (builtins.attrNames b)
-            else if pkgs.lib.isList a && pkgs.lib.isList b then
-              a ++ b
-            else
-            # In all other cases, the right-hand value wins.
-              b;
-        in
-        builtins.foldl' mergeTwo { } list;
+      # be careful:
+      # mkIf false { ... } → { _type = "if"; condition = false; content = { ... }; }
+
+      deep_merge = with pkgs; defs: builtins.foldl'
+        (acc: def: lib.recursiveUpdate acc def)
+        { }
+        defs;
+      # deep_merge = list:
+      #   let
+      #     mergeTwo = a: b:
+      #       if pkgs.lib.isAttrs a && pkgs.lib.isAttrs b then
+      #         builtins.foldl'
+      #           (acc: key:
+      #             let
+      #               aVal = if builtins.hasAttr key acc then acc.${key} else null;
+      #               bVal = b.${key};
+      #               newVal = if aVal == null then bVal else mergeTwo aVal bVal;
+      #             in
+      #             acc // { "${key}" = newVal; }
+      #           )
+      #           a
+      #           (builtins.attrNames b)
+      #       else if pkgs.lib.isList a && pkgs.lib.isList b then
+      #         a ++ b
+      #       else
+      #       # In all other cases, the right-hand value wins.
+      #         b;
+      #   in
+      #   builtins.foldl' mergeTwo { } list;
 
       pkgs = import inputs.nixpkgs {
         system = arch;
