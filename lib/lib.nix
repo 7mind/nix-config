@@ -100,7 +100,12 @@ let
     in
     mergedFunc;
 
-  mk_container = outercfg: deep_merge [
+  mk_container = outercfg: lib.recursiveUpdate  (builtins.removeAttrs outercfg [ "privateUsersMultiplier" ]) {
+    
+  }
+
+
+  deep_merge [
     {
       autoStart = true;
       privateNetwork = true;
