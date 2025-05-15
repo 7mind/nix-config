@@ -100,12 +100,7 @@ let
     in
     mergedFunc;
 
-  mk_container = outercfg: lib.recursiveUpdate  (builtins.removeAttrs outercfg [ "privateUsersMultiplier" ]) {
-    
-  }
-
-
-  deep_merge [
+  mk_container = outercfg: lib.recursiveUpdate (builtins.removeAttrs outercfg [ "privateUsersMultiplier" ])
     {
       autoStart = true;
       privateNetwork = true;
@@ -120,11 +115,7 @@ let
         # "--private-users=${toString (65536 * offset)}:65536"
         "--private-users-ownership=chown"
       ];
-    }
 
-    (builtins.removeAttrs outercfg [ "privateUsersMultiplier" ])
-
-    {
       config = merge_nixpkgs_modules [
         ({ ... }: {
           imports = [
@@ -134,8 +125,7 @@ let
         })
         outercfg.config
       ];
-    }
-  ];
+    };
 in
 {
   _module.args.extend_pkg = extend_pkg;
