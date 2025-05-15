@@ -56,16 +56,10 @@ let
 
 
 
-  ### shit
-  # deep_merge = modules: pkgs.lib.foldl' pkgs.lib.recursiveUpdate { } modules;
-
   # be careful:
   # mkIf false { ... } → { _type = "if"; condition = false; content = { ... }; }
+  # all the 
 
-  # deep_merge = with pkgs; defs: builtins.foldl'
-  #   (acc: def: lib.recursiveUpdate acc def)
-  #   { }
-  #   defs;
   deep_merge = list:
     let
       mergeTwo = a: b:
@@ -91,9 +85,10 @@ let
 
   merge_nixpkgs_modules = funcs:
     let
+      mergeWithRecursiveUpdate = modules: pkgs.lib.foldl' pkgs.lib.recursiveUpdate { } modules;
       call_and_merge = funcs: args: deep_merge (map (f: f args) funcs);
       argsLists = map lib.functionArgs funcs;
-      mergedArgs = deep_merge argsLists;
+      mergedArgs = mergeWithRecursiveUpdate argsLists;
       mergedFunc = lib.setFunctionArgs (call_and_merge funcs) mergedArgs;
 
     in
