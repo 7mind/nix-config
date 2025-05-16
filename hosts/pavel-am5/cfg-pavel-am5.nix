@@ -1,4 +1,4 @@
-{ config, cfg-meta, import_if_exists, cfg-const, ... }:
+{ config, cfg-meta, lib, cfg-const, ... }:
 
 {
   imports =
@@ -111,6 +111,8 @@
   networking.domain = "home.7mind.io";
   networking.useDHCP = false;
   # networking.interfaces.enp8s0.useDHCP = lib.mkDefault true;
+
+  networking.firewall.enable = lib.mkForce false;
 
   boot.initrd = {
     network = {
