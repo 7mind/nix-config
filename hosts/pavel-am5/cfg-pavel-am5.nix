@@ -110,17 +110,6 @@
   networking.hostName = cfg-meta.hostname;
   networking.domain = "home.7mind.io";
   networking.useDHCP = false;
-  # networking.interfaces.enp8s0.useDHCP = lib.mkDefault true;
-
-  # networking.firewall.enable = lib.mkForce false;
-
-  # support SSDP https://serverfault.com/a/911286/9166
-  networking.firewall.extraPackages = [ pkgs.ipset ];
-  networking.firewall.extraCommands = ''
-    ipset create upnp hash:ip,port timeout 3
-    iptables -A OUTPUT -p udp -m udp --dport 1900 -j SET --add-set upnp src,src --exist
-    iptables -A INPUT -p udp -m set --match-set upnp dst,dst -j ACCEPT
-  '';
 
   boot.initrd = {
     network = {

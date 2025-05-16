@@ -1,4 +1,4 @@
-{ lib, config, cfg-meta, ... }: {
+{ lib, config, cfg-meta, pkgs, ... }: {
   options = {
     smind.net.enable = lib.mkOption {
       type = lib.types.bool;
@@ -60,6 +60,15 @@
             ++ (if config.smind.net.upnp.enable then
             [ 1900 ] # UPnP service discovery
           else [ ]);
+
+          # support SSDP https://serverfault.com/a/911286/9166
+          extraPackages = lib.mkIf config.smind.net.upnp.enable [ pkgs.ipset ];
+          extraCommands = lib.mkIf config.smind.net.upnp.enable ''
+            ipset create upnp hash:ip,port timeout 3
+            iptables -A OUTPUT -p udp -m udp --dport 1900 -j SET --add-set upnp src,src --exist
+            iptables -A INPUT -p udp -m set --match-set upnp dst,dst -j ACCEPT
+          '';
+
         };
 
         bridges."${config.smind.net.main-bridge}".interfaces = [ config.smind.net.main-interface ];
