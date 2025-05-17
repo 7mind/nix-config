@@ -1,5 +1,8 @@
 { config, lib, pkgs, cfg-meta, ... }:
 
+let
+  user = "iperf-user";
+in
 {
   options = {
     smind.iperf.enable = lib.mkOption {
@@ -27,6 +30,21 @@
 
     environment.systemPackages = with pkgs; [
       iperf
+      (writeShellScriptBin "iperfc" ''
+        ${iperf}/bin/iperf --username "$user" --rsa-public-key-path "${config.age.secrets.iperf-public-key.path}"
+      '')
+      # (pkgs.stdenvNoCC.mkDerivation {
+      #     name = "iperfc";
+      #     src = pkgs.writeText "iperfc" ''#!/usr/bin/env sh
+      #     ${pkgs.iperf}/bin/iperf --username $user --rsa-public-key-path ${config.age.secrets.iperf-public-key.path}
+      #     '';
+
+      #     builder = pkgs.writeText "builder.sh" ''
+      #       mkdir -p $out/bin
+      #       cp $src $out/bin/$name
+      #       chmod +x $out/bin/$name
+      #     '';
+      #   })
     ];
 
     age.secrets = {
@@ -56,7 +74,6 @@
     };
 
     system.activationScripts."iperf-password" =
-      let user = "iperf-user"; in
       ''
         secret=$(cat "${config.age.secrets.iperf-password.path}")
         sha=$(echo -n "{${user}}$secret" | ${pkgs.coreutils}/bin/sha256sum | ${pkgs.gawk}/bin/awk '{ print $1 }')
