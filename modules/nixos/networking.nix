@@ -62,6 +62,9 @@
           else [ ]);
 
           # support SSDP https://serverfault.com/a/911286/9166
+          # https://discourse.nixos.org/t/ssdp-firewall-support/17809
+          # https://discourse.nixos.org/t/how-to-add-conntrack-helper-to-firewall/798
+          # https://discourse.nixos.org/t/firewall-rules-with-rygel-gnome-sharing/17471
           extraPackages = lib.mkIf config.smind.net.upnp.enable [ pkgs.ipset ];
           extraCommands = lib.mkIf config.smind.net.upnp.enable ''
             ipset create upnp hash:ip,port timeout 3
