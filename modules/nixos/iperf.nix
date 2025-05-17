@@ -31,7 +31,8 @@ in
     environment.systemPackages = with pkgs; [
       iperf
       (writeShellScriptBin "iperfc" ''
-        IPERF3_PASSWORD="$(cat '${config.age.secrets.iperf-password.path}')" ${iperf}/bin/iperf -c --username "${user}" --rsa-public-key-path "${config.age.secrets.iperf-public-key.path}" $*
+        IPERF3_PASSWORD="$(cat '${config.age.secrets.iperf-password.path}')"
+        ${iperf}/bin/iperf --username "${user}" --rsa-public-key-path "${config.age.secrets.iperf-public-key.path}" -c $*
       '')
       # (pkgs.stdenvNoCC.mkDerivation {
       #     name = "iperfc";
