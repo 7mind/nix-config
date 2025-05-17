@@ -11,6 +11,7 @@
   ./env-settings-linux-desktop.nix
   ./env-settings-linux.nix
   ./gnome.nix
+  ./iperf.nix
   ./gnome-minimal-hotkeys.nix
   ./kernel-settings.nix
   ./keyd-super-remap.nix
