@@ -29,40 +29,40 @@
       iperf
     ];
 
-      age.secrets = {
-    iperf-private-key = {
-      rekeyFile = "${cfg-meta.paths.secrets}/generic/iperf-private-key.age";
-      group = "users";
-      mode = "440";
-    };
-    iperf-public-key = {
-      rekeyFile = "${cfg-meta.paths.secrets}/generic/iperf-public-key.age";
-      group = "users";
-      mode = "440";
-    };
-    iperf-password = {
-      rekeyFile = "${cfg-meta.paths.secrets}/generic/iperf-password.age";
-      group = "users";
-      mode = "440";
-    };
+    age.secrets = {
+      iperf-private-key = {
+        rekeyFile = "${cfg-meta.paths.secrets}/generic/iperf-private-key.age";
+        group = "users";
+        mode = "444";
+      };
+      iperf-public-key = {
+        rekeyFile = "${cfg-meta.paths.secrets}/generic/iperf-public-key.age";
+        group = "users";
+        mode = "444";
+      };
+      iperf-password = {
+        rekeyFile = "${cfg-meta.paths.secrets}/generic/iperf-password.age";
+        group = "users";
+        mode = "444";
+      };
     };
 
-      # https://ittavern.com/iperf3-user-authentication-with-password-and-rsa-public-keypair/
-  services.iperf3 = {
-    enable = true;
-    openFirewall = true;
-    rsaPrivateKey = lib.mkiconfig.age.secrets.iperf-private-key.path;
-    authorizedUsersFile = "/run/iperf-creds";
-  };
+    # https://ittavern.com/iperf3-user-authentication-with-password-and-rsa-public-keypair/
+    services.iperf3 = {
+      enable = true;
+      openFirewall = true;
+      rsaPrivateKey = lib.mkIf config.smind.iperf.protected config.age.secrets.iperf-private-key.path;
+      authorizedUsersFile = lib.mkIf config.smind.iperf.protected "/run/iperf-creds";
+    };
 
     system.activationScripts."iperf-password" =
-    let user = "iperf-user"; in
-    ''
-      secret=$(cat "${config.age.secrets.iperf-password.path}")
-      sha=$(echo -n "{${user}}$secret" | ${pkgs.coreutils}/bin/sha256sum | ${pkgs.gawk}/bin/awk '{ print $1 }')
-      echo "${user},$sha" > /run/iperf-creds
-      chmod 444 /run/iperf-creds
-    '';
+      let user = "iperf-user"; in
+      ''
+        secret=$(cat "${config.age.secrets.iperf-password.path}")
+        sha=$(echo -n "{${user}}$secret" | ${pkgs.coreutils}/bin/sha256sum | ${pkgs.gawk}/bin/awk '{ print $1 }')
+        echo "${user},$sha" > /run/iperf-creds
+        chmod 444 /run/iperf-creds
+      '';
 
   };
 }

@@ -9,7 +9,7 @@
     };
   };
 
-  config = lib.mkIf config.smind.ssh.permissive  {
+  config = lib.mkIf config.smind.ssh.permissive {
     services.openssh = {
       enable = true;
       settings = {

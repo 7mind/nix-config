@@ -14,7 +14,7 @@
 
     ] ++ (if (cfg-meta.isLinux) then with pkgs; [
       unityhub
-    ] else []);
+    ] else [ ]);
 
   };
 }

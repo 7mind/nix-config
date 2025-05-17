@@ -9,7 +9,7 @@
   outputs =
     { self
     , nixpkgs
-    # , nixos-cosmic
+      # , nixos-cosmic
     , ...
     }: {
       nixosConfigurations =
