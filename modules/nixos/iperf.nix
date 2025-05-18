@@ -52,7 +52,8 @@ in
       #   })
     ] ++ (if (config.smind.iperf.protected.client.enable) then [
       (writeShellScriptBin "iperfc" ''
-        IPERF3_PASSWORD="$(cat '${config.age.secrets.iperf-password.path}')"
+        set -e
+        export IPERF3_PASSWORD="$(cat '${config.age.secrets.iperf-password.path}')"
         ${iperf}/bin/iperf --username "${user}" --rsa-public-key-path "${config.age.secrets.iperf-public-key.path}" -c $*
       '')
     ] else [ ]);
