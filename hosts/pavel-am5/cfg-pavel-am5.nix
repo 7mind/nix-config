@@ -100,6 +100,10 @@
     llm.enable = true;
     docker.enable = true;
     infra.nix-build.enable = true;
+
+    iperf.enable = true;
+    iperf.protected.server.enable = false;
+    iperf.protected.client.enable = true;
   };
 
   age.rekey = {

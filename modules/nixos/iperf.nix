@@ -11,11 +11,18 @@ in
       description = "";
     };
 
-    smind.iperf.protected = lib.mkOption {
+    smind.iperf.protected.server.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
       description = "";
     };
+
+    smind.iperf.protected.client.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "";
+    };
+
   };
 
   config = lib.mkIf config.smind.iperf.enable {
@@ -30,10 +37,7 @@ in
 
     environment.systemPackages = with pkgs; [
       iperf
-      (writeShellScriptBin "iperfc" ''
-        IPERF3_PASSWORD="$(cat '${config.age.secrets.iperf-password.path}')"
-        ${iperf}/bin/iperf --username "${user}" --rsa-public-key-path "${config.age.secrets.iperf-public-key.path}" -c $*
-      '')
+
       # (pkgs.stdenvNoCC.mkDerivation {
       #     name = "iperfc";
       #     src = pkgs.writeText "iperfc" ''#!/usr/bin/env sh
@@ -46,9 +50,14 @@ in
       #       chmod +x $out/bin/$name
       #     '';
       #   })
-    ];
+    ] ++ (if (config.smind.iperf.protected.client.enable) then [
+      (writeShellScriptBin "iperfc" ''
+        IPERF3_PASSWORD="$(cat '${config.age.secrets.iperf-password.path}')"
+        ${iperf}/bin/iperf --username "${user}" --rsa-public-key-path "${config.age.secrets.iperf-public-key.path}" -c $*
+      '')
+    ] else [ ]);
 
-    age.secrets = {
+    age.secrets = lib.mkIf (config.smind.iperf.protected.server.enable || config.smind.iperf.protected.client.enable) {
       iperf-private-key = {
         rekeyFile = "${cfg-meta.paths.secrets}/generic/iperf-private-key.age";
         group = "users";
@@ -70,11 +79,11 @@ in
     services.iperf3 = {
       enable = true;
       openFirewall = true;
-      rsaPrivateKey = lib.mkIf config.smind.iperf.protected config.age.secrets.iperf-private-key.path;
-      authorizedUsersFile = lib.mkIf config.smind.iperf.protected "/run/iperf-creds";
+      rsaPrivateKey = lib.mkIf config.smind.iperf.protected.server.enable config.age.secrets.iperf-private-key.path;
+      authorizedUsersFile = lib.mkIf config.smind.iperf.protected.server.enable "/run/iperf-creds";
     };
 
-    system.activationScripts."iperf-password" =
+    system.activationScripts."iperf-password" = lib.mkIf (config.smind.iperf.protected.server.enable)
       ''
         secret=$(cat "${config.age.secrets.iperf-password.path}")
         sha=$(echo -n "{${user}}$secret" | ${pkgs.coreutils}/bin/sha256sum | ${pkgs.gawk}/bin/awk '{ print $1 }')
