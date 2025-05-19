@@ -20,6 +20,7 @@
         connect-timeout = 1;
         keep-going = true;
         use-xdg-base-directories = true;
+        download-buffer-size = 1024 * 1024 * 1024; # 1 GiB;
       };
     };
 

@@ -175,7 +175,7 @@
 
     services.gnome = {
       gnome-settings-daemon.enable = true;
-      core-utilities.enable = true;
+      core-apps.enable = true;
       core-os-services.enable = true;
       core-shell.enable = true;
       core-developer-tools.enable = true;

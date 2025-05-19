@@ -115,6 +115,15 @@
   networking.domain = "home.7mind.io";
   networking.useDHCP = false;
 
+  networking.iproute2 = {
+    enable = true;
+    rules = [{
+      to = "192.168.0.0/16";
+      preference = 5000;
+      table = "main";
+    }];
+  };
+
   boot.initrd = {
     network = {
       ssh = {
