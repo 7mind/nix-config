@@ -124,6 +124,17 @@
   #   }];
   # };
 
+  systemd.services.ip-rules = {
+    description = "IP rules configuration";
+    after = [ "network.target" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${pkgs.iproute2}/bin/ip rule add to 192.168.0.0/16 pref 5000 lookup main";
+      RemainAfterExit = true;
+    };
+  };
+
   boot.initrd = {
     network = {
       ssh = {
