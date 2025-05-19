@@ -179,6 +179,8 @@
     vlc
     telegram-desktop
 
+    winbox4
+
     (extended_pkg {
       pkg = jetbrains.idea-ultimate;
       path = "bin/idea-ultimate";
