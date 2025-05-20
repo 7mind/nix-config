@@ -87,6 +87,7 @@
 
           pkgs.open-vsx.jeanp413.open-remote-ssh
 
+          pkgs.open-vsx.devmikeua.mikrotik-routeros-script
           # vscjava.vscode-java-pack
           # missing: anycode*,
         ] ++ (if cfg-meta.isDarwin then [ ] else [
