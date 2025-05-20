@@ -101,6 +101,7 @@
         "trezor-suite"
         "gzdoom"
 
+        "winbox"
 
         # don't need for now
         # "dotnet-sdk"

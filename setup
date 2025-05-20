@@ -116,7 +116,7 @@ function switch() {
                     nix copy --to "ssh://${HOST_FQN}" "${ROOTS}/${HOST}" --extra-experimental-features 'nix-command flakes'
                     # full disk access must be enabled for ssh users (same pref pane where you enable ssh)
                     ssh -t "${HOST_FQN}" sudo -H --preserve-env=PATH env nix-env -p /nix/var/nix/profiles/system --set "$CLOSURE"
-                    ssh -t "${HOST_FQN}" "${CLOSURE}/sw/bin/darwin-rebuild" activate
+                    ssh -t "${HOST_FQN}" "sudo ${CLOSURE}/sw/bin/darwin-rebuild" activate
                 fi
                 set +x
                 ;;

@@ -28,7 +28,7 @@ nix build ".?submodules=1#darwinConfigurations.${HOST}.system" \
     --out-link "${CLOSURE_OUT_PATH}" \
     --extra-experimental-features 'nix-command flakes'
 sudo -H --preserve-env=PATH env nix-env -p /nix/var/nix/profiles/system --set "${CLOSURE_OUT_PATH}"
-/nix/var/nix/profiles/system/sw/bin/darwin-rebuild activate
+sudo /nix/var/nix/profiles/system/sw/bin/darwin-rebuild activate
 
 git submodule foreach git commit -am "autosave" || true
 git commit -am "autosave" || true

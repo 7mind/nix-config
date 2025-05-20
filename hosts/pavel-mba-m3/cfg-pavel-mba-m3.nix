@@ -17,7 +17,7 @@
     hostPubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIEyccdZT7PcV6PpudcAoYsBlQW03L4PAjAwTP/b+rGY";
   };
 
-
+  system.primaryUser = "pavel";
 
   users.users.pavel = {
     home = "/Users/pavel";

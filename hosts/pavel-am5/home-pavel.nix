@@ -1,72 +1,10 @@
-{ pkgs, config, smind-hm, lib, extended_pkg, cfg-meta, xdg_associate, outerConfig, ... }:
-# let
-#   attemptJson = path:
-#     if builtins.pathExists path
-#     then builtins.fromJSON (builtins.readFile path)
-#     else null;
+{ pkgs, config, smind-hm, lib, extended_pkg, cfg-meta, xdg_associate, outerConfig, import_if_exists, ... }:
 
-#   attemptNix = path:
-#     if builtins.pathExists path
-#     then import path
-#     else null;
-
-#   firstNonNull = list:
-#     builtins.foldl' (acc: x: if acc != null then acc else x) null list;
-
-#   readCfg = f: firstNonNull [
-#     (attemptJson ./vscode-keymap/linux/vscode-keymap-linux-${f}.json)
-#     (attemptNix  ./vscode-keymap/linux/vscode-keymap-linux-${f}.nix)
-#     (attemptJson ./vscode-keymap/linux/negate/vscode-keymap-linux-${f}.json)
-#   ];
-
-#   imports = [
-#     "!negate-all"
-#     "!negate-gitlens"
-#     "!negate-continue"
-#     "custom"
-#     "fileExplorer"
-#     "textInputFocus"
-#     "listFocus"
-#   ];
-#   allKeys = builtins.map readCfg imports;
-#   flattened = builtins.concatLists allKeys;
-
-#   processList = objs:
-#     builtins.concatMap
-#       (obj:
-#         let
-#           key = obj.key;
-#           m1 = builtins.match ''^(.+)\+(.+)[[:space:]]+(.+)\+(.+)$'' key;
-#           transformed =
-#             if m1 != null then
-#               let
-#                 M1 = builtins.elemAt m1 0;
-#                 A = builtins.elemAt m1 1;
-#                 M2 = builtins.elemAt m1 2;
-#                 B = builtins.elemAt m1 3;
-#                 newKey = ''${M1}+${A} ${B}'';
-#                 result = if M1 == M2 then [ obj (obj // { key = newKey; }) ] else [ obj ];
-#               in
-#               result
-#             else
-#               [ obj ];
-#         in
-#         if (lib.hasPrefix "-" obj.command) then [ obj ] else transformed
-#       )
-#       objs;
-#   everything = (processList flattened);
-#   everythingJson = builtins.toJSON everything;
-# in
-#   )
-# else
-#   if cfg-meta.isDarwin then [ ] else
-#   [ ];
 {
   imports = smind-hm.imports ++ [
     "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
-    "${cfg-meta.paths.private}/modules/hm/pavel/cfg-hm.nix"
-
     "${cfg-meta.paths.users}/pavel/hm/git.nix"
+    (import_if_exists "${cfg-meta.paths.private}/modules/hm/pavel/cfg-hm.nix")
   ];
 
   age.rekey.hostPubkey = outerConfig.age.rekey.hostPubkey;
