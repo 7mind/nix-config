@@ -115,17 +115,8 @@
   networking.domain = "home.7mind.io";
   networking.useDHCP = false;
 
-  # networking.iproute2 = {
-  #   enable = true;
-  #   rules = [{
-  #     to = "192.168.0.0/16";
-  #     preference = 5000;
-  #     table = "main";
-  #   }];
-  # };
-
   systemd.services.ip-rules = {
-    description = "IP rules configuration";
+    description = "Always prefer LAN routes over tailscale";
     after = [ "network.target" ];
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
