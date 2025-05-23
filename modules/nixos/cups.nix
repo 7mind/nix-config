@@ -36,7 +36,7 @@
         {
           name = "Brother";
           location = "Home";
-          deviceUri = "ipp://printer.home.7mind.io:631/ipp/print";
+          deviceUri = "ipp://printer.iot-lan.7mind.io:631/ipp/print";
           # offline printer hack
           model = "BrotherDCP.ppd";
           # Initial setup
