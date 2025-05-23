@@ -35,6 +35,7 @@
       ensurePrinters = [
         {
           name = "Brother";
+          description = "printer.iot-lan.7mind.io";
           location = "Home";
           deviceUri = "ipp://printer.iot-lan.7mind.io:631/ipp/print";
           # offline printer hack
