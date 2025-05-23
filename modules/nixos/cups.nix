@@ -34,7 +34,7 @@
     hardware.printers = {
       ensurePrinters = [
         {
-          name = "Brother";
+          name = "printer.iot-lan.7mind.io";
           description = "printer.iot-lan.7mind.io";
           location = "Home";
           deviceUri = "ipp://printer.iot-lan.7mind.io:631/ipp/print";
@@ -47,7 +47,7 @@
           # };
         }
       ];
-      ensureDefaultPrinter = "Brother";
+      ensureDefaultPrinter = "printer.iot-lan.7mind.io";
     };
 
   };
