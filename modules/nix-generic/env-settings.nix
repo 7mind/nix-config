@@ -41,7 +41,12 @@
       curl
       rsync
       ipcalc
+
+      trippy
+      mtr
       nmap
+      radvd
+
       bind.dnsutils
       tcpdump
       whois
