@@ -6,8 +6,6 @@
       ./hardware-configuration.nix
       "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
       "${cfg-meta.paths.secrets}/pavel/age-secrets.nix"
-      "${cfg-meta.paths.private}/modules/nix/zerotier.nix"
-      "${cfg-meta.paths.private}/modules/nix/geoip.nix"
     ];
 
   nixpkgs.config.permittedInsecurePackages = [
@@ -109,6 +107,7 @@
 
     services.geoip.enable = true;
     services.geoip.key.enable = true;
+    services.zt.enable = true;
   };
 
   age.rekey = {

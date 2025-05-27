@@ -1,3 +1,7 @@
+let
+  import_if_exists_or = path: default: if builtins.pathExists path then import path else default;
+  import_if_exists = path: import_if_exists_or path { };
+in
 rec {
   smind-nixos-imports = builtins.concatLists [
     (import ./lib/_imports.nix)
@@ -5,6 +9,7 @@ rec {
     (import ./modules/nix-generic/_imports.nix)
     (import ./modules/nixos/_imports.nix)
     (import ./roles/nixos/_imports.nix)
+    (import_if_exists_or ./private/modules/nix/_imports.nix [ ])
   ];
 
   smind-darwin-imports = builtins.concatLists [
@@ -26,8 +31,6 @@ rec {
 
   make = { self, inputs, arch }: hostname:
     let
-      import_if_exists = path: if builtins.pathExists path then import path else { };
-
       pkgs = import inputs.nixpkgs {
         system = arch;
         config.allowUnfree = true;
