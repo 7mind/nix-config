@@ -45,7 +45,6 @@
       trippy
       mtr
       nmap
-      radvd
 
       bind.dnsutils
       tcpdump
@@ -107,6 +106,7 @@
     ] ++ (if cfg-meta.isLinux then with pkgs; [
       # system tools
       d-spy
+      radvd
     ] else [ ]);
   };
 }

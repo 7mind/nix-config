@@ -54,7 +54,6 @@
       # bitwarden-cli
       # rbw
       bws
-
     ];
   };
 
