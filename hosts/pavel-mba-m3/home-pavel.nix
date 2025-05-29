@@ -1,14 +1,13 @@
-{ pkgs, config, smind-hm, lib, extended_pkg, cfg-meta, inputs, outerConfig, import_if_exists, ... }:
+{ pkgs, config, smind-hm, lib, extended_pkg, cfg-meta, inputs, outerConfig, import_if_exists, import_if_exists_or, ... }:
 
 {
   imports = smind-hm.imports ++ [
-    "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
+    (import_if_exists_or "${cfg-meta.paths.secrets}/pavel/age-rekey.nix" (import "${cfg-meta.paths.modules}/age-dummy.nix"))
     (import_if_exists "${cfg-meta.paths.private}/modules/hm/pavel/cfg-hm.nix")
   ];
 
   smind.hm = {
     roles.desktop = true;
-    firefox.sync-username = "pshirshov@gmail.com";
   };
 
   programs.direnv = {
@@ -20,19 +19,9 @@
   home.packages = with pkgs; [
   ];
 
-  age.rekey.hostPubkey = outerConfig.age.rekey.hostPubkey;
-
   programs.zsh.shellAliases = {
     rmj = "find . -depth -type d \\( -name target -or -name .bloop -or -name .bsp -or -name .metals \\) -exec rm -rf {} \\;";
   };
-
-  home.activation.createSymlinks = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    mkdir -p .ssh/
-    ln -sfn ${outerConfig.age.secrets.id_ed25519.path} ~/.ssh/id_ed25519
-    ln -sfn ${outerConfig.age.secrets."id_ed25519.pub".path} ~/.ssh/id_ed25519.pub
-    mkdir -p .sbt/secrets/
-    ln -sfn ${outerConfig.age.secrets.nexus-oss-sonatype.path} ~/.sbt/secrets/credentials.sonatype-nexus.properties
-  '';
 
   /* programs.zed-editor =
     {

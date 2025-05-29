@@ -1,4 +1,4 @@
-{ pkgs, config, smind-hm, lib, extended_pkg, cfg-meta, xdg_associate, outerConfig, import_if_exists, import_if_exists_or,... }:
+{ pkgs, config, smind-hm, lib, extended_pkg, cfg-meta, xdg_associate, outerConfig, import_if_exists, import_if_exists_or, ... }:
 
 {
   imports = smind-hm.imports ++ [
@@ -10,7 +10,6 @@
 
   smind.hm = {
     roles.desktop = true;
-    firefox.sync-username = "pshirshov@gmail.com";
     autostart.programs = with pkgs; [
       {
         name = "element";

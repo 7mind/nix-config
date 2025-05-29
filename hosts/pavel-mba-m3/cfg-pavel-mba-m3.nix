@@ -1,20 +1,15 @@
-{ config, cfg-meta, import_if_exists, cfg-const, ... }:
+{ config, cfg-meta, import_if_exists, cfg-const, import_if_exists_or, ... }:
 
 {
   imports =
     [
-      "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
-      "${cfg-meta.paths.secrets}/pavel/age-secrets.nix"
+      (import_if_exists_or "${cfg-meta.paths.secrets}/pavel/age-rekey.nix" (import "${cfg-meta.paths.modules}/age-dummy.nix"))
     ];
 
   smind = {
     darwin.sysconfig.enable = true;
     darwin.brew.enable = true;
     home-manager.enable = true;
-  };
-
-  age.rekey = {
-    hostPubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIEyccdZT7PcV6PpudcAoYsBlQW03L4PAjAwTP/b+rGY";
   };
 
   system.primaryUser = "pavel";
