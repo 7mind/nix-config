@@ -27,10 +27,11 @@
       dev.enable = true;
     } else { });
 
-    programs = lib.mkIf cfg-meta.isLinux {
-      mtr.enable = true;
-      trippy.enable = true;
-    };
+    programs =
+      if cfg-meta.isLinux then {
+        mtr.enable = true;
+        trippy.enable = true;
+      } else { };
 
     environment.systemPackages = with pkgs; [
       # file managers
