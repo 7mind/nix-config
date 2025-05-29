@@ -1,3 +1,0 @@
-[
-  ./agenix-rekey.nix
-]
