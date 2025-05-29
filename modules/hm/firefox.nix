@@ -240,7 +240,7 @@
           search = {
             force = true;
             default = "leta";
-            order = [ "leta" "ddg" "kagi" "google" ];
+            order = [ "leta" "ddg" "kagi" "google" "github" "nixpkgs" "hixopts" "hm" ];
             engines = {
               "bing".metaData.hidden = true;
               "ebay".metaData.hidden = true;
