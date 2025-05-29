@@ -46,7 +46,6 @@ jobs:
       - ${{ matrix.os }}
       - ${{ matrix.runs-on }}
     steps:
-      - uses: wimpysworld/nothing-but-nix@main
       - uses: 7mind/github-env@minimal
         with:
           setup-nix: ${{ matrix.preconfigured != true }}
