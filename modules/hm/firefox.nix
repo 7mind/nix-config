@@ -249,8 +249,8 @@
               "wikipedia".metaData.alias = "@w";
               "Amazon.co.uk".metaData.hidden = "@a";
 
-              "Leta" = {
-                id = "leta";
+              leta = {
+                name = "Leta";
                 urls = [{
                   template = "https://leta.mullvad.net/search";
                   params = [{
@@ -263,8 +263,8 @@
               };
 
 
-              "Kagi" = {
-                id = "kagi";
+              kagi = {
+                name = "Kagi";
                 urls = [{
                   template = "https://kagi.com/search";
                   params = [{
@@ -276,7 +276,8 @@
                 definedAliases = [ "@k" ];
               };
 
-              "Maven" = {
+              maven = {
+                name = "Maven";
                 urls = [{
                   template = "https://search.maven.org/search";
                   params = [{
@@ -289,7 +290,8 @@
                 definedAliases = [ "@m2" ];
               };
 
-              "GitHub" = {
+              github = {
+                name = "GitHub";
                 urls = [{
                   template = "https://github.com/search";
                   params = [
@@ -312,7 +314,8 @@
                 definedAliases = [ "@gh" ];
               };
 
-              "Nix Packages" = {
+              nixpkgs = {
+                name = "Nix Packages";
                 urls = [{
                   template = "https://search.nixos.org/packages";
                   params = [
@@ -346,7 +349,8 @@
                   "${pkgs.nixos-icons}/share/icons/hicolor/scalable/apps/nix-snowflake.svg";
                 definedAliases = [ "@np" ];
               };
-              "Nix Options" = {
+              nixopts = {
+                name = "Nix Options";
                 urls = [{
                   template = "https://search.nixos.org/options";
                   params = [
@@ -381,7 +385,8 @@
                 definedAliases = [ "@no" ];
               };
 
-              "Home Manager" = {
+              hm = {
+                name = "Home Manager";
                 urls = [{
                   template =
                     "https://home-manager-options.extranix.com/";
@@ -395,7 +400,8 @@
                 definedAliases = [ "@hm" ];
               };
 
-              "Ollama" = {
+              ollama = {
+                name = "Ollama";
                 urls = [{
                   template =
                     "https://ollama.com/search";
@@ -410,7 +416,8 @@
 
               # missing searches: nur, flakehub
 
-              "btdig" = {
+              btdig = {
+                name = "btdig";
                 urls = [{
                   template = "https://btdig.com/search?order=0";
                   params = [
