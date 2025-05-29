@@ -58,7 +58,10 @@
           enable = true;
           allowedUDPPorts = [ 546 547 ] # enables dhcpv6
             ++ (if config.smind.net.upnp.enable then
-            [ 1900 ] # UPnP service discovery
+            [
+              1900 # UPnP service discovery
+              5351 # ipv6 pcp port
+            ]
           else [ ]);
 
           # support SSDP https://serverfault.com/a/911286/9166
@@ -68,7 +71,7 @@
           extraPackages = lib.mkIf config.smind.net.upnp.enable [ pkgs.ipset ];
 
           extraCommands = lib.mkIf config.smind.net.upnp.enable ''
-            ipset create upnp hash:ip,port timeout 3
+            ipset create upnp hash:ip,port timeout 3 || true
             iptables -A OUTPUT -p udp -m udp --dport 1900 -j SET --add-set upnp src,src --exist
             iptables -A INPUT -p udp -m set --match-set upnp dst,dst -j ACCEPT
           '';
