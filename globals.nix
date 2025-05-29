@@ -12,9 +12,9 @@ rec {
 
     (import_if_exists_or ./private/lib/_imports.nix [ ])
     (import_if_exists_or ./private/modules/generic/_imports.nix [ ])
-    (import_if_exists_or ./modules/nix-generic/_imports.nix [ ])
-    (import_if_exists_or ./modules/nixos/_imports.nix [ ])
-    (import_if_exists_or ./roles/nixos/_imports.nix [ ])
+    (import_if_exists_or ./private/modules/nix-generic/_imports.nix [ ])
+    (import_if_exists_or ./private/modules/nixos/_imports.nix [ ])
+    (import_if_exists_or ./private/roles/nixos/_imports.nix [ ])
   ];
 
   smind-darwin-imports = builtins.concatLists [
@@ -27,9 +27,9 @@ rec {
 
     (import_if_exists_or ./private/lib/_imports.nix [ ])
     (import_if_exists_or ./private/modules/generic/_imports.nix [ ])
-    (import_if_exists_or ./modules/nix-generic/_imports.nix [ ])
-    (import_if_exists_or ./modules/darwin/_imports.nix [ ])
-    (import_if_exists_or ./roles/darwin/_imports.nix [ ])
+    (import_if_exists_or ./private/modules/nix-generic/_imports.nix [ ])
+    (import_if_exists_or ./private/modules/darwin/_imports.nix [ ])
+    (import_if_exists_or ./private/roles/darwin/_imports.nix [ ])
   ];
 
   smind-hm = {
@@ -41,8 +41,8 @@ rec {
 
       (import_if_exists_or ./private/lib/_imports.nix [ ])
       (import_if_exists_or ./private/modules/generic/_imports.nix [ ])
-      (import_if_exists_or ./modules/hm/_imports.nix [ ])
-      (import_if_exists_or ./roles/hm/_imports.nix [ ])
+      (import_if_exists_or ./private/modules/hm/_imports.nix [ ])
+      (import_if_exists_or ./private/roles/hm/_imports.nix [ ])
     ];
   };
 
