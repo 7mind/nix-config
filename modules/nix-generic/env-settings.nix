@@ -27,6 +27,11 @@
       dev.enable = true;
     } else { });
 
+    programs = lib.mkIf cfg-meta.isLinux {
+      mtr.enable = true;
+      trippy.enable = true;
+    };
+
     environment.systemPackages = with pkgs; [
       # file managers
       far2l
@@ -45,6 +50,7 @@
       trippy
       mtr
       nmap
+      rustscan
 
       bind.dnsutils
       tcpdump
@@ -68,6 +74,7 @@
 
       # monitoring
       htop
+      zenith
       bandwhich
 
       # terminal
