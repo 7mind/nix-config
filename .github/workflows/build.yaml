@@ -1,0 +1,42 @@
+name: Baboon Build
+
+on:
+  push:
+    branches: [ "main" ]
+    tags:
+      - "v*.*.*"
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        # see : https://github.com/actions/runner-images
+        include:
+          - target: linux-amd64
+            os: ubuntu-latest
+            runs-on: [ ]
+          # - target: linux-aarch64
+          #   os: ubuntu-24.04-arm
+          #   runs-on: [ ]
+          # - target: macos-amd64-13
+          #   os: macos-13 # this is amd64
+          #   runs-on: [ ]
+          # - target: macos-aarch64-14
+          #   runs-on: [ ]
+          #   os: macos-14 # yes, this is aarch64
+    name: ${{ matrix.target }}
+    runs-on:
+      - ${{ matrix.os }}
+      - ${{ matrix.runs-on }}
+    steps:
+      - uses: 7mind/github-env@minimal
+        with:
+          setup-nix: ${{ matrix.preconfigured != true }}
+      - name: Build
+        run: nix build ".#nixosConfigurations.pavel-am5.config.system.build.toplevel" --out-link /tmp/out
