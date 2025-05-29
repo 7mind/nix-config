@@ -108,7 +108,9 @@
   networking.hostName = cfg-meta.hostname;
   networking.domain = "home.7mind.io";
   networking.useDHCP = false;
-
+  networking.firewall = {
+    allowedTCPPorts = [ 8234 ];
+  };
 
 
   boot.initrd = {

@@ -87,19 +87,6 @@
             ipset list upnp6 >/dev/null 2>&1 || ipset create upnp6 hash:ip,port family inet6 timeout 3
             apply_if_not_yet ip6tables -A OUTPUT -p udp -m udp --dport 1900 -j SET --add-set upnp6 src,src --exist
             apply_if_not_yet ip6tables -A INPUT -p udp -m set --match-set upnp6 dst,dst -j ACCEPT
-
-
-            # iptables -C OUTPUT -p udp -m udp --dport 1900 -j SET --add-set upnp src,src --exist >/dev/null 2>&1 || \
-            #   iptables -A OUTPUT -p udp -m udp --dport 1900 -j SET --add-set upnp src,src --exist
-
-            # iptables -C INPUT -p udp -m set --match-set upnp dst,dst -j ACCEPT >/dev/null 2>&1 || \
-            #   iptables -A INPUT -p udp -m set --match-set upnp dst,dst -j ACCEPT
-
-            # iptables -C OUTPUT -p udp -m udp --dport 1900 -j SET --add-set upnp6 src,src --exist >/dev/null 2>&1 || \
-            #   ip6tables -A OUTPUT -p udp -m udp --dport 1900 -j SET --add-set upnp6 src,src --exist
-
-            # iptables -C ip6tables -A INPUT -p udp -m set --match-set upnp6 dst,dst -j ACCEPT >/dev/null 2>&1 || \
-            #   ip6tables -A INPUT -p udp -m set --match-set upnp6 dst,dst -j ACCEPT
           '';
 
         };
