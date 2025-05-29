@@ -71,9 +71,14 @@
           extraPackages = lib.mkIf config.smind.net.upnp.enable [ pkgs.ipset ];
 
           extraCommands = lib.mkIf config.smind.net.upnp.enable ''
-            ipset create upnp hash:ip,port timeout 3 || true
+            ipset list upnp >/dev/null 2>&1 || ipset create upnp hash:ip,port timeout 3
             iptables -A OUTPUT -p udp -m udp --dport 1900 -j SET --add-set upnp src,src --exist
             iptables -A INPUT -p udp -m set --match-set upnp dst,dst -j ACCEPT
+
+            ipset list upnp6 >/dev/null 2>&1 || ipset create upnp6 hash:ip,port family inet6 timeout 3
+            ip6tables -A OUTPUT -p udp --dport 5351 -j SET --add-set upnp6 src,src --exist
+            ip6tables -A OUTPUT -p udp --dport 1900 -j SET --add-set upnp6 src,src --exist
+            ip6tables -A INPUT -p udp -m set --match-set upnp6 dst,dst -j ACCEPT
           '';
 
         };
