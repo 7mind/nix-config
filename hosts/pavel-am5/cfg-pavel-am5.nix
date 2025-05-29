@@ -11,6 +11,14 @@
     "olm-3.2.16"
   ];
 
+  age.rekey = {
+    masterIdentities = [
+      {
+        identity = "/does-not-exist";
+        pubkey = "age";
+      }
+    ];
+  };
 
   nix = {
     settings = {
@@ -109,16 +117,7 @@
   networking.domain = "home.7mind.io";
   networking.useDHCP = false;
 
-  systemd.services.ip-rules = {
-    description = "Always prefer LAN routes over tailscale";
-    after = [ "network.target" ];
-    wantedBy = [ "multi-user.target" ];
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = "${pkgs.iproute2}/bin/ip rule add to 192.168.0.0/16 pref 5000 lookup main";
-      RemainAfterExit = true;
-    };
-  };
+
 
   boot.initrd = {
     network = {

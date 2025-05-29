@@ -1,4 +1,4 @@
-{ config, lib, ... }:
+{ config, lib, pkgs, ... }:
 
 {
   options = {
@@ -14,6 +14,19 @@
       enable = true;
       interfaceName = "tailscale0";
     };
+
     systemd.network.wait-online.ignoredInterfaces = [ "tailscale0" ];
+
+    systemd.services.ip-rules = {
+      description = "Always prefer LAN routes over tailscale";
+      after = [ "network.target" ];
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        # TODO: other prefixes
+        ExecStart = "${pkgs.iproute2}/bin/ip rule add to 192.168.0.0/16 pref 5000 lookup main";
+        RemainAfterExit = true;
+      };
+    };
   };
 }

@@ -66,6 +66,7 @@
           # https://discourse.nixos.org/t/how-to-add-conntrack-helper-to-firewall/798
           # https://discourse.nixos.org/t/firewall-rules-with-rygel-gnome-sharing/17471
           extraPackages = lib.mkIf config.smind.net.upnp.enable [ pkgs.ipset ];
+
           extraCommands = lib.mkIf config.smind.net.upnp.enable ''
             ipset create upnp hash:ip,port timeout 3
             iptables -A OUTPUT -p udp -m udp --dport 1900 -j SET --add-set upnp src,src --exist

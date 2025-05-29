@@ -2,10 +2,17 @@
 
 {
   imports = smind-hm.imports ++ [
-    "${cfg-meta.paths.users}/pavel/hm/git.nix"
     (import_if_exists "${cfg-meta.paths.private}/modules/hm/pavel/cfg-hm.nix")
   ];
 
+  age.rekey = {
+    masterIdentities = [
+      {
+        identity = "/does-not-exist";
+        pubkey = "age";
+      }
+    ];
+  };
 
   smind.hm = {
     roles.desktop = true;
