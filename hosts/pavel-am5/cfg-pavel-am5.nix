@@ -1,4 +1,4 @@
-{ config, cfg-meta, lib, pkgs, cfg-const, ... }:
+{ config, cfg-meta, lib, pkgs, cfg-const, import_if_exists, ... }:
 
 {
   imports =
