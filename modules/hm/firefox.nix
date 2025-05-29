@@ -239,8 +239,8 @@
           # https://gitlab.com/kira-bruneau/home-config/-/blob/main/package/firefox/default.nix
           search = {
             force = true;
-            default = "ddg";
-            order = [ "ddg" "kagi" "google" ];
+            default = "leta";
+            order = [ "leta" "ddg" "kagi" "google" ];
             engines = {
               "bing".metaData.hidden = true;
               "ebay".metaData.hidden = true;
@@ -248,6 +248,20 @@
 
               "wikipedia".metaData.alias = "@w";
               "Amazon.co.uk".metaData.hidden = "@a";
+
+              "Leta" = {
+                id = "leta";
+                urls = [{
+                  template = "https://leta.mullvad.net/search";
+                  params = [{
+                    name = "q";
+                    value = "{searchTerms}";
+                  }];
+                }];
+                icon = "https://leta.mullvad.net/favicon.ico";
+                definedAliases = [ "@l" ];
+              };
+
 
               "Kagi" = {
                 id = "kagi";
