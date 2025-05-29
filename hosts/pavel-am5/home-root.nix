@@ -1,6 +1,6 @@
-{ smind-hm, cfg-meta, ... }: {
+{ smind-hm, cfg-meta, import_if_exists, ... }: {
   imports = smind-hm.imports ++ [
-    "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
+    (import_if_exists "${cfg-meta.paths.secrets}/pavel/age-rekey.nix")
   ];
 
   smind.hm = {

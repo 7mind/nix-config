@@ -2,8 +2,9 @@
 
 {
   imports = smind-hm.imports ++ [
-    "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
     "${cfg-meta.paths.users}/pavel/hm/git.nix"
+
+    (import_if_exists "${cfg-meta.paths.secrets}/pavel/age-rekey.nix")
     (import_if_exists "${cfg-meta.paths.private}/modules/hm/pavel/cfg-hm.nix")
   ];
 
