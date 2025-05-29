@@ -28,6 +28,8 @@ jobs:
       - ${{ matrix.runs-on }}
     steps:
       - uses: wimpysworld/nothing-but-nix@main
+        with:
+          hatchet-protocol: 'rampage'
       - uses: 7mind/github-env@minimal
         with:
           setup-nix: ${{ matrix.preconfigured != true }}
