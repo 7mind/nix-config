@@ -105,8 +105,7 @@
     iperf.protected.server.enable = false;
     iperf.protected.client.enable = true;
 
-    services.geoip.enable = true;
-    services.geoip.key.enable = true;
+
     services.zt.enable = true;
   };
 
