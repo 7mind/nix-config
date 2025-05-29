@@ -1,18 +1,12 @@
-{ pkgs, config, smind-hm, lib, extended_pkg, cfg-meta, xdg_associate, outerConfig, import_if_exists, ... }:
+{ pkgs, config, smind-hm, lib, extended_pkg, cfg-meta, xdg_associate, outerConfig, import_if_exists, import_if_exists_or, ... }:
 
 {
   imports = smind-hm.imports ++ [
     (import_if_exists "${cfg-meta.paths.private}/modules/hm/pavel/cfg-hm.nix")
+    (import_if_exists_or "${cfg-meta.paths.secrets}/pavel/age-rekey.nix" (import "${cfg-meta.paths.modules}/age-dummy.nix"))
+
   ];
 
-  age.rekey = {
-    masterIdentities = [
-      {
-        identity = "/does-not-exist";
-        pubkey = "age";
-      }
-    ];
-  };
 
   smind.hm = {
     roles.desktop = true;

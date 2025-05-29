@@ -144,6 +144,7 @@ rec {
         inherit inputs;
         inherit cfg-const;
         inherit import_if_exists;
+        inherit import_if_exists_or;
       };
       specialArgs = cfg-args // {
         specialArgsSelfRef = cfg-args;

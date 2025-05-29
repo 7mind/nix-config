@@ -1,6 +1,6 @@
-{ smind-hm, cfg-meta, import_if_exists, ... }: {
+{ smind-hm, cfg-meta, import_if_exists_or, ... }: {
   imports = smind-hm.imports ++ [
-    (import_if_exists "${cfg-meta.paths.secrets}/pavel/age-rekey.nix")
+    (import_if_exists_or "${cfg-meta.paths.secrets}/pavel/age-rekey.nix" (import "${cfg-meta.paths.modules}/age-dummy.nix"))
   ];
 
   age.rekey = {
@@ -10,6 +10,7 @@
         pubkey = "age";
       }
     ];
+    storageMode = "derivation";
   };
 
   smind.hm = {

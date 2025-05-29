@@ -1,24 +1,16 @@
-{ config, cfg-meta, lib, pkgs, cfg-const, import_if_exists, ... }:
+{ config, cfg-meta, lib, pkgs, cfg-const, import_if_exists, import_if_exists_or, ... }:
 
 {
   imports =
     [
       ./hardware-configuration.nix
+      (import_if_exists_or "${cfg-meta.paths.secrets}/pavel/age-rekey.nix" (import "${cfg-meta.paths.modules}/age-dummy.nix"))
     ];
 
   nixpkgs.config.permittedInsecurePackages = [
     "fluffychat-linux-1.23.0"
     "olm-3.2.16"
   ];
-
-  age.rekey = {
-    masterIdentities = [
-      {
-        identity = "/does-not-exist";
-        pubkey = "age";
-      }
-    ];
-  };
 
   nix = {
     settings = {
