@@ -104,13 +104,6 @@
     iperf.enable = true;
     iperf.protected.server.enable = false;
     iperf.protected.client.enable = true;
-
-
-    services.zt.enable = true;
-  };
-
-  age.rekey = {
-    hostPubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM1VvmTzQX/bvLjKEyDfGWdxGdt+3ZSy7/f6r5YAsvtS";
   };
 
   networking.hostId = "8a9c7614";
