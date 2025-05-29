@@ -4,8 +4,6 @@
   imports =
     [
       ./hardware-configuration.nix
-      "${cfg-meta.paths.secrets}/pavel/age-rekey.nix"
-      "${cfg-meta.paths.secrets}/pavel/age-secrets.nix"
     ];
 
   nixpkgs.config.permittedInsecurePackages = [
