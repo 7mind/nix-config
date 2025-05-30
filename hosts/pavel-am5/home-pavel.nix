@@ -142,6 +142,29 @@
       #defs = { TEST = "1"; };
     })
 
+
+    (extended_pkg {
+      pkg = jetbrains.pycharm-professional;
+      path = "bin/pycharm-professional";
+      paths = [
+        nodejs_24
+      ];
+
+      ld-libs = [
+        libmediainfo
+        xorg.libX11
+        xorg.libX11.dev
+        xorg.libICE
+        xorg.libSM
+
+        libGL
+        icu
+        fontconfig
+        gccStdenv.cc.cc.lib
+      ];
+    })
+
+
     (extended_pkg {
       pkg = jetbrains.rider;
       path = "bin/rider";
