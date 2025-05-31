@@ -12,6 +12,8 @@
     home-manager.enable = true;
   };
 
+  networking.hostName = cfg-meta.hostname;
+
   system.primaryUser = "pavel";
 
   users.users.pavel = {
