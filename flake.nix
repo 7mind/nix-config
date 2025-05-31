@@ -55,29 +55,23 @@
   outputs = inputs@{ self, ... }:
     let
       globals = import ./globals.nix;
-      make-nixos-x86_64 = globals.make-nixos-x86_64 { inherit inputs; inherit self; };
-      make-nixos-aarch64 = globals.make-nixos-aarch64 { inherit inputs; inherit self; };
-      make-darwin-aarch64 = globals.make-darwin-aarch64 { inherit inputs; inherit self; };
+      hosts-public = import ./hosts.nix;
+      hosts-private = globals.import_if_exists_or ./private/hosts.nix ({ ... }: {
+        nixos = [ ];
+        darwin = [ ];
+      });
+      builders = {
+        make-nixos-x86_64 = globals.make-nixos-x86_64 { inherit inputs; inherit self; };
+        make-nixos-aarch64 = globals.make-nixos-aarch64 { inherit inputs; inherit self; };
+        make-darwin-aarch64 = globals.make-darwin-aarch64 { inherit inputs; inherit self; };
+      };
     in
     {
       inherit globals; # this makes this flake reusable by other flakes
 
-      nixosConfigurations = builtins.listToAttrs
-        [
-          (make-nixos-x86_64 "pavel-am5")
-          (make-nixos-x86_64 "vm")
-          (make-nixos-x86_64 "nas")
+      nixosConfigurations = builtins.listToAttrs ((hosts-public builders).nixos ++ (hosts-private builders).nixos);
 
-          (make-nixos-aarch64 "o1")
-          (make-nixos-aarch64 "o2")
-        ]
-      ;
-
-      darwinConfigurations = builtins.listToAttrs
-        [
-          (make-darwin-aarch64 "pavel-mba-m3")
-        ]
-      ;
+      darwinConfigurations = builtins.listToAttrs ((hosts-public builders).darwin ++ (hosts-private builders).darwin);
 
       agenix-rekey = inputs.agenix-rekey.configure {
         userFlake = self;

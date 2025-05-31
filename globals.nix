@@ -1,8 +1,7 @@
-let
+rec {
   import_if_exists_or = path: default: if builtins.pathExists path then import path else default;
   import_if_exists = path: import_if_exists_or path { };
-in
-rec {
+
   smind-nixos-imports = builtins.concatLists [
     (import ./lib/_imports.nix)
     (import ./modules/generic/_imports.nix)
