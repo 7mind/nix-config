@@ -365,6 +365,24 @@
         "type": "github"
       }
     },
+    "flake-utils_6": {
+      "inputs": {
+        "systems": "systems_7"
+      },
+      "locked": {
+        "lastModified": 1731533236,
+        "narHash": "sha256-l0KFg5HjrsfsO/JpG+r7fRrqm12kzFHyUHqHCVpMMbI=",
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "rev": "11707dc2f618dd54ca8739b309ec4fc024de578b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "type": "github"
+      }
+    },
     "gitignore": {
       "inputs": {
         "nixpkgs": [
@@ -605,6 +623,80 @@
         "type": "github"
       }
     },
+    "pylontech": {
+      "inputs": {
+        "flake-utils": "flake-utils_6",
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "pyproject-build-systems": "pyproject-build-systems",
+        "pyproject-nix": "pyproject-nix",
+        "uv2nix": "uv2nix"
+      },
+      "locked": {
+        "lastModified": 1748715582,
+        "narHash": "sha256-iQJe+Jf19NX6+6SWJJ7voIH58mhCkaTdyl9NO8McV3Q=",
+        "owner": "pshirshov",
+        "repo": "python-pylontech",
+        "rev": "e0981ddf3dc0c5d213f8ec9e6a3e92b5937a0dda",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pshirshov",
+        "repo": "python-pylontech",
+        "type": "github"
+      }
+    },
+    "pyproject-build-systems": {
+      "inputs": {
+        "nixpkgs": [
+          "pylontech",
+          "nixpkgs"
+        ],
+        "pyproject-nix": [
+          "pylontech",
+          "pyproject-nix"
+        ],
+        "uv2nix": [
+          "pylontech",
+          "uv2nix"
+        ]
+      },
+      "locked": {
+        "lastModified": 1748562898,
+        "narHash": "sha256-STk4QklrGpM3gliPKNJdBLSQvIrqRuwHI/rnYb/5rh8=",
+        "owner": "pyproject-nix",
+        "repo": "build-system-pkgs",
+        "rev": "33bd58351957bb52dd1700ea7eeefe34de06a892",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pyproject-nix",
+        "repo": "build-system-pkgs",
+        "type": "github"
+      }
+    },
+    "pyproject-nix": {
+      "inputs": {
+        "nixpkgs": [
+          "pylontech",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1746540146,
+        "narHash": "sha256-QxdHGNpbicIrw5t6U3x+ZxeY/7IEJ6lYbvsjXmcxFIM=",
+        "owner": "pyproject-nix",
+        "repo": "pyproject.nix",
+        "rev": "e09c10c24ebb955125fda449939bfba664c467fd",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pyproject-nix",
+        "repo": "pyproject.nix",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "agenix": "agenix",
@@ -617,6 +709,7 @@
         "nix-apple-fonts": "nix-apple-fonts",
         "nix-vscode-extensions": "nix-vscode-extensions",
         "nixpkgs": "nixpkgs",
+        "pylontech": "pylontech",
         "smind": "smind"
       }
     },
@@ -779,6 +872,21 @@
         "type": "github"
       }
     },
+    "systems_7": {
+      "locked": {
+        "lastModified": 1681028828,
+        "narHash": "sha256-Vy1rq5AaRuLzOxct8nz4T6wlgyUR7zLU309k9mBC768=",
+        "owner": "nix-systems",
+        "repo": "default",
+        "rev": "da67096a3b9bf56a91d16901293e51ba5b49a27e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-systems",
+        "repo": "default",
+        "type": "github"
+      }
+    },
     "treefmt-nix": {
       "inputs": {
         "nixpkgs": [
@@ -797,6 +905,31 @@
       "original": {
         "owner": "numtide",
         "repo": "treefmt-nix",
+        "type": "github"
+      }
+    },
+    "uv2nix": {
+      "inputs": {
+        "nixpkgs": [
+          "pylontech",
+          "nixpkgs"
+        ],
+        "pyproject-nix": [
+          "pylontech",
+          "pyproject-nix"
+        ]
+      },
+      "locked": {
+        "lastModified": 1748398512,
+        "narHash": "sha256-99mf47Kjl/rj716cSjeA6ubZLlhNudmC4HRg/6UMfvs=",
+        "owner": "pyproject-nix",
+        "repo": "uv2nix",
+        "rev": "f006d191d4ff5894d2ead6299e2eaf3659bc46b0",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pyproject-nix",
+        "repo": "uv2nix",
         "type": "github"
       }
     }

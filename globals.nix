@@ -125,6 +125,8 @@ rec {
 
       cfg-flakes = {
         pkgs7mind = inputs.smind.legacyPackages."${arch}";
+
+        pylontech = inputs.pylontech.packages."${arch}";
         nix-apple-fonts = inputs.nix-apple-fonts.packages."${arch}";
       };
 

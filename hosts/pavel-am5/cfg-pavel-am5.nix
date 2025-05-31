@@ -1,4 +1,4 @@
-{ config, cfg-meta, lib, pkgs, cfg-const, import_if_exists, import_if_exists_or, ... }:
+{ config, cfg-meta, lib, pkgs, cfg-const, import_if_exists, import_if_exists_or, cfg-flakes, ... }:
 
 {
   imports =
@@ -167,9 +167,9 @@
   home-manager.users.pavel = import ./home-pavel.nix;
   home-manager.users.root = import ./home-root.nix;
 
-  # environment.systemPackages = with pkgs; [
-
-  # ];
+  environment.systemPackages = with pkgs; [
+    cfg-flakes.pylontech.default
+  ];
 
   # doesn't work
   # systemd.tmpfiles.rules =
