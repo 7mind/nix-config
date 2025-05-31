@@ -2,11 +2,12 @@ name: nixox-config
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
     tags:
       - "v*.*.*"
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -21,7 +22,7 @@ jobs:
         include:
           - target: linux-amd64
             os: ubuntu-latest
-            runs-on: [ ]
+            runs-on: []
     name: ${{ matrix.target }}
     runs-on:
       - ${{ matrix.os }}
@@ -29,7 +30,7 @@ jobs:
     steps:
       - uses: wimpysworld/nothing-but-nix@main
         with:
-          hatchet-protocol: 'rampage'
+          hatchet-protocol: "rampage"
       - uses: 7mind/github-env@minimal
         with:
           setup-nix: ${{ matrix.preconfigured != true }}
@@ -41,7 +42,7 @@ jobs:
       matrix:
         include:
           - target: macos-aarch64-14
-            runs-on: [ ]
+            runs-on: []
             os: macos-14 # yes, this is aarch64
     name: ${{ matrix.target }}
     runs-on:
