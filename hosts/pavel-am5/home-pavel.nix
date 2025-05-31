@@ -164,6 +164,27 @@
       ];
     })
 
+    (extended_pkg {
+      pkg = jetbrains.datagrip;
+      path = "bin/datagrip";
+      paths = [
+        nodejs_24
+      ];
+
+      ld-libs = [
+        libmediainfo
+        xorg.libX11
+        xorg.libX11.dev
+        xorg.libICE
+        xorg.libSM
+
+        libGL
+        icu
+        fontconfig
+        gccStdenv.cc.cc.lib
+      ];
+    })
+
 
     (extended_pkg {
       pkg = jetbrains.rider;
