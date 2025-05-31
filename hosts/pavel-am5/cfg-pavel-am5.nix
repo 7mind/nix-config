@@ -168,7 +168,7 @@
   home-manager.users.root = import ./home-root.nix;
 
   environment.systemPackages = with pkgs; [
-    cfg-flakes.pylontech.default
+
   ];
 
   # doesn't work
