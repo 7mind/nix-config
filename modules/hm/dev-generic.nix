@@ -49,7 +49,7 @@
       tokei
       cloc
 
-      # texlive.combined.scheme-full
+      texlive.combined.scheme-full
 
       # bitwarden-cli
       # rbw
