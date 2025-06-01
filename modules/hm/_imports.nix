@@ -10,6 +10,7 @@
   ./firefox.nix
   ./htop.nix
   ./kitty.nix
+  ./nushell.nix
   ./ssh.nix
   ./tmux.nix
   ./vscodium.nix

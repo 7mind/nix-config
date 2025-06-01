@@ -16,25 +16,15 @@
     #   rm -rf ${config.home.homeDirectory}/.zcompdump* # get rid of outdated zsh junk
     # '';
 
-    programs.starship = {
-      enable = true;
-      settings = {
-        command_timeout = 300;
-        scala.disabled = true;
-      };
-    };
+    programs.zoxide.enableZshIntegration = true;
 
-    programs.zoxide = {
-      enable = true;
-      enableBashIntegration = true;
-      enableZshIntegration = true;
-    };
+    programs.wezterm.enableZshIntegration = true;
 
-    programs.autojump = {
-      enable = true;
-      enableBashIntegration = true;
-      enableZshIntegration = true;
-    };
+    # programs.autojump = {
+    #   enable = true;
+    #   enableBashIntegration = true;
+    #   enableZshIntegration = true;
+    # };
 
     # see any.nix, any-nixos.nix any-darwin.nix, and HM config in zsh.nix
     # https://home-manager-options.extranix.com/?query=programs.zsh&release=master

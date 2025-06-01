@@ -20,6 +20,29 @@
       html.enable = true;
     };
 
+    programs.zoxide = {
+      enable = true;
+      enableBashIntegration = true;
+    };
+
+    programs.starship = {
+      enable = true;
+      settings = {
+        command_timeout = 300;
+        scala.disabled = true;
+        add_newline = true;
+        character = {
+          success_symbol = "[➜](bold green)";
+          error_symbol = "[➜](bold red)";
+        };
+      };
+    };
+
+
+    home.shellAliases = {
+      "j" = "z"; # zoxide
+    };
+
     home.packages = lib.mkIf cfg-meta.isLinux (with pkgs; [
       # productivity
       libreoffice-fresh

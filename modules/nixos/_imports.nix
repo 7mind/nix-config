@@ -22,6 +22,7 @@
   ./networking-desktop.nix
   ./networking.nix
   ./nix-ld.nix
+  ./nushell.nix
   ./oracle-cloud.nix
   ./overlay.nix
   ./power-amd.nix
