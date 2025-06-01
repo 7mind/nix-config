@@ -42,6 +42,16 @@
       };
     };
 
+    systemd.tmpfiles.rules = [
+      "w /sys/kernel/mm/transparent_hugepage/enabled - - - - always"
+      "w /sys/kernel/mm/transparent_hugepage/defrag - - - - defer+madvise"
+      "w /sys/kernel/mm/transparent_hugepage/khugepaged/max_ptes_none - - - - 0"
+    ];
+
+    boot.kernel.sysctl = {
+      "fs.file-max" = 2097152;
+      "fs.nr_open" = 2097152;
+    };
 
     hardware = {
       enableRedistributableFirmware = true;
