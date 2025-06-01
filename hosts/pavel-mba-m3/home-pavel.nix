@@ -22,27 +22,5 @@
   programs.zsh.shellAliases = {
     rmj = "find . -depth -type d \\( -name target -or -name .bloop -or -name .bsp -or -name .metals \\) -exec rm -rf {} \\;";
   };
-
-  /* programs.zed-editor =
-    {
-      userSettings = {
-        base_keymap = "None";
-      };
-      userKeymaps = import ./zed-keymap/zed-keymap-linux.nix;
-    };
-
-    programs.vscode.profiles.default.keybindings =
-    if cfg-meta.isLinux then
-      (builtins.fromJSON (builtins.readFile "${cfg-meta.paths.users}/pavel/hm/keymap-vscode-linux.json"))
-    else
-      [ ];
-  */
-
-  # home.activation.jetbrains-keymaps = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-  #   ${pkgs.findutils}/bin/find ${config.home.homeDirectory}/.config/JetBrains \
-  #     -type d \
-  #     -wholename '*/JetBrains/*/keymaps' '!' -path '*/settingsSync/*' \
-  #     -exec cp -f "${cfg-meta.paths.users}/pavel/hm/keymap-idea-linux.xml" {}/Magen.xml \;
-  # '';
 }
 
