@@ -61,15 +61,6 @@
     else
       [ ];
 
-  home.shellAliases = {
-    # rmj = "${pkgs.findutils}/bin/find . -depth -type d \\( -name target -or -name .bloop -or -name .bsp -or -name .metals \\) -exec rm -rf {} \\;";
-    # rmgpucache = "${pkgs.findutils}/bin/find ~ -name GPUCache -type d -exec rm -rf {} \\;";
-    # open =
-    #   lib.mkIf cfg-meta.isLinux "xdg-open";
-  };
-
-
-
   home.activation.jetbrains-keymaps = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     ${pkgs.findutils}/bin/find ${config.home.homeDirectory}/.config/JetBrains \
       -type d \

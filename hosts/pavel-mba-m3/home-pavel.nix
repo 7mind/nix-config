@@ -18,9 +18,5 @@
 
   home.packages = with pkgs; [
   ];
-
-  home.shellAliases = {
-    # rmj = "find . -depth -type d \\( -name target -or -name .bloop -or -name .bsp -or -name .metals \\) -exec rm -rf {} \\;";
-  };
 }
 
