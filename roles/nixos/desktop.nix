@@ -37,7 +37,8 @@
       environment.all-docs.enable = lib.mkDefault true;
 
       zram-swap = lib.mkDefault true;
-      zsh.enable = lib.mkDefault true;
+      zsh.enable = lib.mkDefault false;
+      nushell.enable = lib.mkDefault true;
       nix.customize = lib.mkDefault true;
 
       zfs.enable = lib.mkDefault true;

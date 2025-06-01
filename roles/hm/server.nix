@@ -14,7 +14,8 @@
       htop.enable = lib.mkDefault true;
       ssh.enable = lib.mkDefault true;
       tmux.enable = lib.mkDefault true;
-      zsh.enable = lib.mkDefault true;
+      zsh.enable = lib.mkDefault false;
+      nushell.enable = lib.mkDefault true;
       cleanups.enable = lib.mkDefault true;
     };
   };
