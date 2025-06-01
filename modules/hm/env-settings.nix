@@ -1,4 +1,4 @@
-{ config, lib, pkgs, xdg_associate, cfg-meta, outerConfig, ... }:
+{ cfg-const, config, lib, pkgs, xdg_associate, cfg-meta, outerConfig, ... }:
 
 {
   options = {
@@ -39,7 +39,7 @@
     };
 
 
-    home.shellAliases = {
+    home.shellAliases = cfg-const.universal-aliases // {
       "j" = "z"; # zoxide
     };
 

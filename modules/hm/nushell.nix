@@ -42,7 +42,7 @@
         )
       '';
 
-      shellAliases = cfg-const.universal-aliases;
+      # shellAliases = cfg-const.universal-aliases;
     };
 
     programs.carapace = {
