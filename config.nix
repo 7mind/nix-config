@@ -11,6 +11,19 @@
     ssh-keys-nix-builder = [
       ''ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJM1TV44pHGx0MxbHPRr+AkkP6k1ppS2pYJdvJGPVQsR builder''
     ];
+
+    universal-aliases = {
+      lsblk =
+        "lsblk -o NAME,TYPE,FSTYPE,SIZE,MOUNTPOINT,FSUSE%,WWN,SERIAL,MODEL";
+      watch = "viddy";
+      tree = "lsd --tree";
+      ls = "lsd -lh --group-directories-first";
+      la = "lsd -lha --group-directories-first";
+
+      myip = "curl -4 ifconfig.co";
+      myip4 = "curl -4 ifconfig.co";
+      myip6 = "curl -6 ifconfig.co";
+    };
   };
 
   cfg-packages = { inputs, pkgs, arch }: {
@@ -18,4 +31,6 @@
     # linux-kernel = pkgs.linuxKernel.packageAliases.linux_latest;
     linux-kernel = pkgs.linuxKernel.packages.linux_6_13;
   };
+
+
 }

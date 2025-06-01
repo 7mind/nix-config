@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, cfg-const, ... }:
 
 {
   options = {
@@ -36,20 +36,7 @@
 
         environment = {
           enableDebugInfo = true;
-
-          shellAliases = {
-            lsblk =
-              "lsblk -o NAME,TYPE,FSTYPE,SIZE,MOUNTPOINT,FSUSE%,WWN,SERIAL,MODEL";
-            watch = "viddy";
-            tree = "lsd --tree";
-            ls = "lsd -lh --group-directories-first";
-            la = "lsd -lha --group-directories-first";
-
-            myip = "curl -4 ifconfig.co";
-            myip4 = "curl -4 ifconfig.co";
-            myip6 = "curl -6 ifconfig.co";
-          };
-
+          shellAliases = cfg-const.universal-aliases;
         };
 
         environment.systemPackages = with pkgs; [

@@ -19,7 +19,7 @@
   home.packages = with pkgs; [
   ];
 
-  programs.zsh.shellAliases = {
+  home.shellAliases = {
     rmj = "find . -depth -type d \\( -name target -or -name .bloop -or -name .bsp -or -name .metals \\) -exec rm -rf {} \\;";
   };
 }

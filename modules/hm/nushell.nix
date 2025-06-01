@@ -1,4 +1,4 @@
-{ config, lib, ... }:
+{ config, lib, cfg-const, ... }:
 
 {
   options = {
@@ -42,11 +42,7 @@
         )
       '';
 
-      # shellAliases = {
-      #   vi = "hx";
-      #   vim = "hx";
-      #   nano = "hx";
-      # };
+      shellAliases = { };
     };
 
     programs.carapace = {
