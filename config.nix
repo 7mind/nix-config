@@ -17,7 +17,7 @@
         "lsblk -o NAME,TYPE,FSTYPE,SIZE,MOUNTPOINT,FSUSE%,WWN,SERIAL,MODEL";
       watch = "viddy";
       tree = "lsd --tree";
-      ls = "lsd -lh --group-directories-first";
+      # ls = "lsd -lh --group-directories-first";
       la = "lsd -lha --group-directories-first";
 
       myip = "curl -4 ifconfig.co";
