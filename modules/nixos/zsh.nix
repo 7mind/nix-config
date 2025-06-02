@@ -2,7 +2,7 @@
   options = {
     smind.zsh.enable = lib.mkOption {
       type = lib.types.bool;
-      default = true;
+      default = false;
       description = "Configure zsh as default shell for all users";
     };
   };
