@@ -239,8 +239,8 @@
           # https://gitlab.com/kira-bruneau/home-config/-/blob/main/package/firefox/default.nix
           search = {
             force = true;
-            default = "leta";
-            order = [ "leta" "ddg" "kagi" "google" "github" "nixpkgs" "hixopts" "hm" ];
+            default = "qwant";
+            order = [ "leta" "qwant" "ddg" "kagi" "google" "github" "nixpkgs" "hixopts" "hm" ];
             engines = {
               "bing".metaData.hidden = true;
               "ebay".metaData.hidden = true;
@@ -260,6 +260,23 @@
                 }];
                 icon = "https://leta.mullvad.net/favicon.ico";
                 definedAliases = [ "@l" ];
+              };
+
+              qwant = {
+                name = "Qwant";
+                urls = [{
+                  template = "https://www.qwant.com/";
+                  params = [{
+                    name = "q";
+                    value = "{searchTerms}";
+                  }
+                    {
+                      name = "t";
+                      value = "web";
+                    }];
+                }];
+                icon = "https://www.qwant.com/favicon.ico";
+                definedAliases = [ "@q" ];
               };
 
 

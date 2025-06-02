@@ -41,6 +41,15 @@
       '';
 
       # shellAliases = cfg-const.universal-aliases;
+
+      plugins = with pkgs.nushellPlugins; [
+        net
+        units
+        query
+        gstat
+        highlight
+        semver
+      ];
     };
 
     programs.carapace = {
