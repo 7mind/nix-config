@@ -36,10 +36,13 @@
           error_symbol = "[➜](bold red)";
         };
         directory = {
+          style = "bold cyan";
           truncation_length = 5;
           truncate_to_repo = false;
           truncation_symbol = "…/";
-          before_repo_root_style = "(dimmed red)";
+          before_repo_root_style = "dimmed white";
+          # https://github.com/starship/starship/issues/6179
+          repo_root_style = "bold cyan";
         };
       };
     };
