@@ -60,38 +60,44 @@
           ls -la `which $1`
         }
 
-        _fzf_comprun () {
-          local command = $1
-          shift
-          case "$command" in
-              cd)           fzf "$@" --preview 'tree -C {} | head -200';;
-              *)            fzf "$@" ;;
-          esac
-        }
+        # _fzf_comprun () {
+        #   local command = $1
+        #   shift
+        #   case "$command" in
+        #       cd)           fzf "$@" --preview 'tree -C {} | head -200';;
+        #       *)            fzf "$@" ;;
+        #   esac
+        # }
       '';
     };
 
-    programs.fzf = {
+    programs.carapace = {
       enable = true;
       enableZshIntegration = true;
-      defaultCommand = "fd .$HOME";
-      fileWidgetCommand = "$FZF_DEFAULT_COMMAND";
-      changeDirWidgetCommand = "fd -t d . $HOME";
-      defaultOptions = [
-        "--layout=reverse"
-        "--border"
-        "--info=inline"
-        "--height=80%"
-        "--multi"
-        "--preview-window=:hidden"
-        "--preview '([[ -f {} ]] && (bat --style=numbers --color=always {} || cat {})) || ([[ -d {} ]] && (tree -C {} | less)) || echo {} 2> /dev/null | head -200'"
-        "--color='hl:148,hl+:154,pointer:032,marker:010,bg+:237,gutter:008'"
-        "--prompt='∼ '"
-        "--pointer='▶'"
-        "--marker='✓'"
-        "--bind '?:toggle-preview'"
-      ];
-      tmux.enableShellIntegration = true;
     };
+
+
+    # programs.fzf = {
+    #   enable = true;
+    #   enableZshIntegration = true;
+    #   defaultCommand = "fd .$HOME";
+    #   fileWidgetCommand = "$FZF_DEFAULT_COMMAND";
+    #   changeDirWidgetCommand = "fd -t d . $HOME";
+    #   defaultOptions = [
+    #     "--layout=reverse"
+    #     "--border"
+    #     "--info=inline"
+    #     "--height=80%"
+    #     "--multi"
+    #     "--preview-window=:hidden"
+    #     "--preview '([[ -f {} ]] && (bat --style=numbers --color=always {} || cat {})) || ([[ -d {} ]] && (tree -C {} | less)) || echo {} 2> /dev/null | head -200'"
+    #     "--color='hl:148,hl+:154,pointer:032,marker:010,bg+:237,gutter:008'"
+    #     "--prompt='∼ '"
+    #     "--pointer='▶'"
+    #     "--marker='✓'"
+    #     "--bind '?:toggle-preview'"
+    #   ];
+    #   tmux.enableShellIntegration = true;
+    # };
   };
 }
