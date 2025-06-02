@@ -71,12 +71,6 @@
       '';
     };
 
-    programs.tealdeer = {
-      enable = true;
-      # updateOnActivation = false;
-      settings = { updates = { auto_update = true; }; };
-    };
-
     programs.fzf = {
       enable = true;
       enableZshIntegration = true;

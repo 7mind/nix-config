@@ -35,8 +35,20 @@
           success_symbol = "[➜](bold green)";
           error_symbol = "[➜](bold red)";
         };
+        directory = {
+          truncate_to_repo = false;
+          truncation_symbol = "…";
+          before_repo_root_style = "(grey)";
+        };
       };
     };
+
+    programs.tealdeer = {
+      enable = true;
+      # updateOnActivation = false;
+      settings = { updates = { auto_update = true; }; };
+    };
+
 
 
     home.shellAliases = cfg-const.universal-aliases // {
