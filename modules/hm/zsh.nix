@@ -20,6 +20,10 @@
 
     programs.wezterm.enableZshIntegration = true;
 
+    programs.carapace.enableZshIntegration = true; = {
+      enable = true;
+
+    };
     # programs.autojump = {
     #   enable = true;
     #   enableBashIntegration = true;
@@ -42,11 +46,11 @@
         size = 10000;
       };
 
-      oh-my-zsh = {
-        enable = true;
-        theme = "kphoen";
-        plugins = [ "zsh-navigation-tools" ];
-      };
+      # oh-my-zsh = {
+      #   enable = true;
+      #   theme = "kphoen";
+      #   plugins = [ "zsh-navigation-tools" ];
+      # };
 
       localVariables = {
         COMPLETION_WAITING_DOTS = true;
@@ -71,10 +75,7 @@
       '';
     };
 
-    programs.carapace = {
-      enable = true;
-      enableZshIntegration = true;
-    };
+
 
 
     # programs.fzf = {
