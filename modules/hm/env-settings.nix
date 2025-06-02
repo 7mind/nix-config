@@ -36,9 +36,10 @@
           error_symbol = "[➜](bold red)";
         };
         directory = {
+          truncation_length = 5;
           truncate_to_repo = false;
-          truncation_symbol = "…";
-          before_repo_root_style = "(grey)";
+          truncation_symbol = "…/";
+          before_repo_root_style = "(dimmed cyan)";
         };
       };
     };
