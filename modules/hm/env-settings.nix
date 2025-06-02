@@ -49,6 +49,9 @@
 
     programs.atuin = {
       enable = true;
+      settings = {
+        enter_accept = false;
+      };
     };
 
     programs.carapace = {
@@ -60,8 +63,6 @@
       # updateOnActivation = false;
       settings = { updates = { auto_update = true; }; };
     };
-
-
 
     home.shellAliases = cfg-const.universal-aliases // {
       "j" = "z"; # zoxide
