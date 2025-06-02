@@ -39,7 +39,7 @@
           truncation_length = 5;
           truncate_to_repo = false;
           truncation_symbol = "…/";
-          before_repo_root_style = "(dimmed cyan)";
+          before_repo_root_style = "(dimmed red)";
         };
       };
     };
