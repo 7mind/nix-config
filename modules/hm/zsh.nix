@@ -20,10 +20,8 @@
 
     programs.wezterm.enableZshIntegration = true;
 
-    programs.carapace.enableZshIntegration = true; = {
-      enable = true;
-
-    };
+    programs.carapace.enableZshIntegration = true;
+    
     # programs.autojump = {
     #   enable = true;
     #   enableBashIntegration = true;
