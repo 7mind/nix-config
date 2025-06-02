@@ -21,7 +21,7 @@
     programs.wezterm.enableZshIntegration = true;
 
     programs.carapace.enableZshIntegration = true;
-    
+
     # programs.autojump = {
     #   enable = true;
     #   enableBashIntegration = true;
@@ -58,6 +58,10 @@
       sessionVariables = { };
 
       initContent = ''
+        # enable carapace
+        setopt menucomplete
+        zstyle ':completion:*' menu select
+
         what() {
           ls -la `which $1`
         }
@@ -74,8 +78,8 @@
     };
 
 
-
-
+    programs.atuin.enableZshIntegration = true;
+    
     # programs.fzf = {
     #   enable = true;
     #   enableZshIntegration = true;

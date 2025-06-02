@@ -47,6 +47,14 @@
       };
     };
 
+    programs.atuin = {
+      enable = true;
+    };
+
+    programs.carapace = {
+      enable = true;
+    };
+
     programs.tealdeer = {
       enable = true;
       # updateOnActivation = false;

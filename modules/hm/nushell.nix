@@ -52,11 +52,8 @@
       ];
     };
 
-    programs.carapace = {
-      enable = true;
-      enableNushellIntegration = true;
-    };
-
+    programs.atuin.enableNushellIntegration = true;
+    programs.carapace.enableNushellIntegration = true;
     programs.zoxide.enableNushellIntegration = true;
     programs.direnv.enableNushellIntegration = true;
     home.shell.enableNushellIntegration = true;
