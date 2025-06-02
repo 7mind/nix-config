@@ -33,7 +33,7 @@
       #zprof.enable = true;
       autocd = true;
 
-      autosuggestion.enable = true;
+      #autosuggestion.enable = true;
       syntaxHighlighting.enable = true;
 
       history = {
