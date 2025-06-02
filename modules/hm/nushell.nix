@@ -57,8 +57,8 @@
     programs.zoxide.enableNushellIntegration = true;
     programs.direnv.enableNushellIntegration = true;
     home.shell.enableNushellIntegration = true;
-
     programs.starship.enableNushellIntegration = true;
+    
     home.packages = with pkgs; [
       nufmt
     ];
