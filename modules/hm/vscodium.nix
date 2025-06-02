@@ -90,6 +90,7 @@
           pkgs.open-vsx.devmikeua.mikrotik-routeros-script
           # vscjava.vscode-java-pack
           # missing: anycode*,
+          thenuprojectcontributors.vscode-nushell-lang
         ] ++ (if cfg-meta.isDarwin then [ ] else [
           ms-vscode.cpptools
         ]);

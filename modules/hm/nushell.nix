@@ -1,4 +1,4 @@
-{ config, lib, cfg-const, ... }:
+{ config, lib, pkgs, cfg-const, ... }:
 
 {
   options = {
@@ -37,11 +37,7 @@
          }
         }
 
-        $env.PATH = ($env.PATH |
-        split row (char esep) |
-        prepend /home/myuser/.apps |
-        append /usr/bin/env
-        )
+        $env.PATH = ($env.PATH | split row (char esep) | append /usr/bin/env)
       '';
 
       # shellAliases = cfg-const.universal-aliases;
@@ -57,5 +53,8 @@
     home.shell.enableNushellIntegration = true;
 
     programs.starship.enableNushellIntegration = true;
+    home.packages = with pkgs; [
+      nufmt
+    ];
   };
 }
