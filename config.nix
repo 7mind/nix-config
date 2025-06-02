@@ -13,6 +13,7 @@
     ];
 
     universal-aliases = {
+      "j" = "z"; # zoxide
       lsblk =
         "lsblk -o NAME,TYPE,FSTYPE,SIZE,MOUNTPOINT,FSUSE%,WWN,SERIAL,MODEL";
       watch = "viddy";

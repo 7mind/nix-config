@@ -51,6 +51,7 @@
       enable = true;
       settings = {
         enter_accept = false;
+        prefers_reduced_motion = true;
       };
     };
 
@@ -64,9 +65,7 @@
       settings = { updates = { auto_update = true; }; };
     };
 
-    home.shellAliases = cfg-const.universal-aliases // {
-      "j" = "z"; # zoxide
-    };
+    home.shellAliases = cfg-const.universal-aliases // { };
 
     home.packages = lib.mkIf cfg-meta.isLinux (with pkgs; [
       # productivity
