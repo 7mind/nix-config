@@ -20,6 +20,8 @@
       jan
       # alpaca
       tabby
+
+      codex
     ];
 
     services.ollama = {
