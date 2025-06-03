@@ -65,6 +65,7 @@
         prefers_reduced_motion = true;
 
         smart_sort = true;
+        search_mode = "skim";
       };
     };
 
