@@ -44,6 +44,11 @@
           # https://github.com/starship/starship/issues/6179
           repo_root_style = "bold cyan";
         };
+        hostname = {
+          ssh_only = false;
+          format = "[$ssh_symbol](bold blue) on [$hostname](bold red) ";
+
+        };
       };
     };
 
@@ -52,7 +57,7 @@
       settings = {
         auto_sync = true;
         sync_frequency = "5m";
-        sync_address = "https://atn.net.7mind";
+        sync_address = "https://atn.net.7mind.io";
 
         enter_accept = false;
         prefers_reduced_motion = true;
