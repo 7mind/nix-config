@@ -11,6 +11,10 @@
   };
 
   config = lib.mkIf (config.smind.hm.environment.sane-defaults.desktop.enable && outerConfig.smind.isDesktop) {
+
+    programs.atuin = {
+      daemon.enable = true;
+    };
     home.packages = lib.mkIf cfg-meta.isLinux (with pkgs; [
       # productivity
       libreoffice-fresh
