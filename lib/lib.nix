@@ -125,7 +125,7 @@ let
       privateUsers = 65536 * outercfg.privateUsersMultiplier;
 
       extraFlags = [
-        # "--private-users=${toString (65536 * offset)}:65536"
+        # "--private-users=${toString (65536 * offset)}:65535"
         "--private-users-ownership=chown"
       ];
 
