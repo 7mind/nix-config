@@ -46,8 +46,9 @@
         };
         hostname = {
           ssh_only = false;
-          format = "[$ssh_symbol](bold blue) on [$hostname](bold red) ";
-
+        };
+        username = {
+          show_always = true;
         };
       };
     };
