@@ -49,7 +49,7 @@
         };
         username = {
           show_always = true;
-          format = "[$user]($style)@";
+          format = "[$user]($style) @ ";
         };
       };
     };
