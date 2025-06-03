@@ -52,7 +52,7 @@
       settings = {
         auto_sync = true;
         sync_frequency = "5m";
-        sync_address = "https://api.atuin.sh";
+        sync_address = "https://atn.net.7mind";
 
         enter_accept = false;
         prefers_reduced_motion = true;
