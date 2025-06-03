@@ -63,6 +63,8 @@
 
         enter_accept = false;
         prefers_reduced_motion = true;
+
+        smart_sort = true;
       };
     };
 
