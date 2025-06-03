@@ -66,6 +66,7 @@
 
         smart_sort = true;
         search_mode = "skim";
+        style = "full";
       };
     };
 
