@@ -25,7 +25,8 @@
       wezterm.enable = lib.mkDefault true;
       autostart.programs = [ ];
       cleanups.enable = lib.mkDefault true;
-      environment.sane-defaults.enable = lib.mkDefault true;
+      environment.sane-defaults.generic.enable = lib.mkDefault true;
+      environment.sane-defaults.desktop.enable = lib.mkDefault true;
     };
   };
 }

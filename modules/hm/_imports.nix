@@ -5,7 +5,8 @@
   ./dev-git.nix
   ./dev-cs.nix
   ./dev-scala.nix
-  ./env-settings.nix
+  ./env-settings-generic.nix
+  ./env-settings-desktop.nix
   ./firefox-notabbar.nix
   ./firefox.nix
   ./htop.nix
