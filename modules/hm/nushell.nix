@@ -50,6 +50,8 @@
         highlight
         semver
       ];
+
+      environmentVariables = config.home.sessionVariables;
     };
 
     programs.atuin.enableNushellIntegration = true;
@@ -58,7 +60,7 @@
     programs.direnv.enableNushellIntegration = true;
     home.shell.enableNushellIntegration = true;
     programs.starship.enableNushellIntegration = true;
-    
+
     home.packages = with pkgs; [
       nufmt
     ];
