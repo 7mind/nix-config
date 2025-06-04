@@ -38,8 +38,8 @@
 
       zram-swap = lib.mkDefault true;
 
-      zsh.enable = lib.mkDefault false;
-      nushell.enable = lib.mkDefault true;
+      zsh.enable = lib.mkDefault true;
+      nushell.enable = lib.mkDefault false;
 
       nix.customize = lib.mkDefault true;
 
