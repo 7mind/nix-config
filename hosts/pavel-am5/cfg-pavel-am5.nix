@@ -53,15 +53,6 @@
                       {symbol = "BTC-USD"; name="BTC-USD";}
                     ];
                   }
-                  {
-                    type = "monitor";
-                    cache = "1m";
-                    title = "Services";
-                    sites =[
-                      {title = "Home Assistant"; url = "https://ha.7mind.io"; icon = "/static/icons/favicon-apple-180x180.png";}
-                    ];
-
-                  }
                 ];
               }
               {
@@ -73,6 +64,20 @@
                       {type = "hacker-news";}
                       {type=  "lobsters";}
                     ];
+                  }
+                ];
+              }
+                            {
+                size = "small";
+                widgets = [
+                  {
+                    type = "monitor";
+                    cache = "1m";
+                    title = "Services";
+                    sites =[
+                      {title = "Home Assistant"; url = "https://ha.7mind.io"; icon = "/static/icons/favicon-apple-180x180.png";}
+                    ];
+
                   }
                 ];
               }
