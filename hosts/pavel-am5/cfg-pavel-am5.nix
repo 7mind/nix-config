@@ -21,6 +21,59 @@
     };
   };
 
+  services.glance = {
+    enable = true;
+    openFirewall = true;
+    settings = {
+      server.port = 8585;
+      server.host = "0.0.0.0";
+      pages = [
+          {
+            columns = [
+              {
+                size = "small";
+                widgets = [
+                  {
+                    type = "calendar";
+                  }
+
+                  {
+                    # location = {
+                    #   _secret = "/var/lib/secrets/glance/location";
+                    # };
+                    location = "Dublin, Ireland";
+                    units = "metric";
+                    hour-format = "24h";
+                    type = "weather";
+                  }
+                  {
+                    type = "markets";
+                    markets = [
+                      {symbol = "SPY"; name="SPY: S&P 500";}
+                      {symbol = "BTC-USD"; name="BTC-USD";}
+                    ];
+                  }
+                ];
+              }
+              {
+                size = "full";
+                widgets = [
+                  {
+                    type = "group";
+                    widgets = [
+                      {type = "hacker-news";}
+                      {type=  "lobsters";}
+                    ];
+                  }
+                ];
+              }
+            ];
+            name = "Home";
+          }
+        ];
+    };
+  };
+
   services = {
     samba = {
       # add user: sudo smbpasswd -a pavel
