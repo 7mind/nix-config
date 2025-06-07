@@ -11,12 +11,12 @@
 
   config = lib.mkIf config.smind.roles.server.oracle-cloud {
     smind = {
+      roles.server.generic = true;
+
       hw.cpu.isArm = true;
       hw.oracle-cloud.enable = true;
 
       systemd-boot.enable = true;
-      isDesktop = false;
-      roles.desktop.generic-gnome = false;
     };
   };
 }
