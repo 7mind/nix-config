@@ -20,6 +20,9 @@
       html.enable = true;
     };
 
+    services.ssh-agent.enable = true;
+    programs.ssh.addKeysToAgent = "yes";
+
     programs.zoxide = {
       enable = true;
       enableBashIntegration = true;

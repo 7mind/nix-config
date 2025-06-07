@@ -35,9 +35,9 @@
         };
 
 
-        programs.ssh = {
-          startAgent = true;
-        };
+        # programs.ssh = {
+        #   startAgent = true;
+        # };
 
         environment = {
           enableDebugInfo = true;
