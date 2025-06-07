@@ -21,6 +21,7 @@
       isDesktop = false;
       roles.desktop.generic-gnome = false;
 
+      environment.linux.sane-defaults.enable = lib.mkDefault true;
       zsh.enable = lib.mkDefault true;
       nushell.enable = lib.mkDefault false;
     };
