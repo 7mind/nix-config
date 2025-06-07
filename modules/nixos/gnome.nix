@@ -73,6 +73,7 @@
     programs.seahorse.enable = true;
 
     programs.ssh = {
+      # https://wiki.nixos.org/wiki/SSH_public_key_authentication
       startAgent = true;
       enableAskPassword = true;
 

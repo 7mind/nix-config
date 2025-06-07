@@ -34,6 +34,12 @@
           ];
         };
 
+
+        programs.ssh = {
+          startAgent = true;
+          enableAskPassword = true;
+        };
+
         environment = {
           enableDebugInfo = true;
           shellAliases = cfg-const.universal-aliases;
