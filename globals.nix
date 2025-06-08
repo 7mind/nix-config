@@ -86,6 +86,9 @@ rec {
         isLinux = pkgs.lib.hasSuffix "-linux" arch;
         isDarwin = pkgs.lib.hasSuffix "-darwin" arch;
         state-version-system = if isLinux then cfg-const.state-version-nixpkgs else cfg-const.state-version-darwin;
+
+        # module inclusions trigger rebuilds we would like to avoid, so here is a dirty workaround
+        generic-linux-module = import ./modules/nixos/env-settings-linux.nix;
       };
 
 
