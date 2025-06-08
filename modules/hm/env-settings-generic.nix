@@ -20,8 +20,8 @@
       html.enable = true;
     };
 
-    services.ssh-agent.enable = true;
-    programs.ssh.addKeysToAgent = "yes";
+    services.ssh-agent.enable = lib.mkIf cfg-meta.isLinux true;
+    programs.ssh.addKeysToAgent = lib.mkIf cfg-meta.isLinux "yes";
 
     programs.zoxide = {
       enable = true;

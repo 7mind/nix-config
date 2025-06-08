@@ -48,7 +48,6 @@
         query
         gstat
         highlight
-        semver
       ];
 
       environmentVariables = config.home.sessionVariables;
