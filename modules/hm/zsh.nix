@@ -44,6 +44,9 @@
       sessionVariables = { };
 
       initContent = ''
+        # alt+backspace deletes by word, symbols in this list ARE word parts
+        export WORDCHARS='*?_-.[]~=&;!#$%^(){}<>'
+
         # enable carapace
         setopt menucomplete
         zstyle ':completion:*' menu select
