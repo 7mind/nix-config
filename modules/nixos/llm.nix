@@ -21,6 +21,7 @@
       # alpaca
       tabby
 
+      aider-chat
       codex
       claude-code
     ];
@@ -54,14 +55,19 @@
         "linux6200/bge-reranker-v2-m3"
 
 
+        "qwen3:32b"
+
         "huihui_ai/llama3.3-abliterated:70b"
         "huihui_ai/deepseek-r1-abliterated:32b"
         "huihui_ai/deepseek-r1-abliterated:70b"
-        "huihui_ai/qwen2.5-coder-abliterate:14b"
-        "huihui_ai/qwen2.5-coder-abliterate:32b"
         "huihui_ai/qwen2.5-abliterate:32b"
         "huihui_ai/qwen2.5-abliterate:72b"
         "huihui_ai/phi4-abliterated:14b"
+
+        "devstral:24b"
+        "huihui_ai/qwen2.5-coder-abliterate:14b"
+        "huihui_ai/qwen2.5-coder-abliterate:32b"
+
 
         "llava-llama3:8b"
         "Drews54/llama3.2-vision-abliterated:11b"
