@@ -22,6 +22,7 @@
       tabby
 
       codex
+      claude-code
     ];
 
     services.ollama = {
