@@ -128,7 +128,7 @@ function switch() {
                     sudo nix-env -p /nix/var/nix/profiles/system --set "$CLOSURE"
                     sudo /nix/var/nix/profiles/system/bin/switch-to-configuration switch
                 else
-                    nix copy --to "ssh://${HOST_FQN}" "${ROOTS}/${HOST}" --extra-experimental-features 'nix-command flakes'
+                    nix copy --to "ssh://root@${HOST_FQN}" "${ROOTS}/${HOST}" --extra-experimental-features 'nix-command flakes'
                     ssh "root@$HOST_FQN" nix-env -p /nix/var/nix/profiles/system --set "$CLOSURE"
                     ssh "root@$HOST_FQN" /nix/var/nix/profiles/system/bin/switch-to-configuration switch
                 fi
