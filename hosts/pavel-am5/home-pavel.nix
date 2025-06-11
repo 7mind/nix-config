@@ -2,9 +2,7 @@
 
 {
   imports = smind-hm.imports ++ [
-    (import_if_exists "${cfg-meta.paths.private}/modules/hm/pavel/home-pavel-generic.nix")
-    (import_if_exists_or "${cfg-meta.paths.secrets}/pavel/age-rekey.nix" (import "${cfg-meta.paths.modules}/age-dummy.nix"))
-
+    "${cfg-meta.paths.users}/pavel/hm/home-pavel-generic.nix"
   ];
 
 

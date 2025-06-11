@@ -7,6 +7,12 @@
       default = false;
       description = "";
     };
+
+    smind.hm.dev.tex.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "";
+    };
   };
 
   config = lib.mkIf config.smind.hm.dev.generic.enable {
@@ -49,12 +55,10 @@
       tokei
       cloc
 
-      texlive.combined.scheme-full
-
       # bitwarden-cli
       # rbw
       bws
-    ];
+    ] ++ (if config.smind.hm.dev.tex.enable then [ texlive.combined.scheme-full ] else [ ]);
   };
 
 

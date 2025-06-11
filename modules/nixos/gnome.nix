@@ -96,7 +96,7 @@
 
     # https://github.com/NixOS/nixpkgs/issues/33277#issuecomment-639281657
     # https://github.com/NixOS/nixpkgs/issues/114514
-    services.xserver.desktopManager.gnome = {
+    services.desktopManager.gnome = {
       enable = true;
       # extraGSettingsOverridePackages = [ pkgs.mutter ];
       # extraGSettingsOverrides = ''
@@ -129,7 +129,7 @@
     services.udev.packages = [ pkgs.gnome-settings-daemon ];
 
     services.xserver.enable = true;
-    services.xserver.displayManager.gdm.enable = true;
+    services.displayManager.gdm.enable = true;
 
     security.pam = {
       services = {
