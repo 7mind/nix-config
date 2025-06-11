@@ -79,9 +79,11 @@
           rooveterinaryinc.roo-cline
 
           # pkgs.open-vsx.tabbyml.vscode-tabby
+          # tabbyml.vscode-tabby
+
           # pkgs.open-vsx.septimalmind.baboon-vscode
           # pkgs.open-vsx.septimalmind.idealingua1
-          tabbyml.vscode-tabby
+
           septimalmind.baboon-vscode
           septimalmind.idealingua1
 

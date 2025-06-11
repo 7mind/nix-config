@@ -19,7 +19,7 @@
 
       jan
       # alpaca
-      tabby
+      # tabby
 
       aider-chat
       codex
@@ -71,6 +71,8 @@
         "huihui_ai/phi4-abliterated:14b"
 
         "devstral:24b"
+        "qwen2.5-coder:32b"
+
         "huihui_ai/qwen2.5-coder-abliterate:14b"
         "huihui_ai/qwen2.5-coder-abliterate:32b"
 
@@ -104,42 +106,42 @@
       ];
     };
 
-    services.tabby-extended = {
-      enable = true;
-      acceleration = "rocm";
+    # services.tabby-extended = {
+    #   enable = true;
+    #   acceleration = "rocm";
 
-      # https://github.com/TabbyML/registry-tabby
-      # model = "Qwen2.5-Coder-14B";
+    #   # https://github.com/TabbyML/registry-tabby
+    #   # model = "Qwen2.5-Coder-14B";
 
-      # TABBY_WEBSERVER_JWT_TOKEN_SECRET
+    #   # TABBY_WEBSERVER_JWT_TOKEN_SECRET
 
-      settings = {
-        model.chat.http = {
-          kind = "openai/chat";
-          model_name = "huihui_ai/deepseek-r1-abliterated:32b";
-          api_endpoint = "http://localhost:11434/v1"; # yes, it's different for chat model
-        };
-        model.completion.http = {
-          kind = "ollama/completion";
-          model_name = "huihui_ai/qwen2.5-coder-abliterate:14b";
-          api_endpoint = "http://localhost:11434";
-          prompt_template = "<|fim_prefix|>{prefix}<|fim_suffix|>{suffix}<|fim_middle|>";
-        };
-        model.embedding.http = {
-          kind = "ollama/embedding";
-          model_name = "mxbai-embed-large";
-          api_endpoint = "http://localhost:11434";
-        };
-      };
-    };
+    #   settings = {
+    #     model.chat.http = {
+    #       kind = "openai/chat";
+    #       model_name = "huihui_ai/deepseek-r1-abliterated:32b";
+    #       api_endpoint = "http://localhost:11434/v1"; # yes, it's different for chat model
+    #     };
+    #     model.completion.http = {
+    #       kind = "ollama/completion";
+    #       model_name = "huihui_ai/qwen2.5-coder-abliterate:14b";
+    #       api_endpoint = "http://localhost:11434";
+    #       prompt_template = "<|fim_prefix|>{prefix}<|fim_suffix|>{suffix}<|fim_middle|>";
+    #     };
+    #     model.embedding.http = {
+    #       kind = "ollama/embedding";
+    #       model_name = "mxbai-embed-large";
+    #       api_endpoint = "http://localhost:11434";
+    #     };
+    #   };
+    # };
 
 
-    systemd.services.tabby = {
-      unitConfig = {
-        Wants = [ "ollama.service" ];
-        After = [ "ollama.service" ];
-      };
-    };
+    # systemd.services.tabby = {
+    #   unitConfig = {
+    #     Wants = [ "ollama.service" ];
+    #     After = [ "ollama.service" ];
+    #   };
+    # };
 
   };
 
