@@ -26,6 +26,12 @@
       claude-code
     ];
 
+
+    environment.variables = {
+      OLLAMA_API_BASE = "http://127.0.0.1:11434";
+      AIDER_DARK_MODE = "true";
+    };
+
     services.ollama = {
       enable = true;
       package = pkgs.ollama-rocm;
