@@ -21,6 +21,10 @@
         name = "slack";
         exec = "${slack}/bin/slack -u";
       }
+      {
+        name = "bitwarden";
+        exec = "${bitwarden-desktop}/bin/bitwarden";
+      }
     ];
   };
 
@@ -74,17 +78,17 @@
   };
 
   services.megasync.enable = true;
-  services.megasync.package = (pkgs.megasync.overrideAttrs (drv:
-    {
-      buildInputs = drv.buildInputs ++ [ pkgs.makeWrapper ];
-      preFixup = ''
-        ${drv.preFixup}
-         qtWrapperArgs+=(--set "QT_STYLE_OVERRIDE" "adwaita")
-         qtWrapperArgs+=(--set "DO_NOT_UNSET_XDG_SESSION_TYPE" "1")
-         qtWrapperArgs+=(--set "QT_SCALE_FACTOR" "1")
-         qtWrapperArgs+=(--set "QT_QPA_PLATFORM" "xcb")
-      '';
-    }));
+  # services.megasync.package = (pkgs.megasync.overrideAttrs (drv:
+  #   {
+  #     buildInputs = drv.buildInputs ++ [ pkgs.makeWrapper ];
+  #     preFixup = ''
+  #       ${drv.preFixup}
+  #        qtWrapperArgs+=(--set "QT_STYLE_OVERRIDE" "adwaita")
+  #        qtWrapperArgs+=(--set "DO_NOT_UNSET_XDG_SESSION_TYPE" "1")
+  #        qtWrapperArgs+=(--set "QT_SCALE_FACTOR" "1")
+  #        qtWrapperArgs+=(--set "QT_QPA_PLATFORM" "xcb")
+  #     '';
+  #   }));
 
   home.packages = with pkgs; [
     element-desktop
@@ -107,6 +111,8 @@
       }))
 
     # winbox4
+
+    mqttx
 
     (extended_pkg {
       pkg = jetbrains.idea-ultimate;
