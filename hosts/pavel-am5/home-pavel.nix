@@ -34,10 +34,10 @@
     {
       desktopEntries = {
         element-desktop-2 = {
-          exec = "${pkgs.element-desktop.out}/bin/element-desktop --profile secondary";
+          exec = "${pkgs.element-desktop.out}/bin/element-desktop --profile secondary %u";
           genericName = "Element Desktop 2nd";
           icon = "element";
-          mimeType = [ ];
+          mimeType = [ "x-scheme-handler/element" "x-scheme-handler/io.element.desktop" ];
           name = "Element Desktop 2nd";
           type = "Application";
         };
