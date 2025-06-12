@@ -30,13 +30,27 @@
 
 
 
-  xdg =
+  xdg = (lib.mkMerge [
+    {
+      desktopEntries = {
+        fheroes2 = {
+          exec = "${pkgs.element-desktop.out}/bin/element-desktop --profile secondary";
+          genericName = "Element Desktop 2nd";
+          icon = "element";
+          mimeType = [ ];
+          name = "Element Desktop 2nd";
+          type = "Application";
+        };
+      };
+    }
+
     (xdg_associate {
       schemes = [
         "application/pdf"
       ];
       desktopfile = "org.gnome.Evince.desktop";
-    });
+    })
+  ]);
 
   programs.zed-editor =
     {
