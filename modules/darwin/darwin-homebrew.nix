@@ -81,7 +81,6 @@
         "vscodium"
 
         # hm version works
-        "telegram"
         "iina"
         "qbittorrent"
         "slack"

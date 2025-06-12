@@ -10,16 +10,16 @@
     roles.desktop = true;
     autostart.programs = with pkgs; [
       {
-        name = "element";
+        name = "element-main";
         exec = "${element-desktop}/bin/element-desktop --hidden";
+      }
+      {
+        name = "element-2nd";
+        exec = "${element-desktop}/bin/element-desktop --hidden --profile secondary";
       }
       {
         name = "slack";
         exec = "${slack}/bin/slack -u";
-      }
-      {
-        name = "telegram-desktop";
-        exec = "${pkgs.telegram-desktop}/bin/telegram-desktop -startintray";
       }
     ];
   };
@@ -96,7 +96,6 @@
     visualvm
 
     vlc
-    telegram-desktop
 
     # https://github.com/NixOS/nixpkgs/issues/408853
     (winbox4.overrideAttrs (drv:
