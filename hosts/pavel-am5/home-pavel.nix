@@ -33,7 +33,7 @@
   xdg = (lib.mkMerge [
     {
       desktopEntries = {
-        fheroes2 = {
+        element-desktop-2 = {
           exec = "${pkgs.element-desktop.out}/bin/element-desktop --profile secondary";
           genericName = "Element Desktop 2nd";
           icon = "element";
