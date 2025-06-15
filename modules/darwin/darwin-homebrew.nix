@@ -102,6 +102,8 @@
 
         "winbox"
 
+        "mqttx"
+
         # don't need for now
         # "dotnet-sdk"
 

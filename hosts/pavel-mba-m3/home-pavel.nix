@@ -15,7 +15,14 @@
     };
   };
 
+  home.sessionVariables = {
+    OLLAMA_API_BASE = "http://127.0.0.1:11434";
+    AIDER_DARK_MODE = "true";
+  };
+
   home.packages = with pkgs; [
+    aider-chat
+    python3
   ];
 }
 
