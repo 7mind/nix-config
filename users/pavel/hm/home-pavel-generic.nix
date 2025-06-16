@@ -9,8 +9,11 @@
   home.activation.aider-config =
     let
       cfg = pkgs.writeText "example.yaml" (pkgs.lib.generators.toYAML { } [
-        { name = "ollama_chat/devstral:24b"; extra_params = { num_ctx = 131072; }; }
-        { name = "ollama_chat/qwen2.5-coder:32b"; extra_params = { num_ctx = 65535; }; }
+        { name = "ollama_chat/devstral:24b-small-2505-q8_0"; extra_params = { num_ctx = 131072; }; }
+        { name = "ollama_chat/devstral:24b-small-2505-fp16"; extra_params = { num_ctx = 60000; }; }
+
+        { name = "ollama_chat/qwen2.5:32b-instruct-q8_0"; extra_params = { num_ctx = 65535; }; }
+        { name = "ollama_chat/qwen2.5-coder:32b-instruct-q8_0"; extra_params = { num_ctx = 65535; }; }
       ]);
     in
     lib.hm.dag.entryAfter [ "writeBoundary" ] ''

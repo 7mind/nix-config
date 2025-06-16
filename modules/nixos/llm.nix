@@ -39,6 +39,7 @@
       user = "ollama";
       group = "users";
       home = "/var/lib/ollama";
+      host = "[::]";
       port = 11434;
 
       acceleration = "rocm";
@@ -54,32 +55,34 @@
         ROCR_VISIBLE_DEVICES = "0,1,2";
       };
 
+      # ollama show <modelname> --modelfile > custom.modelfile
+      # ollama create <yourmodelname> -f custom.modelfile
+      # context size: PARAMETER num_ctx 8192
+
       loadModels = [
         "nomic-embed-text"
         "mxbai-embed-large"
-
         "linux6200/bge-reranker-v2-m3"
 
 
-        "qwen3:32b"
+        "devstral:24b-small-2505-q8_0"
+        "devstral:24b-small-2505-fp16"
 
-        "huihui_ai/llama3.3-abliterated:70b"
-        "huihui_ai/deepseek-r1-abliterated:32b"
-        "huihui_ai/deepseek-r1-abliterated:70b"
-        "huihui_ai/qwen2.5-abliterate:32b"
-        "huihui_ai/qwen2.5-abliterate:72b"
-        "huihui_ai/phi4-abliterated:14b"
+        "qwen2.5:32b-instruct-q8_0"
 
-        "devstral:24b"
-        "qwen2.5-coder:32b"
+        # "qwen3:32b"
 
-        "huihui_ai/qwen2.5-coder-abliterate:14b"
-        "huihui_ai/qwen2.5-coder-abliterate:32b"
-
-
-        "llava-llama3:8b"
-        "Drews54/llama3.2-vision-abliterated:11b"
-        "jean-luc/big-tiger-gemma:27b-v1c-Q6_K"
+        # "huihui_ai/llama3.3-abliterated:70b"
+        # "huihui_ai/deepseek-r1-abliterated:32b"
+        # "huihui_ai/deepseek-r1-abliterated:70b"
+        # "huihui_ai/qwen2.5-abliterate:32b"
+        # "huihui_ai/qwen2.5-abliterate:72b"
+        # "huihui_ai/phi4-abliterated:14b"
+        # "huihui_ai/qwen2.5-coder-abliterate:14b"
+        # "huihui_ai/qwen2.5-coder-abliterate:32b"
+        # "llava-llama3:8b"
+        # "Drews54/llama3.2-vision-abliterated:11b"
+        # "jean-luc/big-tiger-gemma:27b-v1c-Q6_K"
       ];
 
 

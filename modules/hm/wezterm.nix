@@ -35,6 +35,11 @@
               };
               window_decorations = "TITLE|RESIZE";
 
+
+              colors = {
+                 split = 'aqua',
+              };
+
               -- to fix borders under gnome
               enable_wayland = false;
 
