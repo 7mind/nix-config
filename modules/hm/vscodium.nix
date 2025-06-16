@@ -76,7 +76,7 @@
           redhat.java
 
           continue.continue
-          rooveterinaryinc.roo-cline
+          # rooveterinaryinc.roo-cline
 
           # pkgs.open-vsx.tabbyml.vscode-tabby
           # tabbyml.vscode-tabby
