@@ -41,6 +41,7 @@
       home = "/var/lib/ollama";
       host = "[::]";
       port = 11434;
+      openFirewall = true;
 
       acceleration = "rocm";
       rocmOverrideGfx = "11.0.0";
