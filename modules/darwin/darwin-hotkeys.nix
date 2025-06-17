@@ -1,4 +1,4 @@
-{ lib, config }:
+{ lib, config, ... }:
 
 
 let
@@ -102,7 +102,7 @@ in
   };
 
   config = {
-    homebrew = lib.mkIf config.smind.darwin.drop-hotkeys.enable {
+    system.defaults.CustomUserPreferences = lib.mkIf config.smind.darwin.drop-hotkeys.enable {
       "com.apple.symbolichotkeys" = {
         AppleSymbolicHotKeys = appleSymbolicHotkeysSettings;
       };
