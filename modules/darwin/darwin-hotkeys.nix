@@ -45,39 +45,8 @@ let
     screenshotAndRecordingOptions = 184; # Shift-Command-5
   };
 
-  # Define which hotkeys you want to disable
-  # If you want to disable all hotkeys, you can use the `hotkeyEnums` directly
-  # If you want to keep some hotkeys enabled, simply comment them out or remove them from the following list.
-  editMe_disableHotKeys = with hotkeyEnums; [
-    moveFocusToMenuBar # 7
-    moveFocusToDock # 8
-    moveFocusToActiveOrNextWindow # 9
-    moveFocusToWindowToolbar # 10
-    moveFocusToFloatingWindow # 11
-    turnKeyboardAccessOnOrOff # 12
-    changeWayTabMovesFocus # 13
-    moveFocusToNextWindow # 27
-    missionControl # 32
-    missionControlDedicatedKey # 34
-    applicationWindows # 35
-    showDesktop # 36
-    showDesktopDedicatedKey # 37
-    moveFocusToWindowDrawer # 51
-    turnDockHidingOnOff # 52
-    moveFocusToStatusMenus # 57
-    selectPreviousInputSource # 60
-    showSpotlightSearch # 64
-    moveLeftASpace # 79
-    moveLeftASpaceDedicatedKey # 80
-    moveRightASpace # 81
-    moveRightASpaceDedicatedKey # 82
-    switchToDesktop1 # 118
-    switchToDesktop2 # 119
-    switchToDesktop3 # 120
-    showLaunchpad # 160
-    showNotificationCenter # 163
-    turnDoNotDisturbOnOff # 175
-  ];
+  editMe_disableHotKeys = builtins.attrValues hotkeyEnums;
+
 
   uniqueSortedHotkeyIntegerIdsToDisable = lib.sort lib.lessThan editMe_disableHotKeys;
 
