@@ -75,7 +75,9 @@
           redhat.vscode-yaml
           redhat.java
 
-          continue.continue
+          saoudrizwan.claude-dev
+
+          # continue.continue
           # rooveterinaryinc.roo-cline
 
           # pkgs.open-vsx.tabbyml.vscode-tabby

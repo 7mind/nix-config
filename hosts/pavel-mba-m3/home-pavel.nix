@@ -23,6 +23,7 @@
   home.packages = with pkgs; [
     aider-chat
     python3
+    claude-code
   ];
 }
 
