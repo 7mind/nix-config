@@ -10,7 +10,11 @@
   };
 
   config = lib.mkIf config.smind.darwin.sysconfig.enable {
-
+    #alf = { globalstate = 1; };
+    networking.applicationFirewall = {
+      enable = false;
+      blockAllIncoming = false;
+    };
     system.defaults = {
       CustomSystemPreferences = {
         "/Library/Preferences/com.apple.SoftwareUpdate.plist" = {
@@ -161,8 +165,6 @@
       };
 
       LaunchServices = { LSQuarantine = false; };
-
-      alf = { globalstate = 1; };
 
       dock = {
         autohide = true;

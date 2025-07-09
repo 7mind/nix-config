@@ -62,8 +62,8 @@
         # "steam"
         "sublime-merge"
         "imhex"
-        "wireshark"
-        "tailscale"
+        "wireshark-app"
+        "tailscale-app"
         #"the-unarchiver"
         "keka"
         "crystalfetch"
@@ -75,7 +75,7 @@
         "far2l"
         "linearmouse"
         "tunnelblick"
-        "eloston-chromium"
+        "ungoogled-chromium"
 
         # hm version works with full disk access annoyances
         "wezterm"
