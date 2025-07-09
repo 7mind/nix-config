@@ -74,7 +74,7 @@
 
     programs.ssh = {
       # https://wiki.nixos.org/wiki/SSH_public_key_authentication
-      startAgent = true;
+      startAgent = false;
       enableAskPassword = true;
 
       # ssh ignores SSH_ASKPASS if it detects a TTY, workaround:
@@ -183,6 +183,7 @@
       sushi.enable = true;
       # gnome-remote-desktop.enable = true;
       gnome-keyring.enable = true;
+      gcr-ssh-agent.enable = true;
     };
 
     programs.gnome-terminal.enable = true;

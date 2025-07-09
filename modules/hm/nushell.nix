@@ -43,8 +43,8 @@
       # shellAliases = cfg-const.universal-aliases;
 
       plugins = with pkgs.nushellPlugins; [
-        net
-        units
+        #net
+        #units
         query
         gstat
         highlight
