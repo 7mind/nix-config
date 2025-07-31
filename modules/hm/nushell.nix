@@ -47,7 +47,7 @@
         #units
         query
         gstat
-        highlight
+        #highlight
       ];
 
       environmentVariables = config.home.sessionVariables;

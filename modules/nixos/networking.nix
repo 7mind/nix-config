@@ -96,7 +96,12 @@
 
       services.resolved = {
         enable = true;
-        extraConfig = "Cache=no-negative";
+        extraConfig = ''
+          Cache=no-negative
+          DNSStubListener=yes
+          DNSStubListenerExtra=[::1]:53
+
+        '';
         llmnr = "false";
       };
 
