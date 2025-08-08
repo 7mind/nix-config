@@ -109,6 +109,8 @@
 
 
   home.packages = with pkgs; [
+    furmark
+
     element-desktop
 
     bitwarden-desktop
