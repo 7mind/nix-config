@@ -162,6 +162,36 @@
       ];
       openssh.authorizedKeys.keys = cfg-const.ssh-keys-pavel;
     };
+
+    users.test = {
+      isNormalUser = true;
+      home = "/home/test";
+      initialPassword = "test";
+      extraGroups = [
+        "wheel"
+        "audio"
+        "video"
+        "render"
+        "cdrom"
+        "disk"
+        "networkmanager"
+        "plugdev"
+        "input"
+        "libvirtd"
+        "qemu"
+        "qemu-libvirtd"
+        "kvm"
+        "uinput"
+        # "adbusers"
+        # "docker"
+        # "corectrl"
+        # "wireshark"
+        "ssh-users"
+        "podman"
+        "ollama"
+      ];
+    };
+
   };
 
   home-manager.users.pavel = import ./home-pavel.nix;
