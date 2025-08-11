@@ -107,6 +107,13 @@
   #  qtWrapperArgs+=(--set "QT_SCALE_FACTOR" "1")
   #  qtWrapperArgs+=(--set "QT_QPA_PLATFORM" "xcb")
 
+  home.pointerCursor = {
+    gtk.enable = true;
+    x11.enable = true;
+    package = pkgs.adwaita-icon-theme;
+    name = "Adwaita";
+    size = 32; # Adjust based on your display
+  };
 
   home.packages = with pkgs; [
     furmark
