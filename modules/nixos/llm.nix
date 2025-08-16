@@ -17,13 +17,14 @@
       yek
       gitingest
 
-      jan
+      # jan
       # alpaca
       # tabby
 
       aider-chat
-      codex
+      # codex
       claude-code
+      opencode
     ];
 
 
