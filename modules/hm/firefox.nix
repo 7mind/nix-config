@@ -240,7 +240,19 @@
           search = {
             force = true;
             default = "qwant";
-            order = [ "leta" "qwant" "ddg" "kagi" "google" "github" "nixpkgs" "hixopts" "hm" ];
+            order = [
+              "qwant"
+              "ddg"
+              "kagi"
+              "google"
+              "nixpkgs"
+              "nixopts"
+              "hm"
+              "maven"
+              "github"
+              "ollama"
+              "hf"
+            ];
             engines = {
               "bing".metaData.hidden = true;
               "ebay".metaData.hidden = true;
@@ -249,18 +261,7 @@
               "wikipedia".metaData.alias = "@w";
               "Amazon.co.uk".metaData.hidden = "@a";
 
-              leta = {
-                name = "Leta";
-                urls = [{
-                  template = "https://leta.mullvad.net/search";
-                  params = [{
-                    name = "q";
-                    value = "{searchTerms}";
-                  }];
-                }];
-                icon = "https://leta.mullvad.net/favicon.ico";
-                definedAliases = [ "@l" ];
-              };
+
 
               qwant = {
                 name = "Qwant";
@@ -279,19 +280,48 @@
                 definedAliases = [ "@q" ];
               };
 
-
-              kagi = {
-                name = "Kagi";
+              hf = {
+                name = "Hugging Face Models";
                 urls = [{
-                  template = "https://kagi.com/search";
+                  template = "https://huggingface.co/search/full-text";
                   params = [{
                     name = "q";
                     value = "{searchTerms}";
-                  }];
+                  }
+                    {
+                      name = "type";
+                      value = "model";
+                    }];
                 }];
-                icon = "https://kagi.com/favicon.ico";
-                definedAliases = [ "@k" ];
+                icon = "https://huggingface.co/favicon.ico";
+                definedAliases = [ "@hf" ];
               };
+
+              # kagi = {
+              #   name = "Kagi";
+              #   urls = [{
+              #     template = "https://kagi.com/search";
+              #     params = [{
+              #       name = "q";
+              #       value = "{searchTerms}";
+              #     }];
+              #   }];
+              #   icon = "https://kagi.com/favicon.ico";
+              #   definedAliases = [ "@k" ];
+              # };
+
+              # leta = {
+              #   name = "Leta";
+              #   urls = [{
+              #     template = "https://leta.mullvad.net/search";
+              #     params = [{
+              #       name = "q";
+              #       value = "{searchTerms}";
+              #     }];
+              #   }];
+              #   icon = "https://leta.mullvad.net/favicon.ico";
+              #   definedAliases = [ "@l" ];
+              # };
 
               maven = {
                 name = "Maven";

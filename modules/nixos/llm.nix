@@ -68,13 +68,13 @@
       loadModels = [
         "nomic-embed-text"
         "mxbai-embed-large"
-        "linux6200/bge-reranker-v2-m3"
-
 
         "devstral:24b-small-2505-q8_0"
         "devstral:24b-small-2505-fp16"
 
         "qwen2.5:32b-instruct-q8_0"
+
+        "gpt-oss:20b"
 
         # "qwen3:32b"
 
