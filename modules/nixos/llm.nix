@@ -10,10 +10,12 @@
 
   config = lib.mkIf config.smind.llm.enable {
     environment.systemPackages = with pkgs; [
-      aichat
+      llama-cpp
+
       gollama
       # oterm
 
+      # repo ingestion
       yek
       gitingest
 
@@ -21,10 +23,12 @@
       # alpaca
       # tabby
 
+      # agentic coding
+      aichat
       aider-chat
-      # codex
-      claude-code
       opencode
+      claude-code
+      # codex
     ];
 
 
