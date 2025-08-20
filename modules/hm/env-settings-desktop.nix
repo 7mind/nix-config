@@ -15,6 +15,7 @@
     programs.atuin = {
       daemon.enable = true;
     };
+
     home.packages = lib.mkIf cfg-meta.isLinux (with pkgs; [
       # productivity
       libreoffice-fresh
@@ -26,10 +27,13 @@
       # video
       vlc
       mpv
+
+      brave
     ]);
 
     # programs.chromium.enable = true;
     programs.librewolf.enable = lib.mkIf cfg-meta.isLinux true;
+    programs.chromium.enable = lib.mkIf cfg-meta.isLinux true;
 
     xdg = lib.mkIf cfg-meta.isLinux (lib.mkMerge [
       {
