@@ -34,7 +34,7 @@
                 top = "5px",
               };
               window_decorations = "TITLE|RESIZE";
-
+              enable_scroll_bar = true;
 
               colors = {
                  split = 'aqua',
