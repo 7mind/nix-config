@@ -76,8 +76,9 @@
 
     zfs.initrd-unlock.enable = true;
 
-    net.main-interface = "ethmain";
-    net.main-macaddr = "d0:94:66:55:aa:11";
+    net.main-interface = "eth-main";
+    net.main-macaddr = "a0:ad:9f:1c:9e:98";
+    net.main-bridge-macaddr = "d0:94:66:55:aa:11";
     net.tailscale.enable = true;
 
     ssh.permissive = false;
@@ -102,13 +103,6 @@
     iperf.enable = true;
     iperf.protected.server.enable = false;
     iperf.protected.client.enable = true;
-  };
-
-  systemd.network.links = {
-    "10-ethmain.link" = {
-      matchConfig.PermanentMACAddress = "a0:ad:9f:1c:9e:98";
-      linkConfig.Name = "ethmain";
-    };
   };
 
   networking.hostId = "8a9c7614";

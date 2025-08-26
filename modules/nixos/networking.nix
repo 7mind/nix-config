@@ -23,11 +23,18 @@
       description = "";
     };
 
+    smind.net.main-bridge-macaddr = lib.mkOption {
+      type = lib.types.str;
+      default = "";
+      description = "";
+    };
+
     smind.net.main-macaddr = lib.mkOption {
       type = lib.types.str;
       default = "";
       description = "";
     };
+
   };
 
   config =
@@ -38,7 +45,7 @@
             assertion =
               (
                 config.smind.net.main-interface != "" &&
-                config.smind.net.main-macaddr != ""
+                config.smind.net.main-bridge-macaddr != ""
               )
             ;
             message = "set config.smind.net.main-interface";
@@ -116,14 +123,22 @@
       #   "net.ipv6.conf.br-main.accept_ra" = 1;
       # };
 
+
       systemd.network = {
+        links = lib.mkIf (config.smind.net.main-macaddr != "") {
+          "10-${config.smind.net.main-interface}.link" = {
+            matchConfig.PermanentMACAddress = config.smind.net.main-macaddr;
+            linkConfig.Name = config.smind.net.main-interface;
+          };
+        };
+
         networks = {
           "20-${config.smind.net.main-bridge}" = {
             name = "${config.smind.net.main-bridge}";
             DHCP = "yes";
 
             linkConfig = {
-              MACAddress = "${config.smind.net.main-macaddr}";
+              MACAddress = "${config.smind.net.main-bridge-macaddr}";
               RequiredForOnline = "routable";
             };
 
