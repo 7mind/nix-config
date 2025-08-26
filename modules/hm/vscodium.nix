@@ -129,8 +129,12 @@
             "*.out" = true;
             "*.snm" = true;
             "*.toc" = true;
-            "**/node_modules" = false;
+            "**/node_modules" = true;
+            "**/.direnv" = true;
+            "**/.venv" = true;
           };
+          "explorer.excludeGitIgnore" = true;
+
           "files.insertFinalNewline" = true;
           "files.trimTrailingWhitespace" = true;
           "terminal.integrated.fontSize" = 14;
