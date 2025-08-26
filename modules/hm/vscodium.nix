@@ -133,7 +133,7 @@
             "**/.direnv" = true;
             "**/.venv" = true;
           };
-          "explorer.excludeGitIgnore" = true;
+          #"explorer.excludeGitIgnore" = true;
 
           "files.insertFinalNewline" = true;
           "files.trimTrailingWhitespace" = true;
