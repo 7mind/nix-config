@@ -13,6 +13,7 @@
   ./gnome.nix
   ./iperf.nix
   ./gnome-minimal-hotkeys.nix
+  ./gnome-extensions.nix
   ./kernel-settings.nix
   ./keyd-super-remap.nix
   ./ledger.nix
