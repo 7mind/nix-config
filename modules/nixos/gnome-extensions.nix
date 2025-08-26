@@ -12,7 +12,14 @@
       # https://askubuntu.com/questions/1488341/how-do-i-inhibit-shortcuts-for-virtual-machines
       # https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.impl.portal.PermissionStore.html
       gnome-shortcut-inhibitor
-    ];
+    ] ++ (with pkgs.gnomeExtensions;
+      [
+        appindicator
+        gsconnect
+        native-window-placement
+        caffeine
+        # tray-icons-reloaded
+      ]);
 
     programs.dconf = {
       enable = true;

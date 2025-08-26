@@ -147,21 +147,6 @@
         package = pkgs.gnomeExtensions.gsconnect;
       };
 
-    # environment.systemPackages =
-    #   (with pkgs.gnomeExtensions;
-    #   [
-    #     appindicator
-    #     gsconnect
-    #     native-window-placement
-    #     caffeine
-    #     # tray-icons-reloaded
-    #   ]) ++ (with pkgs; [
-    #   dconf-editor
-    #   seahorse
-    #   gnome-firmware
-    #   # gnome-remote-desktop
-    # ]);
-
     environment.systemPackages =
       (with pkgs; [
         dconf-editor
