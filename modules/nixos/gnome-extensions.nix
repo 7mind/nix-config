@@ -27,6 +27,7 @@
                 gnomeExtensions.appindicator.extensionUuid
                 gnomeExtensions.gsconnect.extensionUuid
                 gnomeExtensions.native-window-placement.extensionUuid
+                gnomeExtensions.caffeine.extensionUuid
                 gnome-shortcut-inhibitor.extensionUuid
                 # pkgs.gnomeExtensions.tray-icons-reloaded.extensionUuid
               ];
