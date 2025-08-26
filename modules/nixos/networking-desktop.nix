@@ -22,6 +22,7 @@
             "except:type:wifi"
             "except:type:wifi-p2p"
             "except:interface-name:wlan*"
+            "except:interface-name:enp*"
           ];
         };
 
