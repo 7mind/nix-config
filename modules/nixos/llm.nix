@@ -27,8 +27,8 @@
       aichat
       aider-chat
       opencode
+      goose
       claude-code
-      # codex
     ];
 
 
