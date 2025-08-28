@@ -11,9 +11,15 @@
       type = lib.types.str;
       description = "";
     };
+
+    smind.host.email.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "";
+    };
   };
 
-  config = {
+  config = lib.mkIf config.smind.host.email.enable {
     programs.msmtp = {
       enable = true;
       setSendmail = true;

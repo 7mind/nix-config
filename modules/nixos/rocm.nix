@@ -10,13 +10,13 @@
   config = lib.mkIf config.smind.hw.rocm.enable {
 
     # https://github.com/NixOS/nixpkgs/issues/421822
-    nixpkgs.overlays = [
-      (final: prev: {
-        rocmPackages = prev.rocmPackages.overrideScope (rocmFinal: rocmPrev: {
-          rocdbgapi = rocmPrev.rocdbgapi.override { buildDocs = false; };
-        });
-      })
-    ];
+    # nixpkgs.overlays = [
+    #   (final: prev: {
+    #     rocmPackages = prev.rocmPackages.overrideScope (rocmFinal: rocmPrev: {
+    #       rocdbgapi = rocmPrev.rocdbgapi.override { buildDocs = false; };
+    #     });
+    #   })
+    # ];
 
     # pytorch is broken:
     # https://github.com/NixOS/nixpkgs/blob/c8fadee69d99c39795e50754c1d0f4fb9b24cd65/pkgs/development/python-modules/torch/default.nix#L227
