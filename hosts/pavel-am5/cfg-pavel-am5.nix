@@ -91,7 +91,7 @@
 
     isDesktop = true;
     hw.cpu.isAmd = true;
-    hw.rocm.enable = true;
+    hw.amd.gpu.enable = true;
 
     systemd-boot.enable = true;
     lanzaboote.enable = false;

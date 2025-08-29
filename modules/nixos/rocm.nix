@@ -1,13 +1,20 @@
 { pkgs, lib, config, ... }: {
   options = {
-    smind.hw.rocm.enable = lib.mkOption {
+    smind.hw.amd.rocm.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = config.smind.hw.amd.gpu.enable;
+      description = "";
+    };
+
+    smind.hw.amd.gpu.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
       description = "";
     };
+
   };
 
-  config = lib.mkIf config.smind.hw.rocm.enable {
+  config = lib.mkIf config.smind.hw.amd.gpu.enable {
 
     # https://github.com/NixOS/nixpkgs/issues/421822
     # nixpkgs.overlays = [
@@ -22,7 +29,7 @@
     # https://github.com/NixOS/nixpkgs/blob/c8fadee69d99c39795e50754c1d0f4fb9b24cd65/pkgs/development/python-modules/torch/default.nix#L227
     # should be unblocked by: https://github.com/NixOS/nixpkgs/pull/367695
 
-    nixpkgs.config.rocmSupport = true;
+    nixpkgs.config.rocmSupport = lib.mkIf config.smind.hw.amd.rocm.enable true;
     # nixpkgs.config.packageOverrides = pkgs: {
     #   rocmPackages_6 = pkgs.rocmPackages_6.gfx1100;
     # };
@@ -39,14 +46,14 @@
     hardware.graphics = {
       enable32Bit = true;
       enable = true;
-      extraPackages = [
+      extraPackages = lib.mkIf config.smind.hw.amd.rocm.enable [
         pkgs.rocmPackages.clr
       ];
     };
 
     boot.kernelParams = [ "amdgpu.ppfeaturemask=0xffffffff" ];
 
-    systemd.tmpfiles.rules = [
+    systemd.tmpfiles.rules = lib.mkIf config.smind.hw.amd.rocm.enable [
       "L+    /opt/rocm/hip   -    -    -     -    ${pkgs.rocmPackages.clr}"
     ];
 
@@ -59,6 +66,7 @@
       radeontop
       radeontools
 
+    ] ++ (if lib.config.smind.hw.amd.rocm.enable then [
       rocmPackages.rocminfo
       rocmPackages.rocm-smi
 
@@ -67,7 +75,9 @@
       (python3.withPackages (python-pkgs: [
         python-pkgs.torchWithRocm
       ]))
-    ];
+    ] else [
+
+    ]);
   };
 
 }

@@ -21,8 +21,10 @@
     };
 
     services.ssh-agent.enable = lib.mkIf cfg-meta.isLinux true;
-    programs.ssh.addKeysToAgent = lib.mkIf cfg-meta.isLinux "yes";
+    # programs.ssh.addKeysToAgent = lib.mkIf cfg-meta.isLinux "yes";
 
+    programs.ssh.matchBlocks."*".addKeysToAgent = lib.mkIf cfg-meta.isLinux "yes";
+    
     programs.zoxide = {
       enable = true;
       enableBashIntegration = true;
