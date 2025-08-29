@@ -29,6 +29,7 @@
       opencode
       goose-cli
       claude-code
+      sillytavern
     ];
 
 
