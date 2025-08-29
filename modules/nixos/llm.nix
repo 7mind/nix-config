@@ -17,7 +17,7 @@
 
       # repo ingestion
       yek
-      gitingest
+      # gitingest # broken
 
       # jan
       # alpaca
@@ -27,7 +27,7 @@
       aichat
       aider-chat
       opencode
-      goose
+      goose-cli
       claude-code
     ];
 
