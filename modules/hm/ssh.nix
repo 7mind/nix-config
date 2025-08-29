@@ -1,4 +1,4 @@
-{ config, lib, ... }:
+{ config, cfg-meta, lib, ... }:
 
 {
   options = {

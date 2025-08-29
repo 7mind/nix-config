@@ -66,7 +66,7 @@
       radeontop
       radeontools
 
-    ] ++ (if lib.config.smind.hw.amd.rocm.enable then [
+    ] ++ (if config.smind.hw.amd.rocm.enable then [
       rocmPackages.rocminfo
       rocmPackages.rocm-smi
 
