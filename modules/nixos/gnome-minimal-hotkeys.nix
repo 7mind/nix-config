@@ -260,9 +260,10 @@
                 toggle-on-all-workspaces = empty;
                 unmaximize = empty;
 
-                switch-applications = [ "<Super>tab" ]; # system windows with overview
+                switch-applications = empty; # system windows with overview
+                switch-windows = [ "<Super>tab" ]; # app windows with overview
+
                 cycle-group = [ "<Super>grave" ]; # app windows without overview
-                switch-windows = empty; # app windows with overview
 
                 close = [ "<Super>q" ];
                 #switch-input-source = [ "<Primary><Alt><Super>space" ];
