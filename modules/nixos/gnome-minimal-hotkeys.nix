@@ -7,6 +7,11 @@
       default = false;
       description = "";
     };
+    smind.desktop.gnome.disable-super-drag = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "";
+    };
   };
 
   config = lib.mkIf config.smind.desktop.gnome.minimal-hotkeys {
@@ -270,6 +275,10 @@
                 switch-input-source = empty;
                 toggle-maximized = [ "<Primary><Alt>f" ];
               };
+              "org/gnome/desktop/wm/preferences" =
+                if config.smind.desktop.gnome.disable-super-drag then {
+                  "mouse-button-modifier" = empty;
+                } else { };
             };
         }
       ];

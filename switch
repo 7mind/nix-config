@@ -16,14 +16,11 @@ function add_all() {
 workdir
 add_all
 
-git add .
-git submodule foreach git add .
+git submodule foreach git commit -am "autosave" || true
+git commit -am "autosave" || true
 
 rm -f ~/.config/VSCodium/User/*.hmbak
 
 sudo nixos-rebuild switch --flake "${PWD}?submodules=1"
-
-git submodule foreach git commit -am "autosave" || true
-git commit -am "autosave" || true
 
 popd
