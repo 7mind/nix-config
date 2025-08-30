@@ -51,6 +51,10 @@
       ];
     };
 
+    environment.variables = lib.mkIf config.smind.hw.amd.rocm.enable {
+      ROCM_HOME = "${pkgs.rocmPackages.rocmPath}";
+    };
+
     boot.kernelParams = [ "amdgpu.ppfeaturemask=0xffffffff" ];
 
     systemd.tmpfiles.rules = lib.mkIf config.smind.hw.amd.rocm.enable [
