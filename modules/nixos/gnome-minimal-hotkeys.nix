@@ -277,7 +277,7 @@
               };
               "org/gnome/desktop/wm/preferences" =
                 if config.smind.desktop.gnome.disable-super-drag then {
-                  "mouse-button-modifier" = empty;
+                  mouse-button-modifier = "";
                 } else { };
             };
         }
