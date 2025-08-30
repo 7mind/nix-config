@@ -40,7 +40,7 @@
               "org/gnome/mutter/keybindings" = {
                 cancel-input-capture = empty;
                 rotate-monitor = empty;
-                swithc-monitor = empty;
+                switch-monitor = empty;
                 toggle-tiled-left = empty;
                 toggle-tiled-right = empty;
               };
