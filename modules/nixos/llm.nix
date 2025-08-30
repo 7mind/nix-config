@@ -11,12 +11,14 @@
   config = lib.mkIf config.smind.llm.enable {
     environment.systemPackages = with pkgs; [
       llama-cpp
+      mistral-rs
 
+      # terminal clients
       gollama
-      # oterm
+      oterm
 
-      # repo ingestion
-      yek
+      # repo ingestion - don't need
+      # yek
       # gitingest # broken
 
       # jan

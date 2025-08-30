@@ -35,7 +35,7 @@
 
           mhutchie.git-graph
           donjayamanne.githistory
-          eamodio.gitlens
+          # eamodio.gitlens
 
           scalameta.metals
           scala-lang.scala
@@ -67,9 +67,9 @@
           # ms-vscode-remote.remote-wsl
           # ms-vscode-remote.remote-ssh
 
-          ms-dotnettools.csharp
-          ms-dotnettools.csdevkit
-          ms-dotnettools.vscode-dotnet-runtime
+          # ms-dotnettools.csharp
+          # ms-dotnettools.csdevkit
+          # ms-dotnettools.vscode-dotnet-runtime
 
           redhat.vscode-xml
           redhat.vscode-yaml
@@ -248,9 +248,9 @@
           ];
 
 
-          "tabby.endpoint" = "http://localhost:11029";
-          "tabby.config.telemetry" = false;
-          "tabby.inlineCompletion.triggerMode" = "manual";
+          # "tabby.endpoint" = "http://localhost:11029";
+          # "tabby.config.telemetry" = false;
+          # "tabby.inlineCompletion.triggerMode" = "manual";
 
           "direnv.restart.automatic" = true;
         };

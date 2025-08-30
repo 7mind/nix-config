@@ -31,9 +31,14 @@
       brave
     ]);
 
-    # programs.chromium.enable = true;
     programs.librewolf.enable = lib.mkIf cfg-meta.isLinux true;
-    programs.chromium.enable = lib.mkIf cfg-meta.isLinux true;
+
+    programs.chromium = lib.mkIf cfg-meta.isLinux {
+      enable = true;
+      extensions = [
+        { id = "cjpalhdlnbpafiamejdnhcphjbkeiagm"; } # ublock origin
+      ];
+    };
 
     xdg = lib.mkIf cfg-meta.isLinux (lib.mkMerge [
       {
