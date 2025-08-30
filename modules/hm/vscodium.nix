@@ -29,7 +29,7 @@
         };
 
         profiles.default.extensions = with pkgs.vscode-marketplace; with pkgs.vscode-extensions; [
-          github.github-vscode-theme
+          #github.github-vscode-theme
 
           codezombiech.gitignore
 
@@ -145,7 +145,7 @@
             "editorGutter.background" = "#3f4b4e";
             "contrastBorder" = "#323232";
           };
-          #"workbench.colorTheme" = "GitHub Dark Dimmed";
+          "workbench.colorTheme" = "Dark Modern";
 
           "workbench.settings.editor" = "json";
           "workbench.tree.indent" = 16;
