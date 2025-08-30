@@ -41,7 +41,7 @@
               };
 
               -- to fix borders under gnome
-              enable_wayland = false;
+              enable_wayland = true;
 
               keys = {
                   {
