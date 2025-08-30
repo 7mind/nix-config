@@ -28,7 +28,7 @@ jobs:
       - ${{ matrix.os }}
       - ${{ matrix.runs-on }}
     steps:
-      - uses: wimpysworld/nothing-but-nix@main
+      - uses: wimpysworld/nothing-but-nix@v6
         with:
           hatchet-protocol: "rampage"
       - uses: 7mind/github-env@minimal
