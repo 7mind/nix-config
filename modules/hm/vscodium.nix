@@ -145,7 +145,7 @@
             "editorGutter.background" = "#3f4b4e";
             "contrastBorder" = "#323232";
           };
-          "workbench.colorTheme" = "GitHub Dark Dimmed";
+          #"workbench.colorTheme" = "GitHub Dark Dimmed";
 
           "workbench.settings.editor" = "json";
           "workbench.tree.indent" = 16;
