@@ -33,7 +33,7 @@
                 right = "1cell",
                 top = "5px",
               };
-              window_decorations = "TITLE|RESIZE";
+              window_decorations = "TITLE|RESIZE|INTEGRATED_BUTTONS";
               enable_scroll_bar = true;
 
               colors = {
