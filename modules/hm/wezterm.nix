@@ -33,15 +33,19 @@
                 right = "1cell",
                 top = "5px",
               };
-              window_decorations = "TITLE|RESIZE|INTEGRATED_BUTTONS";
+
+              -- window_decorations = "TITLE|RESIZE|INTEGRATED_BUTTONS";
+              window_decorations = "TITLE|RESIZE";
+
+              -- to fix borders under gnome
+              -- https://github.com/wezterm/wezterm/pull/7095
+              enable_wayland = false;
+
               enable_scroll_bar = true;
 
               colors = {
                  split = 'aqua',
               };
-
-              -- to fix borders under gnome
-              enable_wayland = true;
 
               keys = {
                   {
