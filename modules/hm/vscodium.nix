@@ -35,32 +35,31 @@
 
           mhutchie.git-graph
           donjayamanne.githistory
-          # eamodio.gitlens
+
+          # eamodio.gitlens # annoying
 
           scalameta.metals
           scala-lang.scala
 
           jnoortheen.nix-ide
           mkhl.direnv
-          # arrterian.nix-env-selector # legacy nix envs
 
           mads-hartmann.bash-ide-vscode
 
           dbaeumer.vscode-eslint
 
-          # dart-code.dart-code
-          # dart-code.flutter
-
-          #ms-vscode.powershell
-          ms-vscode.hexeditor
-
-          ms-azuretools.vscode-docker
           ms-python.python
 
+          #ms-vscode.powershell
+          # ms-vscode.hexeditor
+          # ms-azuretools.vscode-docker
           # ms-vscode.anycode # real extensions are not nixified
 
           ms-vscode.cmake-tools
           ms-vscode.makefile-tools
+
+          anthropic.claude-code
+
           twxs.cmake
 
           # https://github.com/VSCodium/vscodium/blob/master/docs/index.md#proprietary-extensions
@@ -75,23 +74,15 @@
           redhat.vscode-yaml
           redhat.java
 
-          saoudrizwan.claude-dev
 
-          # continue.continue
-          # rooveterinaryinc.roo-cline
-
-          # pkgs.open-vsx.tabbyml.vscode-tabby
           # tabbyml.vscode-tabby
-
-          # pkgs.open-vsx.septimalmind.baboon-vscode
-          # pkgs.open-vsx.septimalmind.idealingua1
 
           septimalmind.baboon-vscode
           septimalmind.idealingua1
 
           pkgs.open-vsx.jeanp413.open-remote-ssh
-
           pkgs.open-vsx.devmikeua.mikrotik-routeros-script
+
           # vscjava.vscode-java-pack
           # missing: anycode*,
           thenuprojectcontributors.vscode-nushell-lang
