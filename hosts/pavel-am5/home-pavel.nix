@@ -157,6 +157,7 @@
         icu
         fontconfig
         gccStdenv.cc.cc.lib
+        zstd
       ];
       #defs = { TEST = "1"; };
     })
@@ -202,6 +203,7 @@
         icu
         fontconfig
         gccStdenv.cc.cc.lib
+        zstd
       ];
     })
 
@@ -223,6 +225,7 @@
         libGL
         icu
         fontconfig
+        zstd
       ];
     })
 
@@ -251,6 +254,7 @@
 
         icu
         fontconfig
+        zstd
       ];
       defs = {
         CMAKE_LIBRARY_PATH = lib.makeLibraryPath ld-libs;
