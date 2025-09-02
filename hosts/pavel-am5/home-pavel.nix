@@ -180,6 +180,7 @@
         icu
         fontconfig
         gccStdenv.cc.cc.lib
+        zstd
       ];
     })
 
