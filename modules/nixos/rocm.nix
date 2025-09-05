@@ -34,6 +34,10 @@
     #   rocmPackages_6 = pkgs.rocmPackages_6.gfx1100;
     # };
 
+    services.udev.extraRules = lib.mkIf config.smind.hw.amd.rocm.enable ''
+      ACTION=="add", SUBSYSTEM=="drm", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="manual"
+      ACTION=="add", SUBSYSTEM=="drm", DRIVERS=="amdgpu", ATTR{device/pp_power_profile_mode}="5"
+    '';
 
     hardware.amdgpu = {
       opencl.enable = true;
