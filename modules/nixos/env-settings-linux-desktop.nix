@@ -18,7 +18,7 @@
 
         wl-clipboard
 
-        neohtop
+        # neohtop # broken
         # vkmark
       ];
 

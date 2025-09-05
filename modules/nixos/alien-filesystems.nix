@@ -10,7 +10,10 @@
   };
 
   config = lib.mkIf config.smind.environment.alien-filesystems.enable {
-    boot.supportedFilesystems = [ "apfs" "ntfs" ];
+    boot.supportedFilesystems = [
+      # "apfs" # broken
+      "ntfs"
+    ];
 
     environment.systemPackages = with pkgs; [
       ntfs3g

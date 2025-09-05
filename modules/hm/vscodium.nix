@@ -226,16 +226,16 @@
 
           "redhat.telemetry.enabled" = false;
 
-          "java.configuration.runtimes" = let graal-legacy = cfg-flakes.pkgs7mind.graalvm-legacy-packages; in [
+          "java.configuration.runtimes" = [
             {
               "name" = "Main JDK";
               "path" = "${cfg-packages.jdk-main}";
               default = true;
             }
-            {
-              "name" = "GraalVM 19 CE+JS";
-              "path" = "${graal-legacy.graalvm19-ce-js.out}";
-            }
+            # {
+            #   "name" = "GraalVM 19 CE+JS";
+            #   "path" = let graal-legacy = cfg-flakes.pkgs7mind.graalvm-legacy-packages; in "${graal-legacy.graalvm19-ce-js.out}";
+            # }
           ];
 
 
