@@ -23,6 +23,7 @@
       # graphics
       imagemagick
       nomacs-qt6
+      gimp
 
       # video
       vlc
