@@ -32,6 +32,8 @@
       mpv
 
       brave
+
+      pdftk
     ]);
 
     programs.librewolf.enable = lib.mkIf cfg-meta.isLinux true;
