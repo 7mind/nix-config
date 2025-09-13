@@ -22,8 +22,11 @@
 
       # graphics
       imagemagick
-      nomacs-qt6
       gimp3-with-plugins
+
+      pix
+      nomacs-qt6
+      emulsion
 
       # video
       vlc
