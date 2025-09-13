@@ -60,7 +60,7 @@
       }
 
       (xdg_associate {
-        desktopfile = "org.nomacs.ImageLounge.desktop";
+        desktopfile = "org.gnome.eog.desktop";
         schemes = [
           "image/jpeg"
           "image/png"
