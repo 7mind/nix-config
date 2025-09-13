@@ -153,6 +153,7 @@
         seahorse
         gnome-firmware
         eog
+        pix
         # gnome-remote-desktop
       ]);
 

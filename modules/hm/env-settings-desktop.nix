@@ -24,7 +24,6 @@
       imagemagick
       gimp3-with-plugins
 
-      pix
       nomacs-qt6
       emulsion
 
@@ -63,7 +62,7 @@
       }
 
       (xdg_associate {
-        desktopfile = "org.gnome.eog.desktop";
+        desktopfile = "pix.desktop";
         schemes = [
           "image/jpeg"
           "image/png"
