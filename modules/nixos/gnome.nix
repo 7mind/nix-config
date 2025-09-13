@@ -152,6 +152,7 @@
         dconf-editor
         seahorse
         gnome-firmware
+        eog
         # gnome-remote-desktop
       ]);
 
@@ -177,7 +178,7 @@
       core-shell.enable = true;
       core-developer-tools.enable = true;
       sushi.enable = true;
-      # gnome-remote-desktop.enable = true;
+      gnome-remote-desktop.enable = true;
       gnome-keyring.enable = true;
       gcr-ssh-agent.enable = true;
     };
@@ -196,7 +197,7 @@
       gnome-clocks
       gnome-console
       gnome-contacts
-      gnome-font-viewer
+      # gnome-font-viewer
       gnome-logs
       gnome-maps
       gnome-music
