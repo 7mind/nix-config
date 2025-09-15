@@ -10,7 +10,7 @@
 
   config = lib.mkIf config.smind.llm.enable {
     environment.systemPackages = with pkgs; [
-      llama-cpp
+      #llama-cpp-rocm
       mistral-rs
 
       # terminal clients
