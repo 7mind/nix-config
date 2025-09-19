@@ -113,8 +113,8 @@
     allowedTCPPorts = [ 8234 ];
   };
 
-  services.desktopManager.cosmic.enable = true;
-  services.orca.enable = lib.mkForce false;
+  #services.desktopManager.cosmic.enable = true;
+  #services.orca.enable = lib.mkForce false;
 
   boot.initrd = {
     network = {
