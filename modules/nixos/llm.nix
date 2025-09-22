@@ -32,6 +32,7 @@
       goose-cli
       claude-code
       sillytavern
+      codex
     ];
 
 

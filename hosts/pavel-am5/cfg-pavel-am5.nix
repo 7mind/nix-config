@@ -103,9 +103,6 @@
     iperf.enable = true;
     iperf.protected.server.enable = false;
     iperf.protected.client.enable = true;
-
-    desktop.gnome.enable = true;
-    desktop.gnome.minimal-hotkeys = true;
   };
 
   networking.hostId = "8a9c7614";
