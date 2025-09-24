@@ -23,6 +23,8 @@
           "!gi() { curl -L -s https://www.gitignore.io/api/visualstudiocode,jetbrains+all,java,scala,sbt,maven,metals ;}; gi";
       };
       extraConfig = {
+        credential.helper = "libsecret";
+
         core = {
           reloadindex = true;
           whitespace = "fix,-indent-with-non-tab,trailing-space,cr-at-eol";
