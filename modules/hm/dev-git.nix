@@ -23,7 +23,7 @@
           "!gi() { curl -L -s https://www.gitignore.io/api/visualstudiocode,jetbrains+all,java,scala,sbt,maven,metals ;}; gi";
       };
       extraConfig = {
-        credential.helper = "git-credential-libsecret";
+        credential.helper = "${pkgs.gitFull}/bin/git-credential-libsecret";
 
         core = {
           reloadindex = true;
