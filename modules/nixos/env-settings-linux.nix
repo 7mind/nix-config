@@ -46,7 +46,7 @@
 
         environment.systemPackages = with pkgs; [
           # terminal
-          kitty.terminfo
+          # kitty.terminfo # broken
 
           # file managers
           far2l
