@@ -1,7 +1,9 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    # nixpkgs.url = "github:LunNova/nixpkgs/rocm-update";
+    #nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/master";
+
+    # nixpkgs.url = "github:LunNova/nixpkgs/push-nmzswnymunon";
 
     flake-utils.url = "github:numtide/flake-utils";
 

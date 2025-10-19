@@ -35,7 +35,7 @@
 
     environment.systemPackages = with pkgs; [
       # file managers
-      far2l
+      #far2l broken
       mc
       nnn
 

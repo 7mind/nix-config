@@ -48,9 +48,6 @@
           # terminal
           # kitty.terminfo # broken
 
-          # file managers
-          far2l
-
           # editors
 
           # nix tools

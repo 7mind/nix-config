@@ -28,7 +28,7 @@
       # agentic coding
       aichat
       aider-chat
-      opencode
+      # opencode
       goose-cli
       claude-code
       sillytavern
@@ -99,7 +99,7 @@
     };
 
     services.open-webui = {
-      enable = true; # broken
+      enable = false; # broken
       openFirewall = true;
       host = "0.0.0.0";
       environment = {

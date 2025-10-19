@@ -42,9 +42,10 @@
     hardware.amdgpu = {
       opencl.enable = true;
       initrd.enable = true;
-      amdvlk.enable = true;
-      amdvlk.supportExperimental.enable = true;
-      amdvlk.support32Bit.enable = true;
+      # radv enabled by default
+      # amdvlk.enable = true;
+      # amdvlk.supportExperimental.enable = true;
+      # amdvlk.support32Bit.enable = true;
     };
 
     hardware.graphics = {
@@ -55,9 +56,9 @@
       ];
     };
 
-    environment.variables = lib.mkIf config.smind.hw.amd.rocm.enable {
-      ROCM_HOME = "${pkgs.rocmPackages.rocmPath}";
-    };
+    # environment.variables = lib.mkIf config.smind.hw.amd.rocm.enable {
+    #   ROCM_HOME = "${pkgs.rocmPackages.rocmPath}";
+    # };
 
     boot.kernelParams = [ "amdgpu.ppfeaturemask=0xffffffff" ];
 
@@ -78,11 +79,12 @@
       rocmPackages.rocminfo
       rocmPackages.rocm-smi
 
-      # zluda
+      # zluda #broken
 
-      (python3.withPackages (python-pkgs: [
-        python-pkgs.torchWithRocm
-      ]))
+      # broken
+      # (python3.withPackages (python-pkgs: [
+      #   python-pkgs.torchWithRocm
+      # ]))
     ] else [
 
     ]);

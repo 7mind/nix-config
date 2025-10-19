@@ -49,6 +49,8 @@
         help.autocorrect = 3;
         init.defaultBranch = "main";
         mergetool.keepBackup = "false";
+
+        sequence.editor = "${pkgs.git-interactive-rebase-tool}/bin/interactive-rebase-tool";
       };
     };
   };

@@ -35,6 +35,7 @@
         in
         {
           spiceUSBRedirection.enable = true;
+          #efi.OVMF = ovmf;
 
           libvirtd = {
             enable = true;
@@ -42,7 +43,8 @@
             qemu = {
               package = pkgs.qemu_kvm;
               runAsRoot = true;
-              ovmf.packages = [ ovmf ];
+              # ???
+              #ovmf.packages = [ ovmf ];
               swtpm.enable = true;
             };
             allowedBridges = [

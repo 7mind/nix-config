@@ -226,7 +226,6 @@
         icu
         fontconfig
         zstd
-        wayland
       ];
     })
 
