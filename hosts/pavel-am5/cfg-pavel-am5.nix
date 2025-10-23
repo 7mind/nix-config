@@ -8,8 +8,9 @@
     ];
 
   nixpkgs.config.permittedInsecurePackages = [
-    "fluffychat-linux-1.23.0"
-    "olm-3.2.16"
+    # "fluffychat-linux-1.23.0"
+    # "olm-3.2.16"
+    "python3.13-ecdsa-0.19.1"
   ];
 
   nix = {
@@ -85,7 +86,7 @@
     ssh.safe = true;
 
     hw.uhk-keyboard.enable = true;
-    hw.trezor.enable = true;
+    # hw.trezor.enable = true;
     hw.ledger.enable = true;
     hw.bluetooth.enable = true;
 
@@ -115,6 +116,8 @@
 
   #services.desktopManager.cosmic.enable = true;
   #services.orca.enable = lib.mkForce false;
+
+  programs.steam.enable = true;
 
   boot.initrd = {
     network = {

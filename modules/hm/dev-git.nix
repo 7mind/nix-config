@@ -15,42 +15,45 @@
     programs.git = {
       enable = true;
       package = pkgs.gitAndTools.gitFull;
-      aliases = {
-        lg =
-          "log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit";
-        ignore = "!gi() { curl -L -s https://www.gitignore.io/api/$@ ;}; gi";
-        ignorej =
-          "!gi() { curl -L -s https://www.gitignore.io/api/visualstudiocode,jetbrains+all,java,scala,sbt,maven,metals ;}; gi";
-      };
-      extraConfig = {
-        credential.helper = "${pkgs.gitFull}/bin/git-credential-libsecret";
-
-        core = {
-          reloadindex = true;
-          whitespace = "fix,-indent-with-non-tab,trailing-space,cr-at-eol";
-          compression = 9;
-          editor = "nano";
-          untrackedcache = true;
-          fsmonitor = true;
+      settings = {
+        alias = {
+          lg =
+            "log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit";
+          ignore = "!gi() { curl -L -s https://www.gitignore.io/api/$@ ;}; gi";
+          ignorej =
+            "!gi() { curl -L -s https://www.gitignore.io/api/visualstudiocode,jetbrains+all,java,scala,sbt,maven,metals ;}; gi";
         };
-        push = {
-          default = "simple";
-          autoSetupRemote = true;
+
+        extraConfig = {
+          credential.helper = "${pkgs.gitFull}/bin/git-credential-libsecret";
+
+          core = {
+            reloadindex = true;
+            whitespace = "fix,-indent-with-non-tab,trailing-space,cr-at-eol";
+            compression = 9;
+            editor = "nano";
+            untrackedcache = true;
+            fsmonitor = true;
+          };
+          push = {
+            default = "simple";
+            autoSetupRemote = true;
+          };
+          pull = { ff = "only"; };
+
+          branch.autosetuprebase = "always";
+
+          receive.fsckObjects = true;
+          status.submodulesummary = true;
+          pack.packSizeLimit = "2g";
+          fetch.prune = "false";
+          rebase.autoStash = true;
+          help.autocorrect = 3;
+          init.defaultBranch = "main";
+          mergetool.keepBackup = "false";
+
+          sequence.editor = "${pkgs.git-interactive-rebase-tool}/bin/interactive-rebase-tool";
         };
-        pull = { ff = "only"; };
-
-        branch.autosetuprebase = "always";
-
-        receive.fsckObjects = true;
-        status.submodulesummary = true;
-        pack.packSizeLimit = "2g";
-        fetch.prune = "false";
-        rebase.autoStash = true;
-        help.autocorrect = 3;
-        init.defaultBranch = "main";
-        mergetool.keepBackup = "false";
-
-        sequence.editor = "${pkgs.git-interactive-rebase-tool}/bin/interactive-rebase-tool";
       };
     };
   };

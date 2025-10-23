@@ -240,7 +240,7 @@
         libGL
         libglvnd
         libGLU
-        qt6.full
+        # qt6.full
         vulkan-headers
         boost
 
@@ -259,7 +259,7 @@
       defs = {
         CMAKE_LIBRARY_PATH = lib.makeLibraryPath ld-libs;
         CMAKE_INCLUDE_PATH = lib.makeIncludePath ld-libs;
-        CMAKE_PREFIX_PATH = "${qt6.full}";
+        # CMAKE_PREFIX_PATH = "${qt6.full}";
       };
     })
   ];

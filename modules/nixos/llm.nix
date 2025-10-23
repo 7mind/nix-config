@@ -99,7 +99,7 @@
     };
 
     services.open-webui = {
-      enable = false; # broken
+      enable = true; 
       openFirewall = true;
       host = "0.0.0.0";
       environment = {

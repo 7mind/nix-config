@@ -79,12 +79,11 @@
       rocmPackages.rocminfo
       rocmPackages.rocm-smi
 
-      # zluda #broken
+      zluda
 
-      # broken
-      # (python3.withPackages (python-pkgs: [
-      #   python-pkgs.torchWithRocm
-      # ]))
+      (python3.withPackages (python-pkgs: [
+        python-pkgs.torchWithRocm
+      ]))
     ] else [
 
     ]);
