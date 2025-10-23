@@ -19,7 +19,7 @@
       dev.cs.enable = lib.mkDefault true;
       dev.git.enable = lib.mkDefault true;
       dev.scala.enable = lib.mkDefault true;
-      kitty.enable = lib.mkDefault false; # broken
+      kitty.enable = lib.mkDefault true; # broken
       vscodium.enable = lib.mkDefault true;
       # zed.enable = lib.mkDefault true; # broken
       wezterm.enable = lib.mkDefault true;
