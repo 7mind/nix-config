@@ -52,6 +52,7 @@
 
           # nix tools
           nixpkgs-fmt
+          nix-converter
           nix-ld-rs
 
           # disk tools
