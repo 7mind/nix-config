@@ -43,6 +43,7 @@
     services.sillytavern = {
       enable = true;
       port = 8045;
+      whitelist = false;
       configFile =
         let
           config = ((pkgs.formats.yaml { }).generate "config.yaml" {
