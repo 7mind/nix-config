@@ -31,7 +31,6 @@
       # opencode
       goose-cli
       claude-code
-      sillytavern
       codex
     ];
 
@@ -39,6 +38,29 @@
     environment.variables = {
       OLLAMA_API_BASE = "http://127.0.0.1:11434";
       AIDER_DARK_MODE = "true";
+    };
+
+    services.sillytavern = {
+      enable = true;
+      configFile =
+        let
+          config = ((pkgs.formats.yaml { }).generate "config.yaml" {
+            api = {
+              ollama = {
+                enabled = true;
+                api_url = "http://127.0.0.1:11434/v1";
+                api_key = "";
+                default_model = "huihui_ai/phi4-abliterated:14b";
+                prompt_template = "alpaca";
+                max_context_length = 32768;
+                temperature = 0.7;
+                top_p = 0.9;
+                top_k = 40;
+              };
+            };
+          });
+        in
+        "${config}";
     };
 
     services.ollama = {
@@ -87,7 +109,7 @@
         # "huihui_ai/deepseek-r1-abliterated:70b"
         # "huihui_ai/qwen2.5-abliterate:32b"
         # "huihui_ai/qwen2.5-abliterate:72b"
-        # "huihui_ai/phi4-abliterated:14b"
+        "huihui_ai/phi4-abliterated:14b"
         # "huihui_ai/qwen2.5-coder-abliterate:14b"
         # "huihui_ai/qwen2.5-coder-abliterate:32b"
         # "llava-llama3:8b"
@@ -99,7 +121,7 @@
     };
 
     services.open-webui = {
-      enable = true; 
+      enable = true;
       openFirewall = true;
       host = "0.0.0.0";
       environment = {
