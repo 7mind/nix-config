@@ -260,26 +260,16 @@
         "nomic-embed-text"
         "mxbai-embed-large"
 
+        "mistral-small3.2:24b"
+        "huihui_ai/phi4-abliterated:14b"
+        "huihui_ai/qwen3-abliterated:32b"
+
         "devstral:24b-small-2505-q8_0"
         "devstral:24b-small-2505-fp16"
 
         "qwen2.5:32b-instruct-q8_0"
 
         "gpt-oss:20b"
-
-        # "qwen3:32b"
-
-        # "huihui_ai/llama3.3-abliterated:70b"
-        # "huihui_ai/deepseek-r1-abliterated:32b"
-        # "huihui_ai/deepseek-r1-abliterated:70b"
-        # "huihui_ai/qwen2.5-abliterate:32b"
-        # "huihui_ai/qwen2.5-abliterate:72b"
-        "huihui_ai/phi4-abliterated:14b"
-        # "huihui_ai/qwen2.5-coder-abliterate:14b"
-        # "huihui_ai/qwen2.5-coder-abliterate:32b"
-        # "llava-llama3:8b"
-        # "Drews54/llama3.2-vision-abliterated:11b"
-        # "jean-luc/big-tiger-gemma:27b-v1c-Q6_K"
       ];
 
 
