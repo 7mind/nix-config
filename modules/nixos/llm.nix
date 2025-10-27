@@ -32,6 +32,20 @@
       goose-cli
       claude-code
       codex
+
+      (writeShellScriptBin "yolo-claude" ''
+        set -e
+        firejail --noprofile \
+          --whitelist="''${PWD}" \
+          --whitelist="''${HOME}/.claude" \
+          --whitelist="''${HOME}/.claude.json" \
+          --whitelist="''${HOME}/.config/claude" \
+          --whitelist="''${HOME}/.claude" \
+          --whitelist="''${HOME}/.claude.json" \
+          --whitelist="''${HOME}/.config/claude" \
+          claude \
+          --permission-mode bypassPermissions $*
+      '')
     ];
 
 
