@@ -43,6 +43,7 @@
           --whitelist="''${HOME}/.claude" \
           --whitelist="''${HOME}/.claude.json" \
           --whitelist="''${HOME}/.config/claude" \
+          --whitelist="''${HOME}/.cache" \
           claude \
           --permission-mode bypassPermissions $*
       '')
