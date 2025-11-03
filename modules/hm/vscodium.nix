@@ -169,6 +169,7 @@
             "**/.bloop" = true;
             "**/.metals" = true;
             "**/.ammonite" = true;
+            "**/.direnv" = true;
             "**/target" = true;
           };
 
