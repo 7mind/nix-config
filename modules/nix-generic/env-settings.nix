@@ -66,7 +66,7 @@
       # disk tools
       file
       ncdu
-      du-dust
+      dust
       tree
       lsd
       rename

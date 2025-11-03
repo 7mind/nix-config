@@ -53,7 +53,7 @@
           # nix tools
           nixpkgs-fmt
           nix-converter
-          nix-ld-rs
+          nix-ld
 
           # disk tools
           gptfdisk

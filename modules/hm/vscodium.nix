@@ -215,10 +215,10 @@
           "metals.showInferredType" = true;
           "metals.showImplicitConversionsAndClasses" = false;
           "metals.showImplicitArguments" = false;
-          "metals.javaHome" = "${pkgs.graalvm-ce}";
+          "metals.javaHome" = "${pkgs.graalvmPackages.graalvm-ce}";
           "metals.serverVersion" = "${pkgs.metals.version}";
 
-          "xml.java.home" = "${pkgs.graalvm-ce}";
+          "xml.java.home" = "${pkgs.graalvmPackages.graalvm-ce}";
           "xml.server.workDir" = "~/.cache/lemminx";
 
           "update.mode" = "none";

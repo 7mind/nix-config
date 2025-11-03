@@ -13,7 +13,7 @@
     (lib.mkIf config.smind.environment.linux.sane-defaults.desktop.enable {
       environment.systemPackages = with pkgs; [
         vulkan-tools
-        glxinfo
+        mesa-demos # ex glxinfo
         clinfo
 
         wl-clipboard
