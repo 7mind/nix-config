@@ -40,6 +40,7 @@
       ## Project Guidelines
 
       ### Core Principles
+      - **Don't give up**: continue working until you can provide proper full-comprehensive solution
       - **Fail fast**: Use assertions, throw errors early. No graceful fallbacks or defensive programming
       - **Explicit over implicit**: No default parameters, no optional chaining for required values
       - **Type safety**: Use interfaces/classes, not tuples/any/dictionaries/etc
