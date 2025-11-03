@@ -16,8 +16,9 @@
 
     home.packages = with pkgs; [
       scalafmt
-      ammonite
+      scala-cli
 
+      #ammonite
       # scala
       # sbt
       # mill
