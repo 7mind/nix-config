@@ -40,22 +40,25 @@
       ## Project Guidelines
 
       ### Core Principles
-      - **Don't give up**: continue working until you can provide proper full-comprehensive solution
-      - **Fail fast**: Use assertions, throw errors early. No graceful fallbacks or defensive programming
-      - **Explicit over implicit**: No default parameters, no optional chaining for required values
-      - **Type safety**: Use interfaces/classes, not tuples/any/dictionaries/etc
-      - **SOLID**: adhere to SOLID principles
-      - **RTFM**: read the documentation, code and samples of the libraries you work with
+
+      - **Don't give up**: Provide comprehensive solutions
+      - **Fail fast**: Use assertions, throw errors early - no graceful fallbacks
+      - **Explicit over implicit**: No default parameters or optional chaining for required values
+      - **Type safety**: Use interfaces/classes, avoid tuples/any/dictionaries
+      - **SOLID**: Adhere to SOLID principles
+      - **RTFM**: Read documentation, code, and samples thoroughly
 
       ### Code Style
+
       - No magic constants - use named constants
       - No backwards compatibility concerns - refactor freely
       - Prefer composition over conditional logic
 
       ### Project Structure
-      - Docs: `./docs/drafts/{timestamp}-{name}.md`
-      - Debug scripts: `./debug/{timestamp}-{name}.ts`
-      - Services: try to use interface + implementation pattern when possible
+
+      - Docs: ./docs/drafts/{timestamp}-{name}.md
+      - Debug scripts: ./debug/{timestamp}-{name}.ts
+      - Services: Use interface + implementation pattern when possible
     '';
 
     programs.direnv = {
