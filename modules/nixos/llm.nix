@@ -44,6 +44,7 @@
           --whitelist="''${HOME}/.claude.json" \
           --whitelist="''${HOME}/.config/claude" \
           --whitelist="''${HOME}/.cache" \
+          --whitelist="/nix/store" \
           claude \
           --permission-mode bypassPermissions $*
       '')
