@@ -41,6 +41,7 @@
 
       ### Core Principles
 
+      - You are working in a nix environment, use flake.nix and direnv for dependency management
       - **Don't give up**: Provide comprehensive solutions
       - **Fail fast**: Use assertions, throw errors early - no graceful fallbacks
       - **Explicit over implicit**: No default parameters or optional chaining for required values
