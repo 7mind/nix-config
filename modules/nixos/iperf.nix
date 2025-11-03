@@ -58,6 +58,18 @@ in
       '')
     ] else [ ]);
 
+    # nix shell nixpkgs#openssl
+    # mkdir ./tmp/
+    # cd ./tmp/
+    # openssl genrsa -des3 -out private.pem 2048
+    # # Extract public key
+    # openssl rsa -in private.pem -outform PEM -pubout -out public.pem
+    # # Create unprotected private key for server
+    # openssl rsa -in private.pem -out private_not_protected.pem -outform PEM
+    # cd ..
+    # cat ./tmp/public.pem  | age -e -i ~/age-key.txt > ./private/secrets/generic/iperf-public-key.age
+    # cat ./tmp/private_not_protected.pem | age -e -i ~/age-key.txt > ./private/secrets/generic/iperf-private-key.age
+
     age.secrets = lib.mkIf (config.smind.with-private && (config.smind.iperf.protected.server.enable || config.smind.iperf.protected.client.enable)) {
       iperf-private-key = {
         rekeyFile = "${cfg-meta.paths.secrets}/generic/iperf-private-key.age";

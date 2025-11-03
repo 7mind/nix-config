@@ -83,7 +83,7 @@ rec {
         inherit paths;
         inherit inputs;
         inherit hostname;
-        isLinux = pkgs.lib.hasSuffix "-linux" arch;
+        isLinux = builtins.trace (arch) (pkgs.lib.hasSuffix "-linux" arch);
         isDarwin = pkgs.lib.hasSuffix "-darwin" arch;
         state-version-system = if isLinux then cfg-const.state-version-nixpkgs else cfg-const.state-version-darwin;
 
