@@ -82,6 +82,7 @@
           bridge-utils
           ethtool
           cifs-utils
+          inetutils # telnet, etc
 
           # security
           spectre-meltdown-checker
