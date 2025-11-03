@@ -36,6 +36,27 @@
     #   '';
     # };
 
+    home.file.".claude/CLAUDE.md".text = ''
+      ## Project Guidelines
+
+      ### Core Principles
+      - **Fail fast**: Use assertions, throw errors early. No graceful fallbacks or defensive programming
+      - **Explicit over implicit**: No default parameters, no optional chaining for required values
+      - **Type safety**: Use interfaces/classes, not tuples/any/dictionaries/etc
+      - **SOLID**: adhere to SOLID principles
+      - **RTFM**: read the documentation, code and samples of the libraries you work with
+
+      ### Code Style
+      - No magic constants - use named constants
+      - No backwards compatibility concerns - refactor freely
+      - Prefer composition over conditional logic
+
+      ### Project Structure
+      - Docs: `./docs/drafts/{timestamp}-{name}.md`
+      - Debug scripts: `./debug/{timestamp}-{name}.ts`
+      - Services: try to use interface + implementation pattern when possible
+    '';
+
     programs.direnv = {
       enable = true;
       nix-direnv.enable = true;
