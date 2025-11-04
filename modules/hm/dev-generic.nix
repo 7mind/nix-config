@@ -36,31 +36,50 @@
     #   '';
     # };
 
-    home.file.".claude/CLAUDE.md".text = ''
-      ## Project Guidelines
+    home.sessionVariables = {
+      OLLAMA_API_BASE = "http://127.0.0.1:11434";
+      AIDER_DARK_MODE = "true";
+    };
 
-      ### Core Principles
+    programs.claude-code = {
+      enable = true;
+      settings = {
+        alwaysThinkingEnabled = true;
+        theme = "dark";
+        permissions = { };
+        ncludeCoAuthoredBy = true;
+        #model = "claude-3-5-sonnet-20241022";
+        statusLine = {
+          padding = 0;
+          type = "command";
+        };
+      };
+      memory.text = ''
+        ## Project Guidelines
 
-      - Use nix environment with flake.nix and direnv for dependencies
-      - **Don't give up**: Provide comprehensive solutions
-      - **Fail fast**: Use assertions, throw errors early - no graceful fallbacks
-      - **Explicit over implicit**: No default parameters or optional chaining for required values
-      - **Type safety**: Use interfaces/classes, avoid tuples/any/dictionaries
-      - **SOLID**: Adhere to SOLID principles
-      - **RTFM**: Read documentation, code, and samples thoroughly
+        ### Core Principles
 
-      ### Code Style
+        - Use nix environment with flake.nix and direnv for dependencies
+        - **Don't give up**: Provide comprehensive solutions
+        - **Fail fast**: Use assertions, throw errors early - no graceful fallbacks
+        - **Explicit over implicit**: No default parameters or optional chaining for required values
+        - **Type safety**: Use interfaces/classes, avoid tuples/any/dictionaries
+        - **SOLID**: Adhere to SOLID principles
+        - **RTFM**: Read documentation, code, and samples thoroughly
 
-      - No magic constants - use named constants
-      - No backwards compatibility concerns - refactor freely
-      - Prefer composition over conditional logic
+        ### Code Style
 
-      ### Project Structure
+        - No magic constants - use named constants
+        - No backwards compatibility concerns - refactor freely
+        - Prefer composition over conditional logic
 
-      - Docs: ./docs/drafts/{timestamp}-{name}.md
-      - Debug scripts: ./debug/{timestamp}-{name}.ts
-      - Services: Use interface + implementation pattern when possible
-    '';
+        ### Project Structure
+
+        - Docs: ./docs/drafts/{timestamp}-{name}.md
+        - Debug scripts: ./debug/{timestamp}-{name}.ts
+        - Services: Use interface + implementation pattern when possible
+      '';
+    };
 
     programs.direnv = {
       enable = true;
@@ -84,6 +103,10 @@
       # bitwarden-cli
       # rbw
       bws
+
+      aider-chat
+      python3
+      claude-code
     ] ++ (if config.smind.hm.dev.tex.enable then [ texlive.combined.scheme-full ] else [ ]);
   };
 

@@ -30,7 +30,6 @@
       aider-chat
       # opencode
       goose-cli
-      claude-code
       codex
 
       (writeShellScriptBin "yolo-claude" ''
