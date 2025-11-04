@@ -47,7 +47,7 @@
         alwaysThinkingEnabled = true;
         theme = "dark";
         permissions = { };
-        ncludeCoAuthoredBy = true;
+        includeCoAuthoredBy = true;
         #model = "claude-3-5-sonnet-20241022";
         statusLine = {
           padding = 0;
