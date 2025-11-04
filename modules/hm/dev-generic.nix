@@ -50,8 +50,8 @@
         includeCoAuthoredBy = true;
         #model = "claude-3-5-sonnet-20241022";
         statusLine = {
-          padding = 0;
-          type = "command";
+          "type" = "command";
+          "command" = "printf '\\033[2m\\033[37m%s \\033[0m\\033[2m@ %s \\033[0m\\033[2m\\033[36min \\033[1m\\033[36m%s\\033[0m' \"$(whoami)\" \"$(hostname -s)\" \"$(pwd | sed \"s|^$HOME|~|\")\"";
         };
       };
       memory.text = ''
