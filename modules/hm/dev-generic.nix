@@ -78,6 +78,7 @@
         - Docs: ./docs/drafts/{timestamp}-{name}.md
         - Debug scripts: ./debug/{timestamp}-{name}.ts
         - Services: Use interface + implementation pattern when possible
+        - Always create and maintain reasonable .gitignore files
       '';
     };
 
