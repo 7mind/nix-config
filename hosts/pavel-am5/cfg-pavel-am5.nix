@@ -63,6 +63,40 @@
     };
   };
 
+  systemd.network = {
+    networks = {
+      "20-enp15s0" = {
+        name = "enp15s0";
+        DHCP = "yes";
+
+        linkConfig = {
+          #RequiredForOnline = "routable";
+        };
+
+        networkConfig = {
+          IPv6PrivacyExtensions = "no";
+          DHCPPrefixDelegation = "yes";
+          IPv6AcceptRA = "yes";
+          LinkLocalAddressing = "yes";
+        };
+
+        dhcpV4Config = {
+          SendHostname = true;
+          Hostname = "${config.networking.hostName}-2.${config.networking.domain}";
+          UseDomains = true;
+        };
+
+        dhcpV6Config = {
+          SendHostname = true;
+          Hostname = "${config.networking.hostName}-2-ipv6.${config.networking.domain}";
+          UseDomains = true;
+        };
+      };
+    };
+
+  };
+
+
   smind = {
     roles.desktop.generic-gnome = true;
 
