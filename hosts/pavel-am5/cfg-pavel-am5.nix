@@ -70,7 +70,7 @@
         DHCP = "yes";
 
         linkConfig = {
-          #RequiredForOnline = "routable";
+          RequiredForOnline = "no";
         };
 
         networkConfig = {
