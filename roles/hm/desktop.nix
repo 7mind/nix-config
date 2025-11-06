@@ -21,7 +21,7 @@
       dev.scala.enable = lib.mkDefault true;
       kitty.enable = lib.mkDefault true;
       vscodium.enable = lib.mkDefault true;
-      # zed.enable = lib.mkDefault true; # broken
+      zed.enable = lib.mkDefault true;
       wezterm.enable = lib.mkDefault true;
       autostart.programs = [ ];
       cleanups.enable = lib.mkDefault true;
