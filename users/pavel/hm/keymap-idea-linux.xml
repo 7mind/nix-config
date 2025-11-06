@@ -94,8 +94,8 @@
   </action>
   <action id="CompileProject">
     <!--build.rebuild-->
-    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="ctrl r"/>
-    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="r"/>
+    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="ctrl p"/>
+    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="p"/>
   </action>
   <action id="EditorUnindentSelection">
     <!--EditorUnindentSelection-->
@@ -221,6 +221,11 @@
   <action id="Forward">
     <!--workbench.action.navigateForward-->
     <keyboard-shortcut first-keystroke="ctrl close_bracket"/>
+  </action>
+  <action id="ExternalSystem.RefreshAllProjects">
+    <!--build.reimport-->
+    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="ctrl i"/>
+    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="i"/>
   </action>
   <action id="ShowSettings">
     <!--workbench.action.openSettings-->
@@ -377,8 +382,8 @@
   </action>
   <action id="RebuildSolutionAction">
     <!--rider:build.rebuild-->
-    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="ctrl r"/>
-    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="r"/>
+    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="ctrl p"/>
+    <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="p"/>
   </action>
   <action id="CloseContent">
     <!--workbench.action.closeActiveEditor-->
