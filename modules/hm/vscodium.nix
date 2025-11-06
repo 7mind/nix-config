@@ -74,6 +74,7 @@
           redhat.vscode-yaml
           redhat.java
 
+          ocamllabs.ocaml-platform
 
           # tabbyml.vscode-tabby
 
