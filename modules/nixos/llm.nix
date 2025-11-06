@@ -34,18 +34,25 @@
 
       (writeShellScriptBin "yolo-claude" ''
         set -e
-        firejail --noprofile \
-          --whitelist="''${PWD}" \
-          --whitelist="''${HOME}/.claude" \
-          --whitelist="''${HOME}/.claude.json" \
-          --whitelist="''${HOME}/.config/claude" \
-          --whitelist="''${HOME}/.claude" \
-          --whitelist="''${HOME}/.claude.json" \
-          --whitelist="''${HOME}/.config/claude" \
-          --whitelist="''${HOME}/.cache" \
-          --whitelist="/nix" \
-          claude \
-          --permission-mode bypassPermissions $*
+
+        WHITELISTS=(
+          "''${PWD}"
+          "''${HOME}/.claude"
+          "''${HOME}/.claude.json"
+          "''${HOME}/.config/claude"
+          "''${HOME}/.cache"
+          /nix/store
+          /nix/var
+        )
+
+        WHITELIST_ARGS=()
+        for path in "''${CANDIDATE_PATHS[@]}"; do
+          if [[ -e "$path" ]]; then
+            WHITELIST_ARGS+=(--whitelist="$path")
+          fi
+        done
+
+        firejail --noprofile "''${WHITELIST_ARGS[@]}" claude --permission-mode bypassPermissions "$@"
       '')
     ];
 
