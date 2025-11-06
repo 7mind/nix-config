@@ -64,9 +64,16 @@
   };
 
   systemd.network = {
+    links = {
+      "10-eth-tmp.link" = {
+        matchConfig.PermanentMACAddress = "a0:ad:9f:1c:9e:98";
+        linkConfig.Name = "eth-tmp";
+      };
+    };
+
     networks = {
-      "20-enp15s0" = {
-        name = "enp15s0";
+      "20-eth-tmp" = {
+        name = "eth-tmp";
         DHCP = "yes";
 
         linkConfig = {
@@ -112,7 +119,9 @@
     zfs.initrd-unlock.enable = true;
 
     net.main-interface = "eth-main";
-    net.main-macaddr = "a0:ad:9f:1c:9e:98";
+    # net.main-macaddr = "a0:ad:9f:1c:9e:98"; # 10g marvel
+    net.main-macaddr = "a0:ad:9f:1e:c6:59"; # 2.5g intel
+
     net.main-bridge-macaddr = "d0:94:66:55:aa:11";
     net.tailscale.enable = true;
 
