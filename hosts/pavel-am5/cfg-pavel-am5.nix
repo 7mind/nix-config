@@ -66,7 +66,7 @@
   systemd.network = {
     links = {
       "10-eth-tmp.link" = {
-        matchConfig.PermanentMACAddress = "a0:ad:9f:1c:9e:98";
+        matchConfig.PermanentMACAddress = "a0:ad:9f:1e:c6:59";
         linkConfig.Name = "eth-tmp";
       };
     };
@@ -120,8 +120,8 @@
 
     net.main-interface = "eth-main";
 
-    # net.main-macaddr = "a0:ad:9f:1c:9e:98"; # marvel AQC113, 10g
-    net.main-macaddr = "a0:ad:9f:1e:c6:59"; # intel I226-V, 2.5g
+    net.main-macaddr = "a0:ad:9f:1c:9e:98"; # marvel AQC113, 10g
+    # net.main-macaddr = "a0:ad:9f:1e:c6:59"; # intel I226-V, 2.5g
 
     net.main-bridge-macaddr = "d0:94:66:55:aa:11";
     net.tailscale.enable = true;
