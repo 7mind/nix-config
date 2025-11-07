@@ -119,8 +119,9 @@
     zfs.initrd-unlock.enable = true;
 
     net.main-interface = "eth-main";
-    # net.main-macaddr = "a0:ad:9f:1c:9e:98"; # 10g marvel
-    net.main-macaddr = "a0:ad:9f:1e:c6:59"; # 2.5g intel
+
+    # net.main-macaddr = "a0:ad:9f:1c:9e:98"; # marvel AQC113, 10g
+    net.main-macaddr = "a0:ad:9f:1e:c6:59"; # intel I226-V, 2.5g
 
     net.main-bridge-macaddr = "d0:94:66:55:aa:11";
     net.tailscale.enable = true;
@@ -232,7 +233,7 @@
         "qemu-libvirtd"
         "kvm"
         "uinput"
-        # "adbusers"
+        "adbusers"
         # "docker"
         # "corectrl"
         # "wireshark"
@@ -243,6 +244,11 @@
     };
 
   };
+
+  programs.adb.enable = true;
+  # services.udev.packages = [
+  #   pkgs.android-udev-rules
+  # ];
 
   home-manager.users.pavel = import ./home-pavel.nix;
   home-manager.users.root = import ./home-root.nix;
