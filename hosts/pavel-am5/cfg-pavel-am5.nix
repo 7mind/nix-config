@@ -174,15 +174,6 @@
         authorizedKeys = cfg-const.ssh-keys-pavel;
       };
     };
-
-    # systemd.network = {
-    #   links = {
-    #     "10-initrdnet.link" = {
-    #       matchConfig.PermanentMACAddress = config.smind.net.main-macaddr;
-    #       linkConfig.Name = config.smind.net.main-interface;
-    #     };
-    #   };
-    # };
   };
 
   boot.loader = {
