@@ -34,6 +34,7 @@
         ### Core Principles
 
         - Use nix environment with flake.nix and direnv for dependencies
+        - Use `direnv exec DIR COMMAND [...ARGS]` and `nix run`
         - **Don't give up**: Provide comprehensive solutions
         - **Fail fast**: Use assertions, throw errors early - no graceful fallbacks
         - **Explicit over implicit**: No default parameters or optional chaining for required values
