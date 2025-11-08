@@ -177,7 +177,7 @@
 
     systemd.network = {
       links = {
-        "10-initre.link" = {
+        "10-initrdnet.link" = {
           matchConfig.PermanentMACAddress = "d0:94:66:55:aa:11";
           linkConfig.Name = "eth-main";
         };
