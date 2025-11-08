@@ -165,11 +165,22 @@
   programs.firejail.enable = true;
 
   boot.initrd = {
+    kernelModules = [ "atlantic" "igc" ];
+
     network = {
       ssh = {
         # `ssh-keygen -t ed25519 -N "" -f /etc/secrets/initrd/ssh_host_ed25519_key`
         hostKeys = [ "/etc/secrets/initrd/ssh_host_ed25519_key" ];
         authorizedKeys = cfg-const.ssh-keys-pavel;
+      };
+    };
+
+    systemd.network = {
+      links = {
+        "10-initre.link" = {
+          matchConfig.PermanentMACAddress = "d0:94:66:55:aa:11";
+          linkConfig.Name = "eth-main";
+        };
       };
     };
   };
