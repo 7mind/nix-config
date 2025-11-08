@@ -178,8 +178,8 @@
     systemd.network = {
       links = {
         "10-initrdnet.link" = {
-          matchConfig.PermanentMACAddress = "d0:94:66:55:aa:11";
-          linkConfig.Name = "eth-main";
+          matchConfig.PermanentMACAddress = config.smind.net.main-macaddr;
+          linkConfig.Name = config.smind.net.main-interface;
         };
       };
     };
