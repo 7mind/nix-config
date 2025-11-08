@@ -117,6 +117,7 @@
     host.email.sender = "${config.networking.hostName}@home.7mind.io";
 
     zfs.initrd-unlock.enable = true;
+    zfs.initrd-unlock.macaddr = "d0:94:66:55:aa:ab";
 
     net.main-interface = "eth-main";
 
@@ -172,12 +173,6 @@
         # `ssh-keygen -t ed25519 -N "" -f /etc/secrets/initrd/ssh_host_ed25519_key`
         hostKeys = [ "/etc/secrets/initrd/ssh_host_ed25519_key" ];
         authorizedKeys = cfg-const.ssh-keys-pavel;
-      };
-    };
-
-    systemd.network.networks."20-${config.smind.zfs.initrd-unlock.interface}" = {
-      linkConfig = {
-        MACAddress = "d0:94:66:55:aa:ab";
       };
     };
   };

@@ -13,6 +13,12 @@
       description = "network interface to configure";
     };
 
+    smind.zfs.initrd-unlock.macaddr = lib.mkOption {
+      type = lib.types.str;
+      description = "network interface to configure / mac";
+    };
+
+
     smind.zfs.initrd-unlock.hostname = lib.mkOption {
       type = lib.types.str;
       # default = "initrd-${config.networking.hostName}.${config.networking.domain}";
@@ -74,7 +80,9 @@
               enable = true;
               name = config.smind.zfs.initrd-unlock.interface;
               DHCP = "ipv4";
+
               linkConfig = {
+                MACAddress = config.smind.zfs.initrd-unlock.macaddr;
                 RequiredForOnline = "routable";
               };
 
