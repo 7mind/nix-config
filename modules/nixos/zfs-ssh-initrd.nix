@@ -9,7 +9,7 @@
 
     smind.zfs.initrd-unlock.interface = lib.mkOption {
       type = lib.types.str;
-      default = config.smind.net.main-interface;
+      default = config.smind.net.main-bridge;
       description = "network interface to configure";
     };
 
