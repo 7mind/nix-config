@@ -174,6 +174,12 @@
         authorizedKeys = cfg-const.ssh-keys-pavel;
       };
     };
+
+    systemd.network.networks."20-${config.smind.zfs.initrd-unlock.interface}" = {
+      linkConfig = {
+        MACAddress = "d0:94:66:55:aa:ab";
+      };
+    };
   };
 
   boot.loader = {

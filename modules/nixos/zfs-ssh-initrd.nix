@@ -75,7 +75,6 @@
               name = config.smind.zfs.initrd-unlock.interface;
               DHCP = "ipv4";
               linkConfig = {
-                MACAddress = "d0:94:66:55:aa:ab";
                 RequiredForOnline = "routable";
               };
 
