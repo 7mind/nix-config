@@ -24,38 +24,7 @@
       # jan
       # alpaca
       # tabby
-
-      # agentic coding
-      aichat
-      aider-chat
-      # opencode
-      goose-cli
-      codex
-
-      (writeShellScriptBin "yolo-claude" ''
-        set -e
-
-        WHITELISTS=(
-          "''${PWD}"
-          "''${HOME}/.claude"
-          "''${HOME}/.claude.json"
-          "''${HOME}/.config/claude"
-          "''${HOME}/.cache"
-          /nix/store
-          /nix/var
-        )
-
-        WHITELIST_ARGS=()
-        for path in "''${CANDIDATE_PATHS[@]}"; do
-          if [[ -e "$path" ]]; then
-            WHITELIST_ARGS+=(--whitelist="$path")
-          fi
-        done
-
-        firejail --noprofile "''${WHITELIST_ARGS[@]}" claude --permission-mode bypassPermissions "$@"
-      '')
     ];
-
 
     environment.variables = {
       OLLAMA_API_BASE = "http://127.0.0.1:11434";

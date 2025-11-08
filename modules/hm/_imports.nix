@@ -3,6 +3,7 @@
   ./cleanups.nix
   ./dev-generic.nix
   ./dev-git.nix
+  ./dev-llm.nix
   ./dev-cs.nix
   ./dev-scala.nix
   ./env-settings-generic.nix
