@@ -44,6 +44,8 @@
           shellAliases = cfg-const.universal-aliases;
         };
 
+        programs.firejail.enable = true;
+
         environment.systemPackages = with pkgs; [
           # terminal
           # kitty.terminfo # broken

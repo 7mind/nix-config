@@ -163,7 +163,6 @@
   #services.orca.enable = lib.mkForce false;
 
   programs.steam.enable = true;
-  programs.firejail.enable = true;
 
   boot.initrd = {
     kernelModules = [ "atlantic" "igc" ];
