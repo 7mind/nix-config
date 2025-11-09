@@ -92,6 +92,7 @@
         done
         for path in "''${CANDIDATE_PATHS_RO[@]}"; do
           if [[ -e "$path" ]]; then
+            WHITELIST_ARGS+=(--whitelist="$path")
             WHITELIST_ARGS+=(--read-only="$path")
           fi
         done
