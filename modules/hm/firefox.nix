@@ -234,17 +234,33 @@
             "network.trr.confirmation_telemetry_enabled" = false;
             "security.app_menu.recordEventTelemetry" = false;
             "security.protectionspopup.recordEventTelemetry" = false;
+
+            "browser.ml.enable" = false;
+            "browser.ml.chat.enabled" = false;
+            "browser.ml.chat.hideFromLabs" = true;
+            "browser.ml.chat.hideLabsShortcuts" = true;
+            "browser.ml.chat.page" = false;
+            "browser.ml.chat.page.footerBadge" = false;
+            "browser.ml.chat.page.menuBadge" = false;
+            "browser.ml.chat.menu" = false;
+            "browser.ml.linkPreview.enabled" = false;
+            "browser.ml.pageAssist.enabled" = false;
+            "browser.tabs.groups.smart.enabled" = false;
+            "browser.tabs.groups.smart.userEnable" = false;
+            "extensions.ml.enabled" = false;
           };
 
           # https://gitlab.com/kira-bruneau/home-config/-/blob/main/package/firefox/default.nix
           search = {
             force = true;
-            default = "qwant";
+            default = "ddg";
             order = [
-              "qwant"
               "ddg"
-              "kagi"
               "google"
+              "perplexity"
+              "claude"
+              # "qwant"
+              # "kagi"
               "nixpkgs"
               "nixopts"
               "hm"
@@ -262,23 +278,52 @@
               "Amazon.co.uk".metaData.hidden = "@a";
 
 
-
-              qwant = {
-                name = "Qwant";
+              perplexity = {
+                name = "Perplexity";
                 urls = [{
-                  template = "https://www.qwant.com/";
-                  params = [{
-                    name = "q";
-                    value = "{searchTerms}";
-                  }
+                  template = "https://www.perplexity.ai/search";
+                  params = [
                     {
-                      name = "t";
-                      value = "web";
-                    }];
+                      name = "q";
+                      value = "{searchTerms}";
+                    }
+                  ];
                 }];
-                icon = "https://www.qwant.com/favicon.ico";
-                definedAliases = [ "@q" ];
+                icon = "https://www.perplexity.ai/favicon.ico";
+                definedAliases = [ "@p" ];
               };
+
+              claude = {
+                name = "Claude";
+                urls = [{
+                  template = "https://claude.ai/new";
+                  params = [
+                    {
+                      name = "q";
+                      value = "{searchTerms}";
+                    }
+                  ];
+                }];
+                icon = "https://www.claude.ai/favicon.ico";
+                definedAliases = [ "@c" ];
+              };
+
+              # qwant = {
+              #   name = "Qwant";
+              #   urls = [{
+              #     template = "https://www.qwant.com/";
+              #     params = [{
+              #       name = "q";
+              #       value = "{searchTerms}";
+              #     }
+              #       {
+              #         name = "t";
+              #         value = "web";
+              #       }];
+              #   }];
+              #   icon = "https://www.qwant.com/favicon.ico";
+              #   definedAliases = [ "@q" ];
+              # };
 
               hf = {
                 name = "Hugging Face Models";
