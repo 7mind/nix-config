@@ -290,7 +290,7 @@
                   ];
                 }];
                 icon = "https://www.perplexity.ai/favicon.ico";
-                definedAliases = [ "@p" ];
+                definedAliases = [ "@x" ];
               };
 
               claude = {
