@@ -70,7 +70,7 @@
       (writeShellScriptBin "yolo-claude" ''
         set -e
 
-        WHITELISTS=(
+        CANDIDATE_PATHS=(
           "''${PWD}"
           "''${HOME}/.claude"
           "''${HOME}/.claude.json"
