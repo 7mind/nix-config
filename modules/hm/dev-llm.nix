@@ -69,7 +69,6 @@
 
       (writeShellScriptBin "yolo-claude" ''
         set -e
-        set -x
 
         CANDIDATE_PATHS_RW=(
           "''${PWD}"
@@ -96,6 +95,9 @@
             WHITELIST_ARGS+=(--read-only="$path")
           fi
         done
+
+        set -x
+
         firejail --noprofile "''${WHITELIST_ARGS[@]}" claude --permission-mode bypassPermissions "$@"
       '')
     ];
