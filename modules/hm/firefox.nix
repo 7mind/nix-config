@@ -277,6 +277,7 @@
               "wikipedia".metaData.alias = "@w";
               "Amazon.co.uk".metaData.hidden = "@a";
 
+              "perplexity".metaData.alias = "@p";
 
               perplexity = {
                 name = "Perplexity";
@@ -290,7 +291,7 @@
                   ];
                 }];
                 icon = "https://www.perplexity.ai/favicon.ico";
-                definedAliases = [ "@pp" "@p" ];
+                definedAliases = [ "@pp" ];
               };
 
               claude = {
