@@ -12,6 +12,8 @@
   config = lib.mkIf config.smind.hm.dev.git.enable {
     home.packages = with pkgs; [ git-review tig lazygit ];
 
+    programs.mergiraf.enable = true;
+    
     programs.git = {
       enable = true;
       package = pkgs.gitFull;
