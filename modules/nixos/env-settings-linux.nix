@@ -56,6 +56,7 @@
           nixpkgs-fmt
           nix-converter
           nix-ld
+          nixos-firewall-tool
 
           # disk tools
           gptfdisk
