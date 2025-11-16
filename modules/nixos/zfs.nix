@@ -1,4 +1,4 @@
-{ pkgs, lib, config, ... }:
+{ pkgs, lib, config, cfg-packages, ... }:
 
 {
   options = {
@@ -27,6 +27,7 @@
       supportedFilesystems = [ "zfs" ];
       initrd = { supportedFilesystems = [ "zfs" ]; };
       zfs.removeLinuxDRM = true;
+      #zfs.package = cfg-packages.linux-kernel.zfs_unstable;
     };
 
     services.zfs = {

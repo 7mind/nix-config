@@ -53,6 +53,7 @@
         ];
 
       systemd.network.enable = true;
+      services.networkd-dispatcher.enable = true;
 
       networking = {
         hostName = lib.mkDefault cfg-meta.hostname;
