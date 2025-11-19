@@ -24,7 +24,7 @@
       enable = true;
       profiles.user.databases = [
         {
-          lockAll = true; # prevents overriding
+          #lockAll = true; # prevents overriding
           settings =
             let
               empty = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
