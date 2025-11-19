@@ -30,8 +30,6 @@
               empty = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
             in
             {
-              # not working anymore
-              # sclk mapped by keyd
               "org/gnome/desktop/input-sources" = {
                 xkb-options = [
                   # "terminate:ctrl_alt_bksp"
