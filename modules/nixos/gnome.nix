@@ -154,6 +154,7 @@
         gnome-firmware
         eog
         pix
+        file-roller
         # gnome-remote-desktop
       ]);
 
@@ -186,7 +187,7 @@
 
     programs.gnome-terminal.enable = true;
     programs.gnome-disks.enable = true;
-    programs.file-roller.enable = true;
+    # programs.file-roller.enable = true;
 
     environment.gnome.excludePackages = with pkgs; [
       orca # text to speech

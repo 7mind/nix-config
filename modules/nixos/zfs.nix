@@ -27,7 +27,7 @@
       supportedFilesystems = [ "zfs" ];
       initrd = { supportedFilesystems = [ "zfs" ]; };
       zfs.removeLinuxDRM = true;
-      #zfs.package = cfg-packages.linux-kernel.zfs_unstable;
+      # zfs.package = cfg-packages.linux-kernel.zfs_unstable;
     };
 
     services.zfs = {
