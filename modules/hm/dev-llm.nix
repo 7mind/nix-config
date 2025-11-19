@@ -57,51 +57,57 @@
       '';
     };
 
-    home.packages = with pkgs; [
-      aider-chat
-      claude-code
+    programs.codex = {
+      enable = true;
+      custom-instructions = config.programs.claude-code.memory.text;
+    };
 
-      aichat
-      aider-chat
-      # opencode
-      goose-cli
-      codex
+    home.packages = with pkgs;
+      [
+        aider-chat
+        # claude-code
 
-      (writeShellScriptBin "yolo-claude" ''
-        set -e
+        aichat
+        aider-chat
+        # opencode
+        goose-cli
+        # codex
 
-        CANDIDATE_PATHS_RW=(
-          "''${PWD}"
-          "''${HOME}/.claude"
-          "''${HOME}/.claude.json"
-          "''${HOME}/.config/claude"
-          "''${HOME}/.cache"
-        )
+        (writeShellScriptBin "yolo-claude" ''
+          set -e
 
-        CANDIDATE_PATHS_RO=(
-          "''${HOME}/.config/git"
-          /nix/store
-          /nix/var
-        )
+          CANDIDATE_PATHS_RW=(
+            "''${PWD}"
+            "''${HOME}/.claude"
+            "''${HOME}/.claude.json"
+            "''${HOME}/.config/claude"
+            "''${HOME}/.cache"
+          )
 
-        WHITELIST_ARGS=()
-        for path in "''${CANDIDATE_PATHS_RW[@]}"; do
-          if [[ -e "$path" ]]; then
-            WHITELIST_ARGS+=(--whitelist="$path")
-          fi
-        done
-        for path in "''${CANDIDATE_PATHS_RO[@]}"; do
-          if [[ -e "$path" ]]; then
-            WHITELIST_ARGS+=(--whitelist="$path")
-            WHITELIST_ARGS+=(--read-only="$path")
-          fi
-        done
+          CANDIDATE_PATHS_RO=(
+            "''${HOME}/.config/git"
+            /nix/store
+            /nix/var
+          )
 
-        set -x
+          WHITELIST_ARGS=()
+          for path in "''${CANDIDATE_PATHS_RW[@]}"; do
+            if [[ -e "$path" ]]; then
+              WHITELIST_ARGS+=(--whitelist="$path")
+            fi
+          done
+          for path in "''${CANDIDATE_PATHS_RO[@]}"; do
+            if [[ -e "$path" ]]; then
+              WHITELIST_ARGS+=(--whitelist="$path")
+              WHITELIST_ARGS+=(--read-only="$path")
+            fi
+          done
 
-        firejail --noprofile "''${WHITELIST_ARGS[@]}" claude --permission-mode bypassPermissions "$@"
-      '')
-    ];
+          set -x
+
+          firejail --noprofile "''${WHITELIST_ARGS[@]}" claude --permission-mode bypassPermissions "$@"
+        '')
+      ];
   };
 
 
