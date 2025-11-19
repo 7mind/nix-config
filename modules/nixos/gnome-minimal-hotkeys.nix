@@ -31,15 +31,15 @@
             in
             {
               # not working anymore
-              # # sclk mapped by keyd
-              # "org/gnome/desktop/input-sources" = {
-              #   xkb-options = [
-              #     "terminate:ctrl_alt_bksp"
-              #     "grp:sclk_toggle"
-              #     "lv3:ralt_switch"
-              #     "eurosign:4"
-              #   ];
-              # };
+              # sclk mapped by keyd
+              "org/gnome/desktop/input-sources" = {
+                xkb-options = [
+                  "terminate:ctrl_alt_bksp"
+                  "grp:sclk_toggle"
+                  "lv3:ralt_switch"
+                  "eurosign:4"
+                ];
+              };
               "org/gnome/mutter/wayland/keybindings" = {
                 restore-shortcuts = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
               };
