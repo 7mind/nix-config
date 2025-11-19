@@ -107,6 +107,44 @@
 
           firejail --noprofile "''${WHITELIST_ARGS[@]}" claude --permission-mode bypassPermissions "$@"
         '')
+
+        (writeShellScriptBin "yolo-codex" ''
+          set -euo pipefail
+
+          CANDIDATE_PATHS_RW=(
+            "''${PWD}"
+            "''${HOME}/.codex"
+            "''${HOME}/.config/codex"
+            "''${HOME}/.cache"
+          )
+
+          CANDIDATE_PATHS_RO=(
+            "''${HOME}/.config/git"
+            /nix/store
+            /nix/var
+          )
+
+          WHITELIST_ARGS=()
+          for path in "''${CANDIDATE_PATHS_RW[@]}"; do
+            if [[ -e "$path" ]]; then
+              WHITELIST_ARGS+=(--whitelist="$path")
+            fi
+          done
+          for path in "''${CANDIDATE_PATHS_RO[@]}"; do
+            if [[ -e "$path" ]]; then
+              WHITELIST_ARGS+=(--whitelist="$path")
+              WHITELIST_ARGS+=(--read-only="$path")
+            fi
+          done
+
+          set -x
+
+          # Codex “dangerous full access” mode: alias for --yolo
+          # (no sandbox, no approvals – hence wrapping it in firejail)
+          firejail --noprofile "''${WHITELIST_ARGS[@]}" \
+            codex --dangerously-bypass-approvals-and-sandbox "''$@"
+        '')
+
       ];
   };
 
