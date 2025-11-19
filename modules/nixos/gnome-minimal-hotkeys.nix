@@ -271,8 +271,8 @@
                 cycle-group = [ "<Super>grave" ]; # app windows without overview
 
                 close = [ "<Super>q" ];
-                #switch-input-source = [ "<Primary><Alt><Super>space" ];
-                switch-input-source = empty;
+                # Use a hidden shortcut that keyd will trigger
+                switch-input-source = [ "<Primary><Alt><Super>space" ];
                 toggle-maximized = [ "<Primary><Alt>f" ];
               };
               "org/gnome/desktop/wm/preferences" =

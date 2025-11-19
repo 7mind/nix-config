@@ -26,7 +26,7 @@
           };
 
           "meta+shift" = { f = "macro(leftcontrol+leftshift+f)"; };
-          "control+alt+meta" = { "space" = "macro(scrolllock)"; };
+          #"control+alt+meta" = { "space" = "macro(scrolllock)"; };
         };
       };
     };
