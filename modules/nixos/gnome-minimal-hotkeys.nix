@@ -34,8 +34,8 @@
               # sclk mapped by keyd
               "org/gnome/desktop/input-sources" = {
                 xkb-options = [
-                  "terminate:ctrl_alt_bksp"
-                  "grp:sclk_toggle"
+                  # "terminate:ctrl_alt_bksp"
+                  # "grp:sclk_toggle"
                   "lv3:ralt_switch"
                   "eurosign:4"
                 ];
