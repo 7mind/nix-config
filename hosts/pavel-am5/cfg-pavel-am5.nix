@@ -72,6 +72,12 @@
     };
 
     networks = {
+      "20-${config.smind.net.main-bridge}" = {
+        ipv6AcceptRAConfig = {
+          Token = "::0020";
+        };
+      };
+
       "20-eth-tmp" = {
         name = "eth-tmp";
         DHCP = "yes";
@@ -102,6 +108,9 @@
     };
 
   };
+
+
+
 
   programs.winbox = {
     enable = true;
@@ -186,6 +195,7 @@
       };
     };
   };
+
 
   boot.loader = {
     systemd-boot = {

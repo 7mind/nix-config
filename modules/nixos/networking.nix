@@ -150,11 +150,6 @@
               LinkLocalAddressing = "yes";
             };
 
-            ipv6AcceptRAConfig = {
-              Token = "::0011";
-            };
-
-
             dhcpV4Config = {
               SendHostname = true;
               Hostname = "${config.networking.hostName}.${config.networking.domain}";
