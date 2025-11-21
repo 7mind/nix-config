@@ -36,7 +36,7 @@
     #   '';
     # };
 
-    programs.zsh.envExtra = ''
+    programs.zsh.initContent = ''
       _direnv_project_zsh_autoload() {
         # Only do anything if direnv has an active env
         local direnv_dir="''${DIRENV_DIR:-}"
