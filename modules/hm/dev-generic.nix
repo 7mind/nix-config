@@ -38,23 +38,25 @@
 
     programs.zsh.initContent = ''
       _direnv_project_zsh_autoload() {
-        # Only do anything if direnv has an active env
-        local direnv_dir="''${DIRENV_DIR:-}"
-        [[ -z "$direnv_dir" ]] && return
+        # Only run if direnv has an active env
+        [[ -z ''${DIRENV_FILE:-} ]] && return
 
-        local proj_file="$direnv_dir/.project-zsh"
-        [[ ! -f "$proj_file" ]] && return  # no per-project zsh config, nothing to do
+        # Directory that contains the active .envrc
+        local direnv_root=''${DIRENV_FILE:A:h}
+        local proj_file="$direnv_root/.project-zsh"
 
-        # Avoid re-sourcing for the same project in this shell
-        if [[ "$_DIRENV_PROJECT_ZSH_LOADED" != "$proj_file" ]]; then
+        [[ -r "$proj_file" ]] || return
+
+        # Avoid re-sourcing the same file repeatedly
+        if [[ "$_LAST_PROJECT_ZSH" != "$proj_file" ]]; then
+          _LAST_PROJECT_ZSH="$proj_file"
           source "$proj_file"
-          _DIRENV_PROJECT_ZSH_LOADED="$proj_file"
         fi
       }
 
-      autoload -Uz add-zsh-hook
-      # Run *after* direnv’s own precmd logic, once per prompt
-      add-zsh-hook precmd _direnv_project_zsh_autoload
+      typeset -ag precmd_functions chpwd_functions
+      precmd_functions=(_direnv_project_zsh_autoload $precmd_functions)
+      chpwd_functions=(_direnv_project_zsh_autoload $chpwd_functions)
     '';
 
     programs.direnv = {
