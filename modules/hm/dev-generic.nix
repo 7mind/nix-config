@@ -83,6 +83,8 @@
       bws
 
       python3
+
+      asciinema
     ] ++ (if config.smind.hm.dev.tex.enable then [ texlive.combined.scheme-full ] else [ ]);
   };
 
