@@ -36,6 +36,27 @@
     #   '';
     # };
 
+    programs.zsh.envExtra = ''
+      _direnv_project_zsh_autoload() {
+        # Only do anything if direnv has an active env
+        local direnv_dir="''${DIRENV_DIR:-}"
+        [[ -z "$direnv_dir" ]] && return
+
+        local proj_file="$direnv_dir/.project-zsh"
+        [[ ! -f "$proj_file" ]] && return  # no per-project zsh config, nothing to do
+
+        # Avoid re-sourcing for the same project in this shell
+        if [[ "$_DIRENV_PROJECT_ZSH_LOADED" != "$proj_file" ]]; then
+          source "$proj_file"
+          _DIRENV_PROJECT_ZSH_LOADED="$proj_file"
+        fi
+      }
+
+      autoload -Uz add-zsh-hook
+      # Run *after* direnv’s own precmd logic, once per prompt
+      add-zsh-hook precmd _direnv_project_zsh_autoload
+    '';
+
     programs.direnv = {
       enable = true;
       nix-direnv.enable = true;
