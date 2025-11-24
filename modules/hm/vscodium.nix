@@ -58,7 +58,7 @@
           ms-vscode.cmake-tools
           ms-vscode.makefile-tools
 
-          anthropic.claude-code
+          pkgs.vscode-marketplace.anthropic.claude-code
 
           twxs.cmake
 

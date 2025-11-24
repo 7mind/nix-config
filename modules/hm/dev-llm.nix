@@ -58,7 +58,7 @@
 
         ### Tools
 
-        - Don't forget - you can use gdb and other debuggers
+        - Use debuggers! You can use gdb, lldb, jdb, pdb and any other debuggers!
       '';
     };
 

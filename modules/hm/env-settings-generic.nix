@@ -16,6 +16,8 @@
   };
 
   config = lib.mkIf config.smind.hm.environment.sane-defaults.generic.enable {
+    home.enableNixpkgsReleaseCheck = false;
+
     manual = lib.mkIf config.smind.hm.environment.all-docs.enable {
       html.enable = true;
     };
@@ -60,7 +62,7 @@
     };
 
     programs.zsh = {
-      initExtra = lib.mkIf config.programs.fzf.enable ''
+      initContent = lib.mkIf config.programs.fzf.enable ''
         _fzf_comprun () {
           local command = $1
           shift

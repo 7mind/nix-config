@@ -16,6 +16,31 @@
       daemon.enable = true;
     };
 
+    programs.vicinae = {
+      enable = true;
+      systemd.enable = true;
+      settings = {
+        faviconService = "twenty"; # twenty | google | none
+        #font.size = 11;
+        #popToRootOnClose = false;
+        #rootSearch.searchFiles = false;
+        #theme.name = "rose-pine";
+        #window = {
+        #  csd = true;
+        #  opacity = 0.95;
+        #  rounding = 10;
+        #};
+      };
+      #themes = { };
+      extensions = with cfg-meta.inputs.vicinae-extensions.packages.${pkgs.stdenv.hostPlatform.system}; [
+        fuzzy-files
+        nix
+        it-tools
+        bluetooth
+        agenda
+      ];
+    };
+
     home.packages = lib.mkIf cfg-meta.isLinux (with pkgs; [
       # productivity
       libreoffice-fresh
