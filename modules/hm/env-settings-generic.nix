@@ -24,7 +24,7 @@
     # programs.ssh.addKeysToAgent = lib.mkIf cfg-meta.isLinux "yes";
 
     programs.ssh.matchBlocks."*".addKeysToAgent = lib.mkIf cfg-meta.isLinux "yes";
-    
+
     programs.zoxide = {
       enable = true;
       enableBashIntegration = true;
@@ -59,8 +59,44 @@
       };
     };
 
+    programs.zsh = {
+      initExtra = lib.mkIf config.programs.fzf.enable ''
+        _fzf_comprun () {
+          local command = $1
+          shift
+          case "$command" in
+              cd)           fzf "$@" --preview 'tree -C {} | head -200';;
+              *)            fzf "$@" ;;
+          esac
+        }
+      '';
+    };
+
+    programs.fzf = {
+      enable = lib.mkDefault (!config.smind.hm.roles.desktop);
+      enableZshIntegration = true;
+      defaultCommand = "fd .$HOME";
+      fileWidgetCommand = "$FZF_DEFAULT_COMMAND";
+      changeDirWidgetCommand = "fd -t d . $HOME";
+      defaultOptions = [
+        "--layout=reverse"
+        "--border"
+        "--info=inline"
+        "--height=80%"
+        "--multi"
+        "--preview-window=:hidden"
+        "--preview '([[ -f {} ]] && (bat --style=numbers --color=always {} || cat {})) || ([[ -d {} ]] && (tree -C {} | less)) || echo {} 2> /dev/null | head -200'"
+        "--color='hl:148,hl+:154,pointer:032,marker:010,bg+:237,gutter:008'"
+        "--prompt='∼ '"
+        "--pointer='▶'"
+        "--marker='✓'"
+        "--bind '?:toggle-preview'"
+      ];
+      tmux.enableShellIntegration = true;
+    };
+
     programs.atuin = {
-      enable = true;
+      enable = lib.mkDefault config.smind.hm.roles.desktop;
       settings = {
         auto_sync = true;
         sync_frequency = "5m";

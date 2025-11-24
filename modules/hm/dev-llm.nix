@@ -41,6 +41,7 @@
         - **Type safety**: Use interfaces/classes, avoid tuples/any/dictionaries
         - **SOLID**: Adhere to SOLID principles
         - **RTFM**: Read documentation, code, and samples thoroughly
+        - Don't write obvious comments. Only write comments to explain something important
 
         ### Code Style
 
@@ -54,6 +55,10 @@
         - Debug scripts: ./debug/{timestamp}-{name}.ts
         - Services: Use interface + implementation pattern when possible
         - Always create and maintain reasonable .gitignore files
+
+        ### Tools
+
+        - Don't forget - you can use gdb and other debuggers
       '';
     };
 
