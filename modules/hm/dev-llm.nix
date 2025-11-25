@@ -59,6 +59,7 @@
         ### Tools
 
         - Use debuggers! You can use gdb, lldb, jdb, pdb and any other debuggers!
+        - Use nproc when you need to figure out how many parallel processes you can run
       '';
     };
 
@@ -71,7 +72,7 @@
     programs.gemini-cli = {
       enable = true;
       context = {
-        CONTEXT = config.programs.claude-code.memory.text;
+        AGENTS = config.programs.claude-code.memory.text;
       };
     };
     home.packages = with pkgs;
