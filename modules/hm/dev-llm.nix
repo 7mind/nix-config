@@ -71,6 +71,9 @@
 
     programs.gemini-cli = {
       enable = true;
+      settings = {
+        context.fileName = [ "AGENTS.md" ];
+      };
       context = {
         AGENTS = config.programs.claude-code.memory.text;
       };
@@ -158,6 +161,39 @@
             codex --dangerously-bypass-approvals-and-sandbox "''$@"
         '')
 
+        (writeShellScriptBin "yolo-gemini" ''
+          set -euo pipefail
+
+          CANDIDATE_PATHS_RW=(
+            "''${PWD}"
+            "''${HOME}/.gemini"
+            "''${HOME}/.cache"
+          )
+
+          CANDIDATE_PATHS_RO=(
+            "''${HOME}/.config/git"
+            /nix/store
+            /nix/var
+          )
+
+          WHITELIST_ARGS=()
+          for path in "''${CANDIDATE_PATHS_RW[@]}"; do
+            if [[ -e "$path" ]]; then
+              WHITELIST_ARGS+=(--whitelist="$path")
+            fi
+          done
+          for path in "''${CANDIDATE_PATHS_RO[@]}"; do
+            if [[ -e "$path" ]]; then
+              WHITELIST_ARGS+=(--whitelist="$path")
+              WHITELIST_ARGS+=(--read-only="$path")
+            fi
+          done
+
+          set -x
+
+          firejail --noprofile "''${WHITELIST_ARGS[@]}" \
+            gemini --yolo "''$@"
+        '')
       ];
   };
 
