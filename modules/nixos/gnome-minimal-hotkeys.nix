@@ -28,6 +28,9 @@
           settings =
             let
               empty = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
+              toggleOverviewBinding = "<Alt><Super>space";
+              vicinaeToggleBinding = "<Super>space";
+              vicinaeTogglePath = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/vicinae-toggle/";
             in
             {
               "org/gnome/desktop/input-sources" = {
@@ -81,7 +84,7 @@
                 #open-application-menu = empty;
                 toggle-application-view = empty;
                 toggle-message-tray = empty;
-                toggle-overview = [ "<Super>space" ];
+                toggle-overview = [ toggleOverviewBinding ];
                 toggle-quick-settings = empty;
               };
               "org/gnome/settings-daemon/plugins/media-keys" = {
@@ -91,7 +94,7 @@
                 calculator-static = empty;
                 control-center = empty;
                 control-center-static = empty;
-                custom-keybindings = empty;
+                custom-keybindings = [ vicinaeTogglePath ];
                 decrease-text-size = empty;
                 eject = empty;
                 eject-static = empty;
@@ -183,6 +186,11 @@
                 www = empty;
                 www-static = empty;
                 screensaver = [ "<Shift><Super>l" ];
+              };
+              "org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/vicinae-toggle" = {
+                binding = vicinaeToggleBinding;
+                command = "vicinae toggle";
+                name = "Vicinae Toggle";
               };
               "org/gnome/desktop/wm/keybindings" = {
                 activate-window-menu = empty;
