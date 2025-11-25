@@ -137,7 +137,7 @@
 
           set -x
 
-          ${pkgs.firejail}/bin/firejail --noprofile "''${WHITELIST_ARGS[@]}" claude --permission-mode bypassPermissions "$@"
+          firejail --noprofile "''${WHITELIST_ARGS[@]}" claude --permission-mode bypassPermissions "$@"
         '')
 
         (writeShellScriptBin "yolo-codex" ''
@@ -173,7 +173,7 @@
 
           # Codex “dangerous full access” mode: alias for --yolo
           # (no sandbox, no approvals – hence wrapping it in firejail)
-          ${pkgs.firejail}/bin/firejail --noprofile "''${WHITELIST_ARGS[@]}" \
+          firejail --noprofile "''${WHITELIST_ARGS[@]}" \
             codex --dangerously-bypass-approvals-and-sandbox "''$@"
         '')
 
@@ -207,7 +207,7 @@
 
           set -x
 
-          ${pkgs.firejail}/bin/firejail --noprofile "''${WHITELIST_ARGS[@]}" \
+          firejail --noprofile "''${WHITELIST_ARGS[@]}" \
             gemini --yolo "''$@"
         '')
       ];
