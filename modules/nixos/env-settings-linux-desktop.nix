@@ -17,6 +17,7 @@
         clinfo
 
         wl-clipboard
+        extract-initrd # not the best place, but we need to do some extra job to expose it into pxe
 
         # neohtop # broken
         # vkmark
