@@ -62,7 +62,7 @@
           nix-converter
           nix-ld
           nixos-firewall-tool
-          
+
           # disk tools
           gptfdisk
           parted
@@ -124,19 +124,19 @@
         services.journald.extraConfig = ''
           MaxRetentionSec=1month
         '';
-      })
-    //
-    (lib.mkIf config.smind.environment.linux.serial-debug.enable {
-      boot.consoleLogLevel = 7;
-      boot.kernelParams = [
-        "console=tty0"
-        "console=ttyS0,115200n8"
-        "loglevel=7"
-        "rd.debug"
-        "rd.udev.log_priority=debug"
-        "panic=60"
-      ];
-      systemd.services."serial-getty@ttyS0".enable = true;
-    });
+      });
+  # //
+  # (lib.mkIf config.smind.environment.linux.serial-debug.enable {
+  #   boot.consoleLogLevel = 7;
+  #   boot.kernelParams = [
+  #     "console=tty0"
+  #     "console=ttyS0,115200n8"
+  #     "loglevel=7"
+  #     "rd.debug"
+  #     "rd.udev.log_priority=debug"
+  #     "panic=60"
+  #   ];
+  #   systemd.services."serial-getty@ttyS0".enable = true;
+  # });
 }
 
