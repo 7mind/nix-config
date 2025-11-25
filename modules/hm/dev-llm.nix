@@ -71,11 +71,28 @@
 
     programs.gemini-cli = {
       enable = true;
+      # nix-instantiate --eval -E 'builtins.fromJSON (builtins.readFile ~/.gemini/settings.json)'
       settings = {
         general = {
           previewFeatures = true;
         };
-        context.fileName = [ "AGENTS.md" ];
+        output = {
+          format = "text";
+        };
+        security = {
+          auth = { selectedType = "oauth-personal"; };
+        };
+        tools = {
+          autoAccept = true;
+          shell = { showColor = true; };
+        };
+        ui = {
+          footer = { hideContextPercentage = false; };
+          showCitations = true;
+          showLineNumbers = true;
+          showMemoryUsage = true;
+          showModelInfoInChat = true;
+        };
       };
       context = {
         AGENTS = config.programs.claude-code.memory.text;
