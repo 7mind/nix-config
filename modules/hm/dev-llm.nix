@@ -72,6 +72,9 @@
     programs.gemini-cli = {
       enable = true;
       settings = {
+        general = {
+          previewFeatures = true;
+        };
         context.fileName = [ "AGENTS.md" ];
       };
       context = {
@@ -80,14 +83,10 @@
     };
     home.packages = with pkgs;
       [
-        aider-chat
-        # claude-code
-
-        aichat
-        aider-chat
+        # aichat
+        # aider-chat
         # opencode
-        goose-cli
-        # codex
+        # goose-cli
 
         (writeShellScriptBin "yolo-claude" ''
           set -e
