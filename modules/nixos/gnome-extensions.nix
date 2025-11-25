@@ -18,6 +18,7 @@
         gsconnect
         native-window-placement
         caffeine
+        vicinae
         # tray-icons-reloaded
       ]);
 
