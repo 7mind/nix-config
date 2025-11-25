@@ -57,6 +57,7 @@
           nix-converter
           nix-ld
           nixos-firewall-tool
+          extract-initrd
 
           # disk tools
           gptfdisk

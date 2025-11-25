@@ -10,6 +10,8 @@
 
       menlo = pkgs.callPackage "${cfg-meta.paths.pkg}/menlo/menlo.nix" { };
 
+      extract-initrd = pkgs.callPackage "${cfg-meta.paths.pkg}/extract-initrd/default.nix" { };
+
       nix-apple-fonts = (cfg-flakes.nix-apple-fonts.default.overrideAttrs (drv: {
         # override install script to put fonts into /share/fonts, not /usr/share/fonts - where they don't work.
         # FIXME: notify upstream / submit PR?
