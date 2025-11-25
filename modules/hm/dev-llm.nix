@@ -137,7 +137,7 @@
 
           set -x
 
-          firejail --noprofile "''${WHITELIST_ARGS[@]}" claude --permission-mode bypassPermissions "$@"
+          ${pkgsfirejail --noprofile "''${WHITELIST_ARGS[@]}" claude --permission-mode bypassPermissions "$@"
         '')
 
         (writeShellScriptBin "yolo-codex" ''
