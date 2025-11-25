@@ -67,6 +67,13 @@
       custom-instructions = config.programs.claude-code.memory.text;
     };
 
+
+    programs.gemini-cli = {
+      enable = true;
+      context = {
+        CONTEXT = config.programs.claude-code.memory.text;
+      };
+    };
     home.packages = with pkgs;
       [
         aider-chat
