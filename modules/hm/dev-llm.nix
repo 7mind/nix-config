@@ -38,16 +38,18 @@
         - **Don't give up**: Provide comprehensive solutions
         - **Fail fast**: Use assertions, throw errors early - no graceful fallbacks
         - **Explicit over implicit**: No default parameters or optional chaining for required values
-        - **Type safety**: Use interfaces/classes, avoid tuples/any/dictionaries
+        - **Type safety**: Use interfaces/classes/records/data classes, avoid tuples/any/dictionaries
         - **SOLID**: Adhere to SOLID principles
         - **RTFM**: Read documentation, code, and samples thoroughly
         - Don't write obvious comments. Only write comments to explain something important
+        - Deliver sound, generic, universal solutions. Avoid workarounds.
 
         ### Code Style
 
         - No magic constants - use named constants
         - No backwards compatibility concerns - refactor freely
         - Prefer composition over conditional logic
+        - Never duplicate, always generalize
 
         ### Project Structure
 
