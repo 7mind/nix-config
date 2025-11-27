@@ -40,7 +40,7 @@
         - **Explicit over implicit**: No default parameters or optional chaining for required values
         - **Type safety**: Use interfaces/classes/records/data classes, avoid tuples/any/dictionaries
         - **SOLID**: Adhere to SOLID principles
-        - **RTFM**: Read documentation, code, and samples thoroughly
+        - **RTFM**: Read documentation, code, and samples thoroughly, download docs when necessary
         - Don't write obvious comments. Only write comments to explain something important
         - Deliver sound, generic, universal solutions. Avoid workarounds.
 
