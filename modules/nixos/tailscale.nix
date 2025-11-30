@@ -35,16 +35,13 @@
       };
     };
 
-    services.networkd-dispatcher = lib.mkIf (config.smind.net.tailscale.groInterface != null) {
-      enable = true;
-      rules."50-tailscale-udp-gro" = {
-        onState = [ "routable" ];
-        script = ''
-          #!/bin/sh
-          # Tune UDP GRO for Tailscale on ${config.smind.net.tailscale.groInterface}
-          ${lib.getExe pkgs.ethtool} -K ${config.smind.net.tailscale.groInterface} rx-udp-gro-forwarding on rx-gro-list off
-        '';
-      };
+    environment.etc."networkd-dispatcher/routable.d/50-tailscale-udp-gro" = lib.mkIf (config.smind.net.tailscale.groInterface != null) {
+      mode = "0755";
+      text = ''
+        #!/bin/sh
+        # Tune UDP GRO for Tailscale on ${config.smind.net.tailscale.groInterface}
+        ${lib.getExe pkgs.ethtool} -K ${config.smind.net.tailscale.groInterface} rx-udp-gro-forwarding on rx-gro-list off
+      '';
     };
   };
 }
