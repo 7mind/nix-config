@@ -39,6 +39,7 @@
       description = "Apply Tailscale UDP GRO fix";
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
+      wantedBy = [ "multi-user.target" ];
       serviceConfig = {
         Type = "oneshot";
         ExecStart = "${pkgs.ethtool}/bin/ethtool -K ${config.smind.net.tailscale.groInterface} rx-udp-gro-forwarding on rx-gro-list off";
