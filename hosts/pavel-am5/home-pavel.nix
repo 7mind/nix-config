@@ -115,7 +115,8 @@
     size = 32; # Adjust based on your display
   };
 
-  home.packages = with pkgs; [
+      home.packages = with pkgs; [
+    nordvpn-wireguard-extractor
     furmark
 
     element-desktop

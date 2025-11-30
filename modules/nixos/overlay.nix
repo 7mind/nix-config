@@ -7,6 +7,8 @@
       
       qendercore-pull = pkgs.callPackage "${cfg-meta.paths.pkg}/qendercore-pull/qendercore-pull.nix" { };
 
+      nordvpn-wireguard-extractor = pkgs.callPackage "${cfg-meta.paths.pkg}/nordvpn-wireguard-extractor/default.nix" { };
+
       gnome-shortcut-inhibitor = pkgs.callPackage "${cfg-meta.paths.pkg}/gnome-shortcut-inhibitor/default.nix" { };
 
       menlo = pkgs.callPackage "${cfg-meta.paths.pkg}/menlo/menlo.nix" { };

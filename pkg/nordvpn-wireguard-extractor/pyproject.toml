@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nordvpn-wireguard-extractor"
+version = "0.1.0"
+authors = [
+  { name="Pavel Shirshov", email="pshirshov@example.com" },
+]
+description = "A script to extract NordVPN WireGuard configurations."
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.scripts]
+nordvpn-wireguard-extractor = "nordvpn_wireguard_extractor:main"
