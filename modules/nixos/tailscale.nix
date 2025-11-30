@@ -35,16 +35,15 @@
       };
     };
 
-    environment.etc."networkd-dispatcher/routable.d/50-tailscale-udp-gro" = lib.mkIf (config.smind.net.tailscale.groInterface != null) {
-      mode = "0755";
-      text = ''
-        #!/bin/sh
-        echo "Running 50-tailscale-udp-gro for ${config.smind.net.tailscale.groInterface}" >> /tmp/tailscale-gro.log
-        ${lib.getExe pkgs.ethtool} -K ${config.smind.net.tailscale.groInterface} rx-udp-gro-forwarding on rx-gro-list off &>> /tmp/tailscale-gro.log
-        echo "Finished 50-tailscale-udp-gro" >> /tmp/tailscale-gro.log
-      '';
+    systemd.services.tailscale-gro-fix = lib.mkIf (config.smind.net.tailscale.groInterface != null) {
+      description = "Apply Tailscale UDP GRO fix";
+      after = [ "network-online.target" ];
+      wants = [ "network-online.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${pkgs.ethtool}/bin/ethtool -K ${config.smind.net.tailscale.groInterface} rx-udp-gro-forwarding on rx-gro-list off";
+        RemainAfterExit = true;
+      };
     };
-
-    services.networkd-dispatcher.enable = lib.mkIf (config.smind.net.tailscale.groInterface != null) true;
   };
 }
