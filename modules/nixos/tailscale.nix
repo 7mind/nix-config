@@ -39,9 +39,12 @@
       mode = "0755";
       text = ''
         #!/bin/sh
-        # Tune UDP GRO for Tailscale on ${config.smind.net.tailscale.groInterface}
-        ${lib.getExe pkgs.ethtool} -K ${config.smind.net.tailscale.groInterface} rx-udp-gro-forwarding on rx-gro-list off
+        echo "Running 50-tailscale-udp-gro for ${config.smind.net.tailscale.groInterface}" >> /tmp/tailscale-gro.log
+        ${lib.getExe pkgs.ethtool} -K ${config.smind.net.tailscale.groInterface} rx-udp-gro-forwarding on rx-gro-list off &>> /tmp/tailscale-gro.log
+        echo "Finished 50-tailscale-udp-gro" >> /tmp/tailscale-gro.log
       '';
     };
+
+    services.networkd-dispatcher.enable = lib.mkIf (config.smind.net.tailscale.groInterface != null) true;
   };
 }
