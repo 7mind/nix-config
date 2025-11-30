@@ -13,6 +13,7 @@
     services.tailscale = {
       enable = true;
       interfaceName = "tailscale0";
+      extraUpFlags = [ "--accept-dns=false" ];
     };
 
     systemd.network.wait-online.ignoredInterfaces = [ "tailscale0" ];
