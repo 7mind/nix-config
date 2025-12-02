@@ -108,6 +108,8 @@
         inherit (pkgs) firejail-wrap;
       in
       [
+        bubblewrap
+
         # aichat
         # aider-chat
         # opencode

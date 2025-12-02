@@ -11,7 +11,7 @@ stdenvNoCC.mkDerivation {
   '';
 
   meta = with lib; {
-    description = "Universal firejail wrapper with path whitelisting";
+    description = "Universal bubblewrap sandbox wrapper with path whitelisting";
     license = [ licenses.mit ];
     maintainers = with maintainers; [ pshirshov ];
     platforms = platforms.linux;

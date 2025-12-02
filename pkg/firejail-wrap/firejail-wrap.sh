@@ -9,12 +9,12 @@ show_help() {
   cat <<EOF
 Usage: firejail-wrap [OPTIONS] -- COMMAND [ARGS...]
 
-Wrapper around firejail with simplified path whitelisting.
+Wrapper around bubblewrap with simplified path whitelisting.
 
 Options:
   --rw PATH        Add read-write path (only if exists)
   --ro PATH        Add read-only path (only if exists)
-  --bind SRC,DST   Bind mount SRC to DST inside jail
+  --bind SRC,DST   Bind mount SRC to DST inside sandbox
   --help           Show this help
 
 Example:
@@ -56,24 +56,33 @@ if [[ $# -eq 0 ]]; then
   exit 1
 fi
 
-FIREJAIL_ARGS=()
+BWRAP_ARGS=(
+  --unshare-all
+  --share-net
+  --die-with-parent
+  --dev /dev
+  --proc /proc
+  --tmpfs /tmp
+)
 
 for path in "${RW_PATHS[@]}"; do
   if [[ -e "$path" ]]; then
-    FIREJAIL_ARGS+=(--whitelist="$path")
+    BWRAP_ARGS+=(--bind "$path" "$path")
   fi
 done
 
 for path in "${RO_PATHS[@]}"; do
   if [[ -e "$path" ]]; then
-    FIREJAIL_ARGS+=(--whitelist="$path")
-    FIREJAIL_ARGS+=(--read-only="$path")
+    BWRAP_ARGS+=(--ro-bind "$path" "$path")
   fi
 done
 
 for bind in "${BINDS[@]}"; do
-  FIREJAIL_ARGS+=(--bind="$bind")
+  IFS=',' read -r src dst <<< "$bind"
+  if [[ -e "$src" ]]; then
+    BWRAP_ARGS+=(--bind "$src" "$dst")
+  fi
 done
 
 set -x
-exec firejail --noprofile "${FIREJAIL_ARGS[@]}" "$@"
+exec bwrap "${BWRAP_ARGS[@]}" "$@"
