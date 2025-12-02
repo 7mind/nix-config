@@ -76,4 +76,4 @@ for bind in "${BINDS[@]}"; do
 done
 
 set -x
-exec @firejail@/bin/firejail --noprofile "${FIREJAIL_ARGS[@]}" "$@"
+exec firejail --noprofile "${FIREJAIL_ARGS[@]}" "$@"

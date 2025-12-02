@@ -2,7 +2,7 @@
 
 stdenvNoCC.mkDerivation {
   name = "firejail-wrap";
-  src = pkgs.replaceVars ./firejail-wrap.sh { firejail = pkgs.firejail; };
+  src = ./firejail-wrap.sh;
 
   builder = pkgs.writeText "builder.sh" ''
     mkdir -p $out/bin
