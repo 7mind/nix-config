@@ -65,7 +65,19 @@ BWRAP_ARGS=(
   --tmpfs /tmp
 )
 
-# System paths needed for executables
+# Nix store must be bound first (other paths are symlinks into it)
+NIX_PATHS=(
+  /nix/store
+  /nix/var
+)
+
+for path in "${NIX_PATHS[@]}"; do
+  if [[ -e "$path" ]]; then
+    BWRAP_ARGS+=(--ro-bind "$path" "$path")
+  fi
+done
+
+# System paths needed for executables (may be symlinks into /nix/store)
 SYSTEM_RO_PATHS=(
   /etc
   /bin
@@ -82,15 +94,17 @@ for path in "${SYSTEM_RO_PATHS[@]}"; do
   fi
 done
 
-for path in "${RW_PATHS[@]}"; do
-  if [[ -e "$path" ]]; then
-    BWRAP_ARGS+=(--bind "$path" "$path")
+# User-provided RO paths (filter out /nix/* as already bound)
+for path in "${RO_PATHS[@]}"; do
+  if [[ -e "$path" ]] && [[ "$path" != /nix/* ]]; then
+    BWRAP_ARGS+=(--ro-bind "$path" "$path")
   fi
 done
 
-for path in "${RO_PATHS[@]}"; do
+# User-provided RW paths
+for path in "${RW_PATHS[@]}"; do
   if [[ -e "$path" ]]; then
-    BWRAP_ARGS+=(--ro-bind "$path" "$path")
+    BWRAP_ARGS+=(--bind "$path" "$path")
   fi
 done
 
