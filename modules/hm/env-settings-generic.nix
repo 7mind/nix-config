@@ -110,6 +110,7 @@
         smart_sort = true;
         search_mode = "skim";
         style = "full";
+        inline_height = 0;
       };
     };
 
