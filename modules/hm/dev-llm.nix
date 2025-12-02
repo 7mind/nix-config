@@ -100,7 +100,13 @@
         AGENTS = config.programs.claude-code.memory.text;
       };
     };
+
+    home.file.".gemini-work/settings.json".source = config.home.file.".gemini/settings.json".source;
+    home.file.".gemini-work/AGENTS.md".source = config.home.file.".gemini/AGENTS.md".source;
     home.packages = with pkgs;
+      let
+        inherit (pkgs) firejail-wrap;
+      in
       [
         # aichat
         # aider-chat
@@ -108,109 +114,51 @@
         # goose-cli
 
         (writeShellScriptBin "yolo-claude" ''
-          set -e
-
-          CANDIDATE_PATHS_RW=(
-            "''${PWD}"
-            "''${HOME}/.claude"
-            "''${HOME}/.claude.json"
-            "''${HOME}/.config/claude"
-            "''${HOME}/.cache"
-          )
-
-          CANDIDATE_PATHS_RO=(
-            "''${HOME}/.config/git"
-            /nix/store
-            /nix/var
-          )
-
-          WHITELIST_ARGS=()
-          for path in "''${CANDIDATE_PATHS_RW[@]}"; do
-            if [[ -e "$path" ]]; then
-              WHITELIST_ARGS+=(--whitelist="$path")
-            fi
-          done
-          for path in "''${CANDIDATE_PATHS_RO[@]}"; do
-            if [[ -e "$path" ]]; then
-              WHITELIST_ARGS+=(--whitelist="$path")
-              WHITELIST_ARGS+=(--read-only="$path")
-            fi
-          done
-
-          set -x
-
-          firejail --noprofile "''${WHITELIST_ARGS[@]}" claude --permission-mode bypassPermissions "$@"
+          exec ${firejail-wrap}/bin/firejail-wrap \
+            --rw "''${PWD}" \
+            --rw "''${HOME}/.claude" \
+            --rw "''${HOME}/.claude.json" \
+            --rw "''${HOME}/.config/claude" \
+            --rw "''${HOME}/.cache" \
+            --ro "''${HOME}/.config/git" \
+            --ro /nix/store \
+            --ro /nix/var \
+            -- claude --permission-mode bypassPermissions "$@"
         '')
 
         (writeShellScriptBin "yolo-codex" ''
-          set -euo pipefail
-
-          CANDIDATE_PATHS_RW=(
-            "''${PWD}"
-            "''${HOME}/.codex"
-            "''${HOME}/.config/codex"
-            "''${HOME}/.cache"
-          )
-
-          CANDIDATE_PATHS_RO=(
-            "''${HOME}/.config/git"
-            /nix/store
-            /nix/var
-          )
-
-          WHITELIST_ARGS=()
-          for path in "''${CANDIDATE_PATHS_RW[@]}"; do
-            if [[ -e "$path" ]]; then
-              WHITELIST_ARGS+=(--whitelist="$path")
-            fi
-          done
-          for path in "''${CANDIDATE_PATHS_RO[@]}"; do
-            if [[ -e "$path" ]]; then
-              WHITELIST_ARGS+=(--whitelist="$path")
-              WHITELIST_ARGS+=(--read-only="$path")
-            fi
-          done
-
-          set -x
-
-          # Codex “dangerous full access” mode: alias for --yolo
-          # (no sandbox, no approvals – hence wrapping it in firejail)
-          firejail --noprofile "''${WHITELIST_ARGS[@]}" \
-            codex --dangerously-bypass-approvals-and-sandbox "''$@"
+          exec ${firejail-wrap}/bin/firejail-wrap \
+            --rw "''${PWD}" \
+            --rw "''${HOME}/.codex" \
+            --rw "''${HOME}/.config/codex" \
+            --rw "''${HOME}/.cache" \
+            --ro "''${HOME}/.config/git" \
+            --ro /nix/store \
+            --ro /nix/var \
+            -- codex --dangerously-bypass-approvals-and-sandbox "$@"
         '')
 
         (writeShellScriptBin "yolo-gemini" ''
-          set -euo pipefail
+          exec ${firejail-wrap}/bin/firejail-wrap \
+            --rw "''${PWD}" \
+            --rw "''${HOME}/.gemini" \
+            --rw "''${HOME}/.cache" \
+            --ro "''${HOME}/.config/git" \
+            --ro /nix/store \
+            --ro /nix/var \
+            -- gemini --yolo "$@"
+        '')
 
-          CANDIDATE_PATHS_RW=(
-            "''${PWD}"
-            "''${HOME}/.gemini"
-            "''${HOME}/.cache"
-          )
-
-          CANDIDATE_PATHS_RO=(
-            "''${HOME}/.config/git"
-            /nix/store
-            /nix/var
-          )
-
-          WHITELIST_ARGS=()
-          for path in "''${CANDIDATE_PATHS_RW[@]}"; do
-            if [[ -e "$path" ]]; then
-              WHITELIST_ARGS+=(--whitelist="$path")
-            fi
-          done
-          for path in "''${CANDIDATE_PATHS_RO[@]}"; do
-            if [[ -e "$path" ]]; then
-              WHITELIST_ARGS+=(--whitelist="$path")
-              WHITELIST_ARGS+=(--read-only="$path")
-            fi
-          done
-
-          set -x
-
-          firejail --noprofile "''${WHITELIST_ARGS[@]}" \
-            gemini --yolo "''$@"
+        (writeShellScriptBin "yolo-gemini-work" ''
+          exec ${firejail-wrap}/bin/firejail-wrap \
+            --rw "''${PWD}" \
+            --rw "''${HOME}/.gemini-work" \
+            --rw "''${HOME}/.cache" \
+            --ro "''${HOME}/.config/git" \
+            --ro /nix/store \
+            --ro /nix/var \
+            --bind "''${HOME}/.gemini-work,''${HOME}/.gemini" \
+            -- gemini --yolo "$@"
         '')
       ];
   };
