@@ -65,6 +65,23 @@ BWRAP_ARGS=(
   --tmpfs /tmp
 )
 
+# System paths needed for executables
+SYSTEM_RO_PATHS=(
+  /etc
+  /bin
+  /usr
+  /run/current-system
+  "$HOME/.nix-profile"
+  "/etc/profiles/per-user/$USER"
+  /run/wrappers
+)
+
+for path in "${SYSTEM_RO_PATHS[@]}"; do
+  if [[ -e "$path" ]]; then
+    BWRAP_ARGS+=(--ro-bind "$path" "$path")
+  fi
+done
+
 for path in "${RW_PATHS[@]}"; do
   if [[ -e "$path" ]]; then
     BWRAP_ARGS+=(--bind "$path" "$path")
