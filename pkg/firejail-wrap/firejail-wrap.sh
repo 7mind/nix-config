@@ -77,14 +77,14 @@ for path in "${NIX_PATHS[@]}"; do
   fi
 done
 
-# System paths needed for executables (may be symlinks into /nix/store)
+# System paths needed for executables
+# Note: /etc/profiles and ~/.nix-profile are symlinks into /nix/store,
+# they work automatically since both /etc and /nix/store are bound
 SYSTEM_RO_PATHS=(
   /etc
   /bin
   /usr
   /run/current-system
-  "$HOME/.nix-profile"
-  "/etc/profiles/per-user/$USER"
   /run/wrappers
 )
 

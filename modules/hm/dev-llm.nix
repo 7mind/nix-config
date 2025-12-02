@@ -123,8 +123,6 @@
             --rw "''${HOME}/.config/claude" \
             --rw "''${HOME}/.cache" \
             --ro "''${HOME}/.config/git" \
-            --ro /nix/store \
-            --ro /nix/var \
             -- claude --permission-mode bypassPermissions "$@"
         '')
 
@@ -135,8 +133,6 @@
             --rw "''${HOME}/.config/codex" \
             --rw "''${HOME}/.cache" \
             --ro "''${HOME}/.config/git" \
-            --ro /nix/store \
-            --ro /nix/var \
             -- codex --dangerously-bypass-approvals-and-sandbox "$@"
         '')
 
@@ -146,8 +142,6 @@
             --rw "''${HOME}/.gemini" \
             --rw "''${HOME}/.cache" \
             --ro "''${HOME}/.config/git" \
-            --ro /nix/store \
-            --ro /nix/var \
             -- gemini --yolo "$@"
         '')
 
@@ -157,8 +151,6 @@
             --rw "''${HOME}/.gemini-work" \
             --rw "''${HOME}/.cache" \
             --ro "''${HOME}/.config/git" \
-            --ro /nix/store \
-            --ro /nix/var \
             --bind "''${HOME}/.gemini-work,''${HOME}/.gemini" \
             -- gemini --yolo "$@"
         '')
