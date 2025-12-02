@@ -4,6 +4,7 @@ set -euo pipefail
 RW_PATHS=()
 RO_PATHS=()
 BINDS=()
+ENVS=()
 
 show_help() {
   cat <<EOF
@@ -15,10 +16,11 @@ Options:
   --rw PATH        Add read-write path (only if exists)
   --ro PATH        Add read-only path (only if exists)
   --bind SRC,DST   Bind mount SRC to DST inside sandbox
+  --env VAR=VALUE  Set environment variable inside sandbox
   --help           Show this help
 
 Example:
-  firejail-wrap --rw "\$PWD" --rw ~/.config/app --ro /nix/store -- myapp --flag
+  firejail-wrap --rw "\$PWD" --env FOO=bar -- myapp --flag
 EOF
   exit 0
 }
@@ -35,6 +37,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --bind)
       BINDS+=("$2")
+      shift 2
+      ;;
+    --env)
+      ENVS+=("$2")
       shift 2
       ;;
     --help)
@@ -113,6 +119,12 @@ for bind in "${BINDS[@]}"; do
   if [[ -e "$src" ]]; then
     BWRAP_ARGS+=(--bind "$src" "$dst")
   fi
+done
+
+# Environment variables
+for env in "${ENVS[@]}"; do
+  IFS='=' read -r name value <<< "$env"
+  BWRAP_ARGS+=(--setenv "$name" "$value")
 done
 
 set -x
