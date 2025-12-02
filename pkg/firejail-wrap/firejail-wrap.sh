@@ -92,6 +92,8 @@ SYSTEM_RO_PATHS=(
   /usr
   /run/current-system
   /run/wrappers
+  /run/systemd/resolve
+  /run/nscd
 )
 
 for path in "${SYSTEM_RO_PATHS[@]}"; do

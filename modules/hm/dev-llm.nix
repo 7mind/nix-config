@@ -116,6 +116,14 @@
         # goose-cli
 
         (writeShellScriptBin "yolo-claude" ''
+          ENV_ARGS=()
+          CMD_ARGS=()
+          while [[ $# -gt 0 ]]; do
+            case "$1" in
+              --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
+              *) CMD_ARGS+=("$1"); shift ;;
+            esac
+          done
           exec ${firejail-wrap}/bin/firejail-wrap \
             --rw "''${PWD}" \
             --rw "''${HOME}/.claude" \
@@ -123,36 +131,64 @@
             --rw "''${HOME}/.config/claude" \
             --rw "''${HOME}/.cache" \
             --ro "''${HOME}/.config/git" \
-            -- claude --permission-mode bypassPermissions "$@"
+            "''${ENV_ARGS[@]}" \
+            -- claude --permission-mode bypassPermissions "''${CMD_ARGS[@]}"
         '')
 
         (writeShellScriptBin "yolo-codex" ''
+          ENV_ARGS=()
+          CMD_ARGS=()
+          while [[ $# -gt 0 ]]; do
+            case "$1" in
+              --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
+              *) CMD_ARGS+=("$1"); shift ;;
+            esac
+          done
           exec ${firejail-wrap}/bin/firejail-wrap \
             --rw "''${PWD}" \
             --rw "''${HOME}/.codex" \
             --rw "''${HOME}/.config/codex" \
             --rw "''${HOME}/.cache" \
             --ro "''${HOME}/.config/git" \
-            -- codex --dangerously-bypass-approvals-and-sandbox "$@"
+            "''${ENV_ARGS[@]}" \
+            -- codex --dangerously-bypass-approvals-and-sandbox "''${CMD_ARGS[@]}"
         '')
 
         (writeShellScriptBin "yolo-gemini" ''
+          ENV_ARGS=()
+          CMD_ARGS=()
+          while [[ $# -gt 0 ]]; do
+            case "$1" in
+              --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
+              *) CMD_ARGS+=("$1"); shift ;;
+            esac
+          done
           exec ${firejail-wrap}/bin/firejail-wrap \
             --rw "''${PWD}" \
             --rw "''${HOME}/.gemini" \
             --rw "''${HOME}/.cache" \
             --ro "''${HOME}/.config/git" \
-            -- gemini --yolo "$@"
+            "''${ENV_ARGS[@]}" \
+            -- gemini --yolo "''${CMD_ARGS[@]}"
         '')
 
         (writeShellScriptBin "yolo-gemini-work" ''
+          ENV_ARGS=()
+          CMD_ARGS=()
+          while [[ $# -gt 0 ]]; do
+            case "$1" in
+              --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
+              *) CMD_ARGS+=("$1"); shift ;;
+            esac
+          done
           exec ${firejail-wrap}/bin/firejail-wrap \
             --rw "''${PWD}" \
             --rw "''${HOME}/.gemini-work" \
             --rw "''${HOME}/.cache" \
             --ro "''${HOME}/.config/git" \
+            "''${ENV_ARGS[@]}" \
             --bind "''${HOME}/.gemini-work,''${HOME}/.gemini" \
-            -- gemini --yolo "$@"
+            -- gemini --yolo "''${CMD_ARGS[@]}"
         '')
       ];
   };
