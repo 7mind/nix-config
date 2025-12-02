@@ -109,7 +109,7 @@
 
         smart_sort = true;
         search_mode = "skim";
-        style = "compact";
+        style = "full";
         inline_height = 0; # use alternate terminal mode
       };
     };
