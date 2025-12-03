@@ -68,6 +68,9 @@
     programs.codex = {
       enable = true;
       custom-instructions = config.programs.claude-code.memory.text;
+      settings = {
+        project_doc_fallback_filenames = [ "CLAUDE.md" ];
+      };
     };
 
 
@@ -95,7 +98,7 @@
           showMemoryUsage = true;
           showModelInfoInChat = true;
         };
-        context.fileName = [ "AGENTS.md" "CONTEXT.md" "GEMINI.md" ];
+        context.fileName = [ "AGENTS.md" "CONTEXT.md" "GEMINI.md" "CLAUDE.md" ];
       };
       context = {
         AGENTS = config.programs.claude-code.memory.text;
