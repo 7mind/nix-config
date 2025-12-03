@@ -78,6 +78,7 @@
       enable = true;
       # nix-instantiate --eval -E 'builtins.fromJSON (builtins.readFile ~/.gemini/settings.json)'
       settings = {
+        defaultModel = "gemini-3-pro-preview";
         general = {
           previewFeatures = true;
         };
