@@ -62,6 +62,7 @@
 
         - Use debuggers! You can use gdb, lldb, jdb, pdb and any other debuggers!
         - Use nproc when you need to figure out how many parallel processes you can run
+        - Always run tools in unattended/batch mode, especially tools like SBT which expect user input by default!
       '';
     };
 
