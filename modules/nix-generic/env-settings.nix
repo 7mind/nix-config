@@ -63,6 +63,8 @@
       wireguard-tools
       rsync
 
+      mosh
+
       # disk tools
       file
       ncdu
