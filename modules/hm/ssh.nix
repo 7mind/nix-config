@@ -12,13 +12,14 @@
   config = lib.mkIf config.smind.hm.ssh.enable {
     programs.ssh = {
       enable = true;
-      #addKeysToAgent = "yes";
-      matchBlocks."*".addKeysToAgent = lib.mkIf cfg-meta.isLinux "yes";
-
-      extraConfig = ''
-        IgnoreUnknown UseKeychain
-        UseKeychain yes
-      '';
+      enableDefaultConfig = false;
+      matchBlocks."*" = {
+        addKeysToAgent = lib.mkIf cfg-meta.isLinux "yes";
+        extraOptions = {
+          "IgnoreUnknown" = "UseKeychain";
+          "UseKeychain" = "yes";
+        };
+      };
     };
   };
 }
