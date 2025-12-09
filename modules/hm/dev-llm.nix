@@ -43,6 +43,7 @@
         - **RTFM**: Read documentation, code, and samples thoroughly, download docs when necessary
         - Don't write obvious comments. Only write comments to explain something important
         - Deliver sound, generic, universal solutions. Avoid workarounds.
+        - **Ask questions**: when instructions or requirements are unclear or incomplete or you see contradictions - always ask for clarifications before proceeding.
 
         ### Code Style
 
