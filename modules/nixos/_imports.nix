@@ -2,6 +2,7 @@
   ./alien-filesystems.nix
   ./bluetooth.nix
   ./bootloader-grub.nix
+  ./bootloader-ipxe.nix
   ./bootloader-lanzaboote.nix
   ./bootloader-systemd.nix
   ./cpu.nix
