@@ -37,7 +37,6 @@
   ./ssh-permissive.nix
   ./ssh-safe.nix
   ./sudo.nix
-  ./tabby.nix
   ./tailscale.nix
   ./trezor.nix
   ./uhk-keyboard.nix

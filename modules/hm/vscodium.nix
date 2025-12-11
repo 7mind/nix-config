@@ -76,8 +76,6 @@
 
           ocamllabs.ocaml-platform
 
-          # tabbyml.vscode-tabby
-
           septimalmind.baboon-vscode
           septimalmind.idealingua1
           # septimalmind.grandmaster-builds
@@ -241,10 +239,6 @@
             # }
           ];
 
-
-          # "tabby.endpoint" = "http://localhost:11029";
-          # "tabby.config.telemetry" = false;
-          # "tabby.inlineCompletion.triggerMode" = "manual";
 
           "direnv.restart.automatic" = true;
         };
