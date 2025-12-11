@@ -179,9 +179,10 @@
     allowedTCPPorts = [ 8234 ];
   };
 
-  #services.desktopManager.cosmic.enable = true;
-  #services.orca.enable = lib.mkForce false;
-
+  services.desktopManager.cosmic.enable = true;
+  environment.cosmic.excludePackages = [ pkgs.orca ];
+  # services.orca.enable = lib.mkForce false;
+  
   programs.steam.enable = true;
 
   boot.initrd = {
