@@ -169,6 +169,9 @@
     iperf.enable = true;
     iperf.protected.server.enable = false;
     iperf.protected.client.enable = true;
+
+    desktop.cosmic.enable = true;
+    # desktop.cosmic.minimal-keybindings = true;
   };
 
   networking.hostId = "8a9c7614";
@@ -179,10 +182,6 @@
     allowedTCPPorts = [ 8234 ];
   };
 
-  services.desktopManager.cosmic.enable = true;
-  environment.cosmic.excludePackages = [ pkgs.orca ];
-  # services.orca.enable = lib.mkForce false;
-  
   programs.steam.enable = true;
 
   boot.initrd = {

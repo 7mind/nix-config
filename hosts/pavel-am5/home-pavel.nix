@@ -8,6 +8,8 @@
 
   smind.hm = {
     roles.desktop = true;
+    cosmic.minimal-keybindings = true;
+
     autostart.programs = with pkgs; [
       {
         name = "element-main";
@@ -115,7 +117,7 @@
     size = 32; # Adjust based on your display
   };
 
-      home.packages = with pkgs; [
+  home.packages = with pkgs; [
     nordvpn-wireguard-extractor
     furmark
 

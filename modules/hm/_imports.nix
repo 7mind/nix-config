@@ -1,6 +1,7 @@
 [
   ./autostart.nix
   ./cleanups.nix
+  ./cosmic-keybindings.nix
   ./dev-generic.nix
   ./dev-git.nix
   ./dev-llm.nix

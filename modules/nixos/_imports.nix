@@ -5,6 +5,7 @@
   ./bootloader-ipxe.nix
   ./bootloader-lanzaboote.nix
   ./bootloader-systemd.nix
+  ./cosmic.nix
   ./cpu.nix
   ./email.nix
   ./cups.nix
