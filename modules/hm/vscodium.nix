@@ -80,6 +80,7 @@
 
           septimalmind.baboon-vscode
           septimalmind.idealingua1
+          # septimalmind.grandmaster-builds
 
           pkgs.open-vsx.jeanp413.open-remote-ssh
           pkgs.open-vsx.devmikeua.mikrotik-routeros-script
