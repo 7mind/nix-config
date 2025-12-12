@@ -5,7 +5,7 @@
     smind.power-management.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable power management and CPU frequency scaling";
     };
   };
 

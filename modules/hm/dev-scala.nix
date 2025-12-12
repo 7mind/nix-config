@@ -5,7 +5,7 @@
     smind.hm.dev.scala.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable Scala/JVM development tools";
     };
   };
 

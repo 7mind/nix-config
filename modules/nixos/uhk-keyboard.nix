@@ -3,7 +3,7 @@
     smind.hw.uhk-keyboard.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable Ultimate Hacking Keyboard support";
     };
   };
 

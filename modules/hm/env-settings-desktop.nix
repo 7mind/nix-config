@@ -5,7 +5,7 @@
     smind.hm.environment.sane-defaults.desktop.enable = lib.mkOption {
       type = lib.types.bool;
       default = outerConfig.smind.isDesktop;
-      description = "";
+      description = "Enable desktop-specific home-manager settings";
     };
 
   };

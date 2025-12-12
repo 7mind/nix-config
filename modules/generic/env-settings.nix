@@ -5,7 +5,7 @@
     smind.with-private = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Private secrets are available for this configuration";
     };
   };
 

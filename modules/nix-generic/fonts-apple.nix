@@ -5,7 +5,7 @@
     smind.fonts.apple.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Install Apple fonts (SF Pro, Menlo)";
     };
   };
 

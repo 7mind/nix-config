@@ -5,7 +5,7 @@
     smind.hm.tmux.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable tmux with custom configuration";
     };
   };
 

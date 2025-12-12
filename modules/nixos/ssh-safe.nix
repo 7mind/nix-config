@@ -2,14 +2,14 @@
 
 {
   options = {
-    smind.ssh.safe = lib.mkOption {
+    smind.ssh.safe.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable hardened SSH server (key-only, group-based access)";
     };
   };
 
-  config = lib.mkIf config.smind.ssh.safe {
+  config = lib.mkIf config.smind.ssh.safe.enable {
     users.groups.ssh-users = { };
 
     services.openssh = {

@@ -5,13 +5,13 @@
     smind.environment.sane-defaults.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
-      description = "";
+      description = "Enable sane environment defaults";
     };
 
     smind.environment.all-docs.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
-      description = "";
+      description = "Enable full documentation generation";
     };
   };
 

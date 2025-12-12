@@ -1,13 +1,13 @@
 { pkgs, lib, config, ... }: {
   options = {
-    smind.nushell.enable = lib.mkOption {
+    smind.shell.nushell.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
       description = "Configure nushell as default shell for all users";
     };
   };
 
-  config = lib.mkIf config.smind.nushell.enable {
+  config = lib.mkIf config.smind.shell.nushell.enable {
     environment.shells = with pkgs; [ nushell ];
 
     users = {

@@ -5,7 +5,7 @@
     smind.hm.dev.llm.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable LLM development environment variables";
     };
   };
 

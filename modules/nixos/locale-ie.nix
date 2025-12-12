@@ -5,7 +5,7 @@
     smind.locale.ie.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
-      description = "";
+      description = "Set locale to Ireland (Europe/Dublin, en_IE.UTF-8)";
     };
   };
 

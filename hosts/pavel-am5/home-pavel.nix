@@ -8,7 +8,7 @@
 
   smind.hm = {
     roles.desktop = true;
-    cosmic.minimal-keybindings = true;
+    desktop.cosmic.minimal-keybindings = true;
 
     autostart.programs = with pkgs; [
       {

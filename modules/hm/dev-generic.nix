@@ -5,13 +5,13 @@
     smind.hm.dev.generic.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable generic development tools and packages";
     };
 
     smind.hm.dev.tex.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable TeX/LaTeX toolchain";
     };
   };
 

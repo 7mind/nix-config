@@ -5,12 +5,12 @@
     smind.desktop.gnome.minimal-hotkeys = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Configure minimal GNOME hotkeys, disabling most defaults";
     };
     smind.desktop.gnome.disable-super-drag = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Disable Super key window drag modifier";
     };
   };
 

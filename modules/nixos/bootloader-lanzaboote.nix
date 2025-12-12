@@ -2,14 +2,14 @@
 
 {
   options = {
-    smind.lanzaboote.enable = lib.mkOption {
+    smind.bootloader.lanzaboote.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Use Lanzaboote for Secure Boot support";
     };
   };
 
-  config = lib.mkIf config.smind.lanzaboote.enable {
+  config = lib.mkIf config.smind.bootloader.lanzaboote.enable {
     boot.loader = {
       grub.enable = lib.mkForce false;
 

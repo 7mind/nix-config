@@ -147,8 +147,8 @@
     net.main-bridge-macaddr = "d0:94:66:55:aa:11";
     net.tailscale.enable = true;
 
-    ssh.permissive = false;
-    ssh.safe = true;
+    ssh.permissive.enable = false;
+    ssh.safe.enable = true;
 
     hw.uhk-keyboard.enable = true;
     # hw.trezor.enable = true;
@@ -159,11 +159,11 @@
     hw.cpu.isAmd = true;
     hw.amd.gpu.enable = true;
 
-    systemd-boot.enable = true;
-    lanzaboote.enable = false;
+    bootloader.systemd-boot.enable = true;
+    bootloader.lanzaboote.enable = false;
 
     llm.enable = true;
-    docker.enable = true;
+    containers.docker.enable = true;
     infra.nix-build.enable = true;
 
     iperf.enable = true;

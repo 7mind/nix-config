@@ -3,7 +3,7 @@
     smind.net.desktop.enable = lib.mkOption {
       type = lib.types.bool;
       default = config.smind.net.enable && config.smind.isDesktop;
-      description = "";
+      description = "Enable NetworkManager with iwd for desktop systems";
     };
   };
 

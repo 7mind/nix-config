@@ -5,7 +5,7 @@
     smind.fonts.nerd.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Install Nerd Fonts collection";
     };
   };
 

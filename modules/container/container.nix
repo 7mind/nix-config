@@ -7,7 +7,7 @@
   ];
 
   smind = {
-    ssh.safe = true;
+    ssh.safe.enable = true;
   };
 
   users = {

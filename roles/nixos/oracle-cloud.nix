@@ -5,7 +5,7 @@
     smind.roles.server.oracle-cloud = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable Oracle Cloud ARM server role";
     };
   };
 
@@ -16,7 +16,7 @@
       hw.cpu.isArm = true;
       hw.oracle-cloud.enable = true;
 
-      systemd-boot.enable = true;
+      bootloader.systemd-boot.enable = true;
     };
   };
 }

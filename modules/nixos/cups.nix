@@ -3,7 +3,7 @@
     smind.environment.cups.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable CUPS printing with PDF printer and network discovery";
     };
   };
 

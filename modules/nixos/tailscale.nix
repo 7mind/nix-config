@@ -7,7 +7,7 @@
       default = false;
       description = "Enable tailscale service";
     };
-    smind.net.tailscale.groInterface = lib.mkOption {
+    smind.net.tailscale.gro-interface = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
       description = "The interface to apply the UDP GRO fix to.";
@@ -35,14 +35,14 @@
       };
     };
 
-    systemd.services.tailscale-gro-fix = lib.mkIf (config.smind.net.tailscale.groInterface != null) {
+    systemd.services.tailscale-gro-fix = lib.mkIf (config.smind.net.tailscale.gro-interface != null) {
       description = "Apply Tailscale UDP GRO fix";
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
         Type = "oneshot";
-        ExecStart = "${pkgs.ethtool}/bin/ethtool -K ${config.smind.net.tailscale.groInterface} rx-udp-gro-forwarding on rx-gro-list off";
+        ExecStart = "${pkgs.ethtool}/bin/ethtool -K ${config.smind.net.tailscale.gro-interface} rx-udp-gro-forwarding on rx-gro-list off";
         RemainAfterExit = true;
       };
     };

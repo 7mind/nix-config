@@ -5,7 +5,7 @@
     smind.desktop.gnome.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable GNOME desktop environment with GDM";
     };
   };
 

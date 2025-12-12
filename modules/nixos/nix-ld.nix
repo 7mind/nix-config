@@ -1,13 +1,13 @@
 { pkgs, lib, config, ... }: {
   options = {
-    smind.nix-ld.enable = lib.mkOption {
+    smind.environment.nix-ld.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable nix-ld for running unpatched binaries";
     };
   };
 
-  config = lib.mkIf config.smind.nix-ld.enable {
+  config = lib.mkIf config.smind.environment.nix-ld.enable {
     programs.nix-ld = {
       enable = true;
       package = pkgs.nix-ld;

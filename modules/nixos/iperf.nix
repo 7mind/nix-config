@@ -8,19 +8,19 @@ in
     smind.iperf.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable iperf3 network performance testing";
     };
 
     smind.iperf.protected.server.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
-      description = "";
+      description = "Enable iperf3 server with authentication";
     };
 
     smind.iperf.protected.client.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
-      description = "";
+      description = "Enable iperf3 client credentials";
     };
 
   };

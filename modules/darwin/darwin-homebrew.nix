@@ -5,7 +5,7 @@
     smind.darwin.brew.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable Homebrew package management";
     };
   };
 

@@ -5,7 +5,7 @@
     smind.hm.firefox.no-tabbar = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Hide Firefox tab bar (for use with Tree Style Tab)";
     };
   };
 

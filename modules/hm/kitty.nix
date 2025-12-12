@@ -5,7 +5,7 @@
     smind.hm.kitty.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable Kitty terminal with custom keybindings";
     };
   };
 

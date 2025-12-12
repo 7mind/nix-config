@@ -5,7 +5,7 @@
     smind.environment.alien-filesystems.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable support for NTFS and other non-native filesystems";
     };
   };
 

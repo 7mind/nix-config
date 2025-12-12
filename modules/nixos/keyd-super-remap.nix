@@ -5,7 +5,7 @@
     smind.keyboard.super-remap.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Remap Super key taps to input source switching via keyd";
     };
   };
 

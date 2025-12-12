@@ -3,24 +3,24 @@
     smind.net.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable systemd-networkd based networking";
     };
 
     smind.net.upnp.enable = lib.mkOption {
       type = lib.types.bool;
       default = config.smind.net.enable && config.smind.isDesktop;
-      description = "";
+      description = "Enable miniupnpd for UPnP port forwarding";
     };
 
     smind.net.main-interface = lib.mkOption {
       type = lib.types.str;
-      description = "";
+      description = "Primary network interface name";
     };
 
     smind.net.main-bridge = lib.mkOption {
       type = lib.types.str;
       default = "br-main";
-      description = "";
+      description = "Main bridge interface name";
     };
 
     smind.net.main-bridge-macaddr = lib.mkOption {

@@ -2,14 +2,14 @@
 
 {
   options = {
-    smind.docker.enable = lib.mkOption {
+    smind.containers.docker.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable Podman with Docker compatibility";
     };
   };
 
-  config = lib.mkIf config.smind.docker.enable {
+  config = lib.mkIf config.smind.containers.docker.enable {
     virtualisation.podman = {
       enable = true;
       dockerCompat = true;

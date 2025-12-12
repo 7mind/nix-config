@@ -5,7 +5,7 @@
     smind.environment.linux.sane-defaults.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
-      description = "";
+      description = "Enable common Linux system packages and settings";
     };
     smind.environment.linux.serial-debug.enable = lib.mkOption {
       type = lib.types.bool;

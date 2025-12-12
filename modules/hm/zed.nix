@@ -5,7 +5,7 @@
     smind.hm.zed.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable Zed editor with custom configuration";
     };
   };
 

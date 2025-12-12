@@ -2,14 +2,14 @@
 
 {
   options = {
-    smind.systemd-boot.enable = lib.mkOption {
+    smind.bootloader.systemd-boot.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Use systemd-boot as EFI bootloader";
     };
   };
 
-  config = lib.mkIf config.smind.systemd-boot.enable {
+  config = lib.mkIf config.smind.bootloader.systemd-boot.enable {
     boot.loader = {
       grub.enable = lib.mkForce false;
       efi.efiSysMountPoint = "/boot";

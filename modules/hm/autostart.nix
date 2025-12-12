@@ -6,7 +6,7 @@
       # also useful: types.listOf types.anything
       type = lib.types.listOf lib.types.attrs;
       default = [ ];
-      description = "";
+      description = "List of programs to autostart via XDG autostart";
     };
   };
 

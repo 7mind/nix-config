@@ -5,7 +5,7 @@
     smind.environment.linux.sane-defaults.desktop.enable = lib.mkOption {
       type = lib.types.bool;
       default = config.smind ? "isDesktop" && config.smind.isDesktop;
-      description = "";
+      description = "Enable desktop-specific Linux packages (Vulkan, clipboard tools)";
     };
   };
 

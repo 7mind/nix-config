@@ -5,7 +5,7 @@
     smind.kernel.sane-defaults.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
-      description = "";
+      description = "Enable default kernel configuration and sysctl settings";
     };
   };
 

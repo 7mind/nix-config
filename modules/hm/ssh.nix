@@ -5,7 +5,7 @@
     smind.hm.ssh.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable SSH client configuration";
     };
   };
 

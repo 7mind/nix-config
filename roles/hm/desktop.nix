@@ -5,7 +5,7 @@
     smind.hm.roles.desktop = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable desktop home-manager role with dev tools";
     };
   };
 

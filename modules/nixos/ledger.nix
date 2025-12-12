@@ -3,7 +3,7 @@
     smind.hw.ledger.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable Ledger hardware wallet support";
     };
   };
 

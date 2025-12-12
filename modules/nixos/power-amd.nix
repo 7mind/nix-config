@@ -5,7 +5,7 @@
     smind.power-management.desktop.amd.enable = lib.mkOption {
       type = lib.types.bool;
       default = config.smind.power-management.enable && config.smind.hw.cpu.isAmd;
-      description = "";
+      description = "Enable AMD-specific power management (amd_pstate)";
     };
   };
 

@@ -5,7 +5,7 @@
     smind.hm.zsh.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable Zsh shell integrations";
     };
   };
 

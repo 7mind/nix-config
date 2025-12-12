@@ -5,7 +5,7 @@
     smind.infra.nix-build.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable distributed nix builds";
     };
   };
 

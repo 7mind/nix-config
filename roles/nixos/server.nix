@@ -5,13 +5,13 @@
     smind.isServer = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Host is a server system";
     };
 
     smind.roles.server.generic = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable generic server role";
     };
   };
 
@@ -22,8 +22,8 @@
       roles.desktop.generic-gnome = false;
 
       environment.linux.sane-defaults.enable = lib.mkDefault true;
-      zsh.enable = lib.mkDefault true;
-      nushell.enable = lib.mkDefault false;
+      shell.zsh.enable = lib.mkDefault true;
+      shell.nushell.enable = lib.mkDefault false;
     };
   };
 }

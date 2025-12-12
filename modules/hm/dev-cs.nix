@@ -5,7 +5,7 @@
     smind.hm.dev.cs.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable C#/.NET development tools";
     };
   };
 

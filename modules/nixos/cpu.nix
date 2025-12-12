@@ -7,24 +7,24 @@ in
     smind.hw.cpu.isAmd = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Host has AMD CPU";
     };
     smind.hw.cpu.isIntel = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Host has Intel CPU";
     };
 
     smind.hw.cpu.isIA64 = lib.mkOption {
       type = lib.types.bool;
       default = config.smind.hw.cpu.isAmd || config.smind.hw.cpu.isIntel;
-      description = "";
+      description = "Host has x86_64 CPU (derived from isAmd/isIntel)";
     };
 
     smind.hw.cpu.isArm = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Host has ARM CPU";
     };
   };
 

@@ -3,7 +3,7 @@
     smind.hw.bluetooth.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable Bluetooth support with blueman";
     };
   };
 

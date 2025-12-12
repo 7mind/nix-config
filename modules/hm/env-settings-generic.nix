@@ -5,13 +5,13 @@
     smind.hm.environment.sane-defaults.generic.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
-      description = "";
+      description = "Enable generic home-manager environment settings";
     };
 
     smind.hm.environment.all-docs.enable = lib.mkOption {
       type = lib.types.bool;
       default = outerConfig.smind.isDesktop;
-      description = "";
+      description = "Install documentation and man pages";
     };
   };
 

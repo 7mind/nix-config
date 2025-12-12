@@ -5,13 +5,13 @@
     smind.smartd.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable S.M.A.R.T. disk monitoring";
     };
 
     smind.smartd.email.enable = lib.mkOption {
       type = lib.types.bool;
       default = config.programs.msmtp.enable;
-      description = "";
+      description = "Send S.M.A.R.T. alerts via email";
     };
   };
 

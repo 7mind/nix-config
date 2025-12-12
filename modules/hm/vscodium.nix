@@ -5,7 +5,7 @@
     smind.hm.vscodium.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable VSCodium with extensions and settings";
     };
   };
 

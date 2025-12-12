@@ -5,7 +5,7 @@
     smind.metrics.prometheus.exporters.generic.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable Prometheus node and systemd exporters";
     };
   };
 

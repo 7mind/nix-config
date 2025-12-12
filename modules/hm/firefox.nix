@@ -5,12 +5,12 @@
     smind.hm.firefox.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable Firefox with custom configuration and extensions";
     };
     smind.hm.firefox.sync-username = lib.mkOption {
       type = lib.types.str;
       default = "";
-      description = "";
+      description = "Firefox Sync account username";
     };
   };
 

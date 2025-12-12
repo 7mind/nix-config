@@ -3,7 +3,7 @@
     smind.hw.trezor.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable Trezor hardware wallet support";
     };
   };
 

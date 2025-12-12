@@ -6,7 +6,7 @@
     smind.home-manager.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable home-manager integration";
     };
   };
 

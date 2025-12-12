@@ -5,19 +5,19 @@
     smind.isDesktop = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Host is a desktop system";
     };
 
     smind.roles.desktop.generic-gnome = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable GNOME-based desktop role with full defaults";
     };
 
     smind.roles.desktop.generic-cosmic = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable COSMIC-based desktop role with full defaults";
     };
   };
 
@@ -30,8 +30,8 @@
         hw.trezor.enable = lib.mkDefault false;
         hw.uhk-keyboard.enable = lib.mkDefault false;
         locale.ie.enable = lib.mkDefault false;
-        ssh.permissive = lib.mkDefault false;
-        ssh.safe = lib.mkDefault false;
+        ssh.permissive.enable = lib.mkDefault false;
+        ssh.safe.enable = lib.mkDefault false;
         security.sudo.wheel-permissive-rules = lib.mkDefault false;
         security.sudo.wheel-passwordless = lib.mkDefault false;
         zfs.initrd-unlock.enable = lib.mkDefault false;
@@ -43,28 +43,28 @@
         environment.cups.enable = lib.mkDefault true;
         environment.all-docs.enable = lib.mkDefault true;
 
-        zram-swap = lib.mkDefault true;
+        zram-swap.enable = lib.mkDefault true;
 
-        zsh.enable = lib.mkDefault true;
-        nushell.enable = lib.mkDefault false;
+        shell.zsh.enable = lib.mkDefault true;
+        shell.nushell.enable = lib.mkDefault false;
 
         nix.customize = lib.mkDefault true;
 
         zfs.enable = lib.mkDefault true;
 
-        router.enable = lib.mkDefault true;
+        net.router.enable = lib.mkDefault true;
 
         kernel.sane-defaults.enable = lib.mkDefault true;
         power-management.enable = lib.mkDefault true;
 
-        grub.efi.enable = lib.mkDefault false;
-        systemd-boot.enable = lib.mkDefault true;
-        lanzaboote.enable = lib.mkDefault false;
+        bootloader.grub.enable = lib.mkDefault false;
+        bootloader.systemd-boot.enable = lib.mkDefault true;
+        bootloader.lanzaboote.enable = lib.mkDefault false;
 
         fonts.nerd.enable = lib.mkDefault true;
         fonts.apple.enable = lib.mkDefault true;
 
-        nix-ld.enable = lib.mkDefault true;
+        environment.nix-ld.enable = lib.mkDefault true;
         desktop.cosmic.enable = lib.mkDefault true;
         home-manager.enable = lib.mkDefault true;
 
@@ -83,8 +83,8 @@
       hw.trezor.enable = lib.mkDefault false;
       hw.uhk-keyboard.enable = lib.mkDefault false;
       locale.ie.enable = lib.mkDefault false;
-      ssh.permissive = lib.mkDefault false;
-      ssh.safe = lib.mkDefault false;
+      ssh.permissive.enable = lib.mkDefault false;
+      ssh.safe.enable = lib.mkDefault false;
       security.sudo.wheel-permissive-rules = lib.mkDefault false;
       security.sudo.wheel-passwordless = lib.mkDefault false;
       zfs.initrd-unlock.enable = lib.mkDefault false;
@@ -96,28 +96,28 @@
       environment.cups.enable = lib.mkDefault true;
       environment.all-docs.enable = lib.mkDefault true;
 
-      zram-swap = lib.mkDefault true;
+      zram-swap.enable = lib.mkDefault true;
 
-      zsh.enable = lib.mkDefault true;
-      nushell.enable = lib.mkDefault false;
+      shell.zsh.enable = lib.mkDefault true;
+      shell.nushell.enable = lib.mkDefault false;
 
       nix.customize = lib.mkDefault true;
 
       zfs.enable = lib.mkDefault true;
 
-      router.enable = lib.mkDefault true;
+      net.router.enable = lib.mkDefault true;
 
       kernel.sane-defaults.enable = lib.mkDefault true;
       power-management.enable = lib.mkDefault true;
 
-      grub.efi.enable = lib.mkDefault false;
-      systemd-boot.enable = lib.mkDefault true;
-      lanzaboote.enable = lib.mkDefault false;
+      bootloader.grub.enable = lib.mkDefault false;
+      bootloader.systemd-boot.enable = lib.mkDefault true;
+      bootloader.lanzaboote.enable = lib.mkDefault false;
 
       fonts.nerd.enable = lib.mkDefault true;
       fonts.apple.enable = lib.mkDefault true;
 
-      nix-ld.enable = lib.mkDefault true;
+      environment.nix-ld.enable = lib.mkDefault true;
       desktop.gnome.enable = lib.mkDefault true;
       desktop.gnome.minimal-hotkeys = lib.mkDefault true;
       home-manager.enable = lib.mkDefault true;

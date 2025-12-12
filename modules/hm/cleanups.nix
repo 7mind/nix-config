@@ -5,7 +5,7 @@
     smind.hm.cleanups.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable automatic cleanup of old profiles and mimeapps.list";
     };
   };
 

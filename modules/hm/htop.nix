@@ -5,7 +5,7 @@
     smind.hm.htop.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable htop with custom layout";
     };
   };
 

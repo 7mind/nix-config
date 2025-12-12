@@ -66,7 +66,7 @@ in
     smind.darwin.drop-hotkeys.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
-      description = "";
+      description = "Disable conflicting macOS system hotkeys";
     };
   };
 

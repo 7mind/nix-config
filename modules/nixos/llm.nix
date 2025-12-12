@@ -4,7 +4,7 @@
     smind.llm.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable LLM tools (Ollama, aider, Claude Code)";
     };
   };
 

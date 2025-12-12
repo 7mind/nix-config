@@ -5,7 +5,7 @@
     smind.desktop.cosmic.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable COSMIC desktop environment";
     };
   };
 
@@ -24,6 +24,22 @@
 
     security.polkit.enable = true;
 
+    # Polkit authentication agent - cosmic-osd should handle this but has NixOS issues
+    # Using polkit_gnome as a reliable fallback for apps like virt-manager
+    systemd.user.services.polkit-gnome-authentication-agent-1 = {
+      description = "polkit-gnome-authentication-agent-1";
+      wantedBy = [ "graphical-session.target" ];
+      wants = [ "graphical-session.target" ];
+      after = [ "graphical-session.target" ];
+      serviceConfig = {
+        Type = "simple";
+        ExecStart = "${pkgs.polkit_gnome}/libexec/polkit-gnome-authentication-agent-1";
+        Restart = "on-failure";
+        RestartSec = 1;
+        TimeoutStopSec = 10;
+      };
+    };
+
     xdg.portal.enable = true;
 
     services.gvfs.enable = true;
@@ -38,6 +54,7 @@
       cosmic-edit
       cosmic-term
       cosmic-screenshot
+      polkit_gnome
     ];
   };
 }

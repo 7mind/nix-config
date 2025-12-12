@@ -5,13 +5,13 @@
     smind.vm.virt-manager.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "";
+      description = "Enable libvirt with virt-manager and QEMU/KVM";
     };
 
     smind.vm.virt-manager.amd.enable = lib.mkOption {
       type = lib.types.bool;
       default = config.smind.vm.virt-manager.enable && config.smind.hw.cpu.isAmd;
-      description = "";
+      description = "Enable AMD IOMMU and nested virtualization";
     };
   };
 

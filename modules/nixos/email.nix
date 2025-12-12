@@ -4,18 +4,18 @@
   options = {
     smind.host.email.to = lib.mkOption {
       type = lib.types.str;
-      description = "";
+      description = "Default recipient email address for system notifications";
     };
 
     smind.host.email.sender = lib.mkOption {
       type = lib.types.str;
-      description = "";
+      description = "Sender email domain suffix for outgoing mail";
     };
 
     smind.host.email.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
-      description = "";
+      description = "Enable msmtp for sending system emails";
     };
   };
 
