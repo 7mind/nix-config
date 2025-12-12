@@ -3,11 +3,11 @@
 {
   imports = [
     # ../../consts.nix
-    "${cfg-meta.paths.modules}/nixos/ssh-safe.nix"
+    "${cfg-meta.paths.modules}/nixos/ssh.nix"
   ];
 
   smind = {
-    ssh.safe.enable = true;
+    ssh.mode = "safe";
   };
 
   users = {

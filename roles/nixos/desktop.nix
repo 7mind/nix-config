@@ -30,8 +30,6 @@
         hw.trezor.enable = lib.mkDefault false;
         hw.uhk-keyboard.enable = lib.mkDefault false;
         locale.ie.enable = lib.mkDefault false;
-        ssh.permissive.enable = lib.mkDefault false;
-        ssh.safe.enable = lib.mkDefault false;
         security.sudo.wheel-permissive-rules = lib.mkDefault false;
         security.sudo.wheel-passwordless = lib.mkDefault false;
         zfs.initrd-unlock.enable = lib.mkDefault false;
@@ -83,8 +81,6 @@
       hw.trezor.enable = lib.mkDefault false;
       hw.uhk-keyboard.enable = lib.mkDefault false;
       locale.ie.enable = lib.mkDefault false;
-      ssh.permissive.enable = lib.mkDefault false;
-      ssh.safe.enable = lib.mkDefault false;
       security.sudo.wheel-permissive-rules = lib.mkDefault false;
       security.sudo.wheel-passwordless = lib.mkDefault false;
       zfs.initrd-unlock.enable = lib.mkDefault false;

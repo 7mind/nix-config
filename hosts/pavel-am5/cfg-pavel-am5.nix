@@ -147,8 +147,7 @@
     net.main-bridge-macaddr = "d0:94:66:55:aa:11";
     net.tailscale.enable = true;
 
-    ssh.permissive.enable = false;
-    ssh.safe.enable = true;
+    ssh.mode = "safe";
 
     hw.uhk-keyboard.enable = true;
     # hw.trezor.enable = true;

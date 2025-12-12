@@ -34,8 +34,7 @@
   ./rocm.nix
   ./router.nix
   ./smartd.nix
-  ./ssh-permissive.nix
-  ./ssh-safe.nix
+  ./ssh.nix
   ./sudo.nix
   ./tailscale.nix
   ./trezor.nix
