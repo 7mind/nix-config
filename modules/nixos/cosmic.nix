@@ -40,6 +40,14 @@
       };
     };
 
+    # Keyring and SSH agent via shared module
+    smind.security.keyring = {
+      enable = true;
+      backend = "gnome-keyring";
+      sshAgent = "gcr";
+      displayManagers = [ "login" "greetd" "cosmic-greeter" ];
+    };
+
     xdg.portal.enable = true;
 
     services.gvfs.enable = true;
@@ -55,6 +63,7 @@
       cosmic-term
       cosmic-screenshot
       polkit_gnome
+      # seahorse and gcr added by smind.security.keyring module
     ];
   };
 }

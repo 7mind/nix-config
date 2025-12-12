@@ -68,19 +68,21 @@
       QT_QPA_PLATFORM = "wayland";
     };
 
-    # see https://github.com/NixOS/nixpkgs/issues/372802
-    # an SSH key must have corresponding .pub in order to be recognised by keychain ( ssh-keygen -y -f ~/.ssh/id_ed25519 > ~/.ssh/id_ed25519.pub )
-    programs.seahorse.enable = true;
+    # Keyring and SSH agent via shared module
+    # Note: SSH keys must have corresponding .pub to be recognised by keychain
+    # ( ssh-keygen -y -f ~/.ssh/id_ed25519 > ~/.ssh/id_ed25519.pub )
+    # See: https://github.com/NixOS/nixpkgs/issues/372802
+    smind.security.keyring = {
+      enable = true;
+      backend = "gnome-keyring";
+      sshAgent = "gcr";
+      displayManagers = [ "login" "sddm" "lightdm" "greetd" "gdm" ];
+    };
 
     programs.ssh = {
       # https://wiki.nixos.org/wiki/SSH_public_key_authentication
       startAgent = false;
       enableAskPassword = true;
-
-      # ssh ignores SSH_ASKPASS if it detects a TTY, workaround:
-      # setsid ssh-add < /dev/null
-      #askPassword =
-      #  lib.mkForce "${pkgs.seahorse}/libexec/seahorse/ssh-askpass";
     };
 
     security.polkit.enable = true;
@@ -131,15 +133,7 @@
     services.xserver.enable = true;
     services.displayManager.gdm.enable = true;
 
-    security.pam = {
-      services = {
-        login.enableGnomeKeyring = true;
-        sddm.enableGnomeKeyring = true;
-        lightdm.enableGnomeKeyring = true;
-        greetd.enableGnomeKeyring = true;
-        gdm.enableGnomeKeyring = true;
-      };
-    };
+    # PAM keyring integration handled by smind.security.keyring module
 
     programs.kdeconnect =
       {
@@ -181,8 +175,7 @@
       core-developer-tools.enable = true;
       sushi.enable = true;
       gnome-remote-desktop.enable = true;
-      gnome-keyring.enable = true;
-      gcr-ssh-agent.enable = true;
+      # gnome-keyring and gcr-ssh-agent handled by smind.security.keyring module
     };
 
     programs.gnome-terminal.enable = true;

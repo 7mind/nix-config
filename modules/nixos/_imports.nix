@@ -18,6 +18,7 @@
   ./gnome-extensions.nix
   ./kernel-settings.nix
   ./keyd-super-remap.nix
+  ./keyring.nix
   ./ledger.nix
   ./llm.nix
   ./locale-ie.nix

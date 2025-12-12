@@ -22,8 +22,15 @@
       html.enable = true;
     };
 
-    services.ssh-agent.enable = lib.mkIf cfg-meta.isLinux true;
-    # programs.ssh.addKeysToAgent = lib.mkIf cfg-meta.isLinux "yes";
+    # SSH agent: use Home Manager's ssh-agent only if system keyring uses "standalone" or is disabled
+    # When system uses gcr-ssh-agent (GNOME/COSMIC), don't start a competing agent
+    services.ssh-agent.enable = lib.mkIf cfg-meta.isLinux (
+      let
+        keyringCfg = outerConfig.smind.security.keyring or { };
+        sshAgent = keyringCfg.sshAgent or "standalone";
+      in
+      sshAgent == "standalone"
+    );
 
     programs.ssh.matchBlocks."*".addKeysToAgent = lib.mkIf cfg-meta.isLinux "yes";
 
