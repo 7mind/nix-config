@@ -13,7 +13,17 @@
 
     hardware.bluetooth = {
       enable = true;
-      settings = { General = { Enable = "Source,Sink,Media,Socket"; }; };
+      powerOnBoot = true;
+      settings = {
+        General = {
+          Enable = "Source,Sink,Media,Socket";
+          Experimental = true;
+          FastConnectable = true;
+        };
+        Policy = {
+          AutoEnable = true;
+        };
+      };
     };
 
     system.activationScripts.rfkill-unblock-bluetooth = ''
