@@ -1,7 +1,8 @@
 { config, lib, pkgs, ... }:
 
-# Audio device quirks - fix misdetected form factors via udev rules
+# Audio device quirks - fix misdetected form factors via udev hwdb
 # PipeWire/PulseAudio read ID_SOUND_FORM_FACTOR from udev to classify devices
+# hwdb is the proper way to set device properties by USB ID
 
 {
   options = {
@@ -20,11 +21,11 @@
           };
           vendorId = lib.mkOption {
             type = lib.types.str;
-            description = "USB vendor ID (e.g., '0b0e')";
+            description = "USB vendor ID lowercase (e.g., '0b0e')";
           };
           productId = lib.mkOption {
             type = lib.types.str;
-            description = "USB product ID (e.g., '2e56')";
+            description = "USB product ID lowercase (e.g., '2e56')";
           };
           formFactor = lib.mkOption {
             type = lib.types.enum [
@@ -49,9 +50,17 @@
   };
 
   config = lib.mkIf (config.smind.audio.quirks.enable && config.smind.audio.quirks.devices != []) {
-    services.udev.extraRules = lib.concatMapStringsSep "\n" (dev: ''
-      # ${dev.name}
-      SUBSYSTEM=="sound", ATTR{id}!="", ATTRS{idVendor}=="${dev.vendorId}", ATTRS{idProduct}=="${dev.productId}", ENV{ID_SOUND_FORM_FACTOR}="${dev.formFactor}"
-    '') config.smind.audio.quirks.devices;
+    # Use hwdb to set ID_SOUND_FORM_FACTOR - this is the proper way
+    # Format: usb:vXXXXpYYYY* where XXXX=vendor, YYYY=product (uppercase)
+    services.udev.extraHwdb = lib.concatMapStringsSep "\n" (dev:
+      let
+        vid = lib.toUpper dev.vendorId;
+        pid = lib.toUpper dev.productId;
+      in ''
+        # ${dev.name}
+        usb:v${vid}p${pid}*
+         ID_SOUND_FORM_FACTOR=${dev.formFactor}
+      ''
+    ) config.smind.audio.quirks.devices;
   };
 }
