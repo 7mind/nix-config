@@ -173,6 +173,25 @@
     # desktop.cosmic.minimal-keybindings = true;
   };
 
+  boot.kernelPatches = [
+    {
+      name = "mediatek-mt7927-bluetooth";
+      patch = pkgs.writeText "mt7927-bt.patch" ''
+        --- a/drivers/bluetooth/btusb.c
+        +++ b/drivers/bluetooth/btusb.c
+        @@ -672,6 +672,8 @@ static const struct usb_device_id quirks_table[] = {
+         	{ USB_DEVICE(0x0489, 0xe0e4), .driver_info = BTUSB_MEDIATEK |
+         						     BTUSB_WIDEBAND_SPEECH },
+         	{ USB_DEVICE(0x0489, 0xe0f1), .driver_info = BTUSB_MEDIATEK |
+        +						     BTUSB_WIDEBAND_SPEECH },
+        +	{ USB_DEVICE(0x0489, 0xe13a), .driver_info = BTUSB_MEDIATEK |
+         						     BTUSB_WIDEBAND_SPEECH },
+         	{ USB_DEVICE(0x0489, 0xe0f2), .driver_info = BTUSB_MEDIATEK |
+         						     BTUSB_WIDEBAND_SPEECH },
+      '';
+    }
+  ];
+
   networking.hostId = "8a9c7614";
   networking.hostName = cfg-meta.hostname;
   networking.domain = "home.7mind.io";
