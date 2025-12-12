@@ -1,8 +1,8 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, ... }:
 
-# Audio device quirks - fix misdetected form factors via udev hwdb
+# Audio device quirks - fix misdetected form factors via udev rules
 # PipeWire/PulseAudio read ID_SOUND_FORM_FACTOR from udev to classify devices
-# hwdb is the proper way to set device properties by USB ID
+# Device must be reconnected after rule changes for new properties to apply
 
 {
   options = {
