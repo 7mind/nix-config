@@ -1,5 +1,6 @@
 [
   ./alien-filesystems.nix
+  ./audio-autoswitch.nix
   ./audio-quirks.nix
   ./bluetooth.nix
   ./bootloader-grub.nix

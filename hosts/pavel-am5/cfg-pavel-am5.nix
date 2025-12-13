@@ -183,6 +183,11 @@
         }
       ];
     };
+
+    audio.autoswitch = {
+      enable = true;
+      formFactors = [ "headset" "headphone" ];
+    };
   };
 
   boot.kernelPatches = [
