@@ -27,9 +27,12 @@
     services.ssh-agent.enable = lib.mkIf cfg-meta.isLinux (
       let
         keyringCfg = outerConfig.smind.security.keyring or { };
+        keyringEnabled = keyringCfg.enable or false;
         sshAgent = keyringCfg.sshAgent or "standalone";
       in
-      sshAgent == "standalone"
+      # If keyring is not enabled, always use standalone ssh-agent
+      # Otherwise, only use it if keyring explicitly sets sshAgent = "standalone"
+      !keyringEnabled || sshAgent == "standalone"
     );
 
     programs.ssh.matchBlocks."*".addKeysToAgent = lib.mkIf cfg-meta.isLinux "yes";
