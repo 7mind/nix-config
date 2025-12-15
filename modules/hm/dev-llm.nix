@@ -44,6 +44,7 @@
         - Don't write obvious comments. Only write comments to explain something important
         - Deliver sound, generic, universal solutions. Avoid workarounds.
         - **Ask questions**: when instructions or requirements are unclear or incomplete or you see contradictions - always ask for clarifications before proceeding.
+        - **No workarounds**: whey you discover a bug or a problem, don't hide it. Attempt to fix underlying issues, ask for assistance when you can't
 
         ### Code Style
 
