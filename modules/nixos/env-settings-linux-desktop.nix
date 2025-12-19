@@ -19,6 +19,8 @@
         wl-clipboard
         extract-initrd # not the best place, but we need to do some extra job to expose it into pxe
 
+        yt-dlp
+
         # neohtop # broken
         # vkmark
       ];

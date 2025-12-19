@@ -10,6 +10,7 @@
   };
 
   config = lib.mkIf config.smind.hm.ssh.enable {
+    # there is programs.ssh.startAgent = true, but it conflicts with gnome keychain and ssh forwarding
     programs.ssh = {
       enable = true;
       enableDefaultConfig = false;
