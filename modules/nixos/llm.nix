@@ -41,8 +41,6 @@
       port = 11434;
       openFirewall = true;
 
-      acceleration = "rocm";
-
       environmentVariables = {
         OLLAMA_DEBUG = "1";
         OLLAMA_NEW_ENGINE = "0";
