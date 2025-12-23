@@ -141,8 +141,8 @@
     mqttx
 
     (extended_pkg {
-      pkg = jetbrains.idea-ultimate;
-      path = "bin/idea-ultimate";
+      pkg = jetbrains.idea;
+      path = "bin/idea";
       paths = [
         nodejs_24
       ];
@@ -186,8 +186,8 @@
     })
 
     (extended_pkg {
-      pkg = jetbrains.pycharm-professional;
-      path = "bin/pycharm-professional";
+      pkg = jetbrains.pycharm;
+      path = "bin/pycharm";
       paths = [
         nodejs_24
       ];
