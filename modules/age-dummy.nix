@@ -1,7 +1,7 @@
 { lib, config, ... }:
 
 {
-  config = lib.mkIf (!config.smind.with-private) {
+  config = lib.mkIf (!config.smind.age.enable) {
     age.rekey = {
       masterIdentities = [
         {

@@ -8,7 +8,7 @@
 
     flake-utils.url = "github:numtide/flake-utils";
 
-    lanzaboote.url = "github:nix-community/lanzaboote/v0.4.1";
+    lanzaboote.url = "github:nix-community/lanzaboote"; # was v0.4.1, updated for newer rust/crane
     lanzaboote.inputs.nixpkgs.follows = "nixpkgs";
 
     home-manager.url = "github:nix-community/home-manager";

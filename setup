@@ -5,6 +5,7 @@ set -e
 
 declare -A known_hosts
 known_hosts["pavel-am5"]="linux pavel !"
+known_hosts["pavel-fw"]="linux pavel !"
 known_hosts["o1"]="linux infra o1.7mind.io"
 known_hosts["o2"]="linux infra o2.7mind.io"
 known_hosts["nas"]="linux infra nas.home.7mind.io"
