@@ -3,6 +3,72 @@
 # Unified keyring and SSH agent configuration
 # Used by desktop environments (GNOME, COSMIC) for consistent secret/SSH key management
 
+let
+  cfg = config.smind.security.keyring;
+
+  # Script to enroll keyring password to TPM
+  keyringTpmEnrollScript = pkgs.writeShellScriptBin "keyring-tpm-enroll" ''
+    set -euo pipefail
+
+    CRED_PATH="${cfg.tpmUnlock.credentialPath}"
+    CRED_DIR="$(dirname "$CRED_PATH")"
+
+    echo "GNOME Keyring TPM Credential Enrollment"
+    echo "========================================"
+    echo ""
+    echo "This will encrypt your keyring password using TPM2."
+    echo "The credential will be stored at: $CRED_PATH"
+    echo ""
+
+    # Ensure directory exists
+    if [ ! -d "$CRED_DIR" ]; then
+      echo "Creating credential directory..."
+      sudo mkdir -p "$CRED_DIR"
+      sudo chmod 755 "$CRED_DIR"
+    fi
+
+    # Get password securely
+    PASSWORD=$(${pkgs.systemd}/bin/systemd-ask-password "Enter your keyring/login password:")
+
+    if [ -z "$PASSWORD" ]; then
+      echo "Error: Empty password provided"
+      exit 1
+    fi
+
+    # Encrypt to TPM
+    echo ""
+    echo "Encrypting password to TPM..."
+    echo -n "$PASSWORD" | sudo ${pkgs.systemd}/bin/systemd-creds encrypt \
+      --with-key=tpm2 \
+      --name=keyring-password \
+      - "$CRED_PATH"
+
+    sudo chmod 644 "$CRED_PATH"
+
+    echo ""
+    echo "Done! Credential enrolled successfully."
+    echo "The keyring will be unlocked automatically on next login."
+  '';
+
+  # Script to unlock keyring using TPM credential
+  keyringTpmUnlockScript = pkgs.writeShellScript "keyring-tpm-unlock" ''
+    set -euo pipefail
+
+    CRED_PATH="${cfg.tpmUnlock.credentialPath}"
+
+    if [ ! -f "$CRED_PATH" ]; then
+      echo "TPM credential not found at $CRED_PATH"
+      echo "Run 'keyring-tpm-enroll' to set up TPM-based keyring unlock"
+      exit 0
+    fi
+
+    # Decrypt password from TPM and unlock keyring
+    ${pkgs.systemd}/bin/systemd-creds decrypt "$CRED_PATH" - | \
+      ${pkgs.gnome-keyring}/bin/gnome-keyring-daemon --unlock
+
+    echo "Keyring unlocked via TPM"
+  '';
+in
 {
   options = {
     smind.security.keyring = {
@@ -20,7 +86,7 @@
 
       sshAgent = lib.mkOption {
         type = lib.types.enum [ "gcr" "standalone" "none" ];
-        default = if config.smind.security.keyring.backend == "gnome-keyring" then "gcr" else "standalone";
+        default = if cfg.backend == "gnome-keyring" then "gcr" else "standalone";
         description = ''
           SSH agent to use:
           - gcr: GCR SSH agent (integrates with gnome-keyring)
@@ -33,6 +99,24 @@
         type = lib.types.listOf lib.types.str;
         default = [ "login" ];
         description = "Display managers to enable PAM keyring integration for";
+      };
+
+      tpmUnlock = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = ''
+            Enable TPM-based keyring unlock.
+            Useful for fingerprint login where password is not available to unlock keyring.
+            Requires initial setup: run 'keyring-tpm-enroll' after enabling.
+          '';
+        };
+
+        credentialPath = lib.mkOption {
+          type = lib.types.str;
+          default = "/var/lib/keyring-tpm/credential.cred";
+          description = "Path to store the TPM-encrypted keyring credential";
+        };
       };
     };
   };
@@ -62,6 +146,31 @@
       }];
 
       services.gnome.gcr-ssh-agent.enable = true;
+    })
+
+    # TPM-based keyring unlock (for fingerprint login)
+    (lib.mkIf cfg.tpmUnlock.enable {
+      assertions = [{
+        assertion = cfg.backend == "gnome-keyring";
+        message = "TPM keyring unlock requires gnome-keyring backend";
+      }];
+
+      # Enrollment script
+      environment.systemPackages = [ keyringTpmEnrollScript ];
+
+      # Systemd user service to unlock keyring on login
+      systemd.user.services.keyring-tpm-unlock = {
+        description = "Unlock GNOME Keyring via TPM";
+        wantedBy = [ "graphical-session.target" ];
+        after = [ "gnome-keyring-daemon.service" ];
+        requisite = [ "gnome-keyring-daemon.service" ];
+
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = keyringTpmUnlockScript;
+          RemainAfterExit = true;
+        };
+      };
     })
   ]);
 }

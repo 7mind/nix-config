@@ -94,6 +94,7 @@
 
     security.sudo.wheel-permissive-rules = true;
     security.sudo.wheel-passwordless = true;
+    security.keyring.tpmUnlock.enable = true;
 
     # Networking - use NetworkManager for laptop mobility
     net.enable = false; # Disable systemd-networkd based networking
