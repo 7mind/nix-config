@@ -55,34 +55,21 @@ let
 
   # Inner script that runs as the user to unlock keyring
   keyringUnlockInner = pkgs.writeShellScript "keyring-unlock-inner" ''
-    LOG="/tmp/keyring-tpm-unlock-$$.log"
     CRED_PATH="${cfg.tpmUnlock.credentialPath}"
-
-    echo "User: $(whoami), UID: $(id -u)" >> "$LOG"
-    echo "XDG_RUNTIME_DIR: $XDG_RUNTIME_DIR" >> "$LOG"
-
     CONTROL_SOCKET="$XDG_RUNTIME_DIR/keyring/control"
-    echo "Looking for socket: $CONTROL_SOCKET" >> "$LOG"
 
     # Wait for gnome-keyring control socket
     for i in $(seq 1 10); do
       [ -S "$CONTROL_SOCKET" ] && break
       sleep 0.2
     done
-
-    if [ -S "$CONTROL_SOCKET" ]; then
-      echo "Socket found" >> "$LOG"
-    else
-      echo "Socket NOT found after 2s" >> "$LOG"
-      exit 0
-    fi
+    [ -S "$CONTROL_SOCKET" ] || exit 0
 
     export GNOME_KEYRING_CONTROL="$XDG_RUNTIME_DIR/keyring"
 
-    echo "Attempting unlock..." >> "$LOG"
-    ${pkgs.systemd}/bin/systemd-creds decrypt "$CRED_PATH" - 2>>"$LOG" | \
-      ${pkgs.gnome-keyring}/bin/gnome-keyring-daemon --unlock >>"$LOG" 2>&1
-    echo "Unlock exit code: $?" >> "$LOG"
+    # Decrypt password from TPM and unlock keyring
+    ${pkgs.systemd}/bin/systemd-creds decrypt "$CRED_PATH" - 2>/dev/null | \
+      ${pkgs.gnome-keyring}/bin/gnome-keyring-daemon --unlock >/dev/null 2>&1
   '';
 
   # PAM script wrapper - runs as root, switches to user
@@ -217,7 +204,7 @@ in
         order = 12700;
         control = "optional";
         modulePath = "${pkgs.pam}/lib/security/pam_exec.so";
-        args = [ "quiet" "seteuid" "${keyringTpmUnlockScript}" ];
+        args = [ "quiet" "${keyringTpmUnlockScript}" ];
       };
     })
   ]);

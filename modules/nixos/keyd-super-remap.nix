@@ -17,16 +17,36 @@
         settings = {
           main = { };
 
+          # Mac-style Super key remaps to Ctrl equivalents
           "meta:M" = {
-            #q = "macro(leftcontrol+q)";
-            z = "macro(leftcontrol+z)";
-            v = "macro(leftcontrol+v)";
-            c = "macro(leftcontrol+c)";
-            f = "macro(leftcontrol+f)";
+            # Text editing
+            a = "macro(leftcontrol+a)";  # Select all
+            c = "macro(leftcontrol+c)";  # Copy
+            v = "macro(leftcontrol+v)";  # Paste
+            x = "macro(leftcontrol+x)";  # Cut
+            z = "macro(leftcontrol+z)";  # Undo
+            # File operations
+            s = "macro(leftcontrol+s)";  # Save
+            o = "macro(leftcontrol+o)";  # Open
+            p = "macro(leftcontrol+p)";  # Print / Command palette
+            # Navigation
+            f = "macro(leftcontrol+f)";  # Find
+            l = "macro(leftcontrol+l)";  # Address bar / Go to line
+            r = "macro(leftcontrol+r)";  # Refresh
+            # Window/tab management
+            t = "macro(leftcontrol+t)";  # New tab
+            n = "macro(leftcontrol+n)";  # New window
+            w = "macro(leftcontrol+w)";  # Close tab/window
+            # q = "macro(leftcontrol+q)";  # Quit (commented - too dangerous)
           };
 
-          "meta+shift" = { f = "macro(leftcontrol+leftshift+f)"; };
-          #"control+alt+meta" = { "space" = "macro(scrolllock)"; };
+          "meta+shift" = {
+            z = "macro(leftcontrol+leftshift+z)";  # Redo
+            f = "macro(leftcontrol+leftshift+f)";  # Find in files
+            t = "macro(leftcontrol+leftshift+t)";  # Reopen closed tab
+            n = "macro(leftcontrol+leftshift+n)";  # New incognito/private window
+            p = "macro(leftcontrol+leftshift+p)";  # Command palette (VS Code)
+          };
         };
       };
     };
