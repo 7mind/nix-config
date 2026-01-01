@@ -56,31 +56,46 @@ let
   # PAM script to unlock keyring using TPM credential
   # This runs during PAM session setup, before the desktop starts
   keyringTpmUnlockScript = pkgs.writeShellScript "keyring-tpm-unlock" ''
+    LOG="/tmp/keyring-tpm-unlock-$$.log"
+
     # Only run for real users in tss group (not gdm, etc)
     id -nG 2>/dev/null | ${pkgs.gnugrep}/bin/grep -qw tss || exit 0
     id -nG 2>/dev/null | ${pkgs.gnugrep}/bin/grep -qw users || exit 0
 
+    echo "User: $(whoami), UID: $(id -u)" >> "$LOG"
+    echo "XDG_RUNTIME_DIR: $XDG_RUNTIME_DIR" >> "$LOG"
+
     CRED_PATH="${cfg.tpmUnlock.credentialPath}"
-    [ -f "$CRED_PATH" ] || exit 0
+    [ -f "$CRED_PATH" ] || { echo "No cred file" >> "$LOG"; exit 0; }
 
     # XDG_RUNTIME_DIR should be set by PAM at this point
-    [ -n "$XDG_RUNTIME_DIR" ] || exit 0
+    [ -n "$XDG_RUNTIME_DIR" ] || { echo "No XDG_RUNTIME_DIR" >> "$LOG"; exit 0; }
 
     CONTROL_SOCKET="$XDG_RUNTIME_DIR/keyring/control"
+    echo "Looking for socket: $CONTROL_SOCKET" >> "$LOG"
 
     # Wait for gnome-keyring control socket (pam_gnome_keyring should have started it)
     for i in $(seq 1 10); do
       [ -S "$CONTROL_SOCKET" ] && break
       sleep 0.2
     done
-    [ -S "$CONTROL_SOCKET" ] || exit 0
+
+    if [ -S "$CONTROL_SOCKET" ]; then
+      echo "Socket found" >> "$LOG"
+    else
+      echo "Socket NOT found after 2s" >> "$LOG"
+      ls -la "$XDG_RUNTIME_DIR/" >> "$LOG" 2>&1
+      exit 0
+    fi
 
     # Set control directory so gnome-keyring-daemon finds the existing daemon
     export GNOME_KEYRING_CONTROL="$XDG_RUNTIME_DIR/keyring"
 
     # Decrypt password from TPM and unlock keyring via control socket
-    ${pkgs.systemd}/bin/systemd-creds decrypt "$CRED_PATH" - 2>/dev/null | \
-      ${pkgs.gnome-keyring}/bin/gnome-keyring-daemon --unlock >/dev/null 2>&1
+    echo "Attempting unlock..." >> "$LOG"
+    ${pkgs.systemd}/bin/systemd-creds decrypt "$CRED_PATH" - 2>>"$LOG" | \
+      ${pkgs.gnome-keyring}/bin/gnome-keyring-daemon --unlock >>"$LOG" 2>&1
+    echo "Unlock exit code: $?" >> "$LOG"
 
     # Always exit 0 - don't block login if unlock fails
     exit 0
