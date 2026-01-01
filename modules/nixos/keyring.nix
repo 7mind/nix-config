@@ -35,11 +35,12 @@ let
       exit 1
     fi
 
-    # Encrypt to TPM
+    # Encrypt using host key (stored in /var/lib/systemd/credential.secret)
+    # This ties the credential to this machine without requiring TPM user presence
     echo ""
-    echo "Encrypting password to TPM..."
+    echo "Encrypting password..."
     echo -n "$PASSWORD" | sudo ${pkgs.systemd}/bin/systemd-creds encrypt \
-      --with-key=tpm2 \
+      --with-key=host \
       --name=keyring-password \
       - "$CRED_PATH"
 
