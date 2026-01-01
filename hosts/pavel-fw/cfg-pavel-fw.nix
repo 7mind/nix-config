@@ -19,9 +19,6 @@
 
   # --- Framework 16 AMD (Strix Point) specific configuration ---
 
-  # Hardware support
-  hardware.enableRedistributableFirmware = true;
-
   # Use latest kernel with VPE fix patch for Strix Point suspend/resume
   # Override the default from kernel-settings module (6.17) - Strix Point needs latest
   boot.kernelPackages = lib.mkForce pkgs.linuxPackages_latest;
@@ -73,11 +70,6 @@
 
   boot.loader.efi.canTouchEfiVariables = true;
 
-  # Fingerprint reader
-  services.fprintd.enable = true;
-  security.pam.services.login.fprintAuth = lib.mkForce true;
-  security.pam.services.gdm-fingerprint.fprintAuth = true;
-
   # Framework-specific services
   services.power-profiles-daemon.enable = true;
 
@@ -107,6 +99,7 @@
     net.enable = false; # Disable systemd-networkd based networking
 
     hw.bluetooth.enable = true;
+    hw.fingerprint.enable = true;
 
     ssh.mode = "safe";
 
@@ -147,6 +140,28 @@
         "input"
         "kvm"
         "ssh-users"
+
+        "wheel"
+        "audio"
+        "video"
+        "render"
+        "cdrom"
+        "disk"
+        "networkmanager"
+        "plugdev"
+        "input"
+        "libvirtd"
+        "qemu"
+        "qemu-libvirtd"
+        "kvm"
+        "uinput"
+        "adbusers"
+        # "docker"
+        "corectrl"
+        "wireshark"
+        "ssh-users"
+        "podman"
+        "ollama"
       ];
       openssh.authorizedKeys.keys = cfg-const.ssh-keys-pavel;
     };
@@ -154,6 +169,4 @@
 
   home-manager.users.pavel = import ./home-pavel.nix;
   home-manager.users.root = import ./home-root.nix;
-
-  programs.firefox.enable = true;
 }

@@ -11,6 +11,7 @@
   ./cosmic.nix
   ./cpu.nix
   ./email.nix
+  ./fingerprint.nix
   ./cups.nix
   ./docker.nix
   ./env-settings-linux-desktop.nix
