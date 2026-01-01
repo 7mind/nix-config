@@ -7,6 +7,12 @@
       default = false;
       description = "Enable GNOME desktop environment with GDM";
     };
+
+    smind.desktop.gnome.hibernate.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = config.smind.isLaptop;
+      description = "Enable hibernate support with GNOME hibernate-status-button extension";
+    };
   };
 
   # display settings are being controlled over dbus (org.gnome.Mutter.DisplayConfig), not dconf
@@ -162,10 +168,10 @@
     #networking.firewall.allowedTCPPorts = [ 3389 ];
     #networking.firewall.allowedUDPPorts = [ 3389 ];
 
-    systemd.targets.sleep.enable = false;
-    systemd.targets.suspend.enable = false;
-    systemd.targets.hibernate.enable = false;
-    systemd.targets.hybrid-sleep.enable = false;
+    systemd.targets.sleep.enable = config.smind.desktop.gnome.hibernate.enable;
+    systemd.targets.suspend.enable = config.smind.desktop.gnome.hibernate.enable;
+    systemd.targets.hibernate.enable = config.smind.desktop.gnome.hibernate.enable;
+    systemd.targets.hybrid-sleep.enable = config.smind.desktop.gnome.hibernate.enable;
 
     services.gnome = {
       gnome-settings-daemon.enable = true;

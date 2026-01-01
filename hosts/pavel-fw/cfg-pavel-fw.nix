@@ -94,19 +94,6 @@
     resumeCommands = "${pkgs.kmod}/bin/modprobe mt7925e";
   };
 
-  # GNOME extension for hibernate
-  programs.dconf = {
-    enable = true;
-    profiles.user.databases = [{
-      settings = {
-        "org/gnome/shell" = {
-          enabled-extensions = [ "hibernate-status@dromi" ];
-          disabled-extensions = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
-        };
-      };
-    }];
-  };
-
   # Speed up GDM startup
   systemd.services.display-manager.after = [ "systemd-user-sessions.service" ];
 
@@ -115,6 +102,7 @@
 
   smind = {
     roles.desktop.generic-gnome = true;
+    isLaptop = true;
 
     locale.ie.enable = true;
 
@@ -142,12 +130,6 @@
     # Disable ZFS (using btrfs on LVM)
     zfs.enable = false;
   };
-
-  # Re-enable sleep/suspend/hibernate for laptop (gnome module disables them for desktops)
-  systemd.targets.sleep.enable = lib.mkForce true;
-  systemd.targets.suspend.enable = lib.mkForce true;
-  systemd.targets.hibernate.enable = lib.mkForce true;
-  systemd.targets.hybrid-sleep.enable = lib.mkForce true;
 
   # Use NetworkManager for laptop (instead of systemd-networkd)
   networking.networkmanager.enable = true;
@@ -195,13 +177,6 @@
     brightnessctl
     # Secure Boot
     sbctl
-    # GNOME extensions (patched for current GNOME version)
-    (gnomeExtensions.hibernate-status-button.overrideAttrs (old: {
-      nativeBuildInputs = (old.nativeBuildInputs or []) ++ [ jq ];
-      postPatch = (old.postPatch or "") + ''
-        jq '.["shell-version"] += ["${lib.versions.major gnome-shell.version}"]' metadata.json > tmp.json && mv tmp.json metadata.json
-      '';
-    }))
     git
   ];
 

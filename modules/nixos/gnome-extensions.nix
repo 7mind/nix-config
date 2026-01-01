@@ -1,5 +1,15 @@
 { config, lib, pkgs, cfg-meta, ... }:
 
+let
+  hibernateCfg = config.smind.desktop.gnome.hibernate;
+
+  hibernateExtensionPatched = pkgs.gnomeExtensions.hibernate-status-button.overrideAttrs (old: {
+    nativeBuildInputs = (old.nativeBuildInputs or []) ++ [ pkgs.jq ];
+    postPatch = (old.postPatch or "") + ''
+      jq '.["shell-version"] += ["${lib.versions.major pkgs.gnome-shell.version}"]' metadata.json > tmp.json && mv tmp.json metadata.json
+    '';
+  });
+in
 {
   options = { };
 
@@ -20,7 +30,8 @@
         caffeine
         vicinae
         # tray-icons-reloaded
-      ]);
+      ])
+    ++ lib.optional hibernateCfg.enable hibernateExtensionPatched;
 
     programs.dconf = {
       enable = true;
@@ -39,7 +50,7 @@
                 gnomeExtensions.vicinae.extensionUuid
                 gnome-shortcut-inhibitor.extensionUuid
                 # pkgs.gnomeExtensions.tray-icons-reloaded.extensionUuid
-              ];
+              ] ++ lib.optional hibernateCfg.enable hibernateExtensionPatched.extensionUuid;
             };
 
           };

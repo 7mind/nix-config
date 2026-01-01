@@ -12,6 +12,12 @@ in
       description = "Host is a desktop system";
     };
 
+    smind.isLaptop = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Host is a laptop (enables hibernate, suspend, etc.)";
+    };
+
     smind.roles.desktop.generic-gnome = lib.mkOption {
       type = lib.types.bool;
       default = false;
