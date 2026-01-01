@@ -53,28 +53,18 @@ let
     echo "The keyring will be unlocked automatically on next login."
   '';
 
-  # PAM script to unlock keyring using TPM credential
-  # This runs during PAM session setup, before the desktop starts
-  keyringTpmUnlockScript = pkgs.writeShellScript "keyring-tpm-unlock" ''
+  # Inner script that runs as the user to unlock keyring
+  keyringUnlockInner = pkgs.writeShellScript "keyring-unlock-inner" ''
     LOG="/tmp/keyring-tpm-unlock-$$.log"
-
-    # Only run for real users in tss group (not gdm, etc)
-    id -nG 2>/dev/null | ${pkgs.gnugrep}/bin/grep -qw tss || exit 0
-    id -nG 2>/dev/null | ${pkgs.gnugrep}/bin/grep -qw users || exit 0
+    CRED_PATH="${cfg.tpmUnlock.credentialPath}"
 
     echo "User: $(whoami), UID: $(id -u)" >> "$LOG"
     echo "XDG_RUNTIME_DIR: $XDG_RUNTIME_DIR" >> "$LOG"
 
-    CRED_PATH="${cfg.tpmUnlock.credentialPath}"
-    [ -f "$CRED_PATH" ] || { echo "No cred file" >> "$LOG"; exit 0; }
-
-    # XDG_RUNTIME_DIR should be set by PAM at this point
-    [ -n "$XDG_RUNTIME_DIR" ] || { echo "No XDG_RUNTIME_DIR" >> "$LOG"; exit 0; }
-
     CONTROL_SOCKET="$XDG_RUNTIME_DIR/keyring/control"
     echo "Looking for socket: $CONTROL_SOCKET" >> "$LOG"
 
-    # Wait for gnome-keyring control socket (pam_gnome_keyring should have started it)
+    # Wait for gnome-keyring control socket
     for i in $(seq 1 10); do
       [ -S "$CONTROL_SOCKET" ] && break
       sleep 0.2
@@ -84,21 +74,34 @@ let
       echo "Socket found" >> "$LOG"
     else
       echo "Socket NOT found after 2s" >> "$LOG"
-      ls -la "$XDG_RUNTIME_DIR/" >> "$LOG" 2>&1
       exit 0
     fi
 
-    # Set control directory so gnome-keyring-daemon finds the existing daemon
     export GNOME_KEYRING_CONTROL="$XDG_RUNTIME_DIR/keyring"
 
-    # Decrypt password from TPM and unlock keyring via control socket
     echo "Attempting unlock..." >> "$LOG"
     ${pkgs.systemd}/bin/systemd-creds decrypt "$CRED_PATH" - 2>>"$LOG" | \
       ${pkgs.gnome-keyring}/bin/gnome-keyring-daemon --unlock >>"$LOG" 2>&1
     echo "Unlock exit code: $?" >> "$LOG"
+  '';
 
-    # Always exit 0 - don't block login if unlock fails
-    exit 0
+  # PAM script wrapper - runs as root, switches to user
+  keyringTpmUnlockScript = pkgs.writeShellScript "keyring-tpm-unlock" ''
+    # PAM_USER is set by PAM to the user logging in
+    [ -n "$PAM_USER" ] || exit 0
+
+    # Only run for users in tss group
+    id -nG "$PAM_USER" 2>/dev/null | ${pkgs.gnugrep}/bin/grep -qw tss || exit 0
+    id -nG "$PAM_USER" 2>/dev/null | ${pkgs.gnugrep}/bin/grep -qw users || exit 0
+
+    CRED_PATH="${cfg.tpmUnlock.credentialPath}"
+    [ -f "$CRED_PATH" ] || exit 0
+
+    # XDG_RUNTIME_DIR should be set
+    [ -n "$XDG_RUNTIME_DIR" ] || exit 0
+
+    # Run the inner script as the actual user
+    exec ${pkgs.su}/bin/su "$PAM_USER" -s /bin/sh -c "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR ${keyringUnlockInner}"
   '';
 in
 {
