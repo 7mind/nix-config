@@ -53,7 +53,8 @@ let
     echo "The keyring will be unlocked automatically on next login."
   '';
 
-  # Script to unlock keyring using TPM credential
+  # PAM script to unlock keyring using TPM credential
+  # This runs during PAM session setup, before the desktop starts
   keyringTpmUnlockScript = pkgs.writeShellScript "keyring-tpm-unlock" ''
     # Only run for real users in tss group (not gdm, etc)
     id -nG 2>/dev/null | ${pkgs.gnugrep}/bin/grep -qw tss || exit 0
@@ -62,26 +63,27 @@ let
     CRED_PATH="${cfg.tpmUnlock.credentialPath}"
     [ -f "$CRED_PATH" ] || exit 0
 
+    # XDG_RUNTIME_DIR should be set by PAM at this point
+    [ -n "$XDG_RUNTIME_DIR" ] || exit 0
+
     CONTROL_SOCKET="$XDG_RUNTIME_DIR/keyring/control"
 
-    # Wait for gnome-keyring control socket (up to 15 seconds)
-    for i in $(seq 1 30); do
+    # Wait for gnome-keyring control socket (pam_gnome_keyring should have started it)
+    for i in $(seq 1 10); do
       [ -S "$CONTROL_SOCKET" ] && break
-      sleep 0.5
+      sleep 0.2
     done
-    [ -S "$CONTROL_SOCKET" ] || exit 1
-
-    # Small delay to ensure keyring daemon is fully initialized
-    sleep 1
+    [ -S "$CONTROL_SOCKET" ] || exit 0
 
     # Set control directory so gnome-keyring-daemon finds the existing daemon
     export GNOME_KEYRING_CONTROL="$XDG_RUNTIME_DIR/keyring"
 
     # Decrypt password from TPM and unlock keyring via control socket
-    ${pkgs.systemd}/bin/systemd-creds decrypt "$CRED_PATH" - | \
+    ${pkgs.systemd}/bin/systemd-creds decrypt "$CRED_PATH" - 2>/dev/null | \
       ${pkgs.gnome-keyring}/bin/gnome-keyring-daemon --unlock >/dev/null 2>&1
 
-    echo "Keyring unlock completed"
+    # Always exit 0 - don't block login if unlock fails
+    exit 0
   '';
 in
 {
@@ -190,22 +192,22 @@ in
       # Enrollment script
       environment.systemPackages = [ keyringTpmEnrollScript ];
 
-      # Systemd user service to unlock keyring on login
-      systemd.user.services.keyring-tpm-unlock = {
-        description = "Unlock GNOME Keyring via TPM";
-        wantedBy = [ "graphical-session.target" ];
-        # gnome-keyring is started by GDM/PAM, not systemd, so no service dependency
-        # Wait for session to be fully established before running
-        after = [ "graphical-session.target" ];
+      # Add pam_exec to GDM session to unlock keyring after pam_gnome_keyring starts the daemon
+      # This runs during PAM session setup, before the desktop session begins
+      security.pam.services.gdm-fingerprint.rules.session.keyring-tpm-unlock = {
+        order = 10100;  # After gnome_keyring (order 10000)
+        control = "optional";
+        modulePath = "${pkgs.pam}/lib/security/pam_exec.so";
+        args = [ "quiet" "seteuid" keyringTpmUnlockScript ];
+      };
 
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = keyringTpmUnlockScript;
-          RemainAfterExit = true;
-          # Log output for debugging
-          StandardOutput = "journal";
-          StandardError = "journal";
-        };
+      # Also for gdm-password in case fingerprint fails and user enters password
+      # (though pam_gnome_keyring should handle that case)
+      security.pam.services.gdm-password.rules.session.keyring-tpm-unlock = {
+        order = 10100;
+        control = "optional";
+        modulePath = "${pkgs.pam}/lib/security/pam_exec.so";
+        args = [ "quiet" "seteuid" keyringTpmUnlockScript ];
       };
     })
   ]);
