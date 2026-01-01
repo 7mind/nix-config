@@ -57,9 +57,9 @@ let
   keyringTpmUnlockScript = pkgs.writeShellScript "keyring-tpm-unlock" ''
     set -euo pipefail
 
-    # Skip for gdm user (greeter session)
-    if [ "$(id -un)" = "gdm" ]; then
-      echo "Skipping keyring unlock for gdm user"
+    # Only run for users in both 'users' and 'tss' groups (skip gdm, etc.)
+    if ! id -nG | grep -qw users || ! id -nG | grep -qw tss; then
+      echo "Skipping keyring unlock - user not in users+tss groups"
       exit 0
     fi
 
