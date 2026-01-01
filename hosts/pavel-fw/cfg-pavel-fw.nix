@@ -100,6 +100,7 @@
 
     hw.bluetooth.enable = true;
     hw.fingerprint.enable = true;
+    containers.docker.enable = true;
 
     ssh.mode = "safe";
 
@@ -135,33 +136,22 @@
         "audio"
         "video"
         "render"
-        "networkmanager"
-        "plugdev"
         "input"
-        "kvm"
-        "ssh-users"
-
-        "wheel"
-        "audio"
-        "video"
-        "render"
         "cdrom"
         "disk"
-        "networkmanager"
+        "uinput"
         "plugdev"
-        "input"
+        "networkmanager"
+        "ssh-users"
+        "kvm"
         "libvirtd"
         "qemu"
         "qemu-libvirtd"
-        "kvm"
-        "uinput"
-        "adbusers"
-        # "docker"
-        "corectrl"
-        "wireshark"
-        "ssh-users"
         "podman"
         "ollama"
+        "adbusers"
+        "corectrl"
+        "wireshark"
       ];
       openssh.authorizedKeys.keys = cfg-const.ssh-keys-pavel;
     };
