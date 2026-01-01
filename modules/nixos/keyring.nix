@@ -207,22 +207,14 @@ in
       # Enrollment script
       environment.systemPackages = [ keyringTpmEnrollScript ];
 
-      # Add pam_exec to GDM session to unlock keyring after pam_gnome_keyring starts the daemon
-      # This runs during PAM session setup, before the desktop session begins
-      security.pam.services.gdm-fingerprint.rules.session.keyring-tpm-unlock = {
-        order = 10100;  # After gnome_keyring (order 10000)
+      # Add pam_exec to login session to unlock keyring after pam_gnome_keyring starts the daemon
+      # gdm-fingerprint uses "session include login", so we add our rule to login
+      # pam_gnome_keyring is at order 12600, we run right after it
+      security.pam.services.login.rules.session.keyring-tpm-unlock = {
+        order = 12700;
         control = "optional";
         modulePath = "${pkgs.pam}/lib/security/pam_exec.so";
-        args = [ "quiet" "seteuid" keyringTpmUnlockScript ];
-      };
-
-      # Also for gdm-password in case fingerprint fails and user enters password
-      # (though pam_gnome_keyring should handle that case)
-      security.pam.services.gdm-password.rules.session.keyring-tpm-unlock = {
-        order = 10100;
-        control = "optional";
-        modulePath = "${pkgs.pam}/lib/security/pam_exec.so";
-        args = [ "quiet" "seteuid" keyringTpmUnlockScript ];
+        args = [ "quiet" "seteuid" "${keyringTpmUnlockScript}" ];
       };
     })
   ]);
