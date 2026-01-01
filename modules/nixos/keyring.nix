@@ -57,6 +57,12 @@ let
   keyringTpmUnlockScript = pkgs.writeShellScript "keyring-tpm-unlock" ''
     set -euo pipefail
 
+    # Skip for gdm user (greeter session)
+    if [ "$(id -un)" = "gdm" ]; then
+      echo "Skipping keyring unlock for gdm user"
+      exit 0
+    fi
+
     CRED_PATH="${cfg.tpmUnlock.credentialPath}"
 
     if [ ! -f "$CRED_PATH" ]; then
@@ -184,6 +190,7 @@ in
         description = "Unlock GNOME Keyring via TPM";
         wantedBy = [ "graphical-session.target" ];
         # gnome-keyring is started by GDM/PAM, not systemd, so no service dependency
+        # Wait for session to be fully established before running
         after = [ "graphical-session.target" ];
 
         serviceConfig = {
