@@ -166,6 +166,16 @@ in
         tctiEnvironment.enable = true;
       };
 
+      # Allow tss group to decrypt credentials without authentication
+      security.polkit.extraConfig = ''
+        polkit.addRule(function(action, subject) {
+          if (action.id == "io.systemd.credentials.decrypt" &&
+              subject.isInGroup("tss")) {
+            return polkit.Result.YES;
+          }
+        });
+      '';
+
       # Enrollment script
       environment.systemPackages = [ keyringTpmEnrollScript ];
 
