@@ -55,29 +55,29 @@ let
 
   # Script to unlock keyring using TPM credential
   keyringTpmUnlockScript = pkgs.writeShellScript "keyring-tpm-unlock" ''
-    set -euo pipefail
-
-    # Only run for users in both 'users' and 'tss' groups (skip gdm, etc.)
-    if ! id -nG | grep -qw users || ! id -nG | grep -qw tss; then
-      echo "Skipping keyring unlock - user not in users+tss groups"
-      exit 0
-    fi
+    # Only run for real users in tss group (not gdm, etc)
+    id -nG 2>/dev/null | ${pkgs.gnugrep}/bin/grep -qw tss || exit 0
+    id -nG 2>/dev/null | ${pkgs.gnugrep}/bin/grep -qw users || exit 0
 
     CRED_PATH="${cfg.tpmUnlock.credentialPath}"
+    [ -f "$CRED_PATH" ] || exit 0
 
-    if [ ! -f "$CRED_PATH" ]; then
-      echo "TPM credential not found at $CRED_PATH"
-      echo "Run 'keyring-tpm-enroll' to set up TPM-based keyring unlock"
-      exit 0
-    fi
+    CONTROL_SOCKET="$XDG_RUNTIME_DIR/keyring/control"
 
-    # Decrypt password from TPM and unlock keyring via control socket
-    PASSWORD=$(${pkgs.systemd}/bin/systemd-creds decrypt "$CRED_PATH" -)
+    # Wait for gnome-keyring control socket (up to 15 seconds)
+    for i in $(seq 1 30); do
+      [ -S "$CONTROL_SOCKET" ] && break
+      sleep 0.5
+    done
+    [ -S "$CONTROL_SOCKET" ] || exit 1
 
-    # Use the control socket to unlock the existing daemon
-    echo -n "$PASSWORD" | ${pkgs.gnome-keyring}/bin/gnome-keyring-daemon --start --unlock > /dev/null 2>&1
+    # Small delay to ensure keyring daemon is fully initialized
+    sleep 1
 
-    echo "Keyring unlocked via TPM"
+    # Decrypt password from TPM and unlock keyring
+    # Note: gnome-keyring-daemon --unlock outputs env vars to stdout, redirect to avoid noise
+    ${pkgs.systemd}/bin/systemd-creds decrypt "$CRED_PATH" - | \
+      ${pkgs.gnome-keyring}/bin/gnome-keyring-daemon --unlock >/dev/null 2>&1 || true
   '';
 in
 {
@@ -198,6 +198,9 @@ in
           Type = "oneshot";
           ExecStart = keyringTpmUnlockScript;
           RemainAfterExit = true;
+          # Log output for debugging
+          StandardOutput = "journal";
+          StandardError = "journal";
         };
       };
     })
