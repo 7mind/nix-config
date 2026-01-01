@@ -72,9 +72,8 @@ let
     fi
 
     # Decrypt password from TPM and unlock keyring
-    # --replace is needed to unlock an already-running daemon
     ${pkgs.systemd}/bin/systemd-creds decrypt "$CRED_PATH" - | \
-      ${pkgs.gnome-keyring}/bin/gnome-keyring-daemon --replace --unlock
+      ${pkgs.gnome-keyring}/bin/gnome-keyring-daemon --unlock
 
     echo "Keyring unlocked via TPM"
   '';
