@@ -183,8 +183,8 @@ in
       systemd.user.services.keyring-tpm-unlock = {
         description = "Unlock GNOME Keyring via TPM";
         wantedBy = [ "graphical-session.target" ];
-        after = [ "gnome-keyring-daemon.service" ];
-        requisite = [ "gnome-keyring-daemon.service" ];
+        # gnome-keyring is started by GDM/PAM, not systemd, so no service dependency
+        after = [ "graphical-session.target" ];
 
         serviceConfig = {
           Type = "oneshot";
