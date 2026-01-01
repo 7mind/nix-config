@@ -35,12 +35,14 @@ let
       exit 1
     fi
 
-    # Encrypt using host key (stored in /var/lib/systemd/credential.secret)
-    # This ties the credential to this machine without requiring TPM user presence
+    # Encrypt using TPM2 without user presence requirement
+    # PCRs 0+7 bind to firmware and secure boot state (no user presence needed)
     echo ""
-    echo "Encrypting password..."
+    echo "Encrypting password with TPM..."
     echo -n "$PASSWORD" | sudo ${pkgs.systemd}/bin/systemd-creds encrypt \
-      --with-key=host \
+      --with-key=tpm2 \
+      --tpm2-device=auto \
+      --tpm2-pcrs=0+7 \
       --name=keyring-password \
       - "$CRED_PATH"
 
