@@ -71,9 +71,11 @@ let
       exit 0
     fi
 
-    # Decrypt password from TPM and unlock keyring
-    ${pkgs.systemd}/bin/systemd-creds decrypt "$CRED_PATH" - | \
-      ${pkgs.gnome-keyring}/bin/gnome-keyring-daemon --unlock
+    # Decrypt password from TPM and unlock keyring via control socket
+    PASSWORD=$(${pkgs.systemd}/bin/systemd-creds decrypt "$CRED_PATH" -)
+
+    # Use the control socket to unlock the existing daemon
+    echo -n "$PASSWORD" | ${pkgs.gnome-keyring}/bin/gnome-keyring-daemon --start --unlock > /dev/null 2>&1
 
     echo "Keyring unlocked via TPM"
   '';
