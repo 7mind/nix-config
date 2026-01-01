@@ -1,5 +1,6 @@
 [
   ./alien-filesystems.nix
+  ./audio.nix
   ./audio-autoswitch.nix
   ./audio-quirks.nix
   ./bluetooth.nix

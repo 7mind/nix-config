@@ -34,7 +34,8 @@
     #   rocmPackages_6 = pkgs.rocmPackages_6.gfx1100;
     # };
 
-    services.udev.extraRules = lib.mkIf config.smind.hw.amd.rocm.enable ''
+    # Force compute power profile on desktops (not laptops - would hurt battery/thermals)
+    services.udev.extraRules = lib.mkIf (config.smind.hw.amd.rocm.enable && !(config.smind.isLaptop or false)) ''
       ACTION=="add|change", SUBSYSTEM=="drm", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="manual"
       ACTION=="add|change", SUBSYSTEM=="drm", DRIVERS=="amdgpu", ATTR{device/pp_power_profile_mode}="5"
     '';
@@ -60,7 +61,10 @@
     #   ROCM_HOME = "${pkgs.rocmPackages.rocmPath}";
     # };
 
-    boot.kernelParams = [ "amdgpu.ppfeaturemask=0xffffffff" ];
+    # Enable all power management features on desktops (not laptops - use default power management)
+    boot.kernelParams = lib.optionals (!(config.smind.isLaptop or false)) [
+      "amdgpu.ppfeaturemask=0xffffffff"
+    ];
 
     systemd.tmpfiles.rules = lib.mkIf config.smind.hw.amd.rocm.enable [
       "L+    /opt/rocm/hip   -    -    -     -    ${pkgs.rocmPackages.clr}"

@@ -13,6 +13,12 @@
       default = config.smind.isLaptop;
       description = "Enable hibernate support with GNOME hibernate-status-button extension";
     };
+
+    smind.desktop.gnome.fractional-scaling.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Enable fractional scaling via Mutter experimental features";
+    };
   };
 
   # display settings are being controlled over dbus (org.gnome.Mutter.DisplayConfig), not dconf
@@ -48,6 +54,7 @@
               edge-tiling = true;
               overlay-key = "";
               #workspaces-only-on-primary = true;
+            } // lib.optionalAttrs config.smind.desktop.gnome.fractional-scaling.enable {
               experimental-features = [
                 "scale-monitor-framebuffer"
                 "xwayland-native-scaling"
@@ -138,6 +145,9 @@
 
     services.xserver.enable = true;
     services.displayManager.gdm.enable = true;
+
+    # Speed up GDM startup
+    systemd.services.display-manager.after = [ "systemd-user-sessions.service" ];
 
     # PAM keyring integration handled by smind.security.keyring module
 

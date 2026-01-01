@@ -74,6 +74,7 @@
         pciutils
         usbutils
         fwupd
+        lm_sensors
 
         # networking
         bridge-utils

@@ -22,12 +22,6 @@
   # Hardware support
   hardware.enableRedistributableFirmware = true;
 
-  # AMD GPU configuration
-  hardware.graphics = {
-    enable = true;
-    enable32Bit = true; # For Steam/Wine/32-bit apps
-  };
-
   # Use latest kernel with VPE fix patch for Strix Point suspend/resume
   # Override the default from kernel-settings module (6.17) - Strix Point needs latest
   boot.kernelPackages = lib.mkForce pkgs.linuxPackages_latest;
@@ -86,7 +80,6 @@
 
   # Framework-specific services
   services.power-profiles-daemon.enable = true;
-  services.fwupd.enable = true;
 
   # Workaround: Unload MT7925e WiFi before suspend/hibernate (driver doesn't support PM properly)
   powerManagement = {
@@ -94,15 +87,13 @@
     resumeCommands = "${pkgs.kmod}/bin/modprobe mt7925e";
   };
 
-  # Speed up GDM startup
-  systemd.services.display-manager.after = [ "systemd-user-sessions.service" ];
-
   # Disable age secrets until they are set up for this host
   smind.age.enable = false;
 
   smind = {
     roles.desktop.generic-gnome = true;
     isLaptop = true;
+    desktop.gnome.fractional-scaling.enable = false;
 
     locale.ie.enable = true;
 
@@ -165,26 +156,4 @@
   home-manager.users.root = import ./home-root.nix;
 
   programs.firefox.enable = true;
-
-  environment.systemPackages = with pkgs; [
-    claude-code
-    bitwarden-desktop
-    # Hardware tools
-    pciutils
-    usbutils
-    lm_sensors
-    nvme-cli
-    brightnessctl
-    # Secure Boot
-    sbctl
-    git
-  ];
-
-  # Audio via PipeWire
-  services.pipewire = {
-    enable = true;
-    alsa.enable = true;
-    alsa.support32Bit = true;
-    pulse.enable = true;
-  };
 }
