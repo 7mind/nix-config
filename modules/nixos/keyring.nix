@@ -159,6 +159,13 @@ in
         message = "TPM keyring unlock requires gnome-keyring backend";
       }];
 
+      # Enable TPM2 support with user access
+      security.tpm2 = {
+        enable = true;
+        pkcs11.enable = true;
+        tctiEnvironment.enable = true;
+      };
+
       # Enrollment script
       environment.systemPackages = [ keyringTpmEnrollScript ];
 

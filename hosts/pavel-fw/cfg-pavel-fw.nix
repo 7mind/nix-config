@@ -153,6 +153,7 @@
         "adbusers"
         "corectrl"
         "wireshark"
+        "tss"
       ];
       openssh.authorizedKeys.keys = cfg-const.ssh-keys-pavel;
     };
