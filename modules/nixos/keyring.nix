@@ -74,10 +74,14 @@ let
     # Small delay to ensure keyring daemon is fully initialized
     sleep 1
 
-    # Decrypt password from TPM and unlock keyring
-    # Note: gnome-keyring-daemon --unlock outputs env vars to stdout, redirect to avoid noise
+    # Set control directory so gnome-keyring-daemon finds the existing daemon
+    export GNOME_KEYRING_CONTROL="$XDG_RUNTIME_DIR/keyring"
+
+    # Decrypt password from TPM and unlock keyring via control socket
     ${pkgs.systemd}/bin/systemd-creds decrypt "$CRED_PATH" - | \
-      ${pkgs.gnome-keyring}/bin/gnome-keyring-daemon --unlock >/dev/null 2>&1 || true
+      ${pkgs.gnome-keyring}/bin/gnome-keyring-daemon --unlock >/dev/null 2>&1
+
+    echo "Keyring unlock completed"
   '';
 in
 {
