@@ -10,7 +10,18 @@
     roles.desktop = true;
 
     autostart.programs = with pkgs; [
-
+      {
+        name = "element-main";
+        exec = "${element-desktop}/bin/element-desktop --hidden";
+      }
+      # {
+      #   name = "element-2nd";
+      #   exec = "${element-desktop}/bin/element-desktop --hidden --profile secondary";
+      # }
+      {
+        name = "slack";
+        exec = "${slack}/bin/slack -u";
+      }
     ];
   };
 }
