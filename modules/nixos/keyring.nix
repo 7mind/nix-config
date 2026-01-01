@@ -116,7 +116,7 @@ in
 
         credentialPath = lib.mkOption {
           type = lib.types.str;
-          default = "/var/lib/keyring-tpm/credential.cred";
+          default = "/var/lib/keyring-tpm/keyring-password.cred";
           description = "Path to store the TPM-encrypted keyring credential";
         };
       };
