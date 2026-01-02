@@ -2,13 +2,18 @@
 
 let
   hibernateCfg = config.smind.desktop.gnome.hibernate;
+  inputRemapperCfg = config.smind.input-remapper;
 
-  hibernateExtensionPatched = pkgs.gnomeExtensions.hibernate-status-button.overrideAttrs (old: {
+  # Patch extensions to support current GNOME shell version
+  patchGnomeExtension = ext: ext.overrideAttrs (old: {
     nativeBuildInputs = (old.nativeBuildInputs or []) ++ [ pkgs.jq ];
     postPatch = (old.postPatch or "") + ''
       jq '.["shell-version"] += ["${lib.versions.major pkgs.gnome-shell.version}"]' metadata.json > tmp.json && mv tmp.json metadata.json
     '';
   });
+
+  hibernateExtensionPatched = patchGnomeExtension pkgs.gnomeExtensions.hibernate-status-button;
+  inputRemapperExtensionPatched = patchGnomeExtension pkgs.gnomeExtensions.input-remapper-control;
 in
 {
   options = { };
@@ -31,7 +36,8 @@ in
         vicinae
         # tray-icons-reloaded
       ])
-    ++ lib.optional hibernateCfg.enable hibernateExtensionPatched;
+    ++ lib.optional hibernateCfg.enable hibernateExtensionPatched
+    ++ lib.optional inputRemapperCfg.enable inputRemapperExtensionPatched;
 
     programs.dconf = {
       enable = true;
@@ -50,7 +56,8 @@ in
                 gnomeExtensions.vicinae.extensionUuid
                 gnome-shortcut-inhibitor.extensionUuid
                 # pkgs.gnomeExtensions.tray-icons-reloaded.extensionUuid
-              ] ++ lib.optional hibernateCfg.enable hibernateExtensionPatched.extensionUuid;
+              ] ++ lib.optional hibernateCfg.enable hibernateExtensionPatched.extensionUuid
+                ++ lib.optional inputRemapperCfg.enable inputRemapperExtensionPatched.extensionUuid;
             };
 
           };

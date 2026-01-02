@@ -3,17 +3,6 @@
 let
   cfg = config.smind.input-remapper;
 
-  # Patch extension to support current GNOME shell version
-  inputRemapperExtensionPatched = pkgs.gnomeExtensions.input-remapper-control.overrideAttrs (old: {
-    nativeBuildInputs = (old.nativeBuildInputs or []) ++ [ pkgs.jq ];
-    postPatch = (old.postPatch or "") + ''
-      jq '.["shell-version"] += ["${lib.versions.major pkgs.gnome-shell.version}"]' metadata.json > tmp.json && mv tmp.json metadata.json
-    '';
-  });
-
-  # Helper to generate preset JSON
-  presetToJson = preset: builtins.toJSON preset.mappings;
-
   # Generate config.json with autoload settings
   configJson = builtins.toJSON {
     version = "2.2.0";
@@ -61,9 +50,8 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    environment.systemPackages = [
-      cfg.package
-    ] ++ lib.optional config.smind.desktop.gnome.enable inputRemapperExtensionPatched;
+    # GNOME extension is handled by gnome-extensions.nix
+    environment.systemPackages = [ cfg.package ];
 
     # uinput is required for input-remapper
     boot.kernelModules = [ "uinput" ];
@@ -102,14 +90,5 @@ in
 
     # Set XDG_CONFIG_DIRS to include /etc so input-remapper finds the config
     environment.sessionVariables.XDG_CONFIG_DIRS = lib.mkAfter [ "/etc" ];
-
-    # Enable GNOME extension if GNOME is enabled
-    programs.dconf.profiles.user.databases = lib.mkIf config.smind.desktop.gnome.enable [{
-      settings = {
-        "org/gnome/shell" = {
-          enabled-extensions = [ inputRemapperExtensionPatched.extensionUuid ];
-        };
-      };
-    }];
   };
 }
