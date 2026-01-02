@@ -73,6 +73,10 @@
   # Framework-specific services
   services.power-profiles-daemon.enable = true;
 
+  # QMK/VIA keyboard firmware support (Framework 16 uses QMK)
+  hardware.keyboard.qmk.enable = true;
+  environment.systemPackages = [ pkgs.via pkgs.qmk ];
+
   # Workaround: Unload MT7925e WiFi before suspend/hibernate (driver doesn't support PM properly)
   powerManagement = {
     powerDownCommands = "${pkgs.kmod}/bin/modprobe -r mt7925e";
