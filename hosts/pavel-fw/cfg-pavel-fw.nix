@@ -73,11 +73,11 @@
   # Framework-specific services
   services.power-profiles-daemon.enable = true;
 
-  # QMK/VIA keyboard firmware support (Framework 16 uses QMK)
+  # QMK keyboard firmware support (Framework 16 uses QMK)
+  # Use https://keyboard.frame.work/ for configuration
   hardware.keyboard.qmk.enable = true;
-  environment.systemPackages = [ pkgs.via pkgs.qmk ];
 
-  # Framework keyboard udev rules for VIA access
+  # Framework keyboard udev rules for web configurator access
   services.udev.extraRules = ''
     # Framework Laptop 16 Keyboard Module - ANSI (32ac:0012)
     SUBSYSTEM=="hidraw", ATTRS{idVendor}=="32ac", ATTRS{idProduct}=="0012", MODE="0660", GROUP="users", TAG+="uaccess"

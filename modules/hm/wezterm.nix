@@ -92,6 +92,15 @@
                 {key="[", mods="SUPER", action = wezterm.action.ActivateTabRelative (-1) },
                 {key="]", mods="SUPER", action = wezterm.action.ActivateTabRelative (1) },
 
+                -- New tab/window/close
+                -- SUPER for macOS, CTRL for Linux with keyd (which remaps SUPER to CTRL)
+                {key="t", mods="SUPER", action = wezterm.action.SpawnTab 'CurrentPaneDomain' },
+                {key="t", mods="CTRL", action = wezterm.action.SpawnTab 'CurrentPaneDomain' },
+                {key="n", mods="SUPER", action = wezterm.action.SpawnWindow },
+                {key="n", mods="CTRL", action = wezterm.action.SpawnWindow },
+                {key="w", mods="SUPER", action = wezterm.action.CloseCurrentPane { confirm = true } },
+                {key="w", mods="CTRL", action = wezterm.action.CloseCurrentPane { confirm = true } },
+
                 {key="UpArrow", mods="SHIFT|SUPER", action = wezterm.action.AdjustPaneSize {"Up", 1} },
                 {key="DownArrow", mods="SHIFT|SUPER", action = wezterm.action.AdjustPaneSize {"Down", 1} },
                 {key="LeftArrow", mods="SHIFT|SUPER", action = wezterm.action.AdjustPaneSize {"Left", 1} },
@@ -109,7 +118,9 @@
                   { key = 'g', mods = 'SHIFT|SUPER', action = wezterm.action.CopyMode 'NextMatch' },
                   { key = 'c', mods = 'CTRL', action = wezterm.action.CopyMode 'Close' },
                   { key = 'Backspace', mods = 'SUPER', action = wezterm.action.CopyMode 'ClearPattern' },
+                  { key = 'Backspace', mods = 'CTRL', action = wezterm.action.CopyMode 'ClearPattern' },
                   { key = 'r', mods = 'SUPER', action = wezterm.action.CopyMode 'CycleMatchType' },
+                  { key = 'r', mods = 'CTRL', action = wezterm.action.CopyMode 'CycleMatchType' },
                 }
               },
 
