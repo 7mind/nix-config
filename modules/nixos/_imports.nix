@@ -20,6 +20,7 @@
   ./iperf.nix
   ./gnome-minimal-hotkeys.nix
   ./gnome-extensions.nix
+  ./input-remapper.nix
   ./kernel-settings.nix
   ./keyd-super-remap.nix
   ./keyring.nix
