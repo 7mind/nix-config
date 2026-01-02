@@ -20,6 +20,7 @@
   ./iperf.nix
   ./gnome-minimal-hotkeys.nix
   ./gnome-extensions.nix
+  ./kanata-super-remap.nix
   ./kernel-settings.nix
   ./keyring.nix
   ./ledger.nix
