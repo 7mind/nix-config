@@ -7,7 +7,7 @@ let
   cfg = config.smind.security.keyring;
 
   # Script to enroll keyring password to TPM
-  keyringTpmEnrollScript = pkgs.writeShellScriptBin "keyring-tpm-enroll" ''
+  tpmEnrollKeyringScript = pkgs.writeShellScriptBin "tpm-enroll-keyring" ''
     set -euo pipefail
 
     CRED_PATH="${cfg.tpmUnlock.credentialPath}"
@@ -130,7 +130,7 @@ in
           description = ''
             Enable TPM-based keyring unlock.
             Useful for fingerprint login where password is not available to unlock keyring.
-            Requires initial setup: run 'keyring-tpm-enroll' after enabling.
+            Requires initial setup: run 'tpm-enroll-keyring' after enabling.
           '';
         };
 
@@ -195,7 +195,7 @@ in
       '';
 
       # Enrollment script
-      environment.systemPackages = [ keyringTpmEnrollScript ];
+      environment.systemPackages = [ tpmEnrollKeyringScript ];
 
       # Add pam_exec to login session to unlock keyring after pam_gnome_keyring starts the daemon
       # gdm-fingerprint uses "session include login", so we add our rule to login

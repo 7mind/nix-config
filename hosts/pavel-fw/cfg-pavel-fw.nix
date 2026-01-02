@@ -1,5 +1,8 @@
 { config, cfg-meta, lib, pkgs, cfg-const, import_if_exists, import_if_exists_or, cfg-flakes, ... }:
 
+let
+  luksDevice = "/dev/disk/by-uuid/ebeec38b-52cd-4113-8d91-84e71df293af";
+in
 {
   imports =
     [
@@ -59,11 +62,33 @@
   boot.initrd.verbose = false;
 
   # LUKS encryption with TPM2 auto-unlock
+  # Re-enroll after UEFI/TPM changes: tpm-enroll-luks
   boot.initrd.luks.devices."enc" = {
-    device = "/dev/disk/by-uuid/ebeec38b-52cd-4113-8d91-84e71df293af";
+    device = luksDevice;
     preLVM = true;
     crypttabExtraOpts = [ "tpm2-device=auto" ];
   };
+
+  environment.systemPackages = [
+    (pkgs.writeShellScriptBin "tpm-enroll-luks" ''
+      set -euo pipefail
+      echo "LUKS TPM2 Enrollment"
+      echo "===================="
+      echo ""
+      echo "This will re-enroll TPM2 key for LUKS device:"
+      echo "  ${luksDevice}"
+      echo ""
+      echo "Use this after UEFI/TPM configuration changes."
+      echo "You will be prompted for your LUKS recovery passphrase."
+      echo ""
+      sudo ${pkgs.systemd}/bin/systemd-cryptenroll \
+        --wipe-slot=tpm2 \
+        --tpm2-device=auto \
+        "${luksDevice}"
+      echo ""
+      echo "Done! TPM auto-unlock will work on next boot."
+    '')
+  ];
 
   # Resume device for hibernation
   boot.resumeDevice = "/dev/vg/swap";

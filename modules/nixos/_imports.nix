@@ -29,6 +29,7 @@
   ./metrics.nix
   ./networking-desktop.nix
   ./networking.nix
+  ./nvidia-hybrid.nix
   ./nix-ld.nix
   ./nushell.nix
   ./oracle-cloud.nix
