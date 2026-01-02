@@ -95,5 +95,14 @@ in
 
     # Set XDG_CONFIG_DIRS to include /etc so input-remapper finds the config
     environment.sessionVariables.XDG_CONFIG_DIRS = lib.mkAfter [ "/etc" ];
+
+    # Enable GNOME extension if GNOME is enabled
+    programs.dconf.profiles.user.databases = lib.mkIf config.smind.desktop.gnome.enable [{
+      settings = {
+        "org/gnome/shell" = {
+          enabled-extensions = [ pkgs.gnomeExtensions.input-remapper-control.extensionUuid ];
+        };
+      };
+    }];
   };
 }
