@@ -8,6 +8,7 @@ in
     [
       ./hardware-configuration.nix
       (import_if_exists_or "${cfg-meta.paths.secrets}/pavel/age-rekey.nix" (import "${cfg-meta.paths.modules}/age-dummy.nix"))
+      (import_if_exists "${cfg-meta.paths.secrets}/pavel/age-secrets.nix")
     ];
 
   nix = {
