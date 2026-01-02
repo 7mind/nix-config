@@ -120,6 +120,11 @@
     hw.cpu.isAmd = true;
     hw.amd.gpu.enable = true;
 
+    # LLM/Ollama - use Vulkan for Strix Point (RDNA 3.5)
+    # Alternative: ollama-rocm with rocmOverrideGfx = "11.5.0" (gfx1150)
+    llm.enable = true;
+    llm.ollama.package = pkgs.ollama-vulkan;
+
     # Use lanzaboote for secure boot
     bootloader.systemd-boot.enable = false;
     bootloader.lanzaboote.enable = true;

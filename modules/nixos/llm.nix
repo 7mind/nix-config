@@ -6,6 +6,12 @@
       default = false;
       description = "Enable LLM tools (Ollama, aider, Claude Code)";
     };
+
+    smind.llm.ollama.package = lib.mkOption {
+      type = lib.types.package;
+      default = pkgs.ollama-rocm;
+      description = "Ollama package to use (ollama-rocm, ollama-vulkan, ollama-cuda, ollama-cpu)";
+    };
   };
 
   config = lib.mkIf config.smind.llm.enable {
@@ -32,7 +38,7 @@
 
     services.ollama = {
       enable = true;
-      package = pkgs.ollama-rocm;
+      package = config.smind.llm.ollama.package;
 
       user = "ollama";
       group = "users";
