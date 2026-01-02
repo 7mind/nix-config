@@ -28,6 +28,8 @@
           # Mac-style Super key remaps to Ctrl equivalents
           # Note: "meta" layer (not "meta:M") so Super key is NOT passed through
           "meta" = {
+            # Mouse - Super+Click opens links in new tab (like Ctrl+Click)
+            leftmouse = "macro(leftcontrol+leftmouse)";
             # Text editing
             a = "macro(leftcontrol+a)";  # Select all
             c = "macro(leftcontrol+c)";  # Copy
