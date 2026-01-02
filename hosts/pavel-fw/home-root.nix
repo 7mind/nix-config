@@ -1,7 +1,6 @@
 { smind-hm, cfg-meta, import_if_exists_or, ... }: {
   imports = smind-hm.imports ++ [
-    # Skip age-rekey for now until secrets are set up for this host
-    "${cfg-meta.paths.modules}/age-dummy.nix"
+    (import_if_exists_or "${cfg-meta.paths.secrets}/pavel/age-rekey.nix" (import "${cfg-meta.paths.modules}/age-dummy.nix"))
   ];
 
   smind.hm = {

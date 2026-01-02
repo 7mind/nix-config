@@ -50,6 +50,8 @@
   ]);
 
   home.packages = with pkgs; [
+    mission-center
+
     nordvpn-wireguard-extractor
 
     furmark

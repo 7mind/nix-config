@@ -7,8 +7,7 @@ in
   imports =
     [
       ./hardware-configuration.nix
-      # Skip age-rekey for now until secrets are set up for this host
-      "${cfg-meta.paths.modules}/age-dummy.nix"
+      (import_if_exists_or "${cfg-meta.paths.secrets}/pavel/age-rekey.nix" (import "${cfg-meta.paths.modules}/age-dummy.nix"))
     ];
 
   nix = {
@@ -18,6 +17,10 @@ in
       allowed-users = [ "root" "pavel" ];
       trusted-users = [ "root" "pavel" ];
     };
+  };
+
+  age.rekey = {
+    hostPubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILVhIJvhBhZBZwwW+XNYWLRn5wL+ecMkWRYcuqmJVq1r";
   };
 
   # --- Framework 16 AMD (Strix Point) specific configuration ---
@@ -31,25 +34,25 @@ in
   boot.kernelPatches = [{
     name = "amdgpu-vpe-idle-timeout-fix";
     patch = pkgs.writeText "vpe-timeout.patch" ''
---- a/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
-+++ b/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
-@@ -37,7 +37,7 @@
+      --- a/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
+      +++ b/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
+      @@ -37,7 +37,7 @@
 
- /* 1 second timeout */
--#define VPE_IDLE_TIMEOUT	msecs_to_jiffies(1000)
-+#define VPE_IDLE_TIMEOUT	msecs_to_jiffies(2000)
+       /* 1 second timeout */
+      -#define VPE_IDLE_TIMEOUT	msecs_to_jiffies(1000)
+      +#define VPE_IDLE_TIMEOUT	msecs_to_jiffies(2000)
 
- #define VPE_MAX_DPM_LEVEL			4
- #define FIXED1_8_BITS_PER_FRACTIONAL_PART	8
-'';
+       #define VPE_MAX_DPM_LEVEL			4
+       #define FIXED1_8_BITS_PER_FRACTIONAL_PART	8
+    '';
   }];
 
   boot.kernelParams = [
     "quiet"
     "splash"
     # AMD GPU resume workarounds for Strix Point
-    "amdgpu.sg_display=0"      # Disable scatter-gather display (helps resume)
-    "amdgpu.abmlevel=0"        # Disable adaptive backlight (reduces resume complexity)
+    "amdgpu.sg_display=0" # Disable scatter-gather display (helps resume)
+    "amdgpu.abmlevel=0" # Disable adaptive backlight (reduces resume complexity)
   ];
 
   # Use systemd in initrd for proper LUKS + LVM + hibernate resume sequencing
@@ -116,10 +119,8 @@ in
     resumeCommands = "${pkgs.kmod}/bin/modprobe mt7925e";
   };
 
-  # Disable age secrets until they are set up for this host
-  smind.age.enable = false;
-
   smind = {
+    age.enable = true;
     roles.desktop.generic-gnome = true;
     isLaptop = true;
     desktop.gnome.fractional-scaling.enable = false;
@@ -138,6 +139,19 @@ in
 
     hw.bluetooth.enable = true;
     hw.fingerprint.enable = true;
+    hw.nvidia = {
+      enable = true;
+      specialisation.enable = true;
+      specialisation.defaultWithGpu = true; # Default boots with NVIDIA, "no-nvidia" specialisation for AMD-only
+      # PCI IDs from lspci -Dnn
+      pciId = "0000:c2:00.0";
+      audioPciId = "0000:c2:00.1";
+      vendorDeviceId = "10de 2d58";
+      audioVendorDeviceId = "10de 22eb";
+      # Decimal bus IDs for PRIME (c2 hex = 194, c3 hex = 195)
+      nvidiaBusId = "PCI:194:0:0";
+      amdgpuBusId = "PCI:195:0:0";
+    };
     containers.docker.enable = true;
 
     ssh.mode = "safe";

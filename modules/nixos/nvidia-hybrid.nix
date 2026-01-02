@@ -142,80 +142,82 @@ in
 
     open = lib.mkOption {
       type = lib.types.bool;
-      default = false;
+      default = true;
       description = "Use NVIDIA open kernel modules (may not support all features on new GPUs)";
     };
-  };
+    };
 
-  config = let
-    # NVIDIA configuration to apply when GPU is active
-    nvidiaConfig = {
-      services.xserver.videoDrivers = [ "nvidia" ];
+  config =
+    let
+      # NVIDIA configuration to apply when GPU is active
+      nvidiaConfig = {
+        services.xserver.videoDrivers = [ "nvidia" ];
 
-      hardware.graphics.enable = true;
+        hardware.graphics.enable = true;
 
-      hardware.nvidia = {
-        open = cfg.open;
-        modesetting.enable = true;
-        nvidiaSettings = true;
+        hardware.nvidia = {
+          open = cfg.open;
+          modesetting.enable = true;
+          nvidiaSettings = true;
 
-        powerManagement.enable = true;
-        powerManagement.finegrained = true;
+          powerManagement.enable = true;
+          powerManagement.finegrained = true;
 
-        prime = {
-          offload = {
-            enable = true;
-            enableOffloadCmd = true;
+          prime = {
+            offload = {
+              enable = true;
+              enableOffloadCmd = true;
+            };
+            amdgpuBusId = cfg.amdgpuBusId;
+            nvidiaBusId = cfg.nvidiaBusId;
           };
-          amdgpuBusId = cfg.amdgpuBusId;
-          nvidiaBusId = cfg.nvidiaBusId;
         };
+
+        boot.kernelModules = [ "vfio-pci" ];
+
+        environment.systemPackages = [
+          gpuBindVfio
+          gpuBindNvidia
+          pkgs.nvtopPackages.nvidia
+          pkgs.libva-utils
+        ];
+
+        systemd.services.nvidia-persistenced.enable = false;
       };
 
-      boot.kernelModules = [ "vfio-pci" ];
+      # Minimal config when GPU is not present (just AMD iGPU)
+      noNvidiaConfig = {
+        services.xserver.videoDrivers = lib.mkForce [ "modesetting" ];
+        hardware.nvidia.prime.offload.enable = lib.mkForce false;
+        hardware.nvidia.prime.sync.enable = lib.mkForce false;
+        hardware.nvidia.powerManagement.enable = lib.mkForce false;
+        hardware.nvidia.powerManagement.finegrained = lib.mkForce false;
+        hardware.nvidia.modesetting.enable = lib.mkForce false;
+      };
 
-      environment.systemPackages = [
-        gpuBindVfio
-        gpuBindNvidia
-        pkgs.nvtopPackages.nvidia
-        pkgs.libva-utils
-      ];
+    in
+    lib.mkIf cfg.enable (lib.mkMerge [
+      # Without specialisation: just apply nvidia config directly
+      (lib.mkIf (!cfgSpec.enable) nvidiaConfig)
 
-      systemd.services.nvidia-persistenced.enable = false;
-    };
+      # With specialisation: default has GPU, "no-nvidia" specialisation removes it
+      (lib.mkIf (cfgSpec.enable && cfgSpec.defaultWithGpu) (lib.mkMerge [
+        nvidiaConfig
+        {
+          specialisation.no-nvidia = {
+            inheritParentConfig = true;
+            configuration = noNvidiaConfig;
+          };
+        }
+      ]))
 
-    # Minimal config when GPU is not present (just AMD iGPU)
-    noNvidiaConfig = {
-      services.xserver.videoDrivers = lib.mkForce [ "modesetting" ];
-      hardware.nvidia.prime.offload.enable = lib.mkForce false;
-      hardware.nvidia.prime.sync.enable = lib.mkForce false;
-      hardware.nvidia.powerManagement.enable = lib.mkForce false;
-      hardware.nvidia.powerManagement.finegrained = lib.mkForce false;
-      hardware.nvidia.modesetting.enable = lib.mkForce false;
-    };
-
-  in lib.mkIf cfg.enable (lib.mkMerge [
-    # Without specialisation: just apply nvidia config directly
-    (lib.mkIf (!cfgSpec.enable) nvidiaConfig)
-
-    # With specialisation: default has GPU, "no-nvidia" specialisation removes it
-    (lib.mkIf (cfgSpec.enable && cfgSpec.defaultWithGpu) (lib.mkMerge [
-      nvidiaConfig
-      {
-        specialisation.no-nvidia = {
+      # With specialisation: default has no GPU, "nvidia" specialisation adds it
+      (lib.mkIf (cfgSpec.enable && !cfgSpec.defaultWithGpu) {
+        hardware.graphics.enable = true;
+        specialisation.nvidia = {
           inheritParentConfig = true;
-          configuration = noNvidiaConfig;
+          configuration = nvidiaConfig;
         };
-      }
-    ]))
-
-    # With specialisation: default has no GPU, "nvidia" specialisation adds it
-    (lib.mkIf (cfgSpec.enable && !cfgSpec.defaultWithGpu) {
-      hardware.graphics.enable = true;
-      specialisation.nvidia = {
-        inheritParentConfig = true;
-        configuration = nvidiaConfig;
-      };
-    })
-  ]);
+      })
+    ]);
 }
