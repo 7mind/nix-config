@@ -10,6 +10,9 @@
   };
 
   config = lib.mkIf config.smind.keyboard.super-remap.enable {
+    # Add keyd to PATH for debugging (keyd monitor, keyd list, etc.)
+    environment.systemPackages = [ pkgs.keyd ];
+
     services.keyd = {
       enable = true;
       keyboards.default = {
