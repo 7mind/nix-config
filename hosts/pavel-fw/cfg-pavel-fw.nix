@@ -97,6 +97,7 @@ in
 
   # Framework-specific services
   services.power-profiles-daemon.enable = true;
+  smind.power-management.auto-profile.enable = true;
 
   # QMK keyboard firmware support (Framework 16 uses QMK)
   # Use https://keyboard.frame.work/ for configuration
