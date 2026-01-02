@@ -3,6 +3,14 @@
 let
   cfg = config.smind.input-remapper;
 
+  # Patch extension to support current GNOME shell version
+  inputRemapperExtensionPatched = pkgs.gnomeExtensions.input-remapper-control.overrideAttrs (old: {
+    nativeBuildInputs = (old.nativeBuildInputs or []) ++ [ pkgs.jq ];
+    postPatch = (old.postPatch or "") + ''
+      jq '.["shell-version"] += ["${lib.versions.major pkgs.gnome-shell.version}"]' metadata.json > tmp.json && mv tmp.json metadata.json
+    '';
+  });
+
   # Helper to generate preset JSON
   presetToJson = preset: builtins.toJSON preset.mappings;
 
@@ -55,8 +63,7 @@ in
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [
       cfg.package
-      pkgs.gnomeExtensions.input-remapper-control
-    ];
+    ] ++ lib.optional config.smind.desktop.gnome.enable inputRemapperExtensionPatched;
 
     # uinput is required for input-remapper
     boot.kernelModules = [ "uinput" ];
@@ -100,7 +107,7 @@ in
     programs.dconf.profiles.user.databases = lib.mkIf config.smind.desktop.gnome.enable [{
       settings = {
         "org/gnome/shell" = {
-          enabled-extensions = [ pkgs.gnomeExtensions.input-remapper-control.extensionUuid ];
+          enabled-extensions = [ inputRemapperExtensionPatched.extensionUuid ];
         };
       };
     }];
