@@ -77,6 +77,13 @@
   hardware.keyboard.qmk.enable = true;
   environment.systemPackages = [ pkgs.via pkgs.qmk ];
 
+  # Framework keyboard udev rules for VIA access
+  services.udev.extraRules = ''
+    # Framework Laptop 16 Keyboard Module - ANSI (32ac:0012)
+    SUBSYSTEM=="hidraw", ATTRS{idVendor}=="32ac", ATTRS{idProduct}=="0012", MODE="0660", GROUP="users", TAG+="uaccess"
+    SUBSYSTEM=="usb", ATTRS{idVendor}=="32ac", ATTRS{idProduct}=="0012", MODE="0660", GROUP="users", TAG+="uaccess"
+  '';
+
   # Workaround: Unload MT7925e WiFi before suspend/hibernate (driver doesn't support PM properly)
   powerManagement = {
     powerDownCommands = "${pkgs.kmod}/bin/modprobe -r mt7925e";
