@@ -26,6 +26,13 @@ in
       example = { "Framework Laptop 16 Keyboard Module - ANSI Keyboard" = "mac-style"; };
     };
 
+    users = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      description = "List of users to create config symlinks for";
+      example = [ "pavel" ];
+    };
+
     devices = lib.mkOption {
       type = lib.types.attrsOf (lib.types.submodule {
         options = {
@@ -88,7 +95,15 @@ in
       };
     };
 
-    # Set XDG_CONFIG_DIRS to include /etc so input-remapper finds the config
-    environment.sessionVariables.XDG_CONFIG_DIRS = lib.mkAfter [ "/etc" ];
+    # Create symlinks from user config dirs to /etc for each specified user
+    # input-remapper hardcodes ~/.config/input-remapper-2/ and ignores XDG_CONFIG_DIRS
+    systemd.tmpfiles.rules = lib.flatten (map (user:
+      let
+        homeDir = config.users.users.${user}.home;
+      in [
+        "d ${homeDir}/.config 0755 ${user} users -"
+        "L+ ${homeDir}/.config/input-remapper-2 - - - - /etc/input-remapper-2"
+      ]
+    ) cfg.users);
   };
 }

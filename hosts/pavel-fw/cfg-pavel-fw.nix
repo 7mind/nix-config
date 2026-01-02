@@ -105,6 +105,7 @@
     # Evdev key codes: https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h
     input-remapper = {
       enable = true;
+      users = [ "pavel" ];
       autoload = {
         "Framework Laptop 16 Keyboard Module - ANSI Keyboard" = "mac-style";
         "PIXA3854:00 093A:0274 Touchpad" = "mac-style";
