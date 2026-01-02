@@ -98,91 +98,8 @@
     isLaptop = true;
     desktop.gnome.fractional-scaling.enable = false;
 
-    # Disable keyd, use input-remapper instead (for Super+Click support)
+    # Disable keyd (using kanata instead)
     keyboard.super-remap.enable = false;
-
-    # Input remapper for keyboard/mouse remapping (replaces keyd)
-    # Evdev key codes: https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h
-    input-remapper = {
-      enable = true;
-      users = [ "pavel" ];
-      autoload = {
-        "Framework Laptop 16 Keyboard Module - ANSI Keyboard" = "mac-style";
-        "PIXA3854:00 093A:0274 Touchpad" = "mac-style";
-      };
-      devices = {
-        # Keyboard mappings
-        "Framework Laptop 16 Keyboard Module - ANSI Keyboard" = {
-          presets = {
-            "mac-style" = {
-              mappings = [
-                # Caps Lock → Hyper key (Ctrl+Alt+Super+Space)
-                {
-                  input_combination = [{ type = 1; code = 58; }];  # KEY_CAPSLOCK
-                  target_uinput = "keyboard";
-                  output_symbol = "Control_L + Alt_L + Super_L + space";
-                }
-                # Shift+Caps Lock → actual Caps Lock
-                {
-                  input_combination = [
-                    { type = 1; code = 42; }   # KEY_LEFTSHIFT
-                    { type = 1; code = 58; }   # KEY_CAPSLOCK
-                  ];
-                  target_uinput = "keyboard";
-                  output_symbol = "Caps_Lock";
-                }
-
-                # === Super+Key → Ctrl+Key (Mac-style shortcuts) ===
-                # Text editing
-                { input_combination = [{ type = 1; code = 125; } { type = 1; code = 30; }]; target_uinput = "keyboard"; output_symbol = "Control_L + a"; }  # Super+A → Ctrl+A
-                { input_combination = [{ type = 1; code = 125; } { type = 1; code = 46; }]; target_uinput = "keyboard"; output_symbol = "Control_L + c"; }  # Super+C → Ctrl+C
-                { input_combination = [{ type = 1; code = 125; } { type = 1; code = 47; }]; target_uinput = "keyboard"; output_symbol = "Control_L + v"; }  # Super+V → Ctrl+V
-                { input_combination = [{ type = 1; code = 125; } { type = 1; code = 45; }]; target_uinput = "keyboard"; output_symbol = "Control_L + x"; }  # Super+X → Ctrl+X
-                { input_combination = [{ type = 1; code = 125; } { type = 1; code = 44; }]; target_uinput = "keyboard"; output_symbol = "Control_L + z"; }  # Super+Z → Ctrl+Z
-                # File operations
-                { input_combination = [{ type = 1; code = 125; } { type = 1; code = 31; }]; target_uinput = "keyboard"; output_symbol = "Control_L + s"; }  # Super+S → Ctrl+S
-                { input_combination = [{ type = 1; code = 125; } { type = 1; code = 24; }]; target_uinput = "keyboard"; output_symbol = "Control_L + o"; }  # Super+O → Ctrl+O
-                { input_combination = [{ type = 1; code = 125; } { type = 1; code = 25; }]; target_uinput = "keyboard"; output_symbol = "Control_L + p"; }  # Super+P → Ctrl+P
-                # Navigation
-                { input_combination = [{ type = 1; code = 125; } { type = 1; code = 33; }]; target_uinput = "keyboard"; output_symbol = "Control_L + f"; }  # Super+F → Ctrl+F
-                { input_combination = [{ type = 1; code = 125; } { type = 1; code = 38; }]; target_uinput = "keyboard"; output_symbol = "Control_L + l"; }  # Super+L → Ctrl+L
-                { input_combination = [{ type = 1; code = 125; } { type = 1; code = 19; }]; target_uinput = "keyboard"; output_symbol = "Control_L + r"; }  # Super+R → Ctrl+R
-                # Window/tab management
-                { input_combination = [{ type = 1; code = 125; } { type = 1; code = 20; }]; target_uinput = "keyboard"; output_symbol = "Control_L + t"; }  # Super+T → Ctrl+T
-                { input_combination = [{ type = 1; code = 125; } { type = 1; code = 49; }]; target_uinput = "keyboard"; output_symbol = "Control_L + n"; }  # Super+N → Ctrl+N
-                { input_combination = [{ type = 1; code = 125; } { type = 1; code = 17; }]; target_uinput = "keyboard"; output_symbol = "Control_L + w"; }  # Super+W → Ctrl+W
-
-                # === Super+Shift+Key mappings ===
-                { input_combination = [{ type = 1; code = 125; } { type = 1; code = 42; } { type = 1; code = 44; }]; target_uinput = "keyboard"; output_symbol = "Control_L + Shift_L + z"; }  # Super+Shift+Z → Ctrl+Shift+Z (Redo)
-                { input_combination = [{ type = 1; code = 125; } { type = 1; code = 42; } { type = 1; code = 33; }]; target_uinput = "keyboard"; output_symbol = "Control_L + Shift_L + f"; }  # Super+Shift+F → Ctrl+Shift+F
-                { input_combination = [{ type = 1; code = 125; } { type = 1; code = 42; } { type = 1; code = 20; }]; target_uinput = "keyboard"; output_symbol = "Control_L + Shift_L + t"; }  # Super+Shift+T → Ctrl+Shift+T
-                { input_combination = [{ type = 1; code = 125; } { type = 1; code = 42; } { type = 1; code = 49; }]; target_uinput = "keyboard"; output_symbol = "Control_L + Shift_L + n"; }  # Super+Shift+N → Ctrl+Shift+N
-                { input_combination = [{ type = 1; code = 125; } { type = 1; code = 42; } { type = 1; code = 25; }]; target_uinput = "keyboard"; output_symbol = "Control_L + Shift_L + p"; }  # Super+Shift+P → Ctrl+Shift+P
-              ];
-            };
-          };
-        };
-
-        # Touchpad mappings
-        "PIXA3854:00 093A:0274 Touchpad" = {
-          presets = {
-            "mac-style" = {
-              mappings = [
-                # Super+Click → Ctrl+Click (open links in new tab)
-                {
-                  input_combination = [
-                    { type = 1; code = 125; }  # KEY_LEFTMETA
-                    { type = 1; code = 272; }  # BTN_LEFT
-                  ];
-                  target_uinput = "keyboard+mouse";
-                  output_symbol = "Control_L + BTN_LEFT";
-                }
-              ];
-            };
-          };
-        };
-      };
-    };
 
     locale.ie.enable = true;
 
@@ -212,6 +129,55 @@
 
     # Disable ZFS (using btrfs on LVM)
     zfs.enable = false;
+  };
+
+  # Kanata keyboard remapper (Mac-style shortcuts + Super+Click support)
+  services.kanata = {
+    enable = true;
+    keyboards.default = {
+      # Empty devices = auto-detect all keyboards
+      # For mouse support, we'd need to specify the touchpad device
+      devices = [ ];
+      extraDefCfg = ''
+        process-unmapped-keys yes
+        log-layer-changes no
+      '';
+      config = ''
+        ;; Source keys we want to remap
+        (defsrc
+          caps
+          lmet
+          a c v x z s o p f l r t n w
+        )
+
+        ;; Aliases for cleaner config
+        (defalias
+          ;; Caps Lock: tap = Hyper (Ctrl+Alt+Super+Space), hold = also Hyper
+          ;; For Shift+Caps = real Caps Lock, we use fork
+          hyp (fork
+                (multi lctl lalt lmet spc)  ;; without shift
+                caps                         ;; with shift
+                (lsft rsft))
+
+          ;; Super key: activates meta layer while held, passes through otherwise
+          mta (layer-while-held meta)
+        )
+
+        ;; Base layer
+        (deflayer base
+          @hyp    ;; caps
+          @mta    ;; lmet (Super)
+          a c v x z s o p f l r t n w
+        )
+
+        ;; Meta layer: Super+Key → Ctrl+Key
+        (deflayer meta
+          _       ;; caps unchanged
+          _       ;; lmet (keep layer active)
+          C-a C-c C-v C-x C-z C-s C-o C-p C-f C-l C-r C-t C-n C-w
+        )
+      '';
+    };
   };
 
   # Use NetworkManager for laptop (instead of systemd-networkd)
