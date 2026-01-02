@@ -15,7 +15,15 @@
       keyboards.default = {
         ids = [ "*" ];
         settings = {
-          main = { };
+          main = {
+            # Caps Lock as Hyper key (Ctrl+Alt+Super+Space)
+            capslock = "macro(leftcontrol+leftalt+leftmeta+space)";
+          };
+
+          # Shift+Caps Lock toggles actual Caps Lock
+          "shift" = {
+            capslock = "capslock";
+          };
 
           # Mac-style Super key remaps to Ctrl equivalents
           "meta:M" = {
