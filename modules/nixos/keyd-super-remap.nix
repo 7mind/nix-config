@@ -16,7 +16,9 @@
     services.keyd = {
       enable = true;
       keyboards.default = {
-        ids = [ "*" ];
+        # Note: "*" only matches keyboards, mouse/touchpad devices must be explicit
+        # Common touchpad IDs can be found with: keyd monitor
+        ids = [ "*" "093a:0274" ];  # 093a:0274 = Framework 16 touchpad (PIXA3854)
         settings = {
           main = {
             # Caps Lock as Hyper key (Ctrl+Alt+Super+Space)
