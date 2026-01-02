@@ -131,50 +131,55 @@
     zfs.enable = false;
   };
 
-  # Kanata keyboard remapper (Mac-style shortcuts + Super+Click support)
+  # Kanata keyboard remapper (Mac-style shortcuts)
   services.kanata = {
     enable = true;
     keyboards.default = {
-      # Empty devices = auto-detect all keyboards
-      # For mouse support, we'd need to specify the touchpad device
       devices = [ ];
       extraDefCfg = ''
         process-unmapped-keys yes
-        log-layer-changes no
       '';
       config = ''
-        ;; Source keys we want to remap
-        (defsrc
-          caps
-          lmet
-          a c v x z s o p f l r t n w
-        )
+        ;; Only remap Caps Lock
+        (defsrc caps)
 
-        ;; Aliases for cleaner config
         (defalias
-          ;; Caps Lock: tap = Hyper (Ctrl+Alt+Super+Space), hold = also Hyper
-          ;; For Shift+Caps = real Caps Lock, we use fork
+          ;; Caps Lock: Hyper (Ctrl+Alt+Super+Space), Shift+Caps = real Caps Lock
           hyp (fork
-                (multi lctl lalt lmet spc)  ;; without shift
-                caps                         ;; with shift
+                (multi lctl lalt lmet spc)
+                caps
                 (lsft rsft))
-
-          ;; Super key: activates meta layer while held, passes through otherwise
-          mta (layer-while-held meta)
         )
 
-        ;; Base layer
-        (deflayer base
-          @hyp    ;; caps
-          @mta    ;; lmet (Super)
-          a c v x z s o p f l r t n w
-        )
+        (deflayer base @hyp)
 
-        ;; Meta layer: Super+Key → Ctrl+Key
-        (deflayer meta
-          _       ;; caps unchanged
-          _       ;; lmet (keep layer active)
-          C-a C-c C-v C-x C-z C-s C-o C-p C-f C-l C-r C-t C-n C-w
+        ;; Mac-style: Super+Key → Ctrl+Key (only for specific keys)
+        ;; Super+Tab, Super+Q, etc. are NOT remapped (handled by GNOME)
+        (defoverrides
+          ;; Text editing
+          (lmet a) (lctl a)    ;; Select all
+          (lmet c) (lctl c)    ;; Copy
+          (lmet v) (lctl v)    ;; Paste
+          (lmet x) (lctl x)    ;; Cut
+          (lmet z) (lctl z)    ;; Undo
+          ;; File operations
+          (lmet s) (lctl s)    ;; Save
+          (lmet o) (lctl o)    ;; Open
+          (lmet p) (lctl p)    ;; Print / Command palette
+          ;; Navigation
+          (lmet f) (lctl f)    ;; Find
+          (lmet l) (lctl l)    ;; Address bar / Go to line
+          (lmet r) (lctl r)    ;; Refresh
+          ;; Window/tab management
+          (lmet t) (lctl t)    ;; New tab
+          (lmet n) (lctl n)    ;; New window
+          (lmet w) (lctl w)    ;; Close tab/window
+          ;; Super+Shift combinations
+          (lmet lsft z) (lctl lsft z)  ;; Redo
+          (lmet lsft f) (lctl lsft f)  ;; Find in files
+          (lmet lsft t) (lctl lsft t)  ;; Reopen closed tab
+          (lmet lsft n) (lctl lsft n)  ;; New incognito/private window
+          (lmet lsft p) (lctl lsft p)  ;; Command palette (VS Code)
         )
       '';
     };
