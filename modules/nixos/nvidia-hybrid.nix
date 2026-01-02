@@ -178,7 +178,6 @@ in
         environment.systemPackages = [
           gpuBindVfio
           gpuBindNvidia
-          pkgs.nvtopPackages.nvidia
           pkgs.libva-utils
         ];
 

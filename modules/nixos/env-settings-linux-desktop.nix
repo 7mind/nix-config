@@ -21,6 +21,9 @@
 
         yt-dlp
         brightnessctl
+        mission-center
+        nvtopPackages.full
+
 
         # neohtop # broken
         # vkmark
