@@ -98,9 +98,6 @@
     isLaptop = true;
     desktop.gnome.fractional-scaling.enable = false;
 
-    # Disable keyd (using kanata instead)
-    keyboard.super-remap.enable = false;
-
     locale.ie.enable = true;
 
     host.email.to = "team@7mind.io";
@@ -180,6 +177,8 @@
           (lmet lsft t) (lctl lsft t)  ;; Reopen closed tab
           (lmet lsft n) (lctl lsft n)  ;; New incognito/private window
           (lmet lsft p) (lctl lsft p)  ;; Command palette (VS Code)
+          ;; Mouse: Super+Click → Ctrl+Click (experimental - requires mouse in defsrc)
+          ;; (lmet mlft) (lctl mlft)
         )
       '';
     };

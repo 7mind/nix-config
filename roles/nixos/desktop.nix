@@ -87,7 +87,6 @@ in
       smind = {
         desktop.gnome.enable = lib.mkDefault true;
         desktop.gnome.minimal-hotkeys = lib.mkDefault true;
-        keyboard.super-remap.enable = lib.mkDefault true;
       };
     })
 
