@@ -16,9 +16,7 @@
     services.keyd = {
       enable = true;
       keyboards.default = {
-        # Note: "*" only matches keyboards, mouse/touchpad devices must be explicit
-        # Common touchpad IDs can be found with: keyd monitor
-        ids = [ "*" "093a:0274" ];  # 093a:0274 = Framework 16 touchpad (PIXA3854)
+        ids = [ "*" ];
         settings = {
           main = {
             # Caps Lock as Hyper key (Ctrl+Alt+Super+Space)
@@ -33,8 +31,6 @@
           # Mac-style Super key remaps to Ctrl equivalents
           # Note: "meta" layer (not "meta:M") so Super key is NOT passed through
           "meta" = {
-            # Mouse - Super+Click opens links in new tab (like Ctrl+Click)
-            leftmouse = "C-leftmouse";
             # Text editing
             a = "macro(leftcontrol+a)";  # Select all
             c = "macro(leftcontrol+c)";  # Copy
