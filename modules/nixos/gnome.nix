@@ -39,9 +39,7 @@
               #xwayland-grab-access-rules=['parsecd']
             };
             "org/gnome/desktop/interface" = {
-              #gtk-theme = "Breeze";
-              #cursor-theme = "breeze_cursors";
-              #icon-theme = "breeze-dark";
+              gtk-theme = "adw-gtk3-dark";
               document-font-name = "Noto Sans 11";
               monospace-font-name = "Hack Nerd Font Mono 12";
               cursor-size = lib.gvariant.mkInt32 36;
@@ -161,6 +159,7 @@
 
     environment.systemPackages =
       (with pkgs; [
+        adw-gtk3
         dconf-editor
         seahorse
         gnome-firmware

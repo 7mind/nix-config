@@ -34,14 +34,6 @@
     size = 32;
   };
 
-  gtk = {
-    enable = true;
-    theme = {
-      package = pkgs.adw-gtk3;
-      name = "adw-gtk3-dark";
-    };
-  };
-
   programs.direnv = {
     config = {
       whitelist.prefix = [ "~/work" ];
