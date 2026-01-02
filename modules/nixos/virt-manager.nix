@@ -1,82 +1,56 @@
 { config, lib, pkgs, ... }:
 
+let
+  cfg = config.smind.vm.virt-manager;
+  isAmd = config.smind.hw.cpu.isAmd or false;
+  mainBridge = config.smind.net.main-bridge or null;
+in
 {
-  options = {
-    smind.vm.virt-manager.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable libvirt with virt-manager and QEMU/KVM";
-    };
+  options.smind.vm.virt-manager = {
+    enable = lib.mkEnableOption "libvirt with virt-manager and QEMU/KVM";
 
-    smind.vm.virt-manager.amd.enable = lib.mkOption {
+    iommu.enable = lib.mkOption {
       type = lib.types.bool;
-      default = config.smind.vm.virt-manager.enable && config.smind.hw.cpu.isAmd;
-      description = "Enable AMD IOMMU and nested virtualization";
+      default = cfg.enable && isAmd;
+      description = "Enable IOMMU, VFIO and nested virtualization for GPU passthrough";
     };
   };
 
-  config = {
-    assertions = [ ];
+  config = lib.mkIf cfg.enable {
+    programs.virt-manager.enable = true;
 
-    programs = lib.mkIf config.smind.vm.virt-manager.enable {
-      virt-manager.enable = true;
+    virtualisation = {
+      spiceUSBRedirection.enable = true;
+
+      libvirtd = {
+        enable = true;
+        onBoot = "ignore";
+        qemu = {
+          package = pkgs.qemu_kvm;
+          runAsRoot = true;
+          swtpm.enable = true;
+        };
+        allowedBridges = lib.optional (mainBridge != null) mainBridge;
+      };
     };
 
-    virtualisation = lib.mkIf config.smind.vm.virt-manager.enable
-      (
-        let
-          ovmf = (pkgs.OVMF.override {
-            secureBoot = true;
-            httpSupport = true;
-            # see also: https://github.com/virt-manager/virt-manager/issues/819
-            # TPM should be removed when you create the VM, then it can be added
-            tpmSupport = true;
-          }).fd;
-        in
-        {
-          spiceUSBRedirection.enable = true;
-          #efi.OVMF = ovmf;
-
-          libvirtd = {
-            enable = true;
-            onBoot = "ignore";
-            qemu = {
-              package = pkgs.qemu_kvm;
-              runAsRoot = true;
-              # ???
-              #ovmf.packages = [ ovmf ];
-              swtpm.enable = true;
-            };
-            allowedBridges = [
-              config.smind.net.main-bridge
-            ];
-          };
-        }
-      );
-
-    boot = lib.mkIf config.smind.vm.virt-manager.amd.enable {
+    boot = lib.mkIf cfg.iommu.enable {
       kernelParams = [
         "iommu=pt"
-        "iommu_passthrough=1"
-        "amd_iommu=pgtbl_v2"
-        "amd_iommu_intr=vapic"
-        # "pcie_aspm=off"
         "kvm.ignore_msrs=1"
         "vfio_iommu_type1.allow_unsafe_interrupts=1"
+      ] ++ lib.optionals isAmd [
+        "amd_iommu=pgtbl_v2"
+        "amd_iommu_intr=vapic"
       ];
 
       kernelModules = [
-        "vfio_virqfd"
         "vfio_pci"
         "vfio_iommu_type1"
         "vfio"
       ];
 
-      extraModprobeConfig =
-        lib.concatStringsSep "\n" [
-          "options kvm_amd nested=1"
-          # "options vfio-pci ids=10de:2206,10de:1aef"
-        ];
+      extraModprobeConfig = lib.optionalString isAmd "options kvm_amd nested=1";
     };
   };
 }

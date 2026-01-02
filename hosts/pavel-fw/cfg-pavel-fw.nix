@@ -125,6 +125,9 @@
     llm.enable = true;
     llm.ollama.package = pkgs.ollama-vulkan;
 
+    # Virtualization
+    vm.virt-manager.enable = true;
+
     # Use lanzaboote for secure boot
     bootloader.systemd-boot.enable = false;
     bootloader.lanzaboote.enable = true;
