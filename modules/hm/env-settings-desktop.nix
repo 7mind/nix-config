@@ -20,16 +20,9 @@
       enable = true;
       systemd.enable = true;
       settings = {
-        faviconService = "twenty"; # twenty | google | none
-        font.size = 11;
-        #popToRootOnClose = false;
-        #rootSearch.searchFiles = false;
-        #theme.name = "rose-pine";
-        #window = {
-        #  csd = true;
-        #  opacity = 0.95;
-        #  rounding = 10;
-        #};
+        close_on_focus_loss = true;
+        favicon_service = "twenty"; # twenty | google | none
+        font.normal.size = 11;
       };
       #themes = { };
       extensions = with cfg-meta.inputs.vicinae-extensions.packages.${pkgs.stdenv.hostPlatform.system}; [
