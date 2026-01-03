@@ -20,7 +20,7 @@ in
 
     smind.hm.ghostty.theme = lib.mkOption {
       type = lib.types.str;
-      default = "Adwaita Dark";
+      default = "Dimmed Monokai";
       description = "Ghostty color theme (use 'ghostty +list-themes' to see available)";
     };
   };
