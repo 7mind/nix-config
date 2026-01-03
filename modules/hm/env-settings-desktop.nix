@@ -25,7 +25,7 @@
         font.normal.size = 11;
         favorites = [
           "clipboard:history"
-          "applications:idea.desktop"
+          "applications:idea"
         ];
       };
       #themes = { };
