@@ -11,6 +11,7 @@
   ./env-settings-desktop.nix
   ./firefox-notabbar.nix
   ./firefox.nix
+  ./ghostty.nix
   ./htop.nix
   ./kitty.nix
   ./nushell.nix

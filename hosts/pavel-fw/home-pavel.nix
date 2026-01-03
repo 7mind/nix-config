@@ -10,6 +10,8 @@
     roles.desktop = true;
     wezterm.fontSize = 11;
     vscodium.fontSize = 14;
+    ghostty.enable = true;
+    ghostty.fontSize = 11;
 
     autostart.programs = with pkgs; [
       {
