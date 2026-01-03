@@ -78,7 +78,7 @@
 
 
     programs.gemini-cli = {
-      enable = false; # broken
+      enable = true;
       # nix-instantiate --eval -E 'builtins.fromJSON (builtins.readFile ~/.gemini/settings.json)'
       settings = {
         defaultModel = "gemini-3-pro-preview";
@@ -109,8 +109,8 @@
       };
     };
 
-    #home.file.".gemini-work/settings.json".source = config.home.file.".gemini/settings.json".source;
-    #home.file.".gemini-work/AGENTS.md".source = config.home.file.".gemini/AGENTS.md".source;
+    home.file.".gemini-work/settings.json".source = config.home.file.".gemini/settings.json".source;
+    home.file.".gemini-work/AGENTS.md".source = config.home.file.".gemini/AGENTS.md".source;
 
     home.packages = with pkgs;
       let

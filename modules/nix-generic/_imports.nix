@@ -5,4 +5,5 @@
   ./fonts-nerd.nix
   ./home-manager.nix
   ./nix.nix
+  ./overlay.nix
 ]
