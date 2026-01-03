@@ -61,6 +61,7 @@ in
 
   # Load AMD GPU early for Plymouth (NVIDIA driver isn't signed for SecureBoot)
   boot.initrd.kernelModules = [ "amdgpu" ];
+  hardware.amdgpu.initrd.enable = true;
 
   # Graphical boot splash
   boot.plymouth.enable = true;
@@ -134,7 +135,7 @@ in
     age.enable = true;
     roles.desktop.generic-gnome = true;
     isLaptop = true;
-    desktop.gnome.fractional-scaling.enable = false;
+    desktop.gnome.fractional-scaling.enable = true;
 
     locale.ie.enable = true;
 
