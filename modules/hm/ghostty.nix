@@ -20,12 +20,24 @@ in
 
     smind.hm.ghostty.theme = lib.mkOption {
       type = lib.types.str;
-      default = "dark+";
+      default = "Dark+";
       description = "Ghostty color theme (use 'ghostty +list-themes' to see available)";
     };
   };
 
   config = lib.mkIf config.smind.hm.ghostty.enable {
+    # Set as default terminal in GNOME
+    dconf.settings = lib.mkIf cfg-meta.isLinux {
+      "org/gnome/desktop/applications/terminal" = {
+        exec = "ghostty";
+        exec-arg = "-e";
+      };
+    };
+
+    xdg.mimeApps.defaultApplications = lib.mkIf cfg-meta.isLinux {
+      "x-scheme-handler/terminal" = "com.mitchellh.ghostty.desktop";
+    };
+
     programs.ghostty = {
       enable = true;
       enableZshIntegration = true;
