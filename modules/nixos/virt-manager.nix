@@ -147,12 +147,11 @@ in
         message = "gpuPassthrough requires smind.hw.nvidia.enable = true";
       }];
 
-      # Install the QEMU hook
-      system.activationScripts.libvirt-hooks = ''
-        mkdir -p /var/lib/libvirt/hooks
-        ln -sf ${qemuHook} /var/lib/libvirt/hooks/qemu
-        chmod +x /var/lib/libvirt/hooks/qemu
-      '';
+      # Install the QEMU hook via tmpfiles (runs after filesystem is mounted)
+      systemd.tmpfiles.rules = [
+        "d /var/lib/libvirt/hooks 0755 root root -"
+        "L+ /var/lib/libvirt/hooks/qemu - - - - ${qemuHook}"
+      ];
     })
   ]);
 }
