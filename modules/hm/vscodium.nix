@@ -7,6 +7,12 @@
       default = false;
       description = "Enable VSCodium with extensions and settings";
     };
+
+    smind.hm.vscodium.fontSize = lib.mkOption {
+      type = lib.types.int;
+      default = 14;
+      description = "VSCodium editor and terminal font size";
+    };
   };
 
   config = lib.mkIf config.smind.hm.vscodium.enable {
@@ -93,7 +99,7 @@
         profiles.default.userSettings = {
           "window.titleBarStyle" = "native";
           "workbench.startupEditor" = "newUntitledFile";
-          "editor.fontSize" = 14;
+          "editor.fontSize" = config.smind.hm.vscodium.fontSize;
           "editor.fontFamily" =
             "'FiraMono Nerd Font', 'Fira Code Nerd Font Mono', 'Fira Code', monospace";
           "terminal.integrated.fontFamily" =
@@ -128,7 +134,7 @@
 
           "files.insertFinalNewline" = true;
           "files.trimTrailingWhitespace" = true;
-          "terminal.integrated.fontSize" = 14;
+          "terminal.integrated.fontSize" = config.smind.hm.vscodium.fontSize;
           "editor.multiCursorModifier" = "ctrlCmd";
 
           "git.autofetch" = true;

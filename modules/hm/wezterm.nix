@@ -1,5 +1,8 @@
 { config, lib, cfg-meta, ... }:
 
+let
+  defaultFontSize = if cfg-meta.isDarwin then 14 else 10;
+in
 {
   options = {
     smind.hm.wezterm.enable = lib.mkOption {
@@ -7,12 +10,18 @@
       default = false;
       description = "Enable WezTerm terminal emulator";
     };
+
+    smind.hm.wezterm.fontSize = lib.mkOption {
+      type = lib.types.int;
+      default = defaultFontSize;
+      description = "WezTerm font size";
+    };
   };
 
   config = lib.mkIf config.smind.hm.wezterm.enable {
     programs.wezterm =
       let
-        font_size = if cfg-meta.isDarwin then 14 else 10;
+        font_size = config.smind.hm.wezterm.fontSize;
         initial_rows = if cfg-meta.isDarwin then 40 else 60;
       in
       {

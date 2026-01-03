@@ -8,6 +8,8 @@
 
   smind.hm = {
     roles.desktop = true;
+    wezterm.fontSize = 16;
+    vscodium.fontSize = 16;
 
     autostart.programs = with pkgs; [
       {
