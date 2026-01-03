@@ -28,7 +28,6 @@
           "applications:idea"
           "applications:firefox"
           "applications:codium"
-          "applications:org.wezfurlong.wezterm"
           "applications:com.mitchellh.ghostty"
           "applications:io.missioncenter.MissionCenter"
         ];

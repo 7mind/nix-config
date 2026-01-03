@@ -23,7 +23,8 @@
       kitty.enable = lib.mkDefault true;
       vscodium.enable = lib.mkDefault true;
       zed.enable = lib.mkDefault true;
-      wezterm.enable = lib.mkDefault true;
+      wezterm.enable = lib.mkDefault false;
+      ghostty.enable = lib.mkDefault true;
       autostart.programs = [ ];
       cleanups.enable = lib.mkDefault true;
       environment.sane-defaults.generic.enable = lib.mkDefault true;

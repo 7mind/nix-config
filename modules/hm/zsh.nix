@@ -12,7 +12,9 @@
   config = lib.mkIf config.smind.hm.zsh.enable {
     programs.zoxide.enableZshIntegration = true;
 
-    programs.wezterm.enableZshIntegration = true;
+    programs.wezterm.enableZshIntegration = config.smind.hm.wezterm.enable;
+
+    programs.ghostty.enableZshIntegration = true;
 
     programs.carapace.enableZshIntegration = true;
 
