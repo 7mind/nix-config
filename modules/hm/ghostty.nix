@@ -2,6 +2,7 @@
 
 let
   defaultFontSize = if cfg-meta.isDarwin then 14 else 10;
+  defaultRows = if cfg-meta.isDarwin then 40 else 60;
 in
 {
   options = {
@@ -30,14 +31,19 @@ in
         window-padding-x = 8;
         window-padding-y = 5;
 
+        window-width = 160;
+        window-height = defaultRows;
+
         scrollback-limit = 10000;
 
         copy-on-select = "clipboard";
         clipboard-paste-protection = false;
 
-        # Keybindings
-        # Copy/Paste (Ctrl+C copies if selection, otherwise sends SIGINT)
+        # Clear all default keybindings and define our own
         keybind = [
+          "clear"
+
+          # Copy/Paste (Ctrl+C copies if selection, otherwise sends SIGINT)
           "ctrl+c=copy_to_clipboard"
           "ctrl+shift+c=text:\\x03"
           "ctrl+v=paste_from_clipboard"
@@ -74,6 +80,12 @@ in
           # Scrolling
           "shift+page_up=scroll_page_fractional:-0.5"
           "shift+page_down=scroll_page_fractional:0.5"
+
+          # Essential defaults to keep
+          "ctrl+shift+comma=reload_config"
+          "ctrl+plus=increase_font_size:1"
+          "ctrl+minus=decrease_font_size:1"
+          "ctrl+zero=reset_font_size"
         ];
       };
     };
