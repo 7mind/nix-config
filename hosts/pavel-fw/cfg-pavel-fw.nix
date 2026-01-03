@@ -59,6 +59,9 @@ in
   # Use systemd in initrd for proper LUKS + LVM + hibernate resume sequencing
   boot.initrd.systemd.enable = true;
 
+  # Load AMD GPU early for Plymouth (NVIDIA driver isn't signed for SecureBoot)
+  boot.initrd.kernelModules = [ "amdgpu" ];
+
   # Graphical boot splash
   boot.plymouth.enable = true;
   boot.plymouth.theme = "bgrt"; # Framework logo with spinner
@@ -98,6 +101,13 @@ in
   boot.resumeDevice = "/dev/vg/swap";
 
   boot.loader.efi.canTouchEfiVariables = true;
+
+  boot.loader.systemd-boot.extraEntries = {
+    "windows.conf" = ''
+      title Windows
+      efi /EFI/Microsoft/Boot/bootmgfw.efi
+    '';
+  };
 
   # Framework-specific services
   services.power-profiles-daemon.enable = true;
