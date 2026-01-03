@@ -213,7 +213,6 @@
       gnome-logs
       gnome-maps
       gnome-music
-      gnome-weather
       totem
       yelp
       gnome-tour

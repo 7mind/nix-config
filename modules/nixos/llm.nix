@@ -21,7 +21,7 @@
 
       # terminal clients
       gollama
-      oterm
+      #oterm
 
       # repo ingestion - don't need
       # yek

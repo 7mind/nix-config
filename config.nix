@@ -29,8 +29,7 @@
 
   cfg-packages = { inputs, pkgs, arch }: {
     jdk-main = pkgs.graalvmPackages.graalvm-ce;
-    # linux-kernel = pkgs.linuxKernel.packageAliases.linux_latest;
-    linux-kernel = pkgs.linuxKernel.packages.linux_6_17;
+    linux-kernel = pkgs.linuxKernel.packageAliases.linux_latest;
   };
 
 

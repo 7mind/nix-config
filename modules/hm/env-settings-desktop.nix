@@ -21,7 +21,7 @@
       systemd.enable = true;
       settings = {
         faviconService = "twenty"; # twenty | google | none
-        #font.size = 11;
+        font.size = 11;
         #popToRootOnClose = false;
         #rootSearch.searchFiles = false;
         #theme.name = "rose-pine";

@@ -167,7 +167,13 @@ in
     llm.ollama.package = pkgs.ollama-vulkan;
 
     # Virtualization
-    vm.virt-manager.enable = true;
+    vm.virt-manager = {
+      enable = true;
+      gpuPassthrough = {
+        enable = true;
+        vmNames = [ "win11" ];
+      };
+    };
 
     # Use lanzaboote for secure boot
     bootloader.systemd-boot.enable = false;
