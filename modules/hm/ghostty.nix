@@ -20,7 +20,7 @@ in
 
     smind.hm.ghostty.theme = lib.mkOption {
       type = lib.types.str;
-      default = "Github Dark";
+      default = "GitHub Dark";
       description = "Ghostty color theme (use 'ghostty +list-themes' to see available)";
     };
   };
