@@ -54,15 +54,15 @@ in
     # AMD GPU resume workarounds for Strix Point
     "amdgpu.sg_display=0" # Disable scatter-gather display (helps resume)
     "amdgpu.abmlevel=0" # Disable adaptive backlight (reduces resume complexity)
+    # Prevent simpledrm from taking over framebuffer before amdgpu loads (for Plymouth)
+    "initcall_blacklist=simpledrm_platform_driver_init"
   ];
 
   # Use systemd in initrd for proper LUKS + LVM + hibernate resume sequencing
   boot.initrd.systemd.enable = true;
 
   # Load AMD GPU early for Plymouth (NVIDIA driver isn't signed for SecureBoot)
-  # Blacklist simpledrm so Plymouth waits for amdgpu instead of using UEFI framebuffer
   boot.initrd.kernelModules = [ "amdgpu" ];
-  boot.blacklistedKernelModules = [ "simpledrm" ];
   hardware.amdgpu.initrd.enable = true;
 
   # Graphical boot splash
