@@ -17,6 +17,12 @@ in
       default = defaultFontSize;
       description = "Ghostty font size";
     };
+
+    smind.hm.ghostty.theme = lib.mkOption {
+      type = lib.types.str;
+      default = "dark+";
+      description = "Ghostty color theme (use 'ghostty +list-themes' to see available)";
+    };
   };
 
   config = lib.mkIf config.smind.hm.ghostty.enable {
@@ -25,6 +31,7 @@ in
       enableZshIntegration = true;
 
       settings = {
+        theme = config.smind.hm.ghostty.theme;
         font-family = "JetBrains Mono";
         font-size = config.smind.hm.ghostty.fontSize;
 
