@@ -12,6 +12,11 @@
       default = "";
       description = "Firefox Sync account username";
     };
+    smind.hm.firefox.scrollMultiplier = lib.mkOption {
+      type = lib.types.int;
+      default = 100;
+      description = "Scroll speed multiplier (100 = default, lower = slower, higher = faster)";
+    };
   };
 
   config = lib.mkIf config.smind.hm.firefox.enable {
@@ -168,7 +173,7 @@
             "general.smoothScroll.msdPhysics.slowdownSpringConstant" = 250;
             "general.smoothScroll.currentVelocityWeighting" = 1.0;
             "general.smoothScroll.stopDecelerationWeighting" = 1.0;
-            "mousewheel.default.delta_multiplier_y" = 300;
+            "mousewheel.default.delta_multiplier_y" = config.smind.hm.firefox.scrollMultiplier;
             #
             "browser.compactmode.show" = true;
 
