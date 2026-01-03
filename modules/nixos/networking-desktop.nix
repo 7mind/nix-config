@@ -1,13 +1,19 @@
-{ lib, config, ... }: {
+{ lib, config, pkgs, ... }: {
   options = {
     smind.net.desktop.enable = lib.mkOption {
       type = lib.types.bool;
       default = config.smind.net.enable && config.smind.isDesktop;
       description = "Enable NetworkManager with iwd for desktop systems";
     };
+
+    smind.net.opensnitch.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Enable OpenSnitch application firewall";
+    };
   };
 
-  config =
+  config = lib.mkMerge [
     (lib.mkIf config.smind.net.desktop.enable {
       networking = {
         networkmanager = {
@@ -31,18 +37,21 @@
       };
 
       systemd.services.NetworkManager-wait-online.enable = false;
+    })
 
-      # services.opensnitch = {
-      #   enable = true;
-      #   settings = {
-      #     DefaultAction = "allow";
-      #     Firewall = "nftables";
-      #     ProcMonitorMethod = "ebpf";
-      #   };
-      # };
+    (lib.mkIf config.smind.net.opensnitch.enable {
+      services.opensnitch = {
+        enable = true;
+        settings = {
+          DefaultAction = "allow";
+          Firewall = "nftables";
+          ProcMonitorMethod = "ebpf";
+        };
+      };
 
-      # environment.systemPackages = with pkgs; [
-      #   opensnitch-ui
-      # ];
-    });
+      environment.systemPackages = with pkgs; [
+        opensnitch-ui
+      ];
+    })
+  ];
 }

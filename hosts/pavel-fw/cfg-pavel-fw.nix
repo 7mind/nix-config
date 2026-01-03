@@ -199,9 +199,19 @@ in
   # Use NetworkManager for laptop (instead of systemd-networkd)
   networking.networkmanager.enable = true;
 
-  networking.hostId = "a1b2c3d4"; # Required for ZFS compatibility checks
+  networking.hostId = "a1b2c3d4";
   networking.hostName = cfg-meta.hostname;
   networking.useDHCP = false;
+
+  # Firewall
+  networking.firewall = {
+    enable = true;
+    allowedTCPPorts = [ ];
+    allowedUDPPorts = [ ];
+  };
+
+  # OpenSnitch application firewall
+  smind.net.opensnitch.enable = true;
 
   time.timeZone = "Europe/Dublin";
 
