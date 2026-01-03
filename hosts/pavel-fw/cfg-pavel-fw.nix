@@ -60,7 +60,9 @@ in
   boot.initrd.systemd.enable = true;
 
   # Load AMD GPU early for Plymouth (NVIDIA driver isn't signed for SecureBoot)
+  # Blacklist simpledrm so Plymouth waits for amdgpu instead of using UEFI framebuffer
   boot.initrd.kernelModules = [ "amdgpu" ];
+  boot.blacklistedKernelModules = [ "simpledrm" ];
   hardware.amdgpu.initrd.enable = true;
 
   # Graphical boot splash
