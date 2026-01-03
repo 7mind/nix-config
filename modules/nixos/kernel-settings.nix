@@ -11,7 +11,7 @@
 
   config = lib.mkIf config.smind.kernel.sane-defaults.enable {
     boot = {
-      kernelPackages = cfg-packages.linux-kernel;
+      kernelPackages = lib.mkDefault cfg-packages.linux-kernel;
 
       kernel.sysctl = {
         "kernel.sysrq" = 1;
