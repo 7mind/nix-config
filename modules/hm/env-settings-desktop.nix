@@ -23,6 +23,10 @@
         close_on_focus_loss = true;
         favicon_service = "twenty"; # twenty | google | none
         font.normal.size = 11;
+        favorites = [
+          "clipboard:history"
+          "applications:idea.desktop"
+        ];
       };
       #themes = { };
       extensions = with cfg-meta.inputs.vicinae-extensions.packages.${pkgs.stdenv.hostPlatform.system}; [
