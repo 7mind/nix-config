@@ -26,6 +26,10 @@
         favorites = [
           "clipboard:history"
           "applications:idea"
+          "applications:firefox"
+          "applications:codium"
+          "applications:org.wezfurlong.wezterm"
+          "applications:io.missioncenter.MissionCenter"
         ];
       };
       #themes = { };
