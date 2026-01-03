@@ -20,7 +20,7 @@ in
 
     smind.hm.ghostty.theme = lib.mkOption {
       type = lib.types.str;
-      default = "Catpuccin Mocha";
+      default = "Catppuccin Mocha";
       description = "Ghostty color theme (use 'ghostty +list-themes' to see available)";
     };
   };
