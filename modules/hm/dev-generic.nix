@@ -67,8 +67,9 @@
       };
     };
 
-    home.packages = with pkgs; [
-      slack
+    home.packages = with pkgs;
+      lib.optional (!config.smind.hm.electron-wrappers.slack.enable) slack
+      ++ [
       # zoom-us
       # gitFull
 

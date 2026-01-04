@@ -80,6 +80,9 @@ in
   };
 
   environment.systemPackages = [
+    pkgs.fw-ectool # Framework EC tool for fan control, battery charge limit, etc.
+    pkgs.powertop # Power consumption analysis
+
     (pkgs.writeShellScriptBin "tpm-enroll-luks" ''
       set -euo pipefail
       echo "LUKS TPM2 Enrollment"
@@ -137,6 +140,7 @@ in
     age.enable = true;
     roles.desktop.generic-gnome = true;
     isLaptop = true;
+    power-management.enable = true;
     desktop.gnome.fractional-scaling.enable = true;
 
     locale.ie.enable = true;

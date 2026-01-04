@@ -7,6 +7,7 @@
   ./dev-llm.nix
   ./dev-cs.nix
   ./dev-scala.nix
+  ./electron-wrappers.nix
   ./env-settings-generic.nix
   ./env-settings-desktop.nix
   ./firefox-notabbar.nix

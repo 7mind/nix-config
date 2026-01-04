@@ -53,9 +53,9 @@
     nordvpn-wireguard-extractor
 
     furmark
-
-    element-desktop
-
+  ]
+  ++ lib.optional (!config.smind.hm.electron-wrappers.element.enable) element-desktop
+  ++ [
     bitwarden-desktop
 
     visualvm

@@ -11,6 +11,12 @@ in
       description = "Enable power management and CPU frequency scaling";
     };
 
+    amd.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = cfg.enable && config.smind.hw.cpu.isAmd;
+      description = "Enable AMD-specific power management (amd_pstate, auto-epp)";
+    };
+
     auto-profile = {
       enable = lib.mkOption {
         type = lib.types.bool;
@@ -33,35 +39,43 @@ in
   };
 
   config = lib.mkMerge [
+    # Base power management
     (lib.mkIf cfg.enable {
-      boot = {
-        # TODO: we need to verify if that's completely safe or not
-        extraModprobeConfig = ''
-          options snd_hda_intel power_save=1
-        '';
-      };
+      boot.extraModprobeConfig = ''
+        options snd_hda_intel power_save=1
+      '';
+
       powerManagement = {
         enable = true;
-        # never enable powertop autotuning, it breaks usb inputs
-        powertop.enable = false;
+        powertop.enable = false; # breaks USB inputs
         scsiLinkPolicy = "med_power_with_dipm";
       };
 
-      services.udev = {
-        extraRules = ''
-          ACTION=="add|change", SUBSYSTEM=="usb", TEST=="power/control", ATTR{power/control}="on"
-          ACTION=="add|change", SUBSYSTEM=="pci", TEST=="power/control", ATTR{power/control}="auto"
-          ACTION=="add|change", SUBSYSTEM=="block", TEST=="power/control", ATTR{device/power/control}="auto"
-          ACTION=="add|change", SUBSYSTEM=="ata_port", ATTR{../../power/control}="auto"
-        '';
-      };
+      services.udev.extraRules = ''
+        ACTION=="add|change", SUBSYSTEM=="usb", TEST=="power/control", ATTR{power/control}="on"
+        ACTION=="add|change", SUBSYSTEM=="pci", TEST=="power/control", ATTR{power/control}="auto"
+        ACTION=="add|change", SUBSYSTEM=="block", TEST=="power/control", ATTR{device/power/control}="auto"
+        ACTION=="add|change", SUBSYSTEM=="ata_port", ATTR{../../power/control}="auto"
+      '';
 
-      environment.systemPackages = with pkgs; [
+      environment.systemPackages = [
         config.boot.kernelPackages.cpupower
       ];
     })
 
-    # Auto-switch power profiles based on AC/battery status
+    # AMD-specific power management
+    (lib.mkIf cfg.amd.enable {
+      powerManagement.cpuFreqGovernor = "powersave"; # amd-pstate uses powersave governor
+
+      # Note: auto-epp is not used when power-profiles-daemon is enabled
+      # PPD already manages EPP states and integrates with GNOME
+
+      services.cpupower-gui.enable = true;
+
+      environment.systemPackages = [ pkgs.cpupower-gui ];
+    })
+
+    # Auto-switch power-profiles-daemon profiles based on AC/battery
     (lib.mkIf cfg.auto-profile.enable {
       assertions = [{
         assertion = config.services.power-profiles-daemon.enable;

@@ -34,7 +34,6 @@
   ./nushell.nix
   ./oracle-cloud.nix
   ./overlay.nix
-  ./power-amd.nix
   ./power.nix
   ./realtek-kernel-hack.nix
   ./rocm.nix

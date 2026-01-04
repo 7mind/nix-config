@@ -13,18 +13,23 @@
     ghostty.enable = true;
     ghostty.fontSize = 11;
 
-    autostart.programs = with pkgs; [
+    # Resource-limited Electron apps
+    electron-wrappers = {
+      enable = true;
+      cpuQuota = "5%";
+      memoryMax = "4G";
+      slack.enable = true;
+      element.enable = true;
+    };
+
+    autostart.programs = [
       {
         name = "element-main";
-        exec = "${element-desktop}/bin/element-desktop --hidden";
+        exec = "${config.home.profileDirectory}/bin/element-desktop";
       }
-      # {
-      #   name = "element-2nd";
-      #   exec = "${element-desktop}/bin/element-desktop --hidden --profile secondary";
-      # }
       {
         name = "slack";
-        exec = "${slack}/bin/slack -u";
+        exec = "${config.home.profileDirectory}/bin/slack";
       }
     ];
   };
