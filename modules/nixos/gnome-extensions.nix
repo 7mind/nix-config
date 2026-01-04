@@ -35,15 +35,12 @@ in
       ACTION=="add", SUBSYSTEM=="iio", ATTR{name}=="als", ATTR{scan_elements/in_illuminance_en}="1"
     '';
 
-    # Allow gnome-settings-daemon to claim sensors from iio-sensor-proxy
+    # Allow any local session to claim sensors from iio-sensor-proxy
+    # The default policy requires "allow_active=yes" but D-Bus bus name subjects
+    # may not properly resolve session state, so we allow unconditionally
     security.polkit.extraConfig = lib.mkIf alsCfg.enable ''
       polkit.addRule(function(action, subject) {
-        if (action.id == "net.hadess.SensorProxy.claim-sensor" &&
-            subject.user == "root") {
-          return polkit.Result.YES;
-        }
-        if (action.id == "net.hadess.SensorProxy.claim-sensor" &&
-            subject.isInGroup("users")) {
+        if (action.id == "net.hadess.SensorProxy.claim-sensor") {
           return polkit.Result.YES;
         }
       });

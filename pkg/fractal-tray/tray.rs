@@ -114,6 +114,7 @@ impl TrayHandle {
     pub fn set_has_unread(&self, value: bool) {
         let old = self.has_unread.swap(value, Ordering::Relaxed);
         if old != value {
+            info!("Tray unread status changed: {} -> {}", old, value);
             let _ = self.update_tx.send(());
         }
     }
