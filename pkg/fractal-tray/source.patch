@@ -1,0 +1,100 @@
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -22,6 +22,7 @@
+ mod session_list;
+ mod session_view;
+ mod system_settings;
++mod tray;
+ mod user_facing_error;
+ mod utils;
+ mod window;
+--- a/src/application.rs
++++ b/src/application.rs
+@@ -13,6 +13,7 @@
+     session_list::{FailedSession, SessionInfo, SessionList},
+     spawn,
+     system_settings::SystemSettings,
++    tray::{spawn_tray, TrayCommand},
+     toast,
+     utils::{BoundObjectWeakRef, LoadingState, matrix::MatrixIdUri},
+ };
+@@ -39,6 +40,8 @@
+         pub(super) session_list: SessionList,
+         intent_handler: BoundObjectWeakRef<glib::Object>,
+         last_network_state: Cell<NetworkState>,
++        /// Whether the app was started with --minimized flag.
++        pub(super) start_minimized: Cell<bool>,
+     }
+
+     impl Default for Application {
+@@ -49,6 +52,7 @@
+                 session_list: Default::default(),
+                 intent_handler: Default::default(),
+                 last_network_state: Default::default(),
++                start_minimized: Cell::new(false),
+             }
+         }
+     }
+@@ -62,6 +66,11 @@
+
+     impl ObjectImpl for Application {
+         fn constructed(&self) {
++            // Check for --minimized flag
++            if std::env::args().any(|arg| arg == "--minimized" || arg == "-m") {
++                self.start_minimized.set(true);
++            }
++
+             self.parent_constructed();
+
+             // Initialize actions and accelerators.
+@@ -89,6 +98,21 @@
+                 }
+             ));
+
++            // Initialize system tray
++            spawn!(clone!(
++                #[weak(rename_to = obj)]
++                self.obj(),
++                async move {
++                    let mut rx = spawn_tray().await;
++                    while let Some(cmd) = rx.recv().await {
++                        match cmd {
++                            TrayCommand::Show => { obj.imp().present_main_window(); }
++                            TrayCommand::Quit => { obj.quit(); }
++                        }
++                    }
++                }
++            ));
++
+             // Watch the network to log its state.
+             let network_monitor = gio::NetworkMonitor::default();
+             network_monitor.connect_network_changed(clone!(
+@@ -149,6 +173,15 @@
+         ///
+         /// Returns the main window.
+         fn present_main_window(&self) -> Window {
++            // If started with --minimized, skip presentation on first call only
++            if self.start_minimized.replace(false) {
++                let window = if let Some(window) = self.obj().active_window().and_downcast() {
++                    window
++                } else {
++                    Window::new(&self.obj())
++                };
++                return window;
++            }
+             let window = if let Some(window) = self.obj().active_window().and_downcast() {
+                 window
+             } else {
+--- a/src/window.rs
++++ b/src/window.rs
+@@ -203,7 +203,9 @@
+                 warn!("Could not save current session: {error}");
+             }
+
+-            glib::Propagation::Proceed
++            // Hide to tray instead of closing
++            self.obj().set_visible(false);
++            glib::Propagation::Stop
+         }
+     }
+

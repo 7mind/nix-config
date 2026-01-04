@@ -14,7 +14,7 @@ in
   nix = {
     settings = {
       max-jobs = 2;
-      cores = 8;
+      cores = 10;
       allowed-users = [ "root" "pavel" ];
       trusted-users = [ "root" "pavel" ];
     };
