@@ -99,6 +99,9 @@
       QT_AUTO_SCREEN_SCALE_FACTOR = "1";
       QT_ENABLE_HIGHDPI_SCALING = "1";
       QT_QPA_PLATFORM = "wayland";
+
+      # Electron apps: use native Wayland instead of XWayland
+      ELECTRON_OZONE_PLATFORM_HINT = "wayland";
     };
 
     # Keyring and SSH agent via shared module
