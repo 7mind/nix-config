@@ -55,7 +55,7 @@ in
     # AMD GPU resume workarounds for Strix Point
     "amdgpu.pg_mask=0" # Disable power gating (potential fix for VPE suspend hang)
     #"amdgpu.sg_display=0" # Disable scatter-gather display (helps resume)
-    #"amdgpu.abmlevel=0" # Disable adaptive backlight (reduces resume complexity)
+    "amdgpu.abmlevel=0" # Disable adaptive backlight
     # Prevent simpledrm from taking over framebuffer before amdgpu loads (for Plymouth)
     "initcall_blacklist=simpledrm_platform_driver_init"
   ];
@@ -118,6 +118,7 @@ in
   };
 
   # Framework-specific services
+  hardware.sensor.iio.enable = true; # ALS sensor for wluma
   services.power-profiles-daemon.enable = true;
   smind.power-management.auto-profile.enable = true;
   smind.power-management.auto-profile.onAC = "performance";
