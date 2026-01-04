@@ -99,6 +99,7 @@ impl Tray for FractalTray {
     }
 }
 
+#[derive(Debug)]
 pub struct TrayHandle {
     rx: Option<mpsc::UnboundedReceiver<TrayCommand>>,
     has_unread: Arc<AtomicBool>,

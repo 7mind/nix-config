@@ -28,6 +28,13 @@ in
     # Enable iio-sensor-proxy for ambient light sensor support
     hardware.sensor.iio.enable = lib.mkIf adaptiveBrightnessCfg.enable true;
 
+    # Enable IIO buffer scan elements for HID ambient light sensor (Framework 16)
+    # This ensures iio-sensor-proxy can read the sensor via buffer mode
+    services.udev.extraRules = lib.mkIf adaptiveBrightnessCfg.enable ''
+      # Enable illuminance scan element for ALS buffer mode
+      ACTION=="add", SUBSYSTEM=="iio", ATTR{name}=="als", ATTR{scan_elements/in_illuminance_en}="1"
+    '';
+
     environment.systemPackages = with pkgs; [
       # This is a dirty fix for annoying "allow inhibit shortcuts?" popups
       # https://discourse.gnome.org/t/virtual-machine-manager-wants-to-inhibit-shortcuts/26017/8

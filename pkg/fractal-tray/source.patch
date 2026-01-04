@@ -1,5 +1,5 @@
---- a/src/main.rs
-+++ b/src/main.rs
+--- a/src/main.rs	2026-01-04 16:42:22.108362205 +0000
++++ b/src/main.rs	2026-01-04 16:43:45.462944051 +0000
 @@ -22,6 +22,7 @@
  mod session_list;
  mod session_view;
@@ -8,20 +8,20 @@
  mod user_facing_error;
  mod utils;
  mod window;
-@@ -32,6 +33,10 @@ use gettextrs::*;
+@@ -32,6 +33,10 @@
  use gtk::{IconTheme, gdk::Display, gio};
  use tracing_subscriber::{EnvFilter, fmt, prelude::*};
-
+ 
 +use std::ops::ControlFlow;
 +use gio::prelude::*;
 +use gtk::glib::{Char, OptionArg, OptionFlags};
 +use gtk::subclass::prelude::ObjectSubclassIsExt;
  use self::{application::*, config::*, i18n::*, utils::OneshotNotifier, window::Window};
-
+ 
  /// The default tokio runtime to be used for async tasks
-@@ -76,5 +81,21 @@ fn main() {
+@@ -77,5 +82,21 @@
          .add_resource_path("/org/gnome/Fractal/icons");
-
+ 
      let app = Application::new();
 +
 +    // Register --minimized/-m option
@@ -41,20 +41,20 @@
 +
      app.run();
  }
---- a/src/application.rs
-+++ b/src/application.rs
-@@ -25,8 +25,10 @@ pub(crate) const APP_HOMEPAGE_URL: &str = "https://gitlab.gnome.org/World/fracta
-
+--- a/src/application.rs	2026-01-04 16:42:22.109497152 +0000
++++ b/src/application.rs	2026-01-04 16:55:13.578674778 +0000
+@@ -26,8 +26,10 @@
+ 
  mod imp {
      use std::cell::Cell;
 +    use std::cell::OnceCell;
-
+ 
      use super::*;
 +    use crate::tray::{spawn_tray, TrayCommand, TrayHandle};
-
+ 
      #[derive(Debug)]
      pub struct Application {
-@@ -38,6 +40,10 @@ mod imp {
+@@ -39,6 +41,10 @@
          pub(super) session_list: SessionList,
          intent_handler: BoundObjectWeakRef<glib::Object>,
          last_network_state: Cell<NetworkState>,
@@ -63,9 +63,9 @@
 +        /// System tray handle.
 +        pub tray_handle: OnceCell<TrayHandle>,
      }
-
+ 
      impl Default for Application {
-@@ -48,6 +54,8 @@ mod imp {
+@@ -49,6 +55,8 @@
                  session_list: Default::default(),
                  intent_handler: Default::default(),
                  last_network_state: Default::default(),
@@ -74,10 +74,10 @@
              }
          }
      }
-@@ -89,6 +97,24 @@ mod imp {
+@@ -89,6 +97,26 @@
                  }
              ));
-
+ 
 +            // Initialize system tray
 +            let mut tray_handle = spawn_tray();
 +            let tray_rx = tray_handle.take_receiver();
@@ -101,7 +101,7 @@
              // Watch the network to log its state.
              let network_monitor = gio::NetworkMonitor::default();
              network_monitor.connect_network_changed(clone!(
-@@ -148,6 +174,18 @@ mod imp {
+@@ -149,6 +177,20 @@
          ///
          /// Returns the main window.
          fn present_main_window(&self) -> Window {
@@ -122,11 +122,11 @@
              let window = if let Some(window) = self.obj().active_window().and_downcast() {
                  window
              } else {
---- a/src/session/notifications/mod.rs
-+++ b/src/session/notifications/mod.rs
-@@ -144,6 +144,11 @@ impl Notifications {
+--- a/src/session/notifications/mod.rs	2026-01-04 16:42:22.111489372 +0000
++++ b/src/session/notifications/mod.rs	2026-01-04 16:43:45.463152097 +0000
+@@ -144,6 +144,11 @@
          }
-
+ 
          Application::default().send_notification(Some(id), &notification);
 +
 +        // Update tray unread indicator
@@ -134,24 +134,24 @@
 +            tray.set_has_unread(true);
 +        }
      }
-
+ 
      /// Ask the system to show the given push notification, if applicable.
---- a/src/window.rs
-+++ b/src/window.rs
-@@ -203,7 +203,9 @@ mod imp {
+--- a/src/window.rs	2026-01-04 16:42:22.110531192 +0000
++++ b/src/window.rs	2026-01-04 16:43:45.463228920 +0000
+@@ -203,7 +203,9 @@
                  warn!("Could not save current session: {error}");
              }
-
+ 
 -            glib::Propagation::Proceed
 +            // Hide to tray instead of closing
 +            self.obj().set_visible(false);
 +            glib::Propagation::Stop
          }
      }
-
---- a/src/session_view/sidebar/mod.blp
-+++ b/src/session_view/sidebar/mod.blp
-@@ -28,6 +28,13 @@
+ 
+--- a/src/session_view/sidebar/mod.blp	2026-01-04 16:42:22.112464733 +0000
++++ b/src/session_view/sidebar/mod.blp	2026-01-04 16:45:38.586824731 +0000
+@@ -30,6 +30,13 @@
        action: "app.about";
      }
    }
@@ -163,3 +163,5 @@
 +    }
 +  }
  }
+ 
+ menu room_row_menu {
