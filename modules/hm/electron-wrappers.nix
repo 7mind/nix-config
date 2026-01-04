@@ -14,10 +14,12 @@ let
     } ''
       mkdir -p $out/bin $out/share
 
-      # Create wrapped binary
-      makeWrapper ${pkg}/bin/${binName} $out/bin/${binName} \
-        --run 'exec systemd-run --user --scope --slice=${slice} "$0".wrapped "$@"' \
-        --add-flags "${flags}"
+      # Create wrapper that runs the app in a resource-limited systemd scope
+      cat > $out/bin/${binName} <<EOF
+#!/usr/bin/env bash
+exec systemd-run --user --scope --slice=${slice} ${pkg}/bin/${binName} ${flags} "\$@"
+EOF
+      chmod +x $out/bin/${binName}
 
       # Copy and patch desktop files
       if [ -d "${pkg}/share/applications" ]; then
