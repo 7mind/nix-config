@@ -25,7 +25,7 @@
       # Unbreaks basic auto brightness by fixing normalization and int/float division.
       gnome-settings-daemon = super.gnome-settings-daemon.overrideAttrs (old: {
         patches = (old.patches or []) ++ [
-          "${cfg-meta.paths.root}/patches/gnome-settings-daemon-ambient-brightness-fixes.patch"
+          ../../patches/gnome-settings-daemon-ambient-brightness-fixes.patch
         ];
       });
 

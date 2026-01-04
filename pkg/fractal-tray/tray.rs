@@ -23,7 +23,11 @@ impl FractalTray {
 
 impl Tray for FractalTray {
     fn icon_name(&self) -> String {
-        "org.gnome.Fractal".to_string()
+        if self.has_unread {
+            "mail-message-new".to_string()
+        } else {
+            "org.gnome.Fractal".to_string()
+        }
     }
 
     fn overlay_icon_pixmap(&self) -> Vec<Icon> {

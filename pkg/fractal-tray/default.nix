@@ -5,10 +5,10 @@
 }:
 
 let
-  trayModule = ./tray.rs;
-  cargoPatch = ./cargo.patch;
-  cargoLockPatch = ./cargo-lock.patch;
-  sourcePatch = ./source.patch;
+  trayModule = builtins.path { path = ./tray.rs; name = "tray.rs"; };
+  cargoPatch = builtins.path { path = ./cargo.patch; name = "cargo.patch"; };
+  cargoLockPatch = builtins.path { path = ./cargo-lock.patch; name = "cargo-lock.patch"; };
+  sourcePatch = builtins.path { path = ./source.patch; name = "source.patch"; };
   cargoPatches = [ cargoPatch cargoLockPatch ];
   allPatches = cargoPatches ++ [ sourcePatch ];
 in
