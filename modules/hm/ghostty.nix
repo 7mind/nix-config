@@ -55,6 +55,8 @@ in
 
         scrollback-limit = 10000;
 
+        app-notifications = "no";
+
         # Don't dim inactive panes
         unfocused-split-opacity = 1;
 

@@ -35,6 +35,20 @@ in
       ACTION=="add", SUBSYSTEM=="iio", ATTR{name}=="als", ATTR{scan_elements/in_illuminance_en}="1"
     '';
 
+    # Allow gnome-settings-daemon to claim sensors from iio-sensor-proxy
+    security.polkit.extraConfig = lib.mkIf alsCfg.enable ''
+      polkit.addRule(function(action, subject) {
+        if (action.id == "net.hadess.SensorProxy.claim-sensor" &&
+            subject.user == "root") {
+          return polkit.Result.YES;
+        }
+        if (action.id == "net.hadess.SensorProxy.claim-sensor" &&
+            subject.isInGroup("users")) {
+          return polkit.Result.YES;
+        }
+      });
+    '';
+
     environment.systemPackages = with pkgs; [
       # This is a dirty fix for annoying "allow inhibit shortcuts?" popups
       # https://discourse.gnome.org/t/virtual-machine-manager-wants-to-inhibit-shortcuts/26017/8
