@@ -65,14 +65,14 @@ in
         keybind = [
           "clear"
 
-          # Copy/Paste - use Super+C for copy to keep Ctrl+C for SIGINT
-          "super+c=copy_to_clipboard"
-          "ctrl+shift+c=copy_to_clipboard"
+          # Copy/Paste - performable: only triggers if there's a selection, otherwise passes through
+          "performable:ctrl+c=copy_to_clipboard"
+          "performable:super+c=copy_to_clipboard"
+          "ctrl+v=paste_from_clipboard"
           "super+v=paste_from_clipboard"
-          "ctrl+shift+v=paste_from_clipboard"
 
-          # Clear screen
-          "super+k=text:\\x0c"
+          # Clear screen and scrollback
+          "super+k=clear_screen"
 
           # Splits
           "super+d=new_split:down"
