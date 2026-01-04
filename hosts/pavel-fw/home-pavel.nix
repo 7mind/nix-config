@@ -9,9 +9,10 @@ let
         mkdir -p $out/bin $out/share
 
         # Create wrapper that launches fractal via kdocker (minimized to tray)
+        # Use icon name (not path) so kdocker looks it up from theme
         cat > $out/bin/fractal <<EOF
     #!/usr/bin/env bash
-    exec ${pkgs.kdocker}/bin/kdocker -q -o -l -i ${pkgs.fractal}/share/icons/hicolor/scalable/apps/org.gnome.Fractal.svg ${pkgs.fractal}/bin/fractal "\$@"
+    exec ${pkgs.kdocker}/bin/kdocker -q -o -l -i org.gnome.Fractal ${pkgs.fractal}/bin/fractal "\$@"
     EOF
         chmod +x $out/bin/fractal
 
