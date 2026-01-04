@@ -17,6 +17,7 @@
   ./kitty.nix
   ./nushell.nix
   ./ssh.nix
+  ./tailscale.nix
   ./tmux.nix
   ./vscodium.nix
   ./wezterm.nix
