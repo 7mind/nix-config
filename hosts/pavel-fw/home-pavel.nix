@@ -14,7 +14,7 @@
     enable = true;
     settings = {
       als.iio = {
-        path = "/sys/bus/iio/devices/iio:device0";
+        path = "/sys/bus/iio/devices";
         thresholds = {
           "0" = "night";
           "20" = "dim";
