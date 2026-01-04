@@ -67,6 +67,42 @@ impl Tray for FractalTray {
         "org.gnome.Fractal".to_string()
     }
 
+    fn attention_icon_pixmap(&self) -> Vec<Icon> {
+        // Draw icon with a red notification dot
+        let size = 22;
+        let mut data = Vec::with_capacity((size * size * 4) as usize);
+        let dot_radius = 4i32;
+        let dot_center_x = size - dot_radius - 1;
+        let dot_center_y = dot_radius + 1;
+
+        for y in 0..size {
+            for x in 0..size {
+                let dx = x - dot_center_x;
+                let dy = y - dot_center_y;
+                let in_dot = dx * dx + dy * dy <= dot_radius * dot_radius;
+
+                if in_dot {
+                    // Red dot
+                    data.push(255); // A
+                    data.push(220); // R
+                    data.push(50);  // G
+                    data.push(50);  // B
+                } else {
+                    // Cornflower blue (Fractal-ish color)
+                    data.push(255); // A
+                    data.push(100); // R
+                    data.push(150); // G
+                    data.push(237); // B
+                }
+            }
+        }
+        vec![Icon {
+            width: size,
+            height: size,
+            data,
+        }]
+    }
+
     fn activate(&mut self, _x: i32, _y: i32) {
         info!("Tray icon activated");
         let _ = self.tx.send(TrayCommand::Show);
