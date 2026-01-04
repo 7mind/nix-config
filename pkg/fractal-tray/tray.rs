@@ -31,7 +31,7 @@ impl Tray for FractalTray {
             return vec![];
         }
         // Red notification dot overlay
-        let size = 22;
+        let size = 24;
         let mut data = Vec::with_capacity((size * size * 4) as usize);
         let dot_radius = 5i32;
         let dot_center_x = size - dot_radius - 1;
@@ -73,8 +73,16 @@ impl Tray for FractalTray {
         "org.gnome.Fractal".to_string()
     }
 
+    fn category(&self) -> ksni::Category {
+        ksni::Category::Communications
+    }
+
     fn status(&self) -> ksni::Status {
         ksni::Status::Active
+    }
+
+    fn attention_icon_name(&self) -> String {
+        self.icon_name()
     }
 
     fn activate(&mut self, _x: i32, _y: i32) {
