@@ -74,11 +74,7 @@ impl Tray for FractalTray {
     }
 
     fn status(&self) -> ksni::Status {
-        if self.has_unread {
-            ksni::Status::NeedsAttention
-        } else {
-            ksni::Status::Active
-        }
+        ksni::Status::Active
     }
 
     fn activate(&mut self, _x: i32, _y: i32) {
