@@ -19,6 +19,12 @@
       default = true;
       description = "Enable fractional scaling via Mutter experimental features";
     };
+
+    smind.desktop.gnome.vrr.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Enable Variable Refresh Rate (VRR) via Mutter experimental features";
+    };
   };
 
   # display settings are being controlled over dbus (org.gnome.Mutter.DisplayConfig), not dconf
@@ -52,11 +58,14 @@
               edge-tiling = true;
               overlay-key = "";
               #workspaces-only-on-primary = true;
-            } // lib.optionalAttrs config.smind.desktop.gnome.fractional-scaling.enable {
-              experimental-features = [
-                "scale-monitor-framebuffer"
-                "xwayland-native-scaling"
-              ];
+              experimental-features =
+                lib.optionals config.smind.desktop.gnome.fractional-scaling.enable [
+                  "scale-monitor-framebuffer"
+                  "xwayland-native-scaling"
+                ]
+                ++ lib.optionals config.smind.desktop.gnome.vrr.enable [
+                  "variable-refresh-rate"
+                ];
             };
 
             "org/gnome/shell" = {

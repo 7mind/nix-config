@@ -258,7 +258,7 @@
           # https://gitlab.com/kira-bruneau/home-config/-/blob/main/package/firefox/default.nix
           search = {
             force = true;
-            default = "ddg";
+            default = "e";
             order = [
               "ddg"
               "google"
@@ -283,6 +283,22 @@
               "Amazon.co.uk".metaData.hidden = "@a";
 
               "perplexity".metaData.alias = "@p";
+
+              ecosia = {
+                name = "Ecosia";
+                urls = [{
+                  template = "https://ecosia.org/search";
+                  params = [
+                    {
+                      name = "q";
+                      value = "{searchTerms}";
+                    }
+                  ];
+                }];
+                icon = "https://ecosia.org/favicon.ico";
+                definedAliases = [ "@e" ];
+              };
+
 
               perplexity = {
                 name = "Perplexity";

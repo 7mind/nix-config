@@ -2,6 +2,8 @@ use ksni::{menu::StandardItem, Icon, MenuItem, Tray, TrayMethods};
 use tokio::sync::mpsc;
 use tracing::{info, warn};
 
+use crate::RUNTIME;
+
 #[derive(Debug)]
 pub enum TrayCommand {
     Show,
@@ -82,13 +84,14 @@ impl Tray for FractalTray {
     }
 }
 
-pub async fn spawn_tray() -> mpsc::UnboundedReceiver<TrayCommand> {
+pub fn spawn_tray() -> mpsc::UnboundedReceiver<TrayCommand> {
     let (tx, rx) = mpsc::unbounded_channel();
     let tray = FractalTray::new(tx);
 
     info!("Spawning system tray icon...");
 
-    tokio::spawn(async move {
+    // Spawn on fractal's tokio runtime
+    RUNTIME.spawn(async move {
         match tray.spawn().await {
             Ok(handle) => {
                 info!("System tray icon created successfully");

@@ -52,12 +52,12 @@
              ));
 
 +            // Initialize system tray
++            let mut tray_rx = spawn_tray();
 +            spawn!(clone!(
 +                #[weak(rename_to = obj)]
 +                self.obj(),
 +                async move {
-+                    let mut rx = spawn_tray().await;
-+                    while let Some(cmd) = rx.recv().await {
++                    while let Some(cmd) = tray_rx.recv().await {
 +                        match cmd {
 +                            TrayCommand::Show => { obj.imp().present_main_window(); }
 +                            TrayCommand::Quit => { obj.quit(); }
@@ -98,3 +98,17 @@
          }
      }
 
+--- a/src/session_view/sidebar/mod.blp
++++ b/src/session_view/sidebar/mod.blp
+@@ -28,6 +28,13 @@
+       action: "app.about";
+     }
+   }
++
++  section {
++    item {
++      label: _("_Quit");
++      action: "app.quit";
++    }
++  }
+ }

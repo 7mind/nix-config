@@ -141,7 +141,9 @@ in
     roles.desktop.generic-gnome = true;
     isLaptop = true;
     power-management.enable = true;
+    power-management.auto-refresh-rate.enable = true;
     desktop.gnome.fractional-scaling.enable = true;
+    desktop.gnome.vrr.enable = true;
     desktop.gnome.adaptive-brightness.enable = true;
 
     locale.ie.enable = true;
