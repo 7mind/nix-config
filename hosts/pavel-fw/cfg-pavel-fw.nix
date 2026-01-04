@@ -145,7 +145,7 @@ in
     power-management.auto-refresh-rate.enable = true;
     desktop.gnome.fractional-scaling.enable = true;
     desktop.gnome.vrr.enable = true;
-    desktop.gnome.adaptive-brightness.enable = true;
+    desktop.gnome.ambient-light-sensor.enable = true;
 
     locale.ie.enable = true;
 

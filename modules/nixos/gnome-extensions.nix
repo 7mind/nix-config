@@ -2,7 +2,7 @@
 
 let
   hibernateCfg = config.smind.desktop.gnome.hibernate;
-  adaptiveBrightnessCfg = config.smind.desktop.gnome.adaptive-brightness;
+  alsCfg = config.smind.desktop.gnome.ambient-light-sensor;
 
   # Patch extensions to support current GNOME shell version
   patchGnomeExtension = ext: ext.overrideAttrs (old: {
@@ -16,21 +16,21 @@ let
 in
 {
   options = {
-    smind.desktop.gnome.adaptive-brightness.enable = lib.mkOption {
+    smind.desktop.gnome.ambient-light-sensor.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "Enable adaptive brightness extension (requires ambient light sensor)";
+      description = "Enable ambient light sensor support for GNOME's automatic screen brightness";
     };
   };
 
   config = lib.mkIf config.smind.desktop.gnome.enable {
 
-    # Enable iio-sensor-proxy for ambient light sensor support
-    hardware.sensor.iio.enable = lib.mkIf adaptiveBrightnessCfg.enable true;
+    # Enable iio-sensor-proxy for ambient light sensor support (GNOME 49+ uses this natively)
+    hardware.sensor.iio.enable = lib.mkIf alsCfg.enable true;
 
     # Enable IIO buffer scan elements for HID ambient light sensor (Framework 16)
     # This ensures iio-sensor-proxy can read the sensor via buffer mode
-    services.udev.extraRules = lib.mkIf adaptiveBrightnessCfg.enable ''
+    services.udev.extraRules = lib.mkIf alsCfg.enable ''
       # Enable illuminance scan element for ALS buffer mode
       ACTION=="add", SUBSYSTEM=="iio", ATTR{name}=="als", ATTR{scan_elements/in_illuminance_en}="1"
     '';
@@ -51,8 +51,7 @@ in
         vicinae
         # tray-icons-reloaded
       ])
-    ++ lib.optional hibernateCfg.enable hibernateExtensionPatched
-    ++ lib.optional adaptiveBrightnessCfg.enable pkgs.gnomeExtensions.adaptive-brightness;
+    ++ lib.optional hibernateCfg.enable hibernateExtensionPatched;
 
     programs.dconf = {
       enable = true;
@@ -71,8 +70,7 @@ in
                 gnomeExtensions.vicinae.extensionUuid
                 gnome-shortcut-inhibitor.extensionUuid
                 # pkgs.gnomeExtensions.tray-icons-reloaded.extensionUuid
-              ] ++ lib.optional hibernateCfg.enable hibernateExtensionPatched.extensionUuid
-                ++ lib.optional adaptiveBrightnessCfg.enable pkgs.gnomeExtensions.adaptive-brightness.extensionUuid;
+              ] ++ lib.optional hibernateCfg.enable hibernateExtensionPatched.extensionUuid;
             };
 
           };

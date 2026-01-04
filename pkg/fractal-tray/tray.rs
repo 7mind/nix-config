@@ -59,7 +59,7 @@ impl Tray for FractalTray {
         if self.has_unread.load(Ordering::Relaxed) {
             ksni::Status::NeedsAttention
         } else {
-            ksni::Status::Passive
+            ksni::Status::Active
         }
     }
 
