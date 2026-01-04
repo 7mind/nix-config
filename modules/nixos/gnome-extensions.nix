@@ -2,6 +2,7 @@
 
 let
   hibernateCfg = config.smind.desktop.gnome.hibernate;
+  adaptiveBrightnessCfg = config.smind.desktop.gnome.adaptive-brightness;
 
   # Patch extensions to support current GNOME shell version
   patchGnomeExtension = ext: ext.overrideAttrs (old: {
@@ -14,7 +15,13 @@ let
   hibernateExtensionPatched = patchGnomeExtension pkgs.gnomeExtensions.hibernate-status-button;
 in
 {
-  options = { };
+  options = {
+    smind.desktop.gnome.adaptive-brightness.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Enable adaptive brightness extension (requires ambient light sensor)";
+    };
+  };
 
   config = lib.mkIf config.smind.desktop.gnome.enable {
 
@@ -34,7 +41,8 @@ in
         vicinae
         # tray-icons-reloaded
       ])
-    ++ lib.optional hibernateCfg.enable hibernateExtensionPatched;
+    ++ lib.optional hibernateCfg.enable hibernateExtensionPatched
+    ++ lib.optional adaptiveBrightnessCfg.enable pkgs.gnomeExtensions.adaptive-brightness;
 
     programs.dconf = {
       enable = true;
@@ -53,7 +61,8 @@ in
                 gnomeExtensions.vicinae.extensionUuid
                 gnome-shortcut-inhibitor.extensionUuid
                 # pkgs.gnomeExtensions.tray-icons-reloaded.extensionUuid
-              ] ++ lib.optional hibernateCfg.enable hibernateExtensionPatched.extensionUuid;
+              ] ++ lib.optional hibernateCfg.enable hibernateExtensionPatched.extensionUuid
+                ++ lib.optional adaptiveBrightnessCfg.enable pkgs.gnomeExtensions.adaptive-brightness.extensionUuid;
             };
 
           };

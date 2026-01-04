@@ -145,6 +145,7 @@ in
     isLaptop = true;
     power-management.enable = true;
     desktop.gnome.fractional-scaling.enable = true;
+    desktop.gnome.adaptive-brightness.enable = true;
 
     locale.ie.enable = true;
 

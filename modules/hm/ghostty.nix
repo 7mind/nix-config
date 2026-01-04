@@ -55,6 +55,9 @@ in
 
         scrollback-limit = 10000;
 
+        # Don't dim inactive panes
+        unfocused-split-opacity = 1;
+
         copy-on-select = "clipboard";
         clipboard-paste-protection = false;
 
