@@ -25,6 +25,9 @@ in
 
   config = lib.mkIf config.smind.desktop.gnome.enable {
 
+    # Enable iio-sensor-proxy for ambient light sensor support
+    hardware.sensor.iio.enable = lib.mkIf adaptiveBrightnessCfg.enable true;
+
     environment.systemPackages = with pkgs; [
       # This is a dirty fix for annoying "allow inhibit shortcuts?" popups
       # https://discourse.gnome.org/t/virtual-machine-manager-wants-to-inhibit-shortcuts/26017/8
