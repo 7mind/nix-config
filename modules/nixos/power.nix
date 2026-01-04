@@ -158,19 +158,45 @@ in
     })
 
     # Auto-switch power-profiles-daemon profiles based on AC/battery
-    (lib.mkIf cfg.auto-profile.enable {
-      assertions = [{
-        assertion = config.services.power-profiles-daemon.enable;
-        message = "auto-profile requires services.power-profiles-daemon.enable = true";
-      }];
+    (lib.mkIf cfg.auto-profile.enable (
+      let
+        setProfileScript = pkgs.writeShellScript "power-profile-set" ''
+          # Check if any AC adapter is online
+          for supply in /sys/class/power_supply/*/; do
+            if [ -f "$supply/type" ] && [ "$(cat "$supply/type")" = "Mains" ]; then
+              if [ -f "$supply/online" ] && [ "$(cat "$supply/online")" = "1" ]; then
+                ${pkgs.power-profiles-daemon}/bin/powerprofilesctl set ${cfg.auto-profile.onAC}
+                exit 0
+              fi
+            fi
+          done
+          # No AC found, use battery profile
+          ${pkgs.power-profiles-daemon}/bin/powerprofilesctl set ${cfg.auto-profile.onBattery}
+        '';
+      in {
+        assertions = [{
+          assertion = config.services.power-profiles-daemon.enable;
+          message = "auto-profile requires services.power-profiles-daemon.enable = true";
+        }];
 
-      services.udev.extraRules = ''
-        # Switch to ${cfg.auto-profile.onAC} when AC is connected
-        ACTION=="change", SUBSYSTEM=="power_supply", ATTR{type}=="Mains", ATTR{online}=="1", RUN+="${pkgs.power-profiles-daemon}/bin/powerprofilesctl set ${cfg.auto-profile.onAC}"
-        # Switch to ${cfg.auto-profile.onBattery} when on battery
-        ACTION=="change", SUBSYSTEM=="power_supply", ATTR{type}=="Mains", ATTR{online}=="0", RUN+="${pkgs.power-profiles-daemon}/bin/powerprofilesctl set ${cfg.auto-profile.onBattery}"
-      '';
-    })
+        # Use acpid for AC plug/unplug events
+        services.acpid.enable = true;
+        services.acpid.acEventCommands = "${setProfileScript}";
+
+        # Set correct power profile at boot (acpid only fires on events, not boot)
+        systemd.services.power-profile-boot = {
+          description = "Set power profile based on AC status at boot";
+          wantedBy = [ "multi-user.target" ];
+          after = [ "power-profiles-daemon.service" ];
+          requires = [ "power-profiles-daemon.service" ];
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            ExecStart = setProfileScript;
+          };
+        };
+      }
+    ))
 
     # Auto-switch display refresh rate based on power profile (GNOME/Wayland)
     (lib.mkIf cfg.auto-refresh-rate.enable {
