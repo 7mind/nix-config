@@ -2,14 +2,14 @@ diff -ruN a/src/application.rs b/src/application.rs
 --- a/src/application.rs	2026-01-04 17:39:53.649303460 +0000
 +++ b/src/application.rs	2026-01-04 17:39:53.649592825 +0000
 @@ -26,8 +26,10 @@
- 
+
  mod imp {
      use std::cell::Cell;
 +    use std::cell::OnceCell;
- 
+
      use super::*;
 +    use crate::tray::{spawn_tray, TrayCommand, TrayHandle};
- 
+
      #[derive(Debug)]
      pub struct Application {
 @@ -39,6 +41,10 @@
@@ -21,7 +21,7 @@ diff -ruN a/src/application.rs b/src/application.rs
 +        /// System tray handle.
 +        pub tray_handle: OnceCell<TrayHandle>,
      }
- 
+
      impl Default for Application {
 @@ -49,6 +55,8 @@
                  session_list: Default::default(),
@@ -35,7 +35,7 @@ diff -ruN a/src/application.rs b/src/application.rs
 @@ -89,6 +97,26 @@
                  }
              ));
- 
+
 +            // Initialize system tray
 +            let mut tray_handle = spawn_tray();
 +            let tray_rx = tray_handle.take_receiver();
@@ -59,7 +59,7 @@ diff -ruN a/src/application.rs b/src/application.rs
              // Watch the network to log its state.
              let network_monitor = gio::NetworkMonitor::default();
              network_monitor.connect_network_changed(clone!(
-@@ -149,6 +177,20 @@
+@@ -149,12 +177,28 @@
          ///
          /// Returns the main window.
          fn present_main_window(&self) -> Window {
@@ -77,9 +77,18 @@ diff -ruN a/src/application.rs b/src/application.rs
 +                };
 +                return window;
 +            }
-             let window = if let Some(window) = self.obj().active_window().and_downcast() {
+-            let window = if let Some(window) = self.obj().active_window().and_downcast() {
++            let window = if let Some(window) = self.obj().active_window().and_downcast::<Window>() {
++                // Force to foreground by toggling visibility (bypasses Wayland focus stealing prevention)
++                window.set_visible(false);
                  window
              } else {
+                 Window::new(&self.obj())
+             };
+
+             window.present();
+             window
+         }
 diff -ruN a/src/main.rs b/src/main.rs
 --- a/src/main.rs	2026-01-04 17:39:53.649250221 +0000
 +++ b/src/main.rs	2026-01-04 17:39:53.649491928 +0000
@@ -94,17 +103,17 @@ diff -ruN a/src/main.rs b/src/main.rs
 @@ -32,6 +33,10 @@
  use gtk::{IconTheme, gdk::Display, gio};
  use tracing_subscriber::{EnvFilter, fmt, prelude::*};
- 
+
 +use std::ops::ControlFlow;
 +use gio::prelude::*;
 +use gtk::glib::{Char, OptionArg, OptionFlags};
 +use gtk::subclass::prelude::ObjectSubclassIsExt;
  use self::{application::*, config::*, i18n::*, utils::OneshotNotifier, window::Window};
- 
+
  /// The default tokio runtime to be used for async tasks
 @@ -77,5 +82,21 @@
          .add_resource_path("/org/gnome/Fractal/icons");
- 
+
      let app = Application::new();
 +
 +    // Register --minimized/-m option
@@ -129,7 +138,7 @@ diff -ruN a/src/session/notifications/mod.rs b/src/session/notifications/mod.rs
 +++ b/src/session/notifications/mod.rs	2026-01-04 17:39:53.649623311 +0000
 @@ -144,6 +144,14 @@
          }
- 
+
          Application::default().send_notification(Some(id), &notification);
 +
 +        // Update tray unread indicator
@@ -140,7 +149,7 @@ diff -ruN a/src/session/notifications/mod.rs b/src/session/notifications/mod.rs
 +            tracing::warn!("Tray handle not available");
 +        }
      }
- 
+
      /// Ask the system to show the given push notification, if applicable.
 diff -ruN a/src/session_view/sidebar/mod.blp b/src/session_view/sidebar/mod.blp
 --- a/src/session_view/sidebar/mod.blp	2026-01-04 17:39:53.649424443 +0000
@@ -157,7 +166,7 @@ diff -ruN a/src/session_view/sidebar/mod.blp b/src/session_view/sidebar/mod.blp
 +    }
 +  }
  }
- 
+
  menu room_row_menu {
 diff -ruN a/src/window.rs b/src/window.rs
 --- a/src/window.rs	2026-01-04 17:39:53.649349645 +0000
@@ -165,11 +174,11 @@ diff -ruN a/src/window.rs b/src/window.rs
 @@ -203,7 +203,9 @@
                  warn!("Could not save current session: {error}");
              }
- 
+
 -            glib::Propagation::Proceed
 +            // Hide to tray instead of closing
 +            self.obj().set_visible(false);
 +            glib::Propagation::Stop
          }
      }
- 
+

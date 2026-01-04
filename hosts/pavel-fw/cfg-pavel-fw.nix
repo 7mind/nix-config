@@ -30,30 +30,32 @@ in
   # Override the default from kernel-settings module (6.17) - Strix Point needs latest
   boot.kernelPackages = lib.mkForce pkgs.linuxPackages_latest;
 
-  # Patch VPE idle timeout to fix suspend/resume on Strix Point
-  # See: https://www.mail-archive.com/amd-gfx@lists.freedesktop.org/msg127724.html
-  boot.kernelPatches = [{
-    name = "amdgpu-vpe-idle-timeout-fix";
-    patch = pkgs.writeText "vpe-timeout.patch" ''
-      --- a/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
-      +++ b/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
-      @@ -37,7 +37,7 @@
-
-       /* 1 second timeout */
-      -#define VPE_IDLE_TIMEOUT	msecs_to_jiffies(1000)
-      +#define VPE_IDLE_TIMEOUT	msecs_to_jiffies(2000)
-
-       #define VPE_MAX_DPM_LEVEL			4
-       #define FIXED1_8_BITS_PER_FRACTIONAL_PART	8
-    '';
-  }];
+  # Patch VPE DPM0 check to include Strix Point (6.1.0) - fixes suspend/resume hangs
+  # Upstream only has Strix Halo (6.1.1) with firmware check that doesn't work for Strix Point
+  # See: https://gitlab.freedesktop.org/drm/amd/-/issues/XXXXX
+  # boot.kernelPatches = [{
+  #   name = "amdgpu-vpe-strix-point-dpm0-fix";
+  #   patch = pkgs.writeText "vpe-strix-point.patch" ''
+  #     --- a/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
+  #     +++ b/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
+  #     @@ -325,6 +325,8 @@ static bool vpe_need_dpm0_at_power_down(struct amdgpu_device *adev)
+  #      {
+  #      	switch (amdgpu_ip_version(adev, VPE_HWIP, 0)) {
+  #     +	case IP_VERSION(6, 1, 0):
+  #     +		return true; /* Strix Point needs DPM0 check regardless of PMFW version */
+  #      	case IP_VERSION(6, 1, 1):
+  #      		return adev->pm.fw_version < 0x0a640500;
+  #      	default:
+  #   '';
+  # }];
 
   boot.kernelParams = [
     "quiet"
     "splash"
     # AMD GPU resume workarounds for Strix Point
-    "amdgpu.sg_display=0" # Disable scatter-gather display (helps resume)
-    "amdgpu.abmlevel=0" # Disable adaptive backlight (reduces resume complexity)
+    "amdgpu.pg_mask=0" # Disable power gating (potential fix for VPE suspend hang)
+    #"amdgpu.sg_display=0" # Disable scatter-gather display (helps resume)
+    #"amdgpu.abmlevel=0" # Disable adaptive backlight (reduces resume complexity)
     # Prevent simpledrm from taking over framebuffer before amdgpu loads (for Plymouth)
     "initcall_blacklist=simpledrm_platform_driver_init"
   ];
@@ -145,7 +147,7 @@ in
     power-management.auto-refresh-rate.enable = true;
     desktop.gnome.fractional-scaling.enable = true;
     desktop.gnome.vrr.enable = true;
-    desktop.gnome.ambient-light-sensor.enable = true;
+    desktop.gnome.ambient-light-sensor.enable = false;
 
     locale.ie.enable = true;
 

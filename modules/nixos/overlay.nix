@@ -21,13 +21,12 @@
 
       fractal-tray = pkgs.callPackage "${cfg-meta.paths.pkg}/fractal-tray/default.nix" { };
 
-      # Fix ambient brightness initialization in GNOME 49+ (MR !447)
-      # Unbreaks basic auto brightness by fixing normalization and int/float division.
-      gnome-settings-daemon = super.gnome-settings-daemon.overrideAttrs (old: {
-        patches = (old.patches or []) ++ [
-          ../../patches/gnome-settings-daemon-ambient-brightness-fixes.patch
-        ];
-      });
+      # GNOME adaptive brightness patches disabled - using wluma instead
+      # gnome-settings-daemon = super.gnome-settings-daemon.overrideAttrs (old: {
+      #   patches = (old.patches or []) ++ [
+      #     ../../patches/gnome-settings-daemon-ambient-brightness-fixes.patch
+      #   ];
+      # });
 
 
 

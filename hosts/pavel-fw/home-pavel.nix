@@ -10,6 +10,27 @@
     pkgs.fractal-tray
   ];
 
+  services.wluma = {
+    enable = true;
+    settings = {
+      als.iio = {
+        path = "/sys/bus/iio/devices/iio:device0";
+        thresholds = {
+          "0" = "night";
+          "20" = "dim";
+          "80" = "normal";
+          "250" = "bright";
+          "500" = "outdoors";
+        };
+      };
+      output.backlight = [{
+        name = "eDP-1";
+        path = "/sys/class/backlight/nvidia_wmi_ec_backlight";
+        capturer = "none";
+      }];
+    };
+  };
+
   smind.hm = {
     roles.desktop = true;
     wezterm.fontSize = 11;
