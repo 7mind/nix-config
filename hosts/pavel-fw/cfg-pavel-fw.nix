@@ -119,6 +119,16 @@ in
 
   # Framework-specific services
   hardware.sensor.iio.enable = true; # ALS sensor for wluma
+
+  # Allow wluma to claim sensors from iio-sensor-proxy
+  security.polkit.extraConfig = ''
+    polkit.addRule(function(action, subject) {
+      if (action.id == "net.hadess.SensorProxy.claim-sensor") {
+        return polkit.Result.YES;
+      }
+    });
+  '';
+
   services.power-profiles-daemon.enable = true;
   smind.power-management.auto-profile.enable = true;
   smind.power-management.auto-profile.onAC = "performance";
@@ -132,6 +142,9 @@ in
     # Framework Laptop 16 Keyboard Module - ANSI (32ac:0012)
     SUBSYSTEM=="hidraw", ATTRS{idVendor}=="32ac", ATTRS{idProduct}=="0012", MODE="0660", GROUP="users", TAG+="uaccess"
     SUBSYSTEM=="usb", ATTRS{idVendor}=="32ac", ATTRS{idProduct}=="0012", MODE="0660", GROUP="users", TAG+="uaccess"
+
+    # Enable illuminance scan element for ALS buffer mode (Framework 16)
+    ACTION=="add", SUBSYSTEM=="iio", ATTR{name}=="als", ATTR{scan_elements/in_illuminance_en}="1"
   '';
 
   # Workaround: Unload MT7925e WiFi before suspend/hibernate (driver doesn't support PM properly)
