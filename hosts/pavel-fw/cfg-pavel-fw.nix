@@ -119,6 +119,9 @@ in
   services.power-profiles-daemon.enable = true;
   smind.power-management.auto-profile.enable = true;
 
+  # Ambient light sensor for adaptive screen brightness
+  hardware.sensor.iio.enable = true;
+
   # QMK keyboard firmware support (Framework 16 uses QMK)
   # Use https://keyboard.frame.work/ for configuration
   hardware.keyboard.qmk.enable = true;

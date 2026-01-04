@@ -49,7 +49,7 @@ in
 
     cpuQuota = lib.mkOption {
       type = lib.types.str;
-      default = "5%";
+      default = "50%";
       description = "CPU quota for heavy apps slice";
     };
 
