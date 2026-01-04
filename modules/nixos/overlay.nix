@@ -21,15 +21,15 @@
 
       fractal-tray = pkgs.callPackage "${cfg-meta.paths.pkg}/fractal-tray/default.nix" { };
 
-      # Fix ambient brightness initialization in GNOME 49+
-      # When gsd-power starts, ambient_percentage_old is -1 and never updates
-      # because gsd_backlight_get_brightness returns -1 (backlight moved to mutter)
-      # This patch uses 50% as default for initial normalization
+      # Fix ambient brightness initialization in GNOME 49+ (MR !447)
+      # Unbreaks basic auto brightness by fixing normalization and int/float division.
       gnome-settings-daemon = super.gnome-settings-daemon.overrideAttrs (old: {
         patches = (old.patches or []) ++ [
-          "${cfg-meta.paths.root}/patches/gnome-settings-daemon-ambient-brightness-init.patch"
+          "${cfg-meta.paths.root}/patches/gnome-settings-daemon-ambient-brightness-fixes.patch"
         ];
       });
+
+
 
       nix-apple-fonts = (cfg-flakes.nix-apple-fonts.default.overrideAttrs (drv: {
         # override install script to put fonts into /share/fonts, not /usr/share/fonts - where they don't work.
