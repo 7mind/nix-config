@@ -214,8 +214,8 @@ in
     allowedUDPPorts = [ ];
   };
 
-  # OpenSnitch application firewall
-  smind.net.opensnitch.enable = true;
+  # OpenSnitch application firewall (disabled - adds ~80 wakeups/s overhead)
+  smind.net.opensnitch.enable = false;
 
   time.timeZone = "Europe/Dublin";
 
