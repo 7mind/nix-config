@@ -7,7 +7,7 @@
   ];
 
   home.packages = [
-    #pkgs.fractal-tray
+    pkgs.fractal-tray
   ];
 
   smind.hm = {
@@ -38,7 +38,7 @@
       }
       {
         name = "fractal";
-        exec = "${config.home.profileDirectory}/bin/fractal";
+        exec = "${config.home.profileDirectory}/bin/fractal --minimized";
       }
     ];
   };
