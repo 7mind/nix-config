@@ -78,11 +78,29 @@ impl Tray for FractalTray {
     }
 
     fn status(&self) -> ksni::Status {
-        ksni::Status::Active
+        if self.has_unread {
+            ksni::Status::NeedsAttention
+        } else {
+            ksni::Status::Active
+        }
     }
 
     fn attention_icon_name(&self) -> String {
         self.icon_name()
+    }
+
+    fn tool_tip(&self) -> ksni::ToolTip {
+        let description = if self.has_unread {
+            "Unread messages"
+        } else {
+            "Fractal"
+        };
+        ksni::ToolTip {
+            icon_name: self.icon_name(),
+            title: "Fractal".to_string(),
+            description: description.to_string(),
+            ..Default::default()
+        }
     }
 
     fn activate(&mut self, _x: i32, _y: i32) {
