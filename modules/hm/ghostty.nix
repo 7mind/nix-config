@@ -55,12 +55,12 @@ in
 
         scrollback-limit = 10000;
 
-        app-notifications = "no";
+        app-notifications = false;
 
         # Don't dim inactive panes
         unfocused-split-opacity = 1;
 
-        copy-on-select = "clipboard";
+        copy-on-select = false;
         selection-clear-on-copy = true;
         clipboard-paste-protection = false;
 
