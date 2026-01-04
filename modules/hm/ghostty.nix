@@ -65,11 +65,14 @@ in
         keybind = [
           "clear"
 
-          # Copy/Paste (Ctrl+C copies if selection, otherwise sends SIGINT)
-          "ctrl+c=copy_to_clipboard"
-          "ctrl+shift+c=text:\\x03"
-          "ctrl+v=paste_from_clipboard"
-          "ctrl+shift+v=text:\\x16"
+          # Copy/Paste - use Super+C for copy to keep Ctrl+C for SIGINT
+          "super+c=copy_to_clipboard"
+          "ctrl+shift+c=copy_to_clipboard"
+          "super+v=paste_from_clipboard"
+          "ctrl+shift+v=paste_from_clipboard"
+
+          # Clear screen
+          "super+k=text:\\x0c"
 
           # Splits
           "super+d=new_split:down"
