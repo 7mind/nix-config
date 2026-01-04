@@ -112,7 +112,7 @@
       enable = true;
       backend = "gnome-keyring";
       sshAgent = "gcr";
-      displayManagers = [ "login" "sddm" "lightdm" "greetd" "gdm" ];
+      displayManagers = [ "login" "sddm" "lightdm" "greetd" "gdm" "gdm-password" "gdm-fingerprint" "gdm-autologin" ];
     };
 
     programs.ssh = {

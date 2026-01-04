@@ -34,12 +34,12 @@
             in
             {
               "org/gnome/desktop/input-sources" = {
-                xkb-options = [
-                  "terminate:ctrl_alt_bksp"
-                  # "grp:sclk_toggle" # not working anymore under gnome wayland
-                  # "lv3:ralt_switch"
-                  # "eurosign:4"
-                ];
+                #xkb-options = [
+                # "terminate:ctrl_alt_bksp" # only works for xwayland
+                # "grp:sclk_toggle" # not working anymore under gnome wayland
+                # "lv3:ralt_switch"
+                # "eurosign:4"
+                #];
               };
               "org/gnome/mutter/wayland/keybindings" = {
                 restore-shortcuts = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
