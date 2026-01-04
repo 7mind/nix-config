@@ -7,7 +7,7 @@
   ];
 
   home.packages = [
-    pkgs.fractal
+    pkgs.fractal-tray
   ];
 
   smind.hm = {
