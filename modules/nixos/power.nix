@@ -14,17 +14,22 @@ let
       if [ -n "$MONITOR" ]; then
         echo "$MONITOR"
       else
-        ${pkgs.gnome-randr}/bin/gnome-randr query 2>/dev/null | ${pkgs.gawk}/bin/awk 'NR==1 {print $1}' || echo ""
+        # Find first line that looks like a monitor name (eDP-1, DP-1, HDMI-1, etc.)
+        ${pkgs.gnome-randr}/bin/gnome-randr query 2>/dev/null | \
+          ${pkgs.gawk}/bin/awk '/^(eDP|DP|HDMI|VGA|DVI)-[0-9]/ {print $1; exit}'
       fi
     }
 
     get_current_resolution() {
       local monitor="$1"
+      # Find line with * (current mode) under the monitor section
+      # Format: "  2560x1600@165.000  2560x1600  165.00*  [scales]"
       ${pkgs.gnome-randr}/bin/gnome-randr query 2>/dev/null | \
         ${pkgs.gawk}/bin/awk -v mon="$monitor" '
           $1 == mon { in_monitor = 1; next }
-          /^[A-Za-z]/ && in_monitor { exit }
+          /^[A-Za-z]/ && !/^[[:space:]]/ && in_monitor { exit }
           in_monitor && /\*/ {
+            # First field after trimming is the mode (e.g., 2560x1600@165.000)
             gsub(/^[[:space:]]+/, "")
             split($1, parts, "@")
             print parts[1]
@@ -37,22 +42,28 @@ let
       local monitor="$1"
       local resolution="$2"
       local target_rate="$3"
+      # Find mode matching resolution with rate closest to target
+      # Prefer non-VRR modes (without +vrr suffix)
       ${pkgs.gnome-randr}/bin/gnome-randr query 2>/dev/null | \
         ${pkgs.gawk}/bin/awk -v mon="$monitor" -v res="$resolution" -v rate="$target_rate" '
-          BEGIN { best_mode = ""; best_diff = 999999 }
+          BEGIN { best_mode = ""; best_diff = 999999; best_has_vrr = 1 }
           $1 == mon { in_monitor = 1; next }
-          /^[A-Za-z]/ && in_monitor { exit }
-          in_monitor {
+          /^[A-Za-z]/ && !/^[[:space:]]/ && in_monitor { exit }
+          in_monitor && /^[[:space:]]/ {
             gsub(/^[[:space:]]+/, "")
             mode = $1
-            gsub(/[*+]/, "", mode)
-            if (index(mode, res "@") == 1) {
-              split(mode, parts, "@")
+            has_vrr = (index(mode, "+vrr") > 0)
+            clean_mode = mode
+            gsub(/\+vrr$/, "", clean_mode)
+            if (index(clean_mode, res "@") == 1) {
+              split(clean_mode, parts, "@")
               mode_rate = parts[2] + 0
               diff = (mode_rate - rate) > 0 ? (mode_rate - rate) : (rate - mode_rate)
-              if (diff < best_diff) {
+              # Prefer non-VRR modes, then closest rate
+              if (diff < best_diff || (diff == best_diff && !has_vrr && best_has_vrr)) {
                 best_diff = diff
-                best_mode = mode
+                best_mode = clean_mode
+                best_has_vrr = has_vrr
               }
             }
           }

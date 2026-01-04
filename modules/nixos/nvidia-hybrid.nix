@@ -175,6 +175,12 @@ in
 
         boot.kernelModules = [ "vfio-pci" ];
 
+        # Enable NVIDIA RTD3 (Runtime D3) power management
+        # 0x02 = Fine-grained power management, allows GPU to power down when idle
+        boot.extraModprobeConfig = ''
+          options nvidia NVreg_DynamicPowerManagement=0x02
+        '';
+
         environment.systemPackages = [
           gpuBindVfio
           gpuBindNvidia
@@ -182,6 +188,18 @@ in
         ];
 
         systemd.services.nvidia-persistenced.enable = false;
+
+        # Force session to use AMD iGPU by default
+        # This allows NVIDIA GPU to power down via RTD3 when not in use
+        # Use nvidia-offload for explicit GPU workloads
+        environment.sessionVariables = {
+          # Default to Mesa/AMD for OpenGL
+          __GLX_VENDOR_LIBRARY_NAME = "mesa";
+          # Default to AMD (radv) for Vulkan
+          VK_DRIVER_FILES = "/run/opengl-driver/share/vulkan/icd.d/radeon_icd.x86_64.json";
+          # Ensure EGL uses Mesa
+          __EGL_VENDOR_LIBRARY_FILENAMES = "/run/opengl-driver/share/glvnd/egl_vendor.d/50_mesa.json";
+        };
       };
 
       # Minimal config when GPU is not present (just AMD iGPU)
