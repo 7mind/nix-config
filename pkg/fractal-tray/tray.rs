@@ -1,6 +1,4 @@
 use ksni::{menu::StandardItem, Icon, MenuItem, Tray, TrayMethods};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
 
@@ -14,31 +12,53 @@ pub enum TrayCommand {
 
 pub struct FractalTray {
     tx: mpsc::UnboundedSender<TrayCommand>,
-    has_unread: Arc<AtomicBool>,
+    pub has_unread: bool,
 }
 
 impl FractalTray {
-    pub fn new(tx: mpsc::UnboundedSender<TrayCommand>, has_unread: Arc<AtomicBool>) -> Self {
-        Self { tx, has_unread }
+    pub fn new(tx: mpsc::UnboundedSender<TrayCommand>) -> Self {
+        Self { tx, has_unread: false }
     }
 }
 
 impl Tray for FractalTray {
     fn icon_name(&self) -> String {
-        // Use the installed Fractal icon
-        "org.gnome.Fractal".to_string()
+        // Return empty to force icon_pixmap usage (so we can draw the dot)
+        String::new()
     }
 
     fn icon_pixmap(&self) -> Vec<Icon> {
-        // Fallback: simple 22x22 blue icon if icon_name doesn't work
         let size = 22;
         let mut data = Vec::with_capacity((size * size * 4) as usize);
-        for _ in 0..(size * size) {
-            // ARGB format: blue color
-            data.push(255); // A
-            data.push(100); // R
-            data.push(150); // G
-            data.push(237); // B - cornflower blue
+        let has_unread = self.has_unread;
+        let dot_radius = 4i32;
+        let dot_center_x = size - dot_radius - 1;
+        let dot_center_y = dot_radius + 1;
+
+        for y in 0..size {
+            for x in 0..size {
+                let in_dot = if has_unread {
+                    let dx = x - dot_center_x;
+                    let dy = y - dot_center_y;
+                    dx * dx + dy * dy <= dot_radius * dot_radius
+                } else {
+                    false
+                };
+
+                if in_dot {
+                    // Red dot
+                    data.push(255); // A
+                    data.push(220); // R
+                    data.push(50);  // G
+                    data.push(50);  // B
+                } else {
+                    // Cornflower blue (Fractal-ish color)
+                    data.push(255); // A
+                    data.push(100); // R
+                    data.push(150); // G
+                    data.push(237); // B
+                }
+            }
         }
         vec![Icon {
             width: size,
@@ -138,8 +158,7 @@ impl Tray for FractalTray {
 #[derive(Debug)]
 pub struct TrayHandle {
     rx: Option<mpsc::UnboundedReceiver<TrayCommand>>,
-    has_unread: Arc<AtomicBool>,
-    update_tx: mpsc::UnboundedSender<()>,
+    update_tx: mpsc::UnboundedSender<bool>,
 }
 
 impl TrayHandle {
@@ -148,20 +167,15 @@ impl TrayHandle {
     }
 
     pub fn set_has_unread(&self, value: bool) {
-        let old = self.has_unread.swap(value, Ordering::Relaxed);
-        if old != value {
-            info!("Tray unread status changed: {} -> {}", old, value);
-            let _ = self.update_tx.send(());
-        }
+        info!("Tray set_has_unread: {}", value);
+        let _ = self.update_tx.send(value);
     }
 }
 
 pub fn spawn_tray() -> TrayHandle {
     let (tx, rx) = mpsc::unbounded_channel();
-    let (update_tx, mut update_rx) = mpsc::unbounded_channel::<()>();
-    let has_unread = Arc::new(AtomicBool::new(false));
-    let has_unread_clone = has_unread.clone();
-    let tray = FractalTray::new(tx, has_unread_clone);
+    let (update_tx, mut update_rx) = mpsc::unbounded_channel::<bool>();
+    let tray = FractalTray::new(tx);
 
     info!("Spawning system tray icon...");
 
@@ -169,8 +183,11 @@ pub fn spawn_tray() -> TrayHandle {
         match tray.spawn().await {
             Ok(handle) => {
                 info!("System tray icon created successfully");
-                while update_rx.recv().await.is_some() {
-                    handle.update(|_| {});
+                while let Some(has_unread) = update_rx.recv().await {
+                    info!("Updating tray icon, has_unread: {}", has_unread);
+                    handle.update(|tray| {
+                        tray.has_unread = has_unread;
+                    });
                 }
             }
             Err(e) => {
@@ -179,5 +196,5 @@ pub fn spawn_tray() -> TrayHandle {
         }
     });
 
-    TrayHandle { rx: Some(rx), has_unread, update_tx }
+    TrayHandle { rx: Some(rx), update_tx }
 }

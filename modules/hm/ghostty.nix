@@ -57,6 +57,8 @@ in
 
         app-notifications = false;
 
+        scrollbar = "system";
+
         # Don't dim inactive panes
         unfocused-split-opacity = 1;
 
