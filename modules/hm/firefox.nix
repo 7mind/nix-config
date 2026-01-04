@@ -258,8 +258,9 @@
           # https://gitlab.com/kira-bruneau/home-config/-/blob/main/package/firefox/default.nix
           search = {
             force = true;
-            default = "e";
+            default = "ecosia";
             order = [
+              "ecosia"
               "ddg"
               "google"
               "perplexity"

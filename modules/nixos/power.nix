@@ -7,54 +7,116 @@ let
     set -euo pipefail
 
     MONITOR="${cfg.auto-refresh-rate.monitor}"
+    RATE_AC="${toString cfg.auto-refresh-rate.onAC}"
+    RATE_BATTERY="${toString cfg.auto-refresh-rate.onBattery}"
 
-    get_refresh_for_profile() {
-      case "$1" in
-        power-saver) echo "${toString cfg.auto-refresh-rate.onBattery}" ;;
-        balanced|performance) echo "${toString cfg.auto-refresh-rate.onAC}" ;;
-        *) echo "${toString cfg.auto-refresh-rate.onAC}" ;;
-      esac
+    get_monitor_name() {
+      if [ -n "$MONITOR" ]; then
+        echo "$MONITOR"
+      else
+        ${pkgs.gnome-randr}/bin/gnome-randr query 2>/dev/null | ${pkgs.gawk}/bin/awk 'NR==1 {print $1}' || echo ""
+      fi
+    }
+
+    get_current_resolution() {
+      local monitor="$1"
+      ${pkgs.gnome-randr}/bin/gnome-randr query 2>/dev/null | \
+        ${pkgs.gawk}/bin/awk -v mon="$monitor" '
+          $1 == mon { in_monitor = 1; next }
+          /^[A-Za-z]/ && in_monitor { exit }
+          in_monitor && /\*/ {
+            gsub(/^[[:space:]]+/, "")
+            split($1, parts, "@")
+            print parts[1]
+            exit
+          }
+        '
+    }
+
+    find_best_mode() {
+      local monitor="$1"
+      local resolution="$2"
+      local target_rate="$3"
+      ${pkgs.gnome-randr}/bin/gnome-randr query 2>/dev/null | \
+        ${pkgs.gawk}/bin/awk -v mon="$monitor" -v res="$resolution" -v rate="$target_rate" '
+          BEGIN { best_mode = ""; best_diff = 999999 }
+          $1 == mon { in_monitor = 1; next }
+          /^[A-Za-z]/ && in_monitor { exit }
+          in_monitor {
+            gsub(/^[[:space:]]+/, "")
+            mode = $1
+            gsub(/[*+]/, "", mode)
+            if (index(mode, res "@") == 1) {
+              split(mode, parts, "@")
+              mode_rate = parts[2] + 0
+              diff = (mode_rate - rate) > 0 ? (mode_rate - rate) : (rate - mode_rate)
+              if (diff < best_diff) {
+                best_diff = diff
+                best_mode = mode
+              }
+            }
+          }
+          END { print best_mode }
+        '
     }
 
     set_refresh_rate() {
       local rate="$1"
-      echo "Setting refresh rate to ''${rate}Hz"
-      if [ -n "$MONITOR" ]; then
-        ${pkgs.gnome-randr}/bin/gnome-randr modify "$MONITOR" --rate "$rate" 2>&1 || true
+      local monitor
+      monitor=$(get_monitor_name)
+      if [ -z "$monitor" ]; then
+        echo "No monitor found"
+        return 1
+      fi
+
+      local resolution
+      resolution=$(get_current_resolution "$monitor")
+      if [ -z "$resolution" ]; then
+        echo "Could not determine current resolution for $monitor"
+        return 1
+      fi
+
+      local mode
+      mode=$(find_best_mode "$monitor" "$resolution" "$rate")
+      if [ -z "$mode" ]; then
+        echo "No suitable mode found for ''${resolution}@''${rate}Hz"
+        return 1
+      fi
+
+      echo "Setting $monitor to mode $mode"
+      ${pkgs.gnome-randr}/bin/gnome-randr modify "$monitor" --mode "$mode" 2>&1 || true
+    }
+
+    is_on_battery() {
+      # Check DisplayDevice state - "discharging" means on battery
+      local state
+      state=$(${pkgs.upower}/bin/upower -i /org/freedesktop/UPower/devices/DisplayDevice 2>/dev/null | \
+        ${pkgs.gawk}/bin/awk '/state:/ {print $2}')
+      [ "$state" = "discharging" ]
+    }
+
+    apply_for_power_state() {
+      if is_on_battery; then
+        echo "On battery -> ''${RATE_BATTERY}Hz"
+        set_refresh_rate "$RATE_BATTERY"
       else
-        local monitor
-        monitor=$(${pkgs.gnome-randr}/bin/gnome-randr query 2>/dev/null | grep -oP '^\S+' | head -1 || echo "")
-        if [ -n "$monitor" ]; then
-          ${pkgs.gnome-randr}/bin/gnome-randr modify "$monitor" --rate "$rate" 2>&1 || true
-        fi
+        echo "On AC -> ''${RATE_AC}Hz"
+        set_refresh_rate "$RATE_AC"
       fi
     }
 
-    apply_for_profile() {
-      local profile="$1"
-      local rate
-      rate=$(get_refresh_for_profile "$profile")
-      echo "Profile '$profile' -> ''${rate}Hz"
-      set_refresh_rate "$rate"
-    }
+    # Apply for current power state
+    echo "Checking initial power state..."
+    apply_for_power_state
 
-    # Apply for current profile
-    current_profile=$(${pkgs.power-profiles-daemon}/bin/powerprofilesctl get)
-    echo "Initial profile: $current_profile"
-    apply_for_profile "$current_profile"
-
-    # Monitor D-Bus for profile changes
-    ${pkgs.dbus}/bin/dbus-monitor --system "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path='/org/freedesktop/UPower/PowerProfiles'" 2>/dev/null | \
+    # Monitor DisplayDevice for state changes
+    echo "Monitoring UPower DisplayDevice for power state changes..."
+    ${pkgs.dbus}/bin/dbus-monitor --system "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path='/org/freedesktop/UPower/devices/DisplayDevice'" 2>/dev/null | \
     while read -r line; do
-      if echo "$line" | grep -q "ActiveProfile"; then
-        # Small delay to let the profile change settle
-        sleep 0.2
-        new_profile=$(${pkgs.power-profiles-daemon}/bin/powerprofilesctl get)
-        if [ "$new_profile" != "$current_profile" ]; then
-          echo "Profile changed: $current_profile -> $new_profile"
-          current_profile="$new_profile"
-          apply_for_profile "$current_profile"
-        fi
+      if echo "$line" | ${pkgs.gnugrep}/bin/grep -qE "State|IsPresent"; then
+        sleep 0.3
+        echo "Power state changed"
+        apply_for_power_state
       fi
     done
   '';
@@ -97,7 +159,7 @@ in
       enable = lib.mkOption {
         type = lib.types.bool;
         default = false;
-        description = "Automatically switch display refresh rate based on AC/battery status (GNOME only)";
+        description = "Automatically switch display refresh rate based on AC/battery status via UPower (GNOME/Wayland only)";
       };
 
       onAC = lib.mkOption {
@@ -198,16 +260,12 @@ in
       }
     ))
 
-    # Auto-switch display refresh rate based on power profile (GNOME/Wayland)
+    # Auto-switch display refresh rate based on AC/battery (GNOME/Wayland)
     (lib.mkIf cfg.auto-refresh-rate.enable {
       assertions = [
         {
           assertion = config.smind.desktop.gnome.enable;
           message = "auto-refresh-rate requires smind.desktop.gnome.enable = true";
-        }
-        {
-          assertion = config.services.power-profiles-daemon.enable;
-          message = "auto-refresh-rate requires services.power-profiles-daemon.enable = true (monitors profile changes via D-Bus)";
         }
       ];
 

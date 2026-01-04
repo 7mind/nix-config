@@ -8,6 +8,39 @@
  mod user_facing_error;
  mod utils;
  mod window;
+@@ -32,6 +33,10 @@ use gettextrs::*;
+ use gtk::{IconTheme, gdk::Display, gio};
+ use tracing_subscriber::{EnvFilter, fmt, prelude::*};
+
++use std::ops::ControlFlow;
++use gio::prelude::*;
++use gtk::glib::{Char, OptionArg, OptionFlags};
++use gtk::subclass::prelude::ObjectSubclassIsExt;
+ use self::{application::*, config::*, i18n::*, utils::OneshotNotifier, window::Window};
+
+ /// The default tokio runtime to be used for async tasks
+@@ -76,5 +81,21 @@ fn main() {
+         .add_resource_path("/org/gnome/Fractal/icons");
+
+     let app = Application::new();
++
++    // Register --minimized/-m option
++    app.add_main_option(
++        "minimized",
++        Char::from(b'm'),
++        OptionFlags::NONE,
++        OptionArg::None,
++        "Start minimized to system tray",
++        None,
++    );
++
++    app.connect_handle_local_options(|app, options| {
++        app.imp().start_minimized.set(options.contains("minimized"));
++        ControlFlow::Continue(())
++    });
++
+     app.run();
+ }
 --- a/src/application.rs
 +++ b/src/application.rs
 @@ -13,6 +13,7 @@
@@ -23,7 +56,7 @@
          intent_handler: BoundObjectWeakRef<glib::Object>,
          last_network_state: Cell<NetworkState>,
 +        /// Whether the app was started with --minimized flag.
-+        pub(super) start_minimized: Cell<bool>,
++        pub start_minimized: Cell<bool>,
      }
 
      impl Default for Application {
@@ -35,19 +68,7 @@
              }
          }
      }
-@@ -62,6 +66,11 @@
-
-     impl ObjectImpl for Application {
-         fn constructed(&self) {
-+            // Check for --minimized flag
-+            if std::env::args().any(|arg| arg == "--minimized" || arg == "-m") {
-+                self.start_minimized.set(true);
-+            }
-+
-             self.parent_constructed();
-
-             // Initialize actions and accelerators.
-@@ -89,6 +98,21 @@
+@@ -89,6 +93,21 @@
                  }
              ));
 
@@ -69,7 +90,7 @@
              // Watch the network to log its state.
              let network_monitor = gio::NetworkMonitor::default();
              network_monitor.connect_network_changed(clone!(
-@@ -149,6 +173,15 @@
+@@ -149,6 +168,15 @@
          ///
          /// Returns the main window.
          fn present_main_window(&self) -> Window {

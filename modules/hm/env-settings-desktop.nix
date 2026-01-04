@@ -60,6 +60,8 @@
       brave
 
       pdftk
+
+      tgeraser
     ]);
 
     programs.librewolf.enable = lib.mkIf cfg-meta.isLinux true;
