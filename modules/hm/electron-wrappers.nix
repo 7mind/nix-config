@@ -7,7 +7,7 @@ let
   wrapElectronApp = { pkg, name, extraFlags ? [], slice ? "app-heavy.slice" }:
     let
       binName = pkg.meta.mainProgram or name;
-      flags = lib.concatStringsSep " " ([ "--disable-gpu" ] ++ extraFlags);
+      flags = lib.concatStringsSep " " extraFlags;
     in pkgs.runCommand "${name}-wrapped" {
       nativeBuildInputs = [ pkgs.makeWrapper ];
       meta.mainProgram = binName;
