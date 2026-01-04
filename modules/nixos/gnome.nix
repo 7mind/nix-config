@@ -25,6 +25,13 @@
       default = false;
       description = "Enable Variable Refresh Rate (VRR) via Mutter experimental features";
     };
+
+    smind.desktop.gnome.keyboard-layouts = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ "us+mac" "ru" ];
+      example = [ "us" "de" "fr" ];
+      description = "XKB keyboard layouts to configure (e.g. 'us+mac', 'ru', 'de')";
+    };
   };
 
   # display settings are being controlled over dbus (org.gnome.Mutter.DisplayConfig), not dconf
@@ -71,6 +78,10 @@
             "org/gnome/shell" = {
               "remember-mount-password" = true;
               "always-show-log-out" = true;
+            };
+          } // lib.optionalAttrs (config.smind.desktop.gnome.keyboard-layouts != [ ]) {
+            "org/gnome/desktop/input-sources" = {
+              sources = map (layout: lib.gvariant.mkTuple [ "xkb" layout ]) config.smind.desktop.gnome.keyboard-layouts;
             };
           };
         }
