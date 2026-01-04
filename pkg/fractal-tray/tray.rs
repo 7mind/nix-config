@@ -76,7 +76,7 @@ impl Tray for FractalTray {
     }
 
     fn status(&self) -> ksni::Status {
-        if self.has_unread.load(Ordering::Relaxed) {
+        if self.has_unread {
             ksni::Status::NeedsAttention
         } else {
             ksni::Status::Active

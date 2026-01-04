@@ -57,7 +57,8 @@ in
 
         app-notifications = false;
 
-        scrollbar = "system";
+        # TODO: enable when Ghostty 1.3+ is available
+        # scrollbar = "system";
 
         # Don't dim inactive panes
         unfocused-split-opacity = 1;
