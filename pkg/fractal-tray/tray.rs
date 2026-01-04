@@ -1,4 +1,6 @@
 use ksni::{menu::StandardItem, Icon, MenuItem, Tray, TrayMethods};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
 
@@ -12,11 +14,12 @@ pub enum TrayCommand {
 
 pub struct FractalTray {
     tx: mpsc::UnboundedSender<TrayCommand>,
+    has_unread: Arc<AtomicBool>,
 }
 
 impl FractalTray {
-    pub fn new(tx: mpsc::UnboundedSender<TrayCommand>) -> Self {
-        Self { tx }
+    pub fn new(tx: mpsc::UnboundedSender<TrayCommand>, has_unread: Arc<AtomicBool>) -> Self {
+        Self { tx, has_unread }
     }
 }
 
@@ -52,6 +55,18 @@ impl Tray for FractalTray {
         "org.gnome.Fractal".to_string()
     }
 
+    fn status(&self) -> ksni::Status {
+        if self.has_unread.load(Ordering::Relaxed) {
+            ksni::Status::NeedsAttention
+        } else {
+            ksni::Status::Passive
+        }
+    }
+
+    fn attention_icon_name(&self) -> String {
+        "org.gnome.Fractal".to_string()
+    }
+
     fn activate(&mut self, _x: i32, _y: i32) {
         info!("Tray icon activated");
         let _ = self.tx.send(TrayCommand::Show);
@@ -84,20 +99,41 @@ impl Tray for FractalTray {
     }
 }
 
-pub fn spawn_tray() -> mpsc::UnboundedReceiver<TrayCommand> {
+pub struct TrayHandle {
+    rx: Option<mpsc::UnboundedReceiver<TrayCommand>>,
+    has_unread: Arc<AtomicBool>,
+    update_tx: mpsc::UnboundedSender<()>,
+}
+
+impl TrayHandle {
+    pub fn take_receiver(&mut self) -> Option<mpsc::UnboundedReceiver<TrayCommand>> {
+        self.rx.take()
+    }
+
+    pub fn set_has_unread(&self, value: bool) {
+        let old = self.has_unread.swap(value, Ordering::Relaxed);
+        if old != value {
+            let _ = self.update_tx.send(());
+        }
+    }
+}
+
+pub fn spawn_tray() -> TrayHandle {
     let (tx, rx) = mpsc::unbounded_channel();
-    let tray = FractalTray::new(tx);
+    let (update_tx, mut update_rx) = mpsc::unbounded_channel::<()>();
+    let has_unread = Arc::new(AtomicBool::new(false));
+    let has_unread_clone = has_unread.clone();
+    let tray = FractalTray::new(tx, has_unread_clone);
 
     info!("Spawning system tray icon...");
 
-    // Spawn on fractal's tokio runtime
     RUNTIME.spawn(async move {
         match tray.spawn().await {
             Ok(handle) => {
                 info!("System tray icon created successfully");
-                // Keep the handle alive to keep the tray running
-                let _ = handle;
-                std::future::pending::<()>().await;
+                while update_rx.recv().await.is_some() {
+                    handle.update(|_| {});
+                }
             }
             Err(e) => {
                 warn!("Failed to create tray icon: {e}");
@@ -105,5 +141,5 @@ pub fn spawn_tray() -> mpsc::UnboundedReceiver<TrayCommand> {
         }
     });
 
-    rx
+    TrayHandle { rx: Some(rx), has_unread, update_tx }
 }

@@ -43,57 +43,73 @@
  }
 --- a/src/application.rs
 +++ b/src/application.rs
-@@ -13,6 +13,7 @@
-     session_list::{FailedSession, SessionInfo, SessionList},
-     spawn,
-     system_settings::SystemSettings,
-+    tray::{spawn_tray, TrayCommand},
-     toast,
-     utils::{BoundObjectWeakRef, LoadingState, matrix::MatrixIdUri},
- };
-@@ -39,6 +40,8 @@
+@@ -25,8 +25,10 @@ pub(crate) const APP_HOMEPAGE_URL: &str = "https://gitlab.gnome.org/World/fracta
+
+ mod imp {
+     use std::cell::Cell;
++    use std::cell::OnceCell;
+
+     use super::*;
++    use crate::tray::{spawn_tray, TrayCommand, TrayHandle};
+
+     #[derive(Debug)]
+     pub struct Application {
+@@ -38,6 +40,10 @@ mod imp {
          pub(super) session_list: SessionList,
          intent_handler: BoundObjectWeakRef<glib::Object>,
          last_network_state: Cell<NetworkState>,
 +        /// Whether the app was started with --minimized flag.
 +        pub start_minimized: Cell<bool>,
++        /// System tray handle.
++        pub tray_handle: OnceCell<TrayHandle>,
      }
 
      impl Default for Application {
-@@ -49,6 +52,7 @@
+@@ -48,6 +54,8 @@ mod imp {
                  session_list: Default::default(),
                  intent_handler: Default::default(),
                  last_network_state: Default::default(),
 +                start_minimized: Cell::new(false),
++                tray_handle: OnceCell::new(),
              }
          }
      }
-@@ -89,6 +93,21 @@
+@@ -89,6 +97,24 @@ mod imp {
                  }
              ));
 
 +            // Initialize system tray
-+            let mut tray_rx = spawn_tray();
-+            spawn!(clone!(
-+                #[weak(rename_to = obj)]
-+                self.obj(),
-+                async move {
-+                    while let Some(cmd) = tray_rx.recv().await {
-+                        match cmd {
-+                            TrayCommand::Show => { obj.imp().present_main_window(); }
-+                            TrayCommand::Quit => { obj.quit(); }
++            let mut tray_handle = spawn_tray();
++            let tray_rx = tray_handle.take_receiver();
++            let _ = self.tray_handle.set(tray_handle);
++
++            if let Some(mut rx) = tray_rx {
++                spawn!(clone!(
++                    #[weak(rename_to = obj)]
++                    self.obj(),
++                    async move {
++                        while let Some(cmd) = rx.recv().await {
++                            match cmd {
++                                TrayCommand::Show => { obj.imp().present_main_window(); }
++                                TrayCommand::Quit => { obj.quit(); }
++                            }
 +                        }
 +                    }
-+                }
-+            ));
++                ));
++            }
 +
              // Watch the network to log its state.
              let network_monitor = gio::NetworkMonitor::default();
              network_monitor.connect_network_changed(clone!(
-@@ -149,6 +168,15 @@
+@@ -148,6 +174,18 @@ mod imp {
          ///
          /// Returns the main window.
          fn present_main_window(&self) -> Window {
++            // Clear tray unread indicator when presenting window
++            if let Some(tray) = self.tray_handle.get() {
++                tray.set_has_unread(false);
++            }
++
 +            // If started with --minimized, skip presentation on first call only
 +            if self.start_minimized.replace(false) {
 +                let window = if let Some(window) = self.obj().active_window().and_downcast() {
@@ -106,9 +122,23 @@
              let window = if let Some(window) = self.obj().active_window().and_downcast() {
                  window
              } else {
+--- a/src/session/notifications/mod.rs
++++ b/src/session/notifications/mod.rs
+@@ -144,6 +144,11 @@ impl Notifications {
+         }
+
+         Application::default().send_notification(Some(id), &notification);
++
++        // Update tray unread indicator
++        if let Some(tray) = Application::default().imp().tray_handle.get() {
++            tray.set_has_unread(true);
++        }
+     }
+
+     /// Ask the system to show the given push notification, if applicable.
 --- a/src/window.rs
 +++ b/src/window.rs
-@@ -203,7 +203,9 @@
+@@ -203,7 +203,9 @@ mod imp {
                  warn!("Could not save current session: {error}");
              }
 
