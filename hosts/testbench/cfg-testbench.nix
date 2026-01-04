@@ -75,7 +75,7 @@
   };
 
   users = {
-    users.root.password = "nixos";
+    users.root.initialPassword = "nixos";
 
     users.pavel = {
       isNormalUser = true;
