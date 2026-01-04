@@ -59,6 +59,7 @@ in
         unfocused-split-opacity = 1;
 
         copy-on-select = "clipboard";
+        copy-clear-selection = true;
         clipboard-paste-protection = false;
 
         # Clear all default keybindings and define our own
