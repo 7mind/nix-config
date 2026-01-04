@@ -49,8 +49,14 @@ in
 
     cpuQuota = lib.mkOption {
       type = lib.types.str;
-      default = "50%";
-      description = "CPU quota for heavy apps slice";
+      default = "100%";
+      description = "CPU quota for heavy apps slice (100% = 1 core)";
+    };
+
+    cpuWeight = lib.mkOption {
+      type = lib.types.int;
+      default = 50;
+      description = "CPU weight for heavy apps slice (default system weight is 100)";
     };
 
     memoryMax = lib.mkOption {
@@ -77,6 +83,7 @@ in
       Unit.Description = "Slice for resource-heavy apps (Slack, Element, etc.)";
       Slice = {
         CPUQuota = cfg.cpuQuota;
+        CPUWeight = cfg.cpuWeight;
         MemoryMax = cfg.memoryMax;
       };
     };
