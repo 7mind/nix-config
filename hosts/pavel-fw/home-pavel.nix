@@ -16,8 +16,8 @@
     # Resource-limited Electron apps
     electron-wrappers = {
       enable = true;
-      cpuQuota = "15%";
-      memoryMax = "2G";
+      cpuQuota = "30%";
+      memoryMax = "4G";
       slack.enable = true;
       element.enable = true;
     };
