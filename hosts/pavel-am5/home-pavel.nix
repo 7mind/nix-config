@@ -11,5 +11,7 @@
     slack.enable = true;
     slack.netns = "vpn";
   };
+
+  smind.hm.firefox.scrollMultiplier = 200;
 }
 
