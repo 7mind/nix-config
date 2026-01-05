@@ -32,6 +32,12 @@
       example = [ "us" "de" "fr" ];
       description = "XKB keyboard layouts to configure (e.g. 'us+mac', 'ru', 'de')";
     };
+
+    smind.desktop.gnome.sticky-keys.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Enable sticky keys with GNOME Shell keyboard-modifiers-status extension";
+    };
   };
 
   # display settings are being controlled over dbus (org.gnome.Mutter.DisplayConfig), not dconf
@@ -82,6 +88,11 @@
           } // lib.optionalAttrs (config.smind.desktop.gnome.keyboard-layouts != [ ]) {
             "org/gnome/desktop/input-sources" = {
               sources = map (layout: lib.gvariant.mkTuple [ "xkb" layout ]) config.smind.desktop.gnome.keyboard-layouts;
+            };
+          } // lib.optionalAttrs config.smind.desktop.gnome.sticky-keys.enable {
+            "org/gnome/desktop/a11y/keyboard" = {
+              "stickykeys-enable" = true;
+              "stickykeys-modifier-beep" = true;
             };
           };
         }
