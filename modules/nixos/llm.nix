@@ -79,6 +79,37 @@
 
     };
 
+    # Custom Ollama models with specific parameters
+    systemd.services.ollama-custom-models = {
+      description = "Create custom Ollama models with specific parameters";
+      after = [ "ollama.service" ];
+      wants = [ "ollama.service" ];
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        User = "ollama";
+        Group = "users";
+      };
+      path = [ config.services.ollama.package ];
+      script = ''
+        # Wait for Ollama to be ready
+        for i in $(seq 1 30); do
+          ollama list && break
+          sleep 2
+        done
+
+        # Create devstral-small-2:24b-128k with 128k context
+        if ! ollama list | grep -q "devstral-small-2:24b-128k"; then
+          echo "Creating devstral-small-2:24b-128k..."
+          cat <<EOF | ollama create devstral-small-2:24b-128k -f -
+FROM devstral-small-2:24b
+PARAMETER num_ctx 131072
+EOF
+        fi
+      '';
+    };
+
     services.open-webui = {
       # enable = true; # broken
       openFirewall = true;
