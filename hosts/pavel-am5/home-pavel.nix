@@ -7,6 +7,7 @@
   ];
 
   smind.hm.electron-wrappers = {
+    enable = true;
     slack.enable = true;
     slack.netns = "vpn";
   };
