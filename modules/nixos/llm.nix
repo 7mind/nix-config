@@ -91,7 +91,7 @@
         User = "ollama";
         Group = "users";
       };
-      path = [ config.services.ollama.package ];
+      path = [ config.services.ollama.package pkgs.coreutils ];
       script = ''
         # Wait for Ollama to be ready
         for i in $(seq 1 30); do
@@ -99,13 +99,17 @@
           sleep 2
         done
 
-        # Create devstral-small-2:24b-128k with 128k context
-        if ! ollama list | grep -q "devstral-small-2:24b-128k"; then
-          echo "Creating devstral-small-2:24b-128k..."
-          cat <<EOF | ollama create devstral-small-2:24b-128k -f -
-FROM devstral-small-2:24b
+        MODELFILE=$(mktemp)
+        trap "rm -f $MODELFILE" EXIT
+
+        # Create devstral:24b-small-2505-128k with 128k context
+        if ! ollama list | grep -q "devstral:24b-small-2505-128k"; then
+          echo "Creating devstral:24b-small-2505-128k..."
+          cat > "$MODELFILE" << 'EOF'
+FROM devstral:24b-small-2505-q8_0
 PARAMETER num_ctx 131072
 EOF
+          ollama create devstral:24b-small-2505-128k -f "$MODELFILE"
         fi
       '';
     };

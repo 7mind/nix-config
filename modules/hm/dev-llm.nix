@@ -138,7 +138,7 @@
               baseURL = "http://127.0.0.1:11434/v1";
             };
             models = {
-              "devstral-small-2:24b-128k" = {
+              "devstral:24b-small-2505-128k" = {
                 limit = {
                   context = 131072;
                   output = 131072;
