@@ -21,7 +21,7 @@ in
     smind.hm.ghostty.theme = lib.mkOption {
       type = lib.types.str;
       # default = "GitHub Dark";
-      default = "Adventure";
+      default = "Builtin Pastel Dark";
       description = "Ghostty color theme (use 'ghostty +list-themes' to see available)";
     };
   };

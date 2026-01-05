@@ -217,6 +217,12 @@
   programs.steam = {
     enable = true;
     extraCompatPackages = [ pkgs.proton-ge-bin ];
+    package = pkgs.steam.override {
+      extraEnv = {
+        SDL_VIDEODRIVER = "wayland";
+        SDL_VIDEO_WAYLAND_SCALE_TO_DISPLAY = "1";
+      };
+    };
   };
 
   boot.initrd = {
