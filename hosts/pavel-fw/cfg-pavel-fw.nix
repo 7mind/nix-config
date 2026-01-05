@@ -24,6 +24,9 @@ in
     hostPubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILVhIJvhBhZBZwwW+XNYWLRn5wL+ecMkWRYcuqmJVq1r";
   };
 
+  hardware.nvidia-container-toolkit.enable = true;
+  hardware.nvidia-container-toolkit.suppressNvidiaDriverAssertion = true; # Drivers provided by smind.hw.nvidia module
+
   # --- Framework 16 AMD (Strix Point) specific configuration ---
 
   # Use latest kernel with VPE fix patch for Strix Point suspend/resume
