@@ -8,20 +8,26 @@ let
     let
       binName = pkg.meta.mainProgram or name;
       flags = lib.concatStringsSep " " extraFlags;
-      netnsPrefix = if netns != null
-        then "sudo ${pkgs.iproute2}/bin/ip netns exec ${netns} sudo -u $USER"
-        else "";
+      wrapperScript = if netns != null then ''
+#!/usr/bin/env bash
+# Run in systemd slice for resource limits, then enter network namespace
+exec systemd-run --user --scope --slice=${slice} \
+  sudo ${pkgs.iproute2}/bin/ip netns exec ${netns} \
+  sudo -u "''$USER" \
+  ${pkg}/bin/${binName} ${flags} "$@"
+'' else ''
+#!/usr/bin/env bash
+exec systemd-run --user --scope --slice=${slice} ${pkg}/bin/${binName} ${flags} "$@"
+'';
     in pkgs.runCommand "${name}-wrapped" {
       nativeBuildInputs = [ pkgs.makeWrapper ];
       meta.mainProgram = binName;
+      passAsFile = [ "wrapperScript" ];
+      inherit wrapperScript;
     } ''
       mkdir -p $out/bin $out/share
 
-      # Create wrapper that runs the app in a resource-limited systemd scope
-      cat > $out/bin/${binName} <<EOF
-#!/usr/bin/env bash
-exec ${netnsPrefix} systemd-run --user --scope --slice=${slice} ${pkg}/bin/${binName} ${flags} "\$@"
-EOF
+      cp $wrapperScriptPath $out/bin/${binName}
       chmod +x $out/bin/${binName}
 
       # Copy and patch desktop files
