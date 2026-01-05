@@ -6,5 +6,9 @@
     "${cfg-meta.paths.users}/pavel/hm/home-pavel-generic-linux.nix"
   ];
 
+  smind.hm.electron-wrappers = {
+    slack.enable = true;
+    slack.netns = "vpn";
+  };
 }
 
