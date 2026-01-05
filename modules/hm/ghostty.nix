@@ -56,6 +56,9 @@ in
 
         scrollback-limit = 50000;
 
+        # Inherit CWD when creating new splits/tabs
+        window-inherit-working-directory = true;
+
         app-notifications = false;
 
         # TODO: enable when Ghostty 1.3+ is available
