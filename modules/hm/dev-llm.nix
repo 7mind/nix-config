@@ -141,6 +141,7 @@
               "devstral-small-2:24b" = {
                 limit = {
                   context = 65536;
+                  output = 16384;
                 };
               };
             };
