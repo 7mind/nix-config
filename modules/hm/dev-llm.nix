@@ -117,6 +117,22 @@
       settings = {
         theme = "dark";
         autoupdate = "notify";
+        model = "anthropic/claude-opus-4-5";
+        plugin = [ "opencode-gemini-auth@latest" ];
+        provider = {
+          google = {
+            models = {
+              "gemini-3-pro-preview" = {
+                options = {
+                  thinkingConfig = {
+                    thinkingLevel = "high";
+                    includeThoughts = true;
+                  };
+                };
+              };
+            };
+          };
+        };
         permission = {
           read = "allow";
           edit = "allow";
