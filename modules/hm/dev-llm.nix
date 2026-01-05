@@ -117,13 +117,13 @@
       settings = {
         theme = "dark";
         autoupdate = "notify";
-        permissions = {
+        permission = {
           bash = "allow";
-          write = "allow";
+          edit = "allow";
         };
       };
+      rules = config.programs.claude-code.memory.text;
     };
-    home.file.".config/opencode/AGENTS.md".text = config.programs.claude-code.memory.text;
 
     home.packages = with pkgs;
       let
@@ -210,6 +210,25 @@
             "''${ENV_ARGS[@]}" \
             --bind "''${HOME}/.gemini-work,''${HOME}/.gemini" \
             -- gemini --yolo "''${CMD_ARGS[@]}"
+        '')
+
+        (writeShellScriptBin "yolo-opencode" ''
+          ENV_ARGS=()
+          CMD_ARGS=()
+          while [[ $# -gt 0 ]]; do
+            case "$1" in
+              --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
+              *) CMD_ARGS+=("$1"); shift ;;
+            esac
+          done
+          exec ${firejail-wrap}/bin/firejail-wrap \
+            --rw "''${PWD}" \
+            --rw "''${HOME}/.config/opencode" \
+            --rw "''${HOME}/.local/share/opencode" \
+            --rw "''${HOME}/.cache" \
+            --ro "''${HOME}/.config/git" \
+            "''${ENV_ARGS[@]}" \
+            -- opencode "''${CMD_ARGS[@]}"
         '')
       ];
   };
