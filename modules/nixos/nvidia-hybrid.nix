@@ -153,6 +153,9 @@ in
       nvidiaConfig = {
         services.xserver.videoDrivers = [ "nvidia" ];
 
+        # CUDA support for containers (Podman/Docker)
+        hardware.nvidia-container-toolkit.enable = true;
+
         hardware.graphics.enable = true;
 
         hardware.nvidia = {
