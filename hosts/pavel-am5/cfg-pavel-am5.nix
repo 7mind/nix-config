@@ -114,14 +114,7 @@
 
   programs.winbox = {
     enable = true;
-    package = # https://github.com/NixOS/nixpkgs/issues/408853
-      (pkgs.winbox4.overrideAttrs (drv:
-        {
-          buildInputs = drv.buildInputs ++ [ pkgs.makeWrapper ];
-          postFixup = ''
-            wrapProgram $out/bin/WinBox --set "QT_QPA_PLATFORM" "xcb"
-          '';
-        }));
+    package = pkgs.winbox-quirk;
   };
 
   smind = {

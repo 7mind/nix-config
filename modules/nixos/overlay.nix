@@ -30,6 +30,14 @@
 
 
 
+      # https://github.com/NixOS/nixpkgs/issues/408853
+      winbox-quirk = super.winbox4.overrideAttrs (drv: {
+        nativeBuildInputs = (drv.nativeBuildInputs or [ ]) ++ [ super.makeWrapper ];
+        postFixup = ''
+          wrapProgram $out/bin/WinBox --set "QT_QPA_PLATFORM" "xcb"
+        '';
+      });
+
       nix-apple-fonts = (cfg-flakes.nix-apple-fonts.default.overrideAttrs (drv: {
         # override install script to put fonts into /share/fonts, not /usr/share/fonts - where they don't work.
         # FIXME: notify upstream / submit PR?
