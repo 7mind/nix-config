@@ -140,8 +140,8 @@
             models = {
               "devstral-small-2:24b" = {
                 limit = {
-                  context = 65536;
-                  output = 16384;
+                  context = 131072;
+                  output = 131072;
                 };
               };
             };
