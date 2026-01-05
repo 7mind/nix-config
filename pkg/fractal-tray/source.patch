@@ -59,10 +59,11 @@ diff -ruN a/src/application.rs b/src/application.rs
              // Watch the network to log its state.
              let network_monitor = gio::NetworkMonitor::default();
              network_monitor.connect_network_changed(clone!(
-@@ -149,12 +177,28 @@
+@@ -149,7 +177,26 @@
          ///
          /// Returns the main window.
          fn present_main_window(&self) -> Window {
+-            let window = if let Some(window) = self.obj().active_window().and_downcast() {
 +            // Clear tray unread indicator when presenting window
 +            if let Some(tray) = self.tray_handle.get() {
 +                tray.set_has_unread(false);
@@ -77,18 +78,15 @@ diff -ruN a/src/application.rs b/src/application.rs
 +                };
 +                return window;
 +            }
--            let window = if let Some(window) = self.obj().active_window().and_downcast() {
++
 +            let window = if let Some(window) = self.obj().active_window().and_downcast::<Window>() {
-+                // Force to foreground by toggling visibility (bypasses Wayland focus stealing prevention)
-+                window.set_visible(false);
++                // Force minimize then unminimize to trigger compositor window restoration
++                window.set_visible(true);
++                window.minimize();
++                window.unminimize();
                  window
              } else {
                  Window::new(&self.obj())
-             };
-
-             window.present();
-             window
-         }
 diff -ruN a/src/main.rs b/src/main.rs
 --- a/src/main.rs	2026-01-04 17:39:53.649250221 +0000
 +++ b/src/main.rs	2026-01-04 17:39:53.649491928 +0000
