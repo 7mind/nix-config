@@ -38,6 +38,13 @@
       default = false;
       description = "Enable sticky keys with GNOME Shell keyboard-modifiers-status extension";
     };
+
+    smind.desktop.gnome.gdm.monitors-xml = lib.mkOption {
+      type = lib.types.nullOr lib.types.path;
+      default = null;
+      example = lib.literalExpression "./monitors.xml";
+      description = "Path to monitors.xml for GDM login screen display configuration";
+    };
   };
 
   # display settings are being controlled over dbus (org.gnome.Mutter.DisplayConfig), not dconf
@@ -45,6 +52,20 @@
   config = lib.mkIf config.smind.desktop.gnome.enable {
     programs.dconf = {
       enable = true;
+
+      # GDM login screen settings (runs as gdm user, needs separate profile)
+      profiles.gdm.databases = [
+        {
+          lockAll = true;
+          settings = {
+            "org/gnome/desktop/interface" = {
+              cursor-size = lib.gvariant.mkInt32 36;
+              color-scheme = "prefer-dark";
+            };
+          };
+        }
+      ];
+
       profiles.user.databases = [
         {
           lockAll = true; # prevents overriding
@@ -182,6 +203,13 @@
 
     # Speed up GDM startup
     systemd.services.display-manager.after = [ "systemd-user-sessions.service" ];
+
+    # Symlink monitors.xml to GDM for consistent display resolution on login screen
+    # Configure displays in GNOME Settings first, then set:
+    #   smind.desktop.gnome.gdm.monitors-xml = ./path/to/monitors.xml;
+    systemd.tmpfiles.rules = lib.mkIf (config.smind.desktop.gnome.gdm.monitors-xml != null) [
+      "L+ /run/gdm/.config/monitors.xml - - - - ${config.smind.desktop.gnome.gdm.monitors-xml}"
+    ];
 
     # PAM keyring integration handled by smind.security.keyring module
 
