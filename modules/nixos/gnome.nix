@@ -62,6 +62,13 @@
               cursor-size = lib.gvariant.mkInt32 36;
               color-scheme = "prefer-dark";
             };
+            # Required for fractional scaling in monitors.xml to work
+            "org/gnome/mutter" = {
+              experimental-features =
+                lib.optionals config.smind.desktop.gnome.fractional-scaling.enable [
+                  "scale-monitor-framebuffer"
+                ];
+            };
           };
         }
       ];
