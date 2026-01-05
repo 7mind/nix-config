@@ -10,9 +10,9 @@ let
       flags = lib.concatStringsSep " " extraFlags;
       wrapperScript = if netns != null then ''
 #!/usr/bin/env bash
-# Use firejail (system setuid wrapper) for both network namespace and cgroup resource limits
-CGROUP="/sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/${slice}"
-exec /run/wrappers/bin/firejail --netns=${netns} --cgroup="''$CGROUP" \
+# systemd-run creates scope in slice (resource limits), firejail handles netns
+exec systemd-run --user --scope --slice=${slice} \
+  /run/wrappers/bin/firejail --noprofile --netns=${netns} -- \
   ${pkg}/bin/${binName} ${flags} "$@"
 '' else ''
 #!/usr/bin/env bash
