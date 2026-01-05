@@ -118,8 +118,22 @@
         theme = "dark";
         autoupdate = "notify";
         permission = {
-          bash = "allow";
+          read = "allow";
           edit = "allow";
+          glob = "allow";
+          list = "allow";
+          grep = "allow";
+          websearch = "allow";
+          codesearch = "allow";
+          bash = "allow";
+          task = "allow";
+          lsp = "allow";
+          webfetch = "allow";
+          skill = "allow";
+          todoread = "allow";
+          todowrite = "allow";
+          external_directory = "allow";
+          doom_loop = "allow";
         };
       };
       rules = config.programs.claude-code.memory.text;
