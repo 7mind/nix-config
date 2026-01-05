@@ -133,7 +133,9 @@
             };
           };
           ollama = {
-            api_url = "http://127.0.0.1:11434/v1";
+            options = {
+              baseURL = "http://127.0.0.1:11434/v1";
+            };
             models = {
               "devstral-small-2:24b" = { };
             };
