@@ -11,9 +11,17 @@ let
       wrapperScript = if netns != null then ''
 #!/usr/bin/env bash
 # Run in systemd slice for resource limits, then enter network namespace
+# Preserve environment variables needed for GUI apps
 exec systemd-run --user --scope --slice=${slice} \
   sudo ${pkgs.iproute2}/bin/ip netns exec ${netns} \
   sudo -u "''$USER" \
+    DISPLAY="''$DISPLAY" \
+    WAYLAND_DISPLAY="''$WAYLAND_DISPLAY" \
+    XDG_RUNTIME_DIR="''$XDG_RUNTIME_DIR" \
+    DBUS_SESSION_BUS_ADDRESS="''$DBUS_SESSION_BUS_ADDRESS" \
+    HOME="''$HOME" \
+    XDG_CONFIG_HOME="''${XDG_CONFIG_HOME:-''$HOME/.config}" \
+    XDG_DATA_HOME="''${XDG_DATA_HOME:-''$HOME/.local/share}" \
   ${pkg}/bin/${binName} ${flags} "$@"
 '' else ''
 #!/usr/bin/env bash
