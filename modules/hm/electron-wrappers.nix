@@ -3,11 +3,14 @@
 let
   cfg = config.smind.hm.electron-wrappers;
 
-  # Wrap an Electron app to run in a resource-limited slice
-  wrapElectronApp = { pkg, name, extraFlags ? [], slice ? "app-heavy.slice" }:
+  # Wrap an Electron app to run in a resource-limited slice and optionally in a network namespace
+  wrapElectronApp = { pkg, name, extraFlags ? [], slice ? "app-heavy.slice", netns ? null }:
     let
       binName = pkg.meta.mainProgram or name;
       flags = lib.concatStringsSep " " extraFlags;
+      netnsPrefix = if netns != null
+        then "sudo ${pkgs.iproute2}/bin/ip netns exec ${netns} sudo -u $USER"
+        else "";
     in pkgs.runCommand "${name}-wrapped" {
       nativeBuildInputs = [ pkgs.makeWrapper ];
       meta.mainProgram = binName;
@@ -17,7 +20,7 @@ let
       # Create wrapper that runs the app in a resource-limited systemd scope
       cat > $out/bin/${binName} <<EOF
 #!/usr/bin/env bash
-exec systemd-run --user --scope --slice=${slice} ${pkg}/bin/${binName} ${flags} "\$@"
+exec ${netnsPrefix} systemd-run --user --scope --slice=${slice} ${pkg}/bin/${binName} ${flags} "\$@"
 EOF
       chmod +x $out/bin/${binName}
 
@@ -71,10 +74,22 @@ in
       description = "Install wrapped Slack";
     };
 
+    slack.netns = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Network namespace to run Slack in (e.g., 'vpn')";
+    };
+
     element.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
       description = "Install wrapped Element";
+    };
+
+    element.netns = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Network namespace to run Element in (e.g., 'vpn')";
     };
   };
 
@@ -93,11 +108,13 @@ in
         pkg = pkgs.slack;
         name = "slack";
         extraFlags = [ "-u" ];
+        netns = cfg.slack.netns;
       }))
       (lib.optional cfg.element.enable (wrapElectronApp {
         pkg = pkgs.element-desktop;
         name = "element-desktop";
         extraFlags = [ "--hidden" ];
+        netns = cfg.element.netns;
       }))
     ];
   };

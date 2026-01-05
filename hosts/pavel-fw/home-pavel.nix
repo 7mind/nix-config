@@ -45,6 +45,7 @@
       cpuWeight = 70;
       memoryMax = "4G";
       slack.enable = true;
+      slack.netns = "vpn";
       element.enable = true;
     };
 
