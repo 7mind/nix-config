@@ -133,11 +133,16 @@
             };
           };
           ollama = {
+            npm = "@ai-sdk/openai-compatible";
             options = {
               baseURL = "http://127.0.0.1:11434/v1";
             };
             models = {
-              "devstral-small-2:24b" = { };
+              "devstral-small-2:24b" = {
+                limit = {
+                  context = 65536;
+                };
+              };
             };
           };
         };
