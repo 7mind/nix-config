@@ -80,6 +80,7 @@
             "org/gnome/desktop/wm/preferences" = {
               # button-layout = ":minimize,maximize,close";
               button-layout = "close,minimize,maximize:";
+              num-workspaces = lib.gvariant.mkInt32 1;
             };
             "org/gnome/mutter/wayland" = {
               #xwayland-allow-grabs = true;
@@ -93,6 +94,7 @@
               font-antialiasing = "rgba";
               clock-show-weekday = true;
               color-scheme = "prefer-dark";
+              enable-hot-corners = false;
             };
             "org/gnome/mutter" = {
               dynamic-workspaces = false;
@@ -116,6 +118,7 @@
           } // lib.optionalAttrs (config.smind.desktop.gnome.keyboard-layouts != [ ]) {
             "org/gnome/desktop/input-sources" = {
               sources = map (layout: lib.gvariant.mkTuple [ "xkb" layout ]) config.smind.desktop.gnome.keyboard-layouts;
+              per-window = true;
             };
           } // lib.optionalAttrs config.smind.desktop.gnome.sticky-keys.enable {
             "org/gnome/desktop/a11y/keyboard" = {

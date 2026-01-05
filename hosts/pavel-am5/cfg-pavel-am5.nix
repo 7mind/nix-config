@@ -214,7 +214,10 @@
     allowedTCPPorts = [ 8234 ];
   };
 
-  programs.steam.enable = true;
+  programs.steam = {
+    enable = true;
+    extraCompatPackages = [ pkgs.proton-ge-bin ];
+  };
 
   boot.initrd = {
     kernelModules = [ "atlantic" "igc" ];
