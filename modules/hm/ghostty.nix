@@ -53,7 +53,7 @@ in
         window-width = 160;
         window-height = defaultRows;
 
-        scrollback-limit = 10000;
+        scrollback-limit = 50000;
 
         app-notifications = false;
 

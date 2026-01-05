@@ -10,6 +10,8 @@
   ./bootloader-systemd.nix
   ./cosmic.nix
   ./cpu.nix
+  ./dev-adb.nix
+  ./dev-wireshark.nix
   ./email.nix
   ./fingerprint.nix
   ./cups.nix

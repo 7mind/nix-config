@@ -156,6 +156,9 @@ in
     age.enable = true;
     roles.desktop.generic-gnome = true;
     isLaptop = true;
+
+    dev.adb.users = [ "pavel" ];
+    dev.wireshark.users = [ "pavel" ];
     power-management.enable = true;
     power-management.auto-refresh-rate.enable = true;
     desktop.gnome.fractional-scaling.enable = true;
@@ -265,9 +268,6 @@ in
         "qemu-libvirtd"
         "podman"
         "ollama"
-        "adbusers"
-        "corectrl"
-        "wireshark"
         "tss"
       ];
       openssh.authorizedKeys.keys = cfg-const.ssh-keys-pavel;

@@ -6,21 +6,21 @@
     "${cfg-meta.paths.users}/pavel/hm/home-pavel-generic-linux.nix"
   ];
 
-  home.packages = [
-    pkgs.fractal-tray
-  ];
-
   services.wluma = {
     enable = true;
     settings = {
       als.iio = {
         path = "/sys/bus/iio/devices";
         thresholds = {
-          "0" = "night";
-          "20" = "dim";
-          "80" = "normal";
-          "250" = "bright";
-          "500" = "outdoors";
+          "0" = "0";
+          "5" = "5";
+          "10" = "10";
+          "20" = "20";
+          "30" = "30";
+          "50" = "50";
+          "80" = "80";
+          "250" = "250";
+          "500" = "500";
         };
       };
       output.backlight = [{
@@ -32,10 +32,7 @@
   };
 
   smind.hm = {
-    roles.desktop = true;
-    wezterm.fontSize = 11;
     vscodium.fontSize = 14;
-    ghostty.enable = true;
     ghostty.fontSize = 11;
 
     # Resource-limited Electron apps
@@ -49,19 +46,6 @@
       element.enable = true;
     };
 
-    autostart.programs = [
-      # {
-      #   name = "element-main";
-      #   exec = "${config.home.profileDirectory}/bin/element-desktop";
-      # }
-      {
-        name = "slack";
-        exec = "${config.home.profileDirectory}/bin/slack";
-      }
-      {
-        name = "fractal";
-        exec = "${config.home.profileDirectory}/bin/fractal --minimized";
-      }
-    ];
+
   };
 }

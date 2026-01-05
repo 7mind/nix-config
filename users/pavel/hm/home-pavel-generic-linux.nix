@@ -14,6 +14,21 @@
       -exec cp -f "${cfg-meta.paths.users}/pavel/hm/keymap-idea-linux.xml" {}/Magen.xml \;
   '';
 
+
+  programs.zed-editor =
+    {
+      userSettings = {
+        base_keymap = "None";
+      };
+      userKeymaps = import ./zed-keymap-linux.nix;
+    };
+
+
+  # json 2 nix:
+  # nix eval --impure --expr 'builtins.fromJSON (builtins.readFile ./my-file.json)' --json
+  # nix eval --impure --expr "builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-editorFocus.json)"  > vscode-keymap-linux-editorFocus.nix
+  # nix run nixpkgs#nixfmt-classic ./vscode-keymap-linux-editorFocus.nix
+
   services.megasync.enable = true;
   services.megasync.package = (pkgs.megasync.overrideAttrs (drv:
     {
@@ -47,7 +62,49 @@
       ];
       desktopfile = "org.gnome.Evince.desktop";
     })
+
+    {
+      desktopEntries = {
+        element-desktop-2 = {
+          exec = "${pkgs.element-desktop.out}/bin/element-desktop --profile secondary %u";
+          genericName = "Element Desktop 2nd";
+          icon = "element";
+          mimeType = [ "x-scheme-handler/element" "x-scheme-handler/io.element.desktop" ];
+          name = "Element Desktop 2nd";
+          type = "Application";
+        };
+      };
+    }
   ]);
+
+
+  smind.hm = {
+    roles.desktop = true;
+    desktop.cosmic.minimal-keybindings = true;
+
+    autostart.programs = [
+      # {
+      #   name = "element-main";
+      #   exec = "${config.home.profileDirectory}/bin/element-desktop";
+      # }
+      # {
+      #   name = "element-main";
+      #   exec = "${element-desktop}/bin/element-desktop --hidden";
+      # }
+      # {
+      #   name = "element-2nd";
+      #   exec = "${element-desktop}/bin/element-desktop --hidden --profile secondary";
+      # }
+      {
+        name = "slack";
+        exec = "${config.home.profileDirectory}/bin/slack -u";
+      }
+      {
+        name = "fractal";
+        exec = "${config.home.profileDirectory}/bin/fractal --minimized";
+      }
+    ];
+  };
 
   home.packages = with pkgs; [
     nordvpn-wireguard-extractor
@@ -56,6 +113,8 @@
   ]
   ++ lib.optional (!config.smind.hm.electron-wrappers.element.enable) element-desktop
   ++ [
+    fractal-tray
+
     bitwarden-desktop
 
     visualvm

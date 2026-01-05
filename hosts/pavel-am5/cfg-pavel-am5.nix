@@ -126,6 +126,10 @@
 
   smind = {
     roles.desktop.generic-gnome = true;
+    desktop.gnome.gdm.monitors-xml = ./monitors.xml;
+
+    dev.adb.users = [ "pavel" "test" ];
+    dev.wireshark.users = [ "pavel" "test" ];
 
     locale.ie.enable = true;
 
@@ -158,8 +162,8 @@
     hw.cpu.isAmd = true;
     hw.amd.gpu.enable = true;
 
-    bootloader.systemd-boot.enable = true;
-    bootloader.lanzaboote.enable = false;
+    bootloader.systemd-boot.enable = false;
+    bootloader.lanzaboote.enable = true;
 
     llm.enable = true;
     containers.docker.enable = true;
@@ -261,13 +265,10 @@
         "qemu-libvirtd"
         "kvm"
         "uinput"
-        # "adbusers"
-        # "docker"
-        # "corectrl"
-        # "wireshark"
         "ssh-users"
         "podman"
         "ollama"
+        "tss"
       ];
       openssh.authorizedKeys.keys = cfg-const.ssh-keys-pavel;
     };
@@ -291,10 +292,6 @@
         "qemu-libvirtd"
         "kvm"
         "uinput"
-        "adbusers"
-        # "docker"
-        # "corectrl"
-        # "wireshark"
         "ssh-users"
         "podman"
         "ollama"
@@ -302,11 +299,6 @@
     };
 
   };
-
-  programs.adb.enable = true;
-  # services.udev.packages = [
-  #   pkgs.android-udev-rules
-  # ];
 
   home-manager.users.pavel = import ./home-pavel.nix;
   home-manager.users.root = import ./home-root.nix;
@@ -502,89 +494,4 @@
   #     in
   #     "${config}";
   # };
-
-  # services.ollama = {
-  #   rocmOverrideGfx = "11.0.0";
-  #   environmentVariables = {
-  #     HSA_OVERRIDE_GFX_VERSION_3 = "10.3.0";
-  #     ROCR_VISIBLE_DEVICES = "0,1,2";
-  #   };
-  # };
-
-
-  # doesn't work
-  # systemd.tmpfiles.rules =
-  #   let
-  #     xml = ''
-  #         <monitors version="2">
-  #         <configuration>
-  #           <layoutmode>logical</layoutmode>
-  #           <logicalmonitor>
-  #             <x>5120</x>
-  #             <y>0</y>
-  #             <scale>1.5</scale>
-  #             <monitor>
-  #               <monitorspec>
-  #                 <connector>DP-2</connector>
-  #                 <vendor>PHL</vendor>
-  #                 <product>PHL 329P9</product>
-  #                 <serial>0x000004bc</serial>
-  #               </monitorspec>
-  #               <mode>
-  #                 <width>3840</width>
-  #                 <height>2160</height>
-  #                 <rate>59.997</rate>
-  #               </mode>
-  #             </monitor>
-  #           </logicalmonitor>
-  #           <logicalmonitor>
-  #             <x>2560</x>
-  #             <y>0</y>
-  #             <scale>1.5</scale>
-  #             <primary>yes</primary>
-  #             <monitor>
-  #               <monitorspec>
-  #                 <connector>DP-1</connector>
-  #                 <vendor>AOC</vendor>
-  #                 <product>AG324UWS4R4B</product>
-  #                 <serial>QVJN2JA000291</serial>
-  #               </monitorspec>
-  #               <mode>
-  #                 <width>3840</width>
-  #                 <height>2160</height>
-  #                 <rate>144.000</rate>
-  #               </mode>
-  #             </monitor>
-  #           </logicalmonitor>
-  #           <logicalmonitor>
-  #             <x>0</x>
-  #             <y>0</y>
-  #             <scale>1.5</scale>
-  #             <monitor>
-  #               <monitorspec>
-  #                 <connector>DP-3</connector>
-  #                 <vendor>HPN</vendor>
-  #                 <product>HP Z32</product>
-  #                 <serial>CN4041057P</serial>
-  #               </monitorspec>
-  #               <mode>
-  #                 <width>3840</width>
-  #                 <height>2160</height>
-  #                 <rate>59.997</rate>
-  #               </mode>
-  #             </monitor>
-  #           </logicalmonitor>
-  #         </configuration>
-  #       </monitors>
-  #     '';
-  #   in
-  #   [
-  #     # "f+ /run/gdm/.config/monitors.xml - gdm gdm - ${xml}"
-  #     (
-  #       let monitorsXml = pkgs.writeText "gdm-monitors.xml" xml;
-  #       in "L+ /run/gdm/.config/monitors.xml - - - - ${monitorsXml}"
-  #     )
-  #   ];
-
-
 }
