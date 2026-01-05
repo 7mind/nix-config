@@ -109,8 +109,8 @@
 
   };
 
-
-
+  # networkmanager does not manage ethernet on this host, so gnome connectivity check fails
+  environment.sessionVariables.GIO_USE_NETWORK_MONITOR = "base";
 
   programs.winbox = {
     enable = true;
