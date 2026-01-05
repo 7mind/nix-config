@@ -62,6 +62,7 @@
       pdftk
 
       tgeraser
+      geekbench
     ]);
 
     programs.librewolf.enable = lib.mkIf cfg-meta.isLinux true;
