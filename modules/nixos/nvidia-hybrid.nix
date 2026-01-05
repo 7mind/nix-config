@@ -155,6 +155,7 @@ in
 
         # CUDA support for containers (Podman/Docker)
         hardware.nvidia-container-toolkit.enable = true;
+        hardware.nvidia-container-toolkit.suppressNvidiaDriverAssertion = true;
 
         hardware.graphics.enable = true;
 

@@ -112,6 +112,19 @@
     home.file.".gemini-work/settings.json".source = config.home.file.".gemini/settings.json".source;
     home.file.".gemini-work/AGENTS.md".source = config.home.file.".gemini/AGENTS.md".source;
 
+    programs.opencode = {
+      enable = true;
+      settings = {
+        theme = "dark";
+        autoupdate = "notify";
+        permissions = {
+          bash = "allow";
+          write = "allow";
+        };
+      };
+    };
+    home.file.".config/opencode/AGENTS.md".text = config.programs.claude-code.memory.text;
+
     home.packages = with pkgs;
       let
         inherit (pkgs) firejail-wrap;
@@ -121,7 +134,6 @@
 
         # aichat
         # aider-chat
-        # opencode
         # goose-cli
 
         (writeShellScriptBin "yolo-claude" ''
