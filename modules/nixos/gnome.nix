@@ -22,7 +22,7 @@
 
     smind.desktop.gnome.vrr.enable = lib.mkOption {
       type = lib.types.bool;
-      default = false;
+      default = true;
       description = "Enable Variable Refresh Rate (VRR) via Mutter experimental features";
     };
 
