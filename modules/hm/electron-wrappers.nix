@@ -10,9 +10,9 @@ let
       flags = lib.concatStringsSep " " extraFlags;
       wrapperScript = if netns != null then ''
 #!/usr/bin/env bash
-# Use firejail for both network namespace and cgroup resource limits
+# Use firejail (system setuid wrapper) for both network namespace and cgroup resource limits
 CGROUP="/sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/${slice}"
-exec ${pkgs.firejail}/bin/firejail --netns=${netns} --cgroup="''$CGROUP" \
+exec /run/wrappers/bin/firejail --netns=${netns} --cgroup="''$CGROUP" \
   ${pkg}/bin/${binName} ${flags} "$@"
 '' else ''
 #!/usr/bin/env bash
