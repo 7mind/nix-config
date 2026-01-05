@@ -7,6 +7,12 @@
       default = false;
       description = "Enable LLM development environment variables";
     };
+
+    smind.hm.dev.llm.devstralContextSize = lib.mkOption {
+      type = lib.types.int;
+      default = 131072;
+      description = "Context size for devstral model in opencode (default: 128k)";
+    };
   };
 
   config = lib.mkIf config.smind.hm.dev.llm.enable {
@@ -117,7 +123,7 @@
       settings = {
         theme = "dark";
         autoupdate = "notify";
-        model = "anthropic/claude-opus-4-5";
+        model = "ollama/devstral:24b-small-2505-q8_0";
         plugin = [ "opencode-gemini-auth@latest" ];
         provider = {
           google = {
@@ -138,10 +144,10 @@
               baseURL = "http://127.0.0.1:11434/v1";
             };
             models = {
-              "devstral:24b-small-2505-128k" = {
+              "devstral:24b-small-2505-q8_0" = {
                 limit = {
-                  context = 131072;
-                  output = 131072;
+                  context = config.smind.hm.dev.llm.devstralContextSize;
+                  output = config.smind.hm.dev.llm.devstralContextSize;
                 };
               };
             };

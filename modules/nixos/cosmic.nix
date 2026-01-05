@@ -7,9 +7,17 @@
       default = false;
       description = "Enable COSMIC desktop environment";
     };
+
+    smind.desktop.cosmic.hibernate.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = config.smind.isLaptop;
+      description = "Enable hibernate/suspend support in COSMIC";
+    };
   };
 
   config = lib.mkIf config.smind.desktop.cosmic.enable {
+    # Enable kanata for Mac-style keyboard shortcuts (same as GNOME)
+    smind.keyboard.super-remap.enable = lib.mkDefault true;
     services.desktopManager.cosmic.enable = true;
 
     environment.cosmic.excludePackages = with pkgs; [
@@ -52,10 +60,10 @@
 
     services.gvfs.enable = true;
 
-    systemd.targets.sleep.enable = false;
-    systemd.targets.suspend.enable = false;
-    systemd.targets.hibernate.enable = false;
-    systemd.targets.hybrid-sleep.enable = false;
+    systemd.targets.sleep.enable = config.smind.desktop.cosmic.hibernate.enable;
+    systemd.targets.suspend.enable = config.smind.desktop.cosmic.hibernate.enable;
+    systemd.targets.hibernate.enable = config.smind.desktop.cosmic.hibernate.enable;
+    systemd.targets.hybrid-sleep.enable = config.smind.desktop.cosmic.hibernate.enable;
 
     environment.systemPackages = with pkgs; [
       cosmic-files

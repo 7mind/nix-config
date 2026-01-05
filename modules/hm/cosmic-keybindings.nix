@@ -7,9 +7,50 @@
       default = false;
       description = "Configure minimal COSMIC keybindings";
     };
+
+    smind.hm.desktop.cosmic.dark-mode = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Enable dark mode in COSMIC";
+    };
+
+    smind.hm.desktop.cosmic.keyboard-layouts = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ "us" "ru" ];
+      example = [ "us" "de" "fr" ];
+      description = "XKB keyboard layouts to configure";
+    };
+
+    smind.hm.desktop.cosmic.keyboard-variant = lib.mkOption {
+      type = lib.types.str;
+      default = "mac,";
+      example = "dvorak,";
+      description = "XKB keyboard variants (comma-separated, matching layouts)";
+    };
+
+    smind.hm.desktop.cosmic.keyboard-toggle = lib.mkOption {
+      type = lib.types.str;
+      default = "grp:ctrl_alt_space_toggle";
+      example = "grp:ctrl_space_toggle";
+      description = "XKB option for keyboard layout toggle";
+    };
   };
 
   config = lib.mkIf config.smind.hm.desktop.cosmic.minimal-keybindings {
+    # Dark mode setting
+    xdg.configFile."cosmic/com.system76.CosmicTheme.Mode/v1/is_dark".text =
+      if config.smind.hm.desktop.cosmic.dark-mode then "true" else "false";
+
+    # Keyboard layout configuration
+    xdg.configFile."cosmic/com.system76.CosmicComp/v1/xkb_config".text = ''
+      (
+          rules: "",
+          model: "",
+          layout: "${lib.concatStringsSep "," config.smind.hm.desktop.cosmic.keyboard-layouts}",
+          variant: "${config.smind.hm.desktop.cosmic.keyboard-variant}",
+          options: Some("${config.smind.hm.desktop.cosmic.keyboard-toggle}"),
+      )
+    '';
     # COSMIC keybindings are stored in:
     # ~/.config/cosmic/com.system76.CosmicSettings.Shortcuts/v1/custom
     #

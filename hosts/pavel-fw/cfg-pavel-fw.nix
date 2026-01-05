@@ -159,12 +159,15 @@ in
 
     dev.adb.users = [ "pavel" ];
     dev.wireshark.users = [ "pavel" ];
+    
     power-management.enable = true;
     power-management.auto-refresh-rate.enable = true;
     desktop.gnome.fractional-scaling.enable = true;
     desktop.gnome.vrr.enable = true;
     desktop.gnome.ambient-light-sensor.enable = false;
     desktop.gnome.gdm.monitors-xml = ./monitors.xml;
+
+    desktop.cosmic.enable = true;
 
     locale.ie.enable = true;
 
