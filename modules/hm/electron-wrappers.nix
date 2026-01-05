@@ -106,6 +106,7 @@ in
         CPUWeight = cfg.cpuWeight;
         MemoryMax = cfg.memoryMax;
       };
+      Install.WantedBy = [ "default.target" ];
     };
 
     home.packages = lib.flatten [
