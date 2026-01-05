@@ -33,28 +33,26 @@ in
   # Patch VPE DPM0 check to include Strix Point (6.1.0) - fixes suspend/resume hangs
   # Upstream only has Strix Halo (6.1.1) with firmware check that doesn't work for Strix Point
   # See: https://gitlab.freedesktop.org/drm/amd/-/issues/XXXXX
-  # boot.kernelPatches = [{
-  #   name = "amdgpu-vpe-strix-point-dpm0-fix";
-  #   patch = pkgs.writeText "vpe-strix-point.patch" ''
-  #     --- a/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
-  #     +++ b/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
-  #     @@ -325,6 +325,8 @@ static bool vpe_need_dpm0_at_power_down(struct amdgpu_device *adev)
-  #      {
-  #      	switch (amdgpu_ip_version(adev, VPE_HWIP, 0)) {
-  #     +	case IP_VERSION(6, 1, 0):
-  #     +		return true; /* Strix Point needs DPM0 check regardless of PMFW version */
-  #      	case IP_VERSION(6, 1, 1):
-  #      		return adev->pm.fw_version < 0x0a640500;
-  #      	default:
-  #   '';
-  # }];
+  boot.kernelPatches = [{
+    name = "amdgpu-vpe-strix-point-dpm0-fix";
+    patch = pkgs.writeText "vpe-strix-point.patch" ''
+      --- a/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
+      +++ b/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
+      @@ -325,6 +325,8 @@ static bool vpe_need_dpm0_at_power_down(struct amdgpu_device *adev)
+       {
+       	switch (amdgpu_ip_version(adev, VPE_HWIP, 0)) {
+      +	case IP_VERSION(6, 1, 0):
+      +		return true; /* Strix Point needs DPM0 check regardless of PMFW version */
+       	case IP_VERSION(6, 1, 1):
+       		return adev->pm.fw_version < 0x0a640500;
+       	default:
+    '';
+  }];
 
   boot.kernelParams = [
     "quiet"
     "splash"
-    # AMD GPU resume workarounds for Strix Point
-    "amdgpu.pg_mask=0" # Disable power gating (potential fix for VPE suspend hang)
-    #"amdgpu.sg_display=0" # Disable scatter-gather display (helps resume)
+    # AMD GPU workarounds for Strix Point
     "amdgpu.abmlevel=0" # Disable adaptive backlight
     # Prevent simpledrm from taking over framebuffer before amdgpu loads (for Plymouth)
     "initcall_blacklist=simpledrm_platform_driver_init"
@@ -99,6 +97,7 @@ in
       sudo ${pkgs.systemd}/bin/systemd-cryptenroll \
         --wipe-slot=tpm2 \
         --tpm2-device=auto \
+        --tpm2-pcrs=0+7 \
         "${luksDevice}"
       echo ""
       echo "Done! TPM auto-unlock will work on next boot."

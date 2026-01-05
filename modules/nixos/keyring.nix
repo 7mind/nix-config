@@ -36,13 +36,13 @@ let
     fi
 
     # Encrypt using TPM2 without user presence requirement
-    # PCRs 0+7 bind to firmware and secure boot state (no user presence needed)
+    # PCR 0 binds to firmware only (Secure Boot state checked by LUKS already)
     echo ""
     echo "Encrypting password with TPM..."
     echo -n "$PASSWORD" | sudo ${pkgs.systemd}/bin/systemd-creds encrypt \
       --with-key=tpm2 \
       --tpm2-device=auto \
-      --tpm2-pcrs=0+7 \
+      --tpm2-pcrs=0 \
       --name=keyring-password \
       - "$CRED_PATH"
 
