@@ -68,7 +68,7 @@
       enable = true;
       backend = "gnome-keyring";
       sshAgent = "gcr";
-      displayManagers = [ "login" "greetd" "cosmic-greeter" "gdm" "gdm-password" "gdm-fingerprint" "gdm-autologin" ];
+      displayManagers = [ "login" "cosmic-greeter" "greetd" "gdm" "gdm-password" "gdm-fingerprint" "gdm-autologin" ];
     };
 
     xdg.portal.enable = true;

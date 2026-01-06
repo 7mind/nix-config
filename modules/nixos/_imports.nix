@@ -10,6 +10,7 @@
   ./bootloader-systemd.nix
   ./cosmic.nix
   ./cpu.nix
+  ./display-manager.nix
   ./dev-adb.nix
   ./dev-wireshark.nix
   ./email.nix
@@ -23,6 +24,8 @@
   ./gnome-minimal-hotkeys.nix
   ./gnome-extensions.nix
   ./kanata-super-remap.nix
+  ./kde.nix
+  ./kdeconnect.nix
   ./kernel-settings.nix
   ./keyring.nix
   ./ledger.nix

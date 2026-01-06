@@ -101,7 +101,7 @@ in
       };
 
       backend = lib.mkOption {
-        type = lib.types.enum [ "gnome-keyring" "none" ];
+        type = lib.types.enum [ "gnome-keyring" "kwallet" "none" ];
         default = "gnome-keyring";
         description = "Keyring backend to use";
       };
@@ -168,6 +168,24 @@ in
       }];
 
       services.gnome.gcr-ssh-agent.enable = true;
+    })
+
+    # KWallet
+    (lib.mkIf (config.smind.security.keyring.backend == "kwallet") {
+      # remove seahorse to prevent conflict with KWallet
+      environment.gnome.excludePackages = [
+        pkgs.seahorse
+      ];
+
+      environment.systemPackages = with pkgs; [
+        kdePackages.kwallet-pam
+        kdePackages.kwalletmanager
+      ];
+
+      # PAM integration for auto-unlock on login
+      security.pam.services = lib.genAttrs config.smind.security.keyring.displayManagers (_: {
+        kwallet.enable = true;
+      });
     })
 
     # TPM-based keyring unlock (for fingerprint login)

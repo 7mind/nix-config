@@ -60,26 +60,6 @@
     programs.dconf = {
       enable = true;
 
-      # GDM login screen settings (runs as gdm user, needs separate profile)
-      profiles.gdm.databases = [
-        {
-          lockAll = true;
-          settings = {
-            "org/gnome/desktop/interface" = {
-              cursor-size = lib.gvariant.mkInt32 36;
-              color-scheme = "prefer-dark";
-            };
-            # Required for fractional scaling in monitors.xml to work
-            "org/gnome/mutter" = {
-              experimental-features =
-                lib.optionals config.smind.desktop.gnome.fractional-scaling.enable [
-                  "scale-monitor-framebuffer"
-                ];
-            };
-          };
-        }
-      ];
-
       profiles.user.databases = [
         {
           lockAll = true; # prevents overriding
@@ -162,7 +142,7 @@
       enable = true;
       backend = "gnome-keyring";
       sshAgent = "gcr";
-      displayManagers = [ "login" "sddm" "lightdm" "greetd" "gdm" "gdm-password" "gdm-fingerprint" "gdm-autologin" ];
+      displayManagers = [ "login" "lightdm" "greetd" "gdm" "gdm-password" "gdm-fingerprint" "gdm-autologin" ];
     };
 
     programs.ssh = {
@@ -216,32 +196,14 @@
 
     services.udev.packages = [ pkgs.gnome-settings-daemon ];
 
-    services.xserver.enable = true;
-    services.displayManager.gdm.enable = true;
-
-    # Speed up GDM startup
-    systemd.services.display-manager.after = [ "systemd-user-sessions.service" ];
-
-    # Symlink monitors.xml to GDM for consistent display resolution on login screen
-    # Configure displays in GNOME Settings first, then set:
-    #   smind.desktop.gnome.gdm.monitors-xml = ./path/to/monitors.xml;
-    systemd.tmpfiles.rules = lib.mkIf (config.smind.desktop.gnome.gdm.monitors-xml != null) [
-      "L+ /run/gdm/.config/monitors.xml - - - - ${config.smind.desktop.gnome.gdm.monitors-xml}"
-    ];
+    # Display manager (GDM) configuration handled by smind.displayManager module
 
     # PAM keyring integration handled by smind.security.keyring module
-
-    programs.kdeconnect =
-      {
-        enable = true;
-        package = pkgs.gnomeExtensions.gsconnect;
-      };
 
     environment.systemPackages =
       (with pkgs; [
         adw-gtk3
         dconf-editor
-        seahorse
         gnome-firmware
         eog
         pix
