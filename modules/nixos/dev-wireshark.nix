@@ -1,4 +1,4 @@
-{ config, lib, ... }:
+{ config, lib, pkgs, ... }:
 
 {
   options = {
@@ -18,6 +18,7 @@
 
   config = lib.mkIf config.smind.dev.wireshark.enable {
     programs.wireshark.enable = true;
+    programs.wireshark.package = pkgs.wireshark;
 
     boot.kernelModules = [ "usbmon" ];
 

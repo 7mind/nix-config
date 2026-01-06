@@ -147,7 +147,7 @@
     ssh.mode = "safe";
 
     hw.uhk-keyboard.enable = true;
-    # hw.trezor.enable = true;
+    hw.trezor.enable = true;
     hw.ledger.enable = true;
     hw.bluetooth.enable = true;
 

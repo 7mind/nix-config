@@ -159,9 +159,21 @@ in
 
     dev.adb.users = [ "pavel" ];
     dev.wireshark.users = [ "pavel" ];
-    
+
     power-management.enable = true;
-    power-management.auto-refresh-rate.enable = true;
+    power-management.auto-refresh-rate = {
+      enable = true;
+      displays."eDP-1" = {
+        gnome = {
+          onAC = "2560x1600@165.000+vrr";
+          onBattery = "2560x1600@60.002+vrr";
+        };
+        cosmic = {
+          onAC = "2560x1600@165Hz";
+          onBattery = "2560x1600@60Hz";
+        };
+      };
+    };
     desktop.gnome.fractional-scaling.enable = true;
     desktop.gnome.vrr.enable = true;
     desktop.gnome.ambient-light-sensor.enable = false;
@@ -197,6 +209,8 @@ in
       nvidiaBusId = "PCI:194:0:0";
       amdgpuBusId = "PCI:195:0:0";
     };
+    # hw.trezor.enable = true;
+    hw.ledger.enable = true;
     containers.docker.enable = true;
 
     ssh.mode = "safe";

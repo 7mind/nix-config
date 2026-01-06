@@ -3,279 +3,113 @@
 let
   cfg = config.smind.power-management;
 
-  # COSMIC/Wayland version using wlr-randr with JSON output
-  cosmicRefreshRateSwitchScript = pkgs.writeShellScript "refresh-rate-switch-wayland" ''
-    set -euo pipefail
-
-    # Import environment from systemd user manager
-    eval "$(${pkgs.systemd}/bin/systemctl --user show-environment | grep -E '^(WAYLAND_DISPLAY|DISPLAY|DBUS_SESSION_BUS_ADDRESS)=')" 2>/dev/null || true
-    export WAYLAND_DISPLAY DISPLAY DBUS_SESSION_BUS_ADDRESS 2>/dev/null || true
-
-    # Fallback: try to find wayland socket
-    if [ -z "''${WAYLAND_DISPLAY:-}" ] && [ -d "''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" ]; then
-      for sock in "''${XDG_RUNTIME_DIR}"/wayland-*; do
-        if [ -S "$sock" ]; then
-          export WAYLAND_DISPLAY="$(basename "$sock")"
-          break
+  # Shared: check if on battery
+  isOnBatteryCheck = ''
+    is_on_ac() {
+      for supply in /sys/class/power_supply/*/; do
+        if [ -f "$supply/type" ] && [ "$(cat "$supply/type")" = "Mains" ]; then
+          if [ -f "$supply/online" ] && [ "$(cat "$supply/online")" = "1" ]; then
+            return 0
+          fi
         fi
       done
-    fi
-
-    MONITOR="${cfg.auto-refresh-rate.monitor}"
-    RATE_AC="${toString cfg.auto-refresh-rate.onAC}"
-    RATE_BATTERY="${toString cfg.auto-refresh-rate.onBattery}"
-
-    set_refresh_rate() {
-      local rate="$1"
-      local json
-      json=$(${pkgs.wlr-randr}/bin/wlr-randr --json 2>/dev/null) || return 1
-
-      # Find monitor (first enabled if not specified)
-      local monitor
-      if [ -n "$MONITOR" ]; then
-        monitor="$MONITOR"
-      else
-        monitor=$(echo "$json" | ${pkgs.jq}/bin/jq -r '.[0].name // empty')
-      fi
-
-      if [ -z "$monitor" ]; then
-        echo "No monitor found"
-        return 1
-      fi
-
-      # Get current refresh rate (rounded)
-      local current_rate
-      current_rate=$(echo "$json" | ${pkgs.jq}/bin/jq -r --arg mon "$monitor" '
-        .[] | select(.name == $mon) | .modes[] | select(.current) | .refresh | round
-      ')
-
-      if [ "$current_rate" = "$rate" ]; then
-        echo "Already at ''${rate}Hz, skipping"
-        return 0
-      fi
-
-      # Find mode matching target rate (within 1 Hz tolerance)
-      local mode
-      mode=$(echo "$json" | ${pkgs.jq}/bin/jq -r --arg mon "$monitor" --argjson rate "$rate" '
-        .[] | select(.name == $mon) | .modes[] |
-        select((.refresh | round) == $rate or ((.refresh - $rate) | fabs) < 1) |
-        "\(.width)x\(.height)@\(.refresh)"
-      ' | head -1)
-
-      if [ -z "$mode" ]; then
-        echo "No matching mode found for ''${rate}Hz"
-        return 1
-      fi
-
-      echo "Setting $monitor to $mode"
-      ${pkgs.wlr-randr}/bin/wlr-randr --output "$monitor" --mode "$mode" 2>&1 || true
+      return 1
     }
-
-    is_on_battery() {
-      local state
-      state=$(${pkgs.upower}/bin/upower -i /org/freedesktop/UPower/devices/DisplayDevice 2>/dev/null | \
-        ${pkgs.gawk}/bin/awk '/state:/ {print $2}')
-      [ "$state" = "discharging" ]
-    }
-
-    apply_for_power_state() {
-      if is_on_battery; then
-        echo "On battery -> ''${RATE_BATTERY}Hz"
-        set_refresh_rate "$RATE_BATTERY"
-      else
-        echo "On AC -> ''${RATE_AC}Hz"
-        set_refresh_rate "$RATE_AC"
-      fi
-    }
-
-    echo "Checking initial power state..."
-    apply_for_power_state
-
-    echo "Monitoring UPower DisplayDevice for power state changes..."
-    ${pkgs.dbus}/bin/dbus-monitor --system "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path='/org/freedesktop/UPower/devices/DisplayDevice'" 2>/dev/null | \
-    while read -r line; do
-      if echo "$line" | ${pkgs.gnugrep}/bin/grep -qE "State|IsPresent"; then
-        sleep 0.3
-        echo "Power state changed"
-        apply_for_power_state
-      fi
-    done
   '';
 
-  # GNOME version using gdctl (official mutter display control tool)
-  refreshRateSwitchScript = pkgs.writeShellScript "refresh-rate-switch" ''
+  # Generate display config lines for GNOME (gdctl)
+  # Format: DISPLAY:MODE_AC:MODE_BATTERY:IS_PRIMARY
+  gnomeDisplayConfigLines = lib.concatStringsSep "\n" (lib.filter (x: x != "") (lib.mapAttrsToList
+    (name: dcfg:
+      if dcfg.gnome != null
+      then "${name}:${dcfg.gnome.onAC}:${dcfg.gnome.onBattery}:${if dcfg.primary then "1" else "0"}"
+      else "")
+    cfg.auto-refresh-rate.displays));
+
+  # Generate display config lines for COSMIC (wlr-randr)
+  # Format: DISPLAY:MODE_AC:MODE_BATTERY
+  cosmicDisplayConfigLines = lib.concatStringsSep "\n" (lib.filter (x: x != "") (lib.mapAttrsToList
+    (name: dcfg:
+      if dcfg.cosmic != null
+      then "${name}:${dcfg.cosmic.onAC}:${dcfg.cosmic.onBattery}"
+      else "")
+    cfg.auto-refresh-rate.displays));
+
+  # COSMIC: set refresh rate using wlr-randr
+  cosmicSetRefreshRate = pkgs.writeShellScript "refresh-rate-set-cosmic" ''
     set -euo pipefail
+    ${isOnBatteryCheck}
 
-    MONITOR="${cfg.auto-refresh-rate.monitor}"
-    RATE_AC="${toString cfg.auto-refresh-rate.onAC}"
-    RATE_BATTERY="${toString cfg.auto-refresh-rate.onBattery}"
+    if is_on_ac; then
+      echo "On AC power"
+      MODE_IDX=1
+    else
+      echo "On battery"
+      MODE_IDX=2
+    fi
 
-    # Parse gdctl show output to get monitor info
-    # Returns: CONNECTOR CURRENT_MODE (e.g., "eDP-1 2560x1600@165.000+vrr")
-    get_current_config() {
-      ${pkgs.mutter}/bin/gdctl show 2>/dev/null | ${pkgs.gawk}/bin/awk '
-        /^.*Monitor [A-Za-z]+-[0-9]/ {
-          # Extract connector name (e.g., eDP-1)
-          match($0, /Monitor ([A-Za-z]+-[0-9]+)/, m)
-          if (m[1]) connector = m[1]
-        }
-        /Current mode/ { in_current = 1; next }
-        in_current && /[0-9]+x[0-9]+@[0-9.]+/ {
-          # Extract mode (e.g., 2560x1600@165.000 or 2560x1600@165.000+vrr)
-          match($0, /([0-9]+x[0-9]+@[0-9.]+(\+vrr)?)/, m)
-          if (m[1]) {
-            print connector " " m[1]
-            exit
-          }
-        }
-      '
-    }
-
-    # Parse gdctl show --modes to get available modes for a monitor
-    get_available_modes() {
-      local monitor="$1"
-      ${pkgs.mutter}/bin/gdctl show --modes 2>/dev/null | ${pkgs.gawk}/bin/awk -v mon="$monitor" '
-        /Monitor / && $0 ~ mon { in_monitor = 1; next }
-        /^.*Monitor [A-Za-z]+-[0-9]/ && in_monitor { exit }
-        in_monitor && /[0-9]+x[0-9]+@[0-9.]+/ {
-          match($0, /([0-9]+x[0-9]+@[0-9.]+(\+vrr)?)/, m)
-          if (m[1]) print m[1]
-        }
-      '
-    }
-
-    # Find best mode matching resolution and target rate, preserving VRR state
-    find_best_mode() {
-      local current_mode="$1"
-      local target_rate="$2"
-      local available_modes="$3"
-
-      # Extract resolution and VRR state from current mode
-      local resolution vrr_suffix
-      resolution=$(echo "$current_mode" | ${pkgs.gnused}/bin/sed 's/@.*//')
-      if echo "$current_mode" | ${pkgs.gnugrep}/bin/grep -q '+vrr'; then
-        vrr_suffix="+vrr"
+    # Process each configured display
+    while IFS=: read -r display mode_ac mode_battery; do
+      [ -z "$display" ] && continue
+      if [ "$MODE_IDX" = "1" ]; then
+        target_mode="$mode_ac"
       else
-        vrr_suffix=""
+        target_mode="$mode_battery"
       fi
+      echo "Setting $display -> $target_mode"
+      ${pkgs.wlr-randr}/bin/wlr-randr --output "$display" --mode "$target_mode" 2>&1 || true
+    done <<'DISPLAYS'
+    ${cosmicDisplayConfigLines}
+    DISPLAYS
+  '';
 
-      # Find mode with matching resolution and closest refresh rate
-      echo "$available_modes" | ${pkgs.gawk}/bin/awk -v res="$resolution" -v rate="$target_rate" -v vrr="$vrr_suffix" '
-        BEGIN { best_mode = ""; best_diff = 999999 }
-        {
-          mode = $1
-          # Check if mode has matching VRR state
-          has_vrr = (index(mode, "+vrr") > 0)
-          want_vrr = (vrr == "+vrr")
-          if (has_vrr != want_vrr) next
+  # GNOME: set refresh rate using gdctl
+  gnomeSetRefreshRate = pkgs.writeShellScript "refresh-rate-set-gnome" ''
+    set -euo pipefail
+    ${isOnBatteryCheck}
 
-          # Extract resolution and rate from mode
-          clean_mode = mode
-          gsub(/\+vrr$/, "", clean_mode)
-          split(clean_mode, parts, "@")
-          mode_res = parts[1]
-          mode_rate = parts[2] + 0
+    if is_on_ac; then
+      echo "On AC power"
+      MODE_IDX=1
+    else
+      echo "On battery"
+      MODE_IDX=2
+    fi
 
-          # Check resolution match
-          if (mode_res != res) next
-
-          # Calculate rate difference
-          diff = (mode_rate - rate) > 0 ? (mode_rate - rate) : (rate - mode_rate)
-          if (diff < best_diff) {
-            best_diff = diff
-            best_mode = mode
-          }
-        }
-        END { print best_mode }
-      '
-    }
-
-    set_refresh_rate() {
-      local target_rate="$1"
-
-      # Get current configuration
-      local config
-      config=$(get_current_config)
-      if [ -z "$config" ]; then
-        echo "Could not get current display configuration"
-        return 1
-      fi
-
-      local monitor current_mode
-      monitor=$(echo "$config" | ${pkgs.gawk}/bin/awk '{print $1}')
-      current_mode=$(echo "$config" | ${pkgs.gawk}/bin/awk '{print $2}')
-
-      # Override monitor if specified in config
-      if [ -n "$MONITOR" ]; then
-        monitor="$MONITOR"
-        # Re-fetch current mode for specified monitor
-        config=$(${pkgs.mutter}/bin/gdctl show 2>/dev/null | ${pkgs.gawk}/bin/awk -v mon="$MONITOR" '
-          /Monitor / && $0 ~ mon { in_monitor = 1; next }
-          /^.*Monitor [A-Za-z]+-[0-9]/ && in_monitor { exit }
-          in_monitor && /Current mode/ { in_current = 1; next }
-          in_monitor && in_current && /[0-9]+x[0-9]+@[0-9.]+/ {
-            match($0, /([0-9]+x[0-9]+@[0-9.]+(\+vrr)?)/, m)
-            if (m[1]) { print m[1]; exit }
-          }
-        ')
-        current_mode="$config"
-      fi
-
-      if [ -z "$monitor" ] || [ -z "$current_mode" ]; then
-        echo "Could not determine monitor or current mode"
-        return 1
-      fi
-
-      # Extract current rate (rounded)
-      local current_rate
-      current_rate=$(echo "$current_mode" | ${pkgs.gnused}/bin/sed 's/.*@//; s/+vrr//; s/\..*//')
-
-      if [ "$current_rate" = "$target_rate" ]; then
-        echo "Already at ''${target_rate}Hz (mode: $current_mode), skipping"
-        return 0
-      fi
-
-      # Get available modes and find best match
-      local available_modes best_mode
-      available_modes=$(get_available_modes "$monitor")
-      best_mode=$(find_best_mode "$current_mode" "$target_rate" "$available_modes")
-
-      if [ -z "$best_mode" ]; then
-        echo "No suitable mode found for ''${target_rate}Hz (current: $current_mode)"
-        return 1
-      fi
-
-      echo "Setting $monitor: $current_mode -> $best_mode"
-      ${pkgs.mutter}/bin/gdctl set -L --primary -M "$monitor" --mode "$best_mode" 2>&1 || true
-    }
-
-    is_on_battery() {
-      local state
-      state=$(${pkgs.upower}/bin/upower -i /org/freedesktop/UPower/devices/DisplayDevice 2>/dev/null | \
-        ${pkgs.gawk}/bin/awk '/state:/ {print $2}')
-      [ "$state" = "discharging" ]
-    }
-
-    apply_for_power_state() {
-      if is_on_battery; then
-        echo "On battery -> ''${RATE_BATTERY}Hz"
-        set_refresh_rate "$RATE_BATTERY"
+    # Build gdctl command with all displays
+    args=""
+    while IFS=: read -r display mode_ac mode_battery is_primary; do
+      [ -z "$display" ] && continue
+      if [ "$MODE_IDX" = "1" ]; then
+        target_mode="$mode_ac"
       else
-        echo "On AC -> ''${RATE_AC}Hz"
-        set_refresh_rate "$RATE_AC"
+        target_mode="$mode_battery"
       fi
-    }
+      primary_flag=""
+      [ "$is_primary" = "1" ] && primary_flag="--primary"
+      args="$args -L $primary_flag -M $display --mode $target_mode"
+      echo "Setting $display -> $target_mode"
+    done <<'DISPLAYS'
+    ${gnomeDisplayConfigLines}
+    DISPLAYS
 
-    echo "Checking initial power state..."
-    apply_for_power_state
+    [ -n "$args" ] && ${pkgs.mutter}/bin/gdctl set $args 2>&1 || true
+  '';
 
-    echo "Monitoring UPower DisplayDevice for power state changes..."
-    ${pkgs.dbus}/bin/dbus-monitor --system "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path='/org/freedesktop/UPower/devices/DisplayDevice'" 2>/dev/null | \
-    while read -r line; do
-      if echo "$line" | ${pkgs.gnugrep}/bin/grep -qE "State|IsPresent"; then
-        sleep 0.3
-        echo "Power state changed"
-        apply_for_power_state
+  # System script to signal user services (called by acpid)
+  triggerRefreshRateUpdate = pkgs.writeShellScript "trigger-refresh-rate-update" ''
+    # Signal all graphical user sessions to update refresh rate
+    ${pkgs.systemd}/bin/loginctl list-sessions --no-legend | while read -r session rest; do
+      user=$(${pkgs.systemd}/bin/loginctl show-session "$session" -p Name --value 2>/dev/null)
+      type=$(${pkgs.systemd}/bin/loginctl show-session "$session" -p Type --value 2>/dev/null)
+      [ "$type" = "wayland" ] || [ "$type" = "x11" ] || continue
+      uid=$(id -u "$user" 2>/dev/null) || continue
+      runtime_dir="/run/user/$uid"
+      trigger_file="$runtime_dir/refresh-rate-trigger"
+      # Create/update trigger file with user ownership so path unit can watch it
+      if [ -d "$runtime_dir" ]; then
+        touch "$trigger_file" 2>/dev/null || true
+        chown "$uid:$uid" "$trigger_file" 2>/dev/null || true
       fi
     done
   '';
@@ -318,25 +152,71 @@ in
       enable = lib.mkOption {
         type = lib.types.bool;
         default = false;
-        description = "Automatically switch display refresh rate based on AC/battery status via UPower (GNOME/COSMIC Wayland)";
+        description = "Automatically switch display refresh rate based on AC/battery status (GNOME/COSMIC Wayland)";
       };
 
-      onAC = lib.mkOption {
-        type = lib.types.int;
-        default = 165;
-        description = "Refresh rate (Hz) to use when on AC power";
-      };
-
-      onBattery = lib.mkOption {
-        type = lib.types.int;
-        default = 60;
-        description = "Refresh rate (Hz) to use when on battery";
-      };
-
-      monitor = lib.mkOption {
-        type = lib.types.str;
-        default = "";
-        description = "Monitor name to control (empty = first monitor). Use 'gdctl show' to list.";
+      displays = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.submodule {
+          options = {
+            gnome = lib.mkOption {
+              type = lib.types.nullOr (lib.types.submodule {
+                options = {
+                  onAC = lib.mkOption {
+                    type = lib.types.str;
+                    example = "2560x1600@165.000+vrr";
+                    description = "Mode for AC power. Get from 'gdctl show --modes'.";
+                  };
+                  onBattery = lib.mkOption {
+                    type = lib.types.str;
+                    example = "2560x1600@60.002+vrr";
+                    description = "Mode for battery.";
+                  };
+                };
+              });
+              default = null;
+              description = "GNOME/gdctl mode configuration.";
+            };
+            cosmic = lib.mkOption {
+              type = lib.types.nullOr (lib.types.submodule {
+                options = {
+                  onAC = lib.mkOption {
+                    type = lib.types.str;
+                    example = "2560x1600@165Hz";
+                    description = "Mode for AC power. Get from 'wlr-randr'.";
+                  };
+                  onBattery = lib.mkOption {
+                    type = lib.types.str;
+                    example = "2560x1600@60Hz";
+                    description = "Mode for battery.";
+                  };
+                };
+              });
+              default = null;
+              description = "COSMIC/wlr-randr mode configuration.";
+            };
+            primary = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+              description = "Whether this is the primary display (for GNOME gdctl).";
+            };
+          };
+        });
+        default = {};
+        example = lib.literalExpression ''
+          {
+            "eDP-1" = {
+              gnome = {
+                onAC = "2560x1600@165.000+vrr";
+                onBattery = "2560x1600@60.002+vrr";
+              };
+              cosmic = {
+                onAC = "2560x1600@165Hz";
+                onBattery = "2560x1600@60Hz";
+              };
+            };
+          }
+        '';
+        description = "Per-display mode configuration for AC/battery power states.";
       };
     };
   };
@@ -419,21 +299,43 @@ in
       }
     ))
 
+    # Auto-switch display refresh rate based on AC/battery (shared acpid trigger)
+    (lib.mkIf cfg.auto-refresh-rate.enable {
+      services.acpid.enable = true;
+      # Use lib.mkAfter to append to acEventCommands if auto-profile also sets it
+      services.acpid.acEventCommands = lib.mkAfter "${triggerRefreshRateUpdate}";
+    })
+
     # Auto-switch display refresh rate based on AC/battery (GNOME/Wayland)
     (lib.mkIf (cfg.auto-refresh-rate.enable && config.smind.desktop.gnome.enable) {
-      # gdctl is included in mutter, no extra packages needed
+      # Path unit watches for trigger file changes
+      systemd.user.paths.auto-refresh-rate-gnome = {
+        description = "Watch for power state changes to update refresh rate";
+        wantedBy = [ "gnome-session.target" ];
+        pathConfig = {
+          PathChanged = "%t/refresh-rate-trigger";
+          Unit = "auto-refresh-rate-gnome.service";
+        };
+      };
 
+      # Oneshot service applies correct refresh rate
       systemd.user.services.auto-refresh-rate-gnome = {
-        description = "Automatic display refresh rate switching based on power state (GNOME)";
+        description = "Apply display refresh rate based on power state (GNOME)";
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = gnomeSetRefreshRate;
+        };
+      };
+
+      # Apply on login
+      systemd.user.services.auto-refresh-rate-gnome-init = {
+        description = "Set initial display refresh rate based on power state (GNOME)";
         wantedBy = [ "gnome-session.target" ];
         after = [ "gnome-session.target" ];
-        partOf = [ "gnome-session.target" ];
-
         serviceConfig = {
-          Type = "simple";
-          ExecStart = refreshRateSwitchScript;
-          Restart = "on-failure";
-          RestartSec = 5;
+          Type = "oneshot";
+          ExecStart = gnomeSetRefreshRate;
+          RemainAfterExit = true;
         };
       };
     })
@@ -442,26 +344,36 @@ in
     (lib.mkIf (cfg.auto-refresh-rate.enable && config.smind.desktop.cosmic.enable) {
       environment.systemPackages = [ pkgs.wlr-randr ];
 
-      systemd.user.services.auto-refresh-rate-cosmic = {
-        description = "Automatic display refresh rate switching based on power state (COSMIC)";
+      # Path unit watches for trigger file changes
+      systemd.user.paths.auto-refresh-rate-cosmic = {
+        description = "Watch for power state changes to update refresh rate";
         wantedBy = [ "cosmic-session.target" ];
-        after = [ "cosmic-session.target" ];
-        partOf = [ "cosmic-session.target" ];
-
-        serviceConfig = {
-          Type = "simple";
-          ExecStart = cosmicRefreshRateSwitchScript;
-          Restart = "on-failure";
-          RestartSec = 5;
-        };
-
-        # Delay start to ensure COSMIC output management is ready
-        unitConfig = {
-          StartLimitIntervalSec = 60;
-          StartLimitBurst = 3;
+        pathConfig = {
+          PathChanged = "%t/refresh-rate-trigger";
+          Unit = "auto-refresh-rate-cosmic.service";
         };
       };
 
+      # Oneshot service applies correct refresh rate
+      systemd.user.services.auto-refresh-rate-cosmic = {
+        description = "Apply display refresh rate based on power state (COSMIC)";
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = cosmicSetRefreshRate;
+        };
+      };
+
+      # Apply on login
+      systemd.user.services.auto-refresh-rate-cosmic-init = {
+        description = "Set initial display refresh rate based on power state (COSMIC)";
+        wantedBy = [ "cosmic-session.target" ];
+        after = [ "cosmic-session.target" ];
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = cosmicSetRefreshRate;
+          RemainAfterExit = true;
+        };
+      };
     })
   ];
 }
