@@ -6,19 +6,6 @@
 let
   cfg = config.smind.security.keyring;
 
-  # Helper to build gdm-password PAM text with optional TPM unlock
-  gdmPasswordPamText = { includeTpmUnlock ? false, tpmUnlockScript ? null }: ''
-    auth      substack      login
-    auth      optional      ${pkgs.gnome-keyring}/lib/security/pam_gnome_keyring.so
-    account   include       login
-    password  substack      login
-    password  optional      ${pkgs.gnome-keyring}/lib/security/pam_gnome_keyring.so use_authtok
-    session   include       login
-    session   optional      ${pkgs.gnome-keyring}/lib/security/pam_gnome_keyring.so auto_start
-  '' + lib.optionalString includeTpmUnlock ''
-    session   optional      ${pkgs.pam}/lib/security/pam_exec.so quiet ${tpmUnlockScript}
-  '';
-
   # Script to enroll keyring password to TPM
   tpmEnrollKeyringScript = pkgs.writeShellScriptBin "tpm-enroll-keyring" ''
     set -euo pipefail
@@ -170,15 +157,7 @@ in
       # PAM integration for auto-unlock on login
       security.pam.services = lib.genAttrs config.smind.security.keyring.displayManagers (_: {
         enableGnomeKeyring = true;
-      }) // {
-        # GDM hardcodes gdm-password.text with "substack login" which bypasses our rules.
-        # The substack doesn't properly pass credentials to pam_gnome_keyring.
-        # Override the text to include gnome_keyring directly, plus TPM unlock if enabled.
-        gdm-password.text = lib.mkForce (gdmPasswordPamText {
-          includeTpmUnlock = cfg.tpmUnlock.enable;
-          tpmUnlockScript = keyringTpmUnlockScript;
-        });
-      };
+      });
     })
 
     # GCR SSH agent (requires gnome-keyring)

@@ -30,10 +30,16 @@
       QT_QPA_PLATFORM = "wayland";
     };
 
-    # Set SSH_AUTH_SOCK for gcr-ssh-agent (same pattern as Budgie/Cinnamon/MATE)
-    # The gcr-ssh-agent.socket sets this via systemd, but shells may not inherit it
-    environment.extraInit = lib.mkIf config.services.gnome.gcr-ssh-agent.enable ''
-      if [ -z "$SSH_AUTH_SOCK" ] || [ ! -S "$SSH_AUTH_SOCK" ]; then
+    # Set SSH_AUTH_SOCK for gcr-ssh-agent in COSMIC sessions
+    # Something sets SSH_AUTH_SOCK to keyring/ssh before shells start,
+    # so we override it in interactive shells (only for COSMIC)
+    programs.zsh.interactiveShellInit = lib.mkIf config.services.gnome.gcr-ssh-agent.enable ''
+      if [[ "$XDG_CURRENT_DESKTOP" == "COSMIC" ]]; then
+        export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/gcr/ssh"
+      fi
+    '';
+    programs.bash.interactiveShellInit = lib.mkIf config.services.gnome.gcr-ssh-agent.enable ''
+      if [[ "$XDG_CURRENT_DESKTOP" == "COSMIC" ]]; then
         export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/gcr/ssh"
       fi
     '';
