@@ -86,7 +86,7 @@
         vim_mode = false;
         ui_font_size = config.smind.hm.zed.uiFontSize;
         buffer_font_size = config.smind.hm.zed.bufferFontSize;
-        buffer_line_height = { custom = 1.1; };
+        buffer_line_height = { custom = 1.2; };
         # ui_font_family = "";
         # buffer_font_fallbacks
         auto_update = false;
