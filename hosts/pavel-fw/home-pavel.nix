@@ -34,7 +34,6 @@
   smind.hm = {
     vscodium.fontSize = 14;
     ghostty.fontSize = 11;
-    dev.llm.devstralContextSize = 16384;
 
     desktop.cosmic.minimal-keybindings = true;
 
