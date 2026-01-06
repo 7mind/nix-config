@@ -77,6 +77,7 @@
               gtk-theme = "adw-gtk3-dark";
               document-font-name = "Noto Sans 11";
               monospace-font-name = "Hack Nerd Font Mono 12";
+              cursor-theme = "Adwaita";
               cursor-size = lib.gvariant.mkInt32 36;
               font-antialiasing = "rgba";
               clock-show-weekday = true;
