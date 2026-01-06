@@ -35,7 +35,7 @@
     # };
 
     # Force compute power profile on desktops (not laptops - would hurt battery/thermals)
-    services.udev.extraRules = lib.mkIf (config.smind.hw.amd.rocm.enable && !(config.smind.isLaptop or false)) ''
+    services.udev.extraRules = lib.mkIf (config.smind.hw.amd.rocm.enable && !config.smind.isLaptop) ''
       ACTION=="add|change", SUBSYSTEM=="drm", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="manual"
       ACTION=="add|change", SUBSYSTEM=="drm", DRIVERS=="amdgpu", ATTR{device/pp_power_profile_mode}="5"
     '';
@@ -61,9 +61,20 @@
     #   ROCM_HOME = "${pkgs.rocmPackages.rocmPath}";
     # };
 
-    # Enable all power management features on desktops (not laptops - use default power management)
-    boot.kernelParams = lib.optionals (!(config.smind.isLaptop or false)) [
-      "amdgpu.ppfeaturemask=0xffffffff"
+    # Enable all power management features EXCEPT GFXOFF on desktops.
+    # GFXOFF causes system hangs when GPU enters idle/power-saving state, especially
+    # on RDNA3 (RX 7000 series). The GPU fails to disable gfxoff during reset attempts,
+    # leading to soft lockups in amdgpu-reset-dev workqueue.
+    #
+    # Known issue - not fixed as of kernel 6.18 (Jan 2026):
+    # - https://gist.github.com/danielrosehill/6a531b079906f160911a87dea50e1507
+    # - https://community.frame.work/t/linux-stability-patch-coming-to-kernel-6-18/75885
+    # - https://wiki.archlinux.org/title/AMDGPU#Boot_parameter
+    #
+    # 0xffff7fff = all PowerPlay features except PP_GFXOFF_MASK (bit 15)
+    # Laptops keep default behavior for battery life.
+    boot.kernelParams = lib.optionals (!config.smind.isLaptop) [
+      "amdgpu.ppfeaturemask=0xffff7fff"
     ];
 
     systemd.tmpfiles.rules = lib.mkIf config.smind.hw.amd.rocm.enable [
