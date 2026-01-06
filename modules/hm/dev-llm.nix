@@ -123,7 +123,7 @@
       settings = {
         theme = "dark";
         autoupdate = "notify";
-        model = "ollama/devstral:24b-small-2505-q8_0";
+        model = "ollama/devstral:24b-small-2505-custom";
         plugin = [ "opencode-gemini-auth@latest" ];
         provider = {
           google = {
@@ -144,7 +144,7 @@
               baseURL = "http://127.0.0.1:11434/v1";
             };
             models = {
-              "devstral:24b-small-2505-q8_0" = {
+              "devstral:24b-small-2505-custom" = {
                 limit = {
                   context = config.smind.hm.dev.llm.devstralContextSize;
                   output = config.smind.hm.dev.llm.devstralContextSize;

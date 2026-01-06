@@ -13,6 +13,12 @@
       default = pkgs.ollama-vulkan;
       description = "Ollama package to use (ollama-rocm, ollama-vulkan, ollama-cuda, ollama-cpu)";
     };
+
+    smind.llm.ollama.customContextLength = lib.mkOption {
+      type = lib.types.int;
+      default = 131072;
+      description = "Context length for custom Ollama models (default 128k)";
+    };
   };
 
   config = lib.mkIf config.smind.llm.enable {
@@ -69,7 +75,6 @@
         "huihui_ai/qwen3-abliterated:32b"
 
         "devstral:24b-small-2505-q8_0"
-        "devstral:24b-small-2505-fp16"
 
         "qwen2.5:32b-instruct-q8_0"
 
@@ -93,24 +98,24 @@
       };
       path = [ config.services.ollama.package pkgs.coreutils ];
       script = ''
-        # Wait for Ollama to be ready
-        for i in $(seq 1 30); do
-          ollama list && break
-          sleep 2
-        done
+                # Wait for Ollama to be ready
+                for i in $(seq 1 30); do
+                  ollama list && break
+                  sleep 2
+                done
 
-        MODELFILE=$(mktemp)
-        trap "rm -f $MODELFILE" EXIT
+                MODELFILE=$(mktemp)
+                trap "rm -f $MODELFILE" EXIT
 
-        # Create devstral:24b-small-2505-128k with 128k context
-        if ! ollama list | grep -q "devstral:24b-small-2505-128k"; then
-          echo "Creating devstral:24b-small-2505-128k..."
-          cat > "$MODELFILE" << 'EOF'
-FROM devstral:24b-small-2505-q8_0
-PARAMETER num_ctx 131072
-EOF
-          ollama create devstral:24b-small-2505-128k -f "$MODELFILE"
-        fi
+                # Create devstral:24b-small-2505-custom with configurable context
+                if ! ollama list | grep -q "devstral:24b-small-2505-custom"; then
+                  echo "Creating devstral:24b-small-2505-custom with context ${toString config.smind.llm.ollama.customContextLength}..."
+                  cat > "$MODELFILE" << EOF
+        FROM devstral:24b-small-2505-q8_0
+        PARAMETER num_ctx ${toString config.smind.llm.ollama.customContextLength}
+        EOF
+                  ollama create devstral:24b-small-2505-custom -f "$MODELFILE"
+                fi
       '';
     };
 
