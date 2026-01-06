@@ -30,6 +30,14 @@
       QT_QPA_PLATFORM = "wayland";
     };
 
+    # Set SSH_AUTH_SOCK for gcr-ssh-agent (same pattern as Budgie/Cinnamon/MATE)
+    # The gcr-ssh-agent.socket sets this via systemd, but shells may not inherit it
+    environment.extraInit = lib.mkIf config.services.gnome.gcr-ssh-agent.enable ''
+      if [ -z "$SSH_AUTH_SOCK" ] || [ ! -S "$SSH_AUTH_SOCK" ]; then
+        export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/gcr/ssh"
+      fi
+    '';
+
     security.polkit.enable = true;
 
     # Polkit authentication agent - cosmic-osd should handle this but has NixOS issues
