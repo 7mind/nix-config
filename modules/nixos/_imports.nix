@@ -42,6 +42,7 @@
   ./router.nix
   ./smartd.nix
   ./ssh.nix
+  ./steam.nix
   ./sudo.nix
   ./tailscale.nix
   ./trezor.nix

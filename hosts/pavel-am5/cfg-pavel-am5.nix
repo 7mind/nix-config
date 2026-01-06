@@ -214,16 +214,7 @@
     allowedTCPPorts = [ 8234 ];
   };
 
-  programs.steam = {
-    enable = true;
-    extraCompatPackages = [ pkgs.proton-ge-bin ];
-    package = pkgs.steam.override {
-      extraEnv = {
-        SDL_VIDEO_DRIVER = "wayland";
-        SDL_VIDEO_WAYLAND_SCALE_TO_DISPLAY = "1";
-      };
-    };
-  };
+  smind.gaming.steam.enable = true;
 
   boot.initrd = {
     kernelModules = [ "atlantic" "igc" ];
@@ -305,9 +296,6 @@
   home-manager.users.pavel = import ./home-pavel.nix;
   home-manager.users.root = import ./home-root.nix;
 
-  environment.systemPackages = with pkgs; [
-    heroic
-  ];
 
   # services.sillytavern = {
   #   enable = true;

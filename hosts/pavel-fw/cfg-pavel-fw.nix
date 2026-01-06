@@ -224,6 +224,8 @@ in
     llm.enable = true;
     llm.ollama.package = pkgs.ollama-vulkan;
 
+    gaming.steam.enable = true;
+
     # Virtualization
     vm.virt-manager = {
       enable = true;
