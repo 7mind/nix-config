@@ -7,6 +7,18 @@
       default = false;
       description = "Enable Zed editor with custom configuration";
     };
+
+    smind.hm.zed.uiFontSize = lib.mkOption {
+      type = lib.types.int;
+      default = 14;
+      description = "Zed UI font size";
+    };
+
+    smind.hm.zed.bufferFontSize = lib.mkOption {
+      type = lib.types.int;
+      default = 14;
+      description = "Zed buffer/editor font size";
+    };
   };
 
   config = lib.mkIf config.smind.hm.zed.enable {
@@ -72,9 +84,9 @@
           metrics = false;
         };
         vim_mode = false;
-        ui_font_size = lib.mkDefault 14;
-        buffer_font_size = lib.mkDefault 14;
-        buffer_line_height = "standard";
+        ui_font_size = config.smind.hm.zed.uiFontSize;
+        buffer_font_size = config.smind.hm.zed.bufferFontSize;
+        buffer_line_height = "compact";
         # ui_font_family = "";
         # buffer_font_fallbacks
         auto_update = false;
@@ -158,10 +170,12 @@
           };
         };
 
-        # Use nixd as primary, disable nil
         languages = {
           Nix = {
             language_servers = [ "nixd" "!nil" ];
+          };
+          Scala = {
+            tab_size = 2;
           };
         };
       };

@@ -15,12 +15,13 @@
   '';
 
 
+  smind.hm.zed.uiFontSize = 16;
+  smind.hm.zed.bufferFontSize = 14;
+
   programs.zed-editor =
     {
       userSettings = {
         base_keymap = "None";
-        ui_font_size = 16;
-        buffer_font_size = 16;
       };
       userKeymaps =
         (builtins.fromJSON (builtins.readFile "${cfg-meta.paths.users}/pavel/hm/keymap-zed-linux.json"));
