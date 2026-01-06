@@ -195,23 +195,11 @@
           # nix
           "nix.enableLanguageServer" = true;
           "nix.formatterPath" = "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt";
-          "nix.serverPath" = "${pkgs.nil}/bin/nil";
+          "nix.serverPath" = "${pkgs.nixd}/bin/nixd";
           "nix.serverSettings" = {
-            "nil" = {
-              "formatting" = { "command" = [ "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt" ]; };
-              "nix" = { "flake" = { autoArchive = true; autoEvalInputs = true; }; };
-            };
             "nixd" = {
-              "eval" = { };
               "formatting" = {
-                "command" = "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt";
-              };
-              "options" = {
-                "enable" = true;
-                "target" = {
-                  "args" = [ ];
-                  "installable" = "<flakeref>#nixosConfigurations.<name>.options";
-                };
+                "command" = [ "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt" ];
               };
             };
           };
