@@ -1,4 +1,4 @@
-{ config, lib, pkgs, cfg-meta, ... }:
+{ config, lib, pkgs, cfg-meta, osConfig, ... }:
 
 {
   options = {
@@ -13,9 +13,19 @@
       default = 131072;
       description = "Context size for devstral model in opencode (default: 128k)";
     };
+
+    smind.hm.dev.llm.opencodeDefaultModel = lib.mkOption {
+      type = lib.types.str;
+      default = "ollama/devstral:24b-small-2505-custom";
+      description = "Default model for opencode";
+    };
   };
 
-  config = lib.mkIf config.smind.hm.dev.llm.enable {
+  config = lib.mkMerge [
+    {
+      smind.hm.dev.llm.devstralContextSize = lib.mkDefault (osConfig.smind.llm.ollama.customContextLength or 131072);
+    }
+    (lib.mkIf config.smind.hm.dev.llm.enable {
     home.sessionVariables = {
       OLLAMA_API_BASE = "http://127.0.0.1:11434";
       # AIDER_DARK_MODE = "true";
@@ -123,7 +133,7 @@
       settings = {
         theme = "dark";
         autoupdate = "notify";
-        model = "ollama/devstral:24b-small-2505-custom";
+        model = config.smind.hm.dev.llm.opencodeDefaultModel;
         plugin = [ "opencode-gemini-auth@latest" ];
         provider = {
           google = {
@@ -281,7 +291,6 @@
             -- opencode "''${CMD_ARGS[@]}"
         '')
       ];
-  };
-
-
+  })
+  ];
 }
