@@ -199,8 +199,8 @@ in
         environment.sessionVariables = {
           # Default to Mesa/AMD for OpenGL
           __GLX_VENDOR_LIBRARY_NAME = "mesa";
-          # Default to AMD (radv) for Vulkan
-          VK_DRIVER_FILES = "/run/opengl-driver/share/vulkan/icd.d/radeon_icd.x86_64.json";
+          # Don't set VK_DRIVER_FILES - let Vulkan discover drivers automatically
+          # nvidia-offload uses __VK_LAYER_NV_optimus to select NVIDIA for Vulkan
           # Ensure EGL uses Mesa
           __EGL_VENDOR_LIBRARY_FILENAMES = "/run/opengl-driver/share/glvnd/egl_vendor.d/50_mesa.json";
         };
