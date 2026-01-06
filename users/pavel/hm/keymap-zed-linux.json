@@ -153,11 +153,36 @@
     }
   },
   {
+    "context" : "Editor && (showing_code_actions || showing_completions)",
+    "bindings" : {
+      "down" : "editor::ContextMenuNext",
+      "up" : "editor::ContextMenuPrevious"
+    }
+  },
+  {
     "context" : "Editor && mode == full",
     "bindings" : {
       "enter" : "editor::Newline",
       "ctrl-enter" : "editor::NewlineBelow",
       "ctrl-shift-enter" : "editor::NewlineAbove"
+    }
+  },
+  {
+    "context" : "Editor && renaming",
+    "bindings" : {
+      "enter" : "editor::ConfirmRename"
+    }
+  },
+  {
+    "context" : "Editor && showing_code_actions",
+    "bindings" : {
+      "enter" : "editor::ConfirmCodeAction"
+    }
+  },
+  {
+    "context" : "Editor && showing_completions",
+    "bindings" : {
+      "enter" : "editor::ConfirmCompletion"
     }
   },
   {

@@ -131,6 +131,31 @@
               };
             };
           };
+          pylsp = {
+            binary = {
+              path = "${pkgs.python3Packages.python-lsp-server}/bin/pylsp";
+            };
+          };
+          bash-language-server = {
+            binary = {
+              path = "${pkgs.bash-language-server}/bin/bash-language-server";
+            };
+          };
+          metals = {
+            binary = {
+              path = "${pkgs.metals}/bin/metals";
+            };
+          };
+          omnisharp = {
+            binary = {
+              path = "${pkgs.omnisharp-roslyn}/bin/OmniSharp";
+            };
+          };
+          jdtls = {
+            binary = {
+              path = "${pkgs.jdt-language-server}/bin/jdtls";
+            };
+          };
         };
 
         # Use nixd as primary, disable nil
@@ -145,12 +170,21 @@
         [ ];
 
       extraPackages = with pkgs; [
-        omnisharp-roslyn
-        coursier
-        metals
+        # Nix
         nixd
         nil
         nixpkgs-fmt
+        # Scala
+        coursier
+        metals
+        # C#
+        omnisharp-roslyn
+        # Python
+        python3Packages.python-lsp-server
+        # Bash
+        bash-language-server
+        # Java
+        jdt-language-server
       ];
 
     };
