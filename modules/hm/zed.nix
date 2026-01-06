@@ -51,14 +51,10 @@
             milliseconds = 250;
           };
         };
-        inline_completion_provider = "none";
         agent = {
           enabled = false;
         };
         collaboration_panel = {
-          button = false;
-        };
-        chat_panel = {
           button = false;
         };
         notification_panel = {
@@ -112,7 +108,37 @@
           "runnables" = true; # Show runnables buttons.
           "folds" = true; # Show fold buttons.
         };
-        # "relative_line_numbers" = true;
+
+        # LSP configuration
+        lsp = {
+          nixd = {
+            binary = {
+              path = "${pkgs.nixd}/bin/nixd";
+            };
+            settings = {
+              formatting = {
+                command = [ "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt" ];
+              };
+            };
+          };
+          nil = {
+            binary = {
+              path = "${pkgs.nil}/bin/nil";
+            };
+            initialization_options = {
+              formatting = {
+                command = [ "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt" ];
+              };
+            };
+          };
+        };
+
+        # Use nixd as primary, disable nil
+        languages = {
+          Nix = {
+            language_servers = [ "nixd" "!nil" ];
+          };
+        };
       };
 
       userKeymaps =
@@ -122,6 +148,9 @@
         omnisharp-roslyn
         coursier
         metals
+        nixd
+        nil
+        nixpkgs-fmt
       ];
 
     };
