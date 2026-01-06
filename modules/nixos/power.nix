@@ -246,7 +246,7 @@ let
       fi
 
       echo "Setting $monitor: $current_mode -> $best_mode"
-      ${pkgs.mutter}/bin/gdctl set -L -M "$monitor" --mode "$best_mode" 2>&1 || true
+      ${pkgs.mutter}/bin/gdctl set -L --primary -M "$monitor" --mode "$best_mode" 2>&1 || true
     }
 
     is_on_battery() {
