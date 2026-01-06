@@ -44,12 +44,19 @@ let
         # cosmic-randr format: "eDP-1 (enabled)" for monitor header
         # and "    2560x1600 @ 165.000 Hz (current)" for modes
         echo "$output" | ${pkgs.gawk}/bin/awk '
-          /^[A-Za-z]+-?[0-9]/ { mon=$1 }
+          /^[A-Za-z]+-?[0-9]/ {
+            mon=$1
+            print "DEBUG AWK: found monitor:", mon > "/dev/stderr"
+          }
           mon && /\(current\)/ {
+            print "DEBUG AWK: found current line:", $0 > "/dev/stderr"
             if (match($0, /[0-9]+x[0-9]+/)) {
               res = substr($0, RSTART, RLENGTH)
+              print "DEBUG AWK: extracted res:", res > "/dev/stderr"
               split(res, dims, "x")
               print mon, dims[1], dims[2]
+            } else {
+              print "DEBUG AWK: no resolution match" > "/dev/stderr"
             }
             exit
           }

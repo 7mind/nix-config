@@ -34,6 +34,10 @@ in
   config = lib.mkMerge [
     # Common desktop settings (shared by all desktop roles)
     (lib.mkIf isDesktopRole {
+      # Disable IBus - not needed and causes issues on Wayland (especially COSMIC)
+      # GNOME enables it by default, but we don't use CJK input methods
+      i18n.inputMethod.enable = false;
+
       smind = {
         isDesktop = lib.mkDefault true;
 
