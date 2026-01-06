@@ -65,7 +65,7 @@
       geekbench
     ]);
 
-    programs.librewolf.enable = lib.mkIf cfg-meta.isLinux true;
+    #programs.librewolf.enable = lib.mkIf cfg-meta.isLinux true;
 
     programs.chromium = lib.mkIf cfg-meta.isLinux {
       enable = true;

@@ -284,11 +284,9 @@
       epiphany
       gnome-text-editor
       gnome-calculator
-      gnome-calendar
       gnome-characters
       gnome-clocks
       gnome-console
-      gnome-contacts
       # gnome-font-viewer
       gnome-logs
       gnome-maps
