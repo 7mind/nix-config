@@ -11,8 +11,16 @@
 
   config = lib.mkIf config.smind.hm.zed.enable {
 
+    # force overwrite config files to prevent "would be clobbered" errors
+    xdg.configFile."zed/settings.json".force = true;
+    xdg.configFile."zed/keymap.json".force = true;
+
     programs.zed-editor = {
       enable = true;
+
+      # use immutable mode so force works
+      mutableUserSettings = false;
+      mutableUserKeymaps = false;
 
       extensions = [
         "nix"

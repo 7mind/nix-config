@@ -59,7 +59,6 @@
     "context" : "Editor",
     "bindings" : {
       "shift-ctrl-right" : "editor::SelectToNextWordEnd",
-      "ctrl-shift-enter" : "editor::NewlineAbove",
       "cmd-v" : "editor::Paste",
       "ctrl-shift-up" : "editor::AddSelectionAbove",
       "alt-p" : "editor::GoToPreviousDiagnostic",
@@ -93,14 +92,12 @@
       "ctrl-d" : "editor::DuplicateLineDown",
       "ctrl-n d" : "editor::GoToDefinition",
       "up" : "editor::MoveUp",
-      "enter" : "editor::Newline",
       "ctrl-x" : "editor::Cut",
       "shift-backspace" : "editor::Backspace",
       "ctrl-n ctrl-d" : "editor::GoToDefinition",
       "shift-left" : "editor::SelectLeft",
       "shift-alt-up" : "editor::MoveLineUp",
       "ctrl-n ctrl-u" : "editor::FindAllReferences",
-      "ctrl-enter" : "editor::NewlineBelow",
       "ctrl-right" : "editor::MoveToNextWordEnd",
       "cmd-[slash]" : "editor::ToggleComments",
       "cmd-backspace" : "editor::DeleteLine",
@@ -153,6 +150,14 @@
       "ctrl-v" : "editor::Paste",
       "ctrl-e" : "editor::MoveToEndOfLine",
       "ctrl-shift-end" : "editor::SelectToEnd"
+    }
+  },
+  {
+    "context" : "Editor && mode == full",
+    "bindings" : {
+      "enter" : "editor::Newline",
+      "ctrl-enter" : "editor::NewlineBelow",
+      "ctrl-shift-enter" : "editor::NewlineAbove"
     }
   },
   {

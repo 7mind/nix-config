@@ -20,10 +20,13 @@
     ];
 
     # sometimes vscodium borks extensions.json so it's better to make sure there is nothing before deployment
-    home.activation.vscode-extensions-cleanup = config.lib.dag.entryBefore [ "writeBoundary" ] ''
-      echo >&2 "Removing vscodium extensions.json..."
+    home.activation.vscode-cleanup = config.lib.dag.entryBefore [ "writeBoundary" ] ''
       rm -f "${config.home.homeDirectory}/.vscode-oss/extensions/extensions.json"
     '';
+
+    # force overwrite config files to prevent "would be clobbered" errors
+    home.file."${config.xdg.configHome}/VSCodium/User/keybindings.json".force = true;
+    home.file."${config.xdg.configHome}/VSCodium/User/settings.json".force = true;
 
     programs.vscode =
       {
