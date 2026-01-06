@@ -45,14 +45,32 @@
         };
         features = {
           copilot = false;
+          inline_completion_provider = "none";
         };
+        assistant = {
+          enabled = false;
+          version = "2";
+        };
+        agent = {
+          enabled = false;
+        };
+        collaboration_panel = {
+          button = false;
+        };
+        chat_panel = {
+          button = false;
+        };
+        notification_panel = {
+          button = false;
+        };
+        show_call_status_icon = false;
         telemetry = {
           diagnostics = false;
           metrics = false;
         };
         vim_mode = false;
-        ui_font_size = 14;
-        buffer_font_size = 14;
+        ui_font_size = lib.mkDefault 14;
+        buffer_font_size = lib.mkDefault 14;
         buffer_line_height = "standard";
         # ui_font_family = "";
         # buffer_font_fallbacks

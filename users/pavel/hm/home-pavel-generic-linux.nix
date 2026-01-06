@@ -19,6 +19,8 @@
     {
       userSettings = {
         base_keymap = "None";
+        ui_font_size = 16;
+        buffer_font_size = 16;
       };
       userKeymaps =
         (builtins.fromJSON (builtins.readFile "${cfg-meta.paths.users}/pavel/hm/keymap-zed-linux.json"));
