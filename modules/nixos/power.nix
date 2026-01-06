@@ -3,6 +3,90 @@
 let
   cfg = config.smind.power-management;
 
+  # COSMIC version using cosmic-randr
+  cosmicRefreshRateSwitchScript = pkgs.writeShellScript "refresh-rate-switch-cosmic" ''
+    set -euo pipefail
+
+    MONITOR="${cfg.auto-refresh-rate.monitor}"
+    RATE_AC="${toString cfg.auto-refresh-rate.onAC}"
+    RATE_BATTERY="${toString cfg.auto-refresh-rate.onBattery}"
+
+    get_monitor_info() {
+      # Get first monitor if not specified, and its current resolution
+      local output
+      output=$(${pkgs.cosmic-randr}/bin/cosmic-randr list 2>/dev/null)
+
+      if [ -n "$MONITOR" ]; then
+        echo "$output" | ${pkgs.gawk}/bin/awk -v mon="$MONITOR" '
+          $1 == mon { found=1 }
+          found && /\(current\)/ {
+            match($0, /([0-9]+)x([0-9]+)/, res)
+            print mon, res[1], res[2]
+            exit
+          }
+        '
+      else
+        # Find first monitor and its current mode
+        echo "$output" | ${pkgs.gawk}/bin/awk '
+          /^[A-Za-z]+-[0-9]/ { mon=$1 }
+          mon && /\(current\)/ {
+            match($0, /([0-9]+)x([0-9]+)/, res)
+            print mon, res[1], res[2]
+            exit
+          }
+        '
+      fi
+    }
+
+    set_refresh_rate() {
+      local rate="$1"
+      local info
+      info=$(get_monitor_info)
+
+      if [ -z "$info" ]; then
+        echo "No monitor found"
+        return 1
+      fi
+
+      local monitor width height
+      read -r monitor width height <<< "$info"
+
+      echo "Setting $monitor to ''${width}x''${height}@''${rate}Hz"
+      ${pkgs.cosmic-randr}/bin/cosmic-randr mode "$monitor" "$width" "$height" --refresh "$rate" 2>&1 || true
+    }
+
+    is_on_battery() {
+      local state
+      state=$(${pkgs.upower}/bin/upower -i /org/freedesktop/UPower/devices/DisplayDevice 2>/dev/null | \
+        ${pkgs.gawk}/bin/awk '/state:/ {print $2}')
+      [ "$state" = "discharging" ]
+    }
+
+    apply_for_power_state() {
+      if is_on_battery; then
+        echo "On battery -> ''${RATE_BATTERY}Hz"
+        set_refresh_rate "$RATE_BATTERY"
+      else
+        echo "On AC -> ''${RATE_AC}Hz"
+        set_refresh_rate "$RATE_AC"
+      fi
+    }
+
+    echo "Checking initial power state..."
+    apply_for_power_state
+
+    echo "Monitoring UPower DisplayDevice for power state changes..."
+    ${pkgs.dbus}/bin/dbus-monitor --system "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path='/org/freedesktop/UPower/devices/DisplayDevice'" 2>/dev/null | \
+    while read -r line; do
+      if echo "$line" | ${pkgs.gnugrep}/bin/grep -qE "State|IsPresent"; then
+        sleep 0.3
+        echo "Power state changed"
+        apply_for_power_state
+      fi
+    done
+  '';
+
+  # GNOME version using gnome-randr
   refreshRateSwitchScript = pkgs.writeShellScript "refresh-rate-switch" ''
     set -euo pipefail
 
@@ -170,7 +254,7 @@ in
       enable = lib.mkOption {
         type = lib.types.bool;
         default = false;
-        description = "Automatically switch display refresh rate based on AC/battery status via UPower (GNOME/Wayland only)";
+        description = "Automatically switch display refresh rate based on AC/battery status via UPower (GNOME/COSMIC Wayland)";
       };
 
       onAC = lib.mkOption {
@@ -272,25 +356,37 @@ in
     ))
 
     # Auto-switch display refresh rate based on AC/battery (GNOME/Wayland)
-    (lib.mkIf cfg.auto-refresh-rate.enable {
-      assertions = [
-        {
-          assertion = config.smind.desktop.gnome.enable;
-          message = "auto-refresh-rate requires smind.desktop.gnome.enable = true";
-        }
-      ];
-
+    (lib.mkIf (cfg.auto-refresh-rate.enable && config.smind.desktop.gnome.enable) {
       environment.systemPackages = [ pkgs.gnome-randr ];
 
-      systemd.user.services.auto-refresh-rate = {
-        description = "Automatic display refresh rate switching based on power state";
-        wantedBy = [ "graphical-session.target" ];
-        after = [ "graphical-session.target" ];
-        partOf = [ "graphical-session.target" ];
+      systemd.user.services.auto-refresh-rate-gnome = {
+        description = "Automatic display refresh rate switching based on power state (GNOME)";
+        wantedBy = [ "gnome-session.target" ];
+        after = [ "gnome-session.target" ];
+        partOf = [ "gnome-session.target" ];
 
         serviceConfig = {
           Type = "simple";
           ExecStart = refreshRateSwitchScript;
+          Restart = "on-failure";
+          RestartSec = 5;
+        };
+      };
+    })
+
+    # Auto-switch display refresh rate based on AC/battery (COSMIC/Wayland)
+    (lib.mkIf (cfg.auto-refresh-rate.enable && config.smind.desktop.cosmic.enable) {
+      environment.systemPackages = [ pkgs.cosmic-randr ];
+
+      systemd.user.services.auto-refresh-rate-cosmic = {
+        description = "Automatic display refresh rate switching based on power state (COSMIC)";
+        wantedBy = [ "cosmic-session.target" ];
+        after = [ "cosmic-session.target" ];
+        partOf = [ "cosmic-session.target" ];
+
+        serviceConfig = {
+          Type = "simple";
+          ExecStart = cosmicRefreshRateSwitchScript;
           Restart = "on-failure";
           RestartSec = 5;
         };

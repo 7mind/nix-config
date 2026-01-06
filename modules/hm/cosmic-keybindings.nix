@@ -30,9 +30,33 @@
 
     smind.hm.desktop.cosmic.keyboard-toggle = lib.mkOption {
       type = lib.types.str;
-      default = "grp:ctrl_alt_space_toggle";
-      example = "grp:ctrl_space_toggle";
+      default = "grp:caps_toggle";
+      example = "grp:alt_shift_toggle";
       description = "XKB option for keyboard layout toggle";
+    };
+
+    smind.hm.desktop.cosmic.touchpad-natural-scroll = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Enable natural scrolling for touchpad";
+    };
+
+    smind.hm.desktop.cosmic.roundness = lib.mkOption {
+      type = lib.types.enum [ "Round" "SlightlyRound" "Square" ];
+      default = "Square";
+      description = "Corner radius style (Round, SlightlyRound, Square)";
+    };
+
+    smind.hm.desktop.cosmic.interface-density = lib.mkOption {
+      type = lib.types.enum [ "Comfortable" "Compact" "Spacious" ];
+      default = "Compact";
+      description = "Interface density (Comfortable, Compact, Spacious)";
+    };
+
+    smind.hm.desktop.cosmic.active-hint-size = lib.mkOption {
+      type = lib.types.int;
+      default = 1;
+      description = "Active window hint border size in pixels";
     };
   };
 
@@ -51,6 +75,42 @@
           options: Some("${config.smind.hm.desktop.cosmic.keyboard-toggle}"),
       )
     '';
+
+    # Touchpad configuration with natural scrolling
+    xdg.configFile."cosmic/com.system76.CosmicComp/v1/input_touchpad".text = ''
+      (
+          state: Enabled,
+          click_method: Some(Clickfinger),
+          scroll_config: Some((
+              method: Some(TwoFinger),
+              natural_scroll: Some(${if config.smind.hm.desktop.cosmic.touchpad-natural-scroll then "true" else "false"}),
+              scroll_button: None,
+              scroll_factor: None,
+          )),
+          tap_config: Some((
+              enabled: true,
+              button_map: Some(LeftRightMiddle),
+              drag: true,
+              drag_lock: false,
+          )),
+      )
+    '';
+
+    # Interface density (Comfortable, Compact, Spacious)
+    xdg.configFile."cosmic/com.system76.CosmicTk/v1/interface_density".text =
+      config.smind.hm.desktop.cosmic.interface-density;
+
+    # Corner roundness for dark theme
+    xdg.configFile."cosmic/com.system76.CosmicTheme.Dark/v1/roundness".text =
+      config.smind.hm.desktop.cosmic.roundness;
+
+    # Corner roundness for light theme
+    xdg.configFile."cosmic/com.system76.CosmicTheme.Light/v1/roundness".text =
+      config.smind.hm.desktop.cosmic.roundness;
+
+    # Active window hint size
+    xdg.configFile."cosmic/com.system76.CosmicComp/v1/active_hint".text =
+      toString config.smind.hm.desktop.cosmic.active-hint-size;
     # COSMIC keybindings are stored in:
     # ~/.config/cosmic/com.system76.CosmicSettings.Shortcuts/v1/custom
     #
@@ -77,9 +137,12 @@
 
             // Window management - matching GNOME minimal hotkeys
             ${kb ["Super"] "q" "Close"},
-            ${kb ["Alt"] "F4" "Close"},
+            ${disable ["Alt"] "F4"},
             ${kb ["Super"] "Tab" "System(WindowSwitcher)"},
             ${kb ["Alt"] "Tab" "System(WindowSwitcher)"},
+            // Disable reversed window switching
+            ${disable (["Shift" "Super"]) "Tab"},
+            ${disable (["Shift" "Alt"]) "Tab"},
             ${kb ["Super"] "grave" "System(WindowSwitcherSameApp)"},
             ${kb (["Ctrl" "Alt"]) "f" "Maximize"},
             ${kb (["Ctrl" "Alt"]) "m" "Minimize"},
@@ -93,12 +156,21 @@
             ${kb (["Shift" "Super"]) "4" "System(ScreenshotUi)"},
             ${kb [] "Print" "System(Screenshot)"},
 
-            // Launcher
-            ${kb ["Super"] "space" "System(Launcher)"},
-            ${kb (["Alt" "Super"]) "space" "ToggleOverview"},
-            ${kb ["Super"] "a" "System(AppLibrary)"},
+            // Launcher - use vicinae instead of COSMIC launcher
+            // Using sh -c to ensure proper environment inheritance for IPC
+            ${kb ["Super"] "space" "Spawn(\"sh -c 'vicinae toggle'\")"},
+            // COSMIC launcher as fallback on Alt+Super+Space
+            ${kb (["Alt" "Super"]) "space" "System(Launcher)"},
+            ${disable ["Super"] "a"},
 
-            // Disable default Super+/ launcher binding
+            // Disable accessibility shortcuts
+            ${disable ["Super"] "equal"},
+            ${disable ["Super"] "minus"},
+
+            // Disable fullscreen shortcut
+            ${disable ["Super"] "F11"},
+
+            // Disable default launcher shortcut
             ${disable ["Super"] "slash"},
 
             // Disable workspace overview (Super+W default)
@@ -202,12 +274,12 @@
             ${disable (["Alt" "Shift" "Super"]) "k"},
             ${disable (["Alt" "Shift" "Super"]) "l"},
 
-            // Keep terminal launcher
-            ${kb ["Super"] "t" "System(Terminal)"},
+            // Disable terminal and browser launchers
+            ${disable ["Super"] "t"},
+            ${disable ["Super"] "b"},
 
-            // Keep file manager and browser
+            // Keep file manager
             ${kb ["Super"] "f" "System(FileBrowser)"},
-            ${kb ["Super"] "b" "System(WebBrowser)"},
         }
       '';
   };

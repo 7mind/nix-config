@@ -278,8 +278,8 @@
                 cycle-group = [ "<Super>grave" ]; # app windows without overview
 
                 close = [ "<Super>q" ];
-                # Use a hidden shortcut that keyd will trigger
-                switch-input-source = [ "<Primary><Alt><Super>space" ];
+                # Input source switching handled by XKB grp:menu_toggle (Caps->Menu via kanata)
+                switch-input-source = empty;
                 toggle-maximized = [ "<Primary><Alt>f" ];
               };
               "org/gnome/desktop/wm/preferences" =

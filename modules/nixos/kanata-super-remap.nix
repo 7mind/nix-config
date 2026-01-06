@@ -14,18 +14,11 @@
           process-unmapped-keys yes
         '';
         config = ''
-          ;; Only remap Caps Lock
-          (defsrc caps)
+          ;; Caps Lock is handled by XKB grp:caps_toggle for layout switching
+          ;; No kanata remapping needed
+          (defsrc)
 
-          (defalias
-            ;; Caps Lock: Hyper (Ctrl+Alt+Super+Space), Shift+Caps = real Caps Lock
-            hyp (fork
-                  (multi lctl lalt lmet spc)
-                  caps
-                  (lsft rsft))
-          )
-
-          (deflayer base @hyp)
+          (deflayer base)
 
           ;; Mac-style: Super+Key → Ctrl+Key (only for specific keys)
           ;; Super+Tab, Super+Q, etc. are NOT remapped (handled by GNOME/desktop)

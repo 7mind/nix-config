@@ -33,6 +33,13 @@
       description = "XKB keyboard layouts to configure (e.g. 'us+mac', 'ru', 'de')";
     };
 
+    smind.desktop.gnome.xkb-options = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ "grp:caps_toggle" ];
+      example = [ "grp:alt_shift_toggle" "caps:escape" ];
+      description = "XKB options (e.g. layout toggle, caps behavior)";
+    };
+
     smind.desktop.gnome.sticky-keys.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -119,6 +126,7 @@
             "org/gnome/desktop/input-sources" = {
               sources = map (layout: lib.gvariant.mkTuple [ "xkb" layout ]) config.smind.desktop.gnome.keyboard-layouts;
               per-window = true;
+              xkb-options = config.smind.desktop.gnome.xkb-options;
             };
           } // lib.optionalAttrs config.smind.desktop.gnome.sticky-keys.enable {
             "org/gnome/desktop/a11y/keyboard" = {
