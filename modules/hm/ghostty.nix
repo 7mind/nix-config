@@ -27,6 +27,12 @@ in
   };
 
   config = lib.mkIf config.smind.hm.ghostty.enable {
+    # Set as default terminal via xdg-terminal-exec (modern GNOME)
+    # See: https://gitlab.freedesktop.org/terminal-wg/specifications
+    xdg.configFile."xdg-terminals.list".text = ''
+      com.mitchellh.ghostty.desktop
+    '';
+
     xdg.mimeApps.defaultApplications = lib.mkIf cfg-meta.isLinux {
       "x-scheme-handler/terminal" = "com.mitchellh.ghostty.desktop";
     };
