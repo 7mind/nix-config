@@ -74,7 +74,7 @@ in
           settings = {
             "org/gnome/shell" = {
               disable-user-extensions = false;
-              enabled-extensions = lib.map (e: e.extensionUuid) extensions;
+              enabled-extensions = map (e: e.extensionUuid) extensions;
             };
 
           };

@@ -258,8 +258,6 @@ in
   # OpenSnitch application firewall (disabled - adds ~80 wakeups/s overhead)
   smind.net.opensnitch.enable = false;
 
-  time.timeZone = "Europe/Dublin";
-
   users = {
     users.root.initialPassword = "nixos";
 
