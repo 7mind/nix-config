@@ -27,14 +27,6 @@ in
   };
 
   config = lib.mkIf config.smind.hm.ghostty.enable {
-    # Set as default terminal in GNOME
-    dconf.settings = lib.mkIf cfg-meta.isLinux {
-      "org/gnome/desktop/applications/terminal" = {
-        exec = "ghostty";
-        exec-arg = "-e";
-      };
-    };
-
     xdg.mimeApps.defaultApplications = lib.mkIf cfg-meta.isLinux {
       "x-scheme-handler/terminal" = "com.mitchellh.ghostty.desktop";
     };
