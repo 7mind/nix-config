@@ -345,6 +345,13 @@
     <!--actions.find-->
     <keyboard-shortcut first-keystroke="meta f"/>
   </action>
+  <action id="Generate">
+    <!--Generate-->
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="ctrl g"/>
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="g"/>
+    <!--Generate-->
+    <keyboard-shortcut first-keystroke="ctrl t" second-keystroke="g"/>
+  </action>
   <action id="EditorStartNewLineBefore">
     <!--editor.action.insertLineBefore-->
     <keyboard-shortcut first-keystroke="ctrl shift enter"/>
@@ -946,7 +953,6 @@
   <action id="SendEOF"/>
   <action id="BraceOrQuoteOut"/>
   <action id="ChangesView.GroupBy.Directory"/>
-  <action id="Generate"/>
   <action id="Vcs.MoveChangedLinesToChangelist"/>
   <action id="FileChooser.GoToRoot"/>
   <action id="RunToCursor"/>

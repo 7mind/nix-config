@@ -20,7 +20,8 @@
       userSettings = {
         base_keymap = "None";
       };
-      userKeymaps = import ./zed-keymap-linux.nix;
+      userKeymaps =
+        (builtins.fromJSON (builtins.readFile "${cfg-meta.paths.users}/pavel/hm/keymap-zed-linux.json"));
     };
 
 
