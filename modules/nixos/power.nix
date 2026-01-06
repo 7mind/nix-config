@@ -14,7 +14,16 @@ let
     get_monitor_info() {
       # Get first monitor if not specified, and its current resolution
       local output
-      output=$(${pkgs.cosmic-randr}/bin/cosmic-randr list 2>/dev/null)
+      output=$(${pkgs.cosmic-randr}/bin/cosmic-randr list 2>&1) || true
+
+      echo "DEBUG: cosmic-randr output:" >&2
+      echo "$output" >&2
+      echo "DEBUG: end output" >&2
+
+      if [ -z "$output" ]; then
+        echo "DEBUG: cosmic-randr returned empty output" >&2
+        return 1
+      fi
 
       if [ -n "$MONITOR" ]; then
         echo "$output" | ${pkgs.gawk}/bin/awk -v mon="$MONITOR" '
@@ -27,8 +36,10 @@ let
         '
       else
         # Find first monitor and its current mode
+        # cosmic-randr format: "eDP-1 [Enabled]" for monitor header
+        # and "  2560x1600@165.003 (current)" for modes
         echo "$output" | ${pkgs.gawk}/bin/awk '
-          /^[A-Za-z]+-[0-9]/ { mon=$1 }
+          /^[A-Za-z]+-[0-9]/ || /^[A-Za-z]+[0-9]/ { mon=$1 }
           mon && /\(current\)/ {
             match($0, /([0-9]+)x([0-9]+)/, res)
             print mon, res[1], res[2]
@@ -389,6 +400,12 @@ in
           ExecStart = cosmicRefreshRateSwitchScript;
           Restart = "on-failure";
           RestartSec = 5;
+        };
+
+        # cosmic-randr needs Wayland environment
+        environment = {
+          WAYLAND_DISPLAY = "wayland-1";
+          XDG_RUNTIME_DIR = "%t";
         };
       };
     })
