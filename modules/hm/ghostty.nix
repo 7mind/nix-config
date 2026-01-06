@@ -100,14 +100,17 @@ in
           "super+shift+left=resize_split:left,10"
           "super+shift+right=resize_split:right,10"
 
-          # Tabs
+          # Tabs (both super and ctrl for kanata compatibility)
           "super+t=new_tab"
+          "ctrl+t=new_tab"
           "super+bracket_left=previous_tab"
           "super+bracket_right=next_tab"
 
-          # Window
+          # Window (both super and ctrl for kanata compatibility)
           "super+n=new_window"
+          "ctrl+n=new_window"
           "super+w=close_surface"
+          "ctrl+w=close_surface"
 
           # Scrolling
           "shift+page_up=scroll_page_fractional:-0.5"
