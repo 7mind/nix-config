@@ -29,19 +29,22 @@ let
         echo "$output" | ${pkgs.gawk}/bin/awk -v mon="$MONITOR" '
           $1 == mon { found=1 }
           found && /\(current\)/ {
-            match($0, /([0-9]+)x([0-9]+)/, res)
+            # Line format: "    2560x1600 @ 165.000 Hz (current) (preferred)"
+            gsub(/^[[:space:]]+/, "")
+            split($1, res, "x")
             print mon, res[1], res[2]
             exit
           }
         '
       else
         # Find first monitor and its current mode
-        # cosmic-randr format: "eDP-1 [Enabled]" for monitor header
-        # and "  2560x1600@165.003 (current)" for modes
+        # cosmic-randr format: "eDP-1 (enabled)" for monitor header
+        # and "    2560x1600 @ 165.000 Hz (current)" for modes
         echo "$output" | ${pkgs.gawk}/bin/awk '
-          /^[A-Za-z]+-[0-9]/ || /^[A-Za-z]+[0-9]/ { mon=$1 }
+          /^[A-Za-z]+-?[0-9]/ { mon=$1 }
           mon && /\(current\)/ {
-            match($0, /([0-9]+)x([0-9]+)/, res)
+            gsub(/^[[:space:]]+/, "")
+            split($1, res, "x")
             print mon, res[1], res[2]
             exit
           }
