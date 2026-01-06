@@ -3,82 +3,72 @@
 let
   cfg = config.smind.power-management;
 
-  # COSMIC version using cosmic-randr
-  cosmicRefreshRateSwitchScript = pkgs.writeShellScript "refresh-rate-switch-cosmic" ''
+  # COSMIC/Wayland version using wlr-randr with JSON output
+  cosmicRefreshRateSwitchScript = pkgs.writeShellScript "refresh-rate-switch-wayland" ''
     set -euo pipefail
+
+    # Import environment from systemd user manager
+    eval "$(${pkgs.systemd}/bin/systemctl --user show-environment | grep -E '^(WAYLAND_DISPLAY|DISPLAY|DBUS_SESSION_BUS_ADDRESS)=')" 2>/dev/null || true
+    export WAYLAND_DISPLAY DISPLAY DBUS_SESSION_BUS_ADDRESS 2>/dev/null || true
+
+    # Fallback: try to find wayland socket
+    if [ -z "''${WAYLAND_DISPLAY:-}" ] && [ -d "''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" ]; then
+      for sock in "''${XDG_RUNTIME_DIR}"/wayland-*; do
+        if [ -S "$sock" ]; then
+          export WAYLAND_DISPLAY="$(basename "$sock")"
+          break
+        fi
+      done
+    fi
 
     MONITOR="${cfg.auto-refresh-rate.monitor}"
     RATE_AC="${toString cfg.auto-refresh-rate.onAC}"
     RATE_BATTERY="${toString cfg.auto-refresh-rate.onBattery}"
 
-    get_monitor_info() {
-      # Get first monitor if not specified, and its current resolution
-      local output
-      output=$(${pkgs.cosmic-randr}/bin/cosmic-randr list 2>&1) || true
-
-      echo "DEBUG: cosmic-randr output:" >&2
-      echo "$output" >&2
-      echo "DEBUG: end output" >&2
-
-      if [ -z "$output" ]; then
-        echo "DEBUG: cosmic-randr returned empty output" >&2
-        return 1
-      fi
-
-      if [ -n "$MONITOR" ]; then
-        echo "$output" | ${pkgs.gawk}/bin/awk -v mon="$MONITOR" '
-          $1 == mon { found=1 }
-          found && /\(current\)/ {
-            # Line: "    2560x1600 @ 165.000 Hz (current)"
-            # Extract resolution by finding NNNNxNNNN pattern
-            if (match($0, /[0-9]+x[0-9]+/)) {
-              res = substr($0, RSTART, RLENGTH)
-              split(res, dims, "x")
-              print mon, dims[1], dims[2]
-            }
-            exit
-          }
-        '
-      else
-        # Find first monitor and its current mode
-        # cosmic-randr format: "eDP-1 (enabled)" for monitor header
-        # and "    2560x1600 @ 165.000 Hz (current)" for modes
-        echo "$output" | ${pkgs.gawk}/bin/awk '
-          /^[A-Za-z]+-?[0-9]/ {
-            mon=$1
-            print "DEBUG AWK: found monitor:", mon > "/dev/stderr"
-          }
-          mon && /\(current\)/ {
-            print "DEBUG AWK: found current line:", $0 > "/dev/stderr"
-            if (match($0, /[0-9]+x[0-9]+/)) {
-              res = substr($0, RSTART, RLENGTH)
-              print "DEBUG AWK: extracted res:", res > "/dev/stderr"
-              split(res, dims, "x")
-              print mon, dims[1], dims[2]
-            } else {
-              print "DEBUG AWK: no resolution match" > "/dev/stderr"
-            }
-            exit
-          }
-        '
-      fi
-    }
-
     set_refresh_rate() {
       local rate="$1"
-      local info
-      info=$(get_monitor_info)
+      local json
+      json=$(${pkgs.wlr-randr}/bin/wlr-randr --json 2>/dev/null) || return 1
 
-      if [ -z "$info" ]; then
+      # Find monitor (first enabled if not specified)
+      local monitor
+      if [ -n "$MONITOR" ]; then
+        monitor="$MONITOR"
+      else
+        monitor=$(echo "$json" | ${pkgs.jq}/bin/jq -r '.[0].name // empty')
+      fi
+
+      if [ -z "$monitor" ]; then
         echo "No monitor found"
         return 1
       fi
 
-      local monitor width height
-      read -r monitor width height <<< "$info"
+      # Get current refresh rate (rounded)
+      local current_rate
+      current_rate=$(echo "$json" | ${pkgs.jq}/bin/jq -r --arg mon "$monitor" '
+        .[] | select(.name == $mon) | .modes[] | select(.current) | .refresh | round
+      ')
 
-      echo "Setting $monitor to ''${width}x''${height}@''${rate}Hz"
-      ${pkgs.cosmic-randr}/bin/cosmic-randr mode "$monitor" "$width" "$height" --refresh "$rate" 2>&1 || true
+      if [ "$current_rate" = "$rate" ]; then
+        echo "Already at ''${rate}Hz, skipping"
+        return 0
+      fi
+
+      # Find mode matching target rate (within 1 Hz tolerance)
+      local mode
+      mode=$(echo "$json" | ${pkgs.jq}/bin/jq -r --arg mon "$monitor" --argjson rate "$rate" '
+        .[] | select(.name == $mon) | .modes[] |
+        select((.refresh | round) == $rate or ((.refresh - $rate) | fabs) < 1) |
+        "\(.width)x\(.height)@\(.refresh)"
+      ' | head -1)
+
+      if [ -z "$mode" ]; then
+        echo "No matching mode found for ''${rate}Hz"
+        return 1
+      fi
+
+      echo "Setting $monitor to $mode"
+      ${pkgs.wlr-randr}/bin/wlr-randr --output "$monitor" --mode "$mode" 2>&1 || true
     }
 
     is_on_battery() {
@@ -148,6 +138,22 @@ let
         '
     }
 
+    get_current_rate() {
+      local monitor="$1"
+      # Get current refresh rate (rounded to nearest integer)
+      ${pkgs.gnome-randr}/bin/gnome-randr query 2>/dev/null | \
+        ${pkgs.gawk}/bin/awk -v mon="$monitor" '
+          $1 == mon { in_monitor = 1; next }
+          /^[A-Za-z]/ && !/^[[:space:]]/ && in_monitor { exit }
+          in_monitor && /\*/ {
+            gsub(/^[[:space:]]+/, "")
+            split($1, parts, "@")
+            print int(parts[2] + 0.5)
+            exit
+          }
+        '
+    }
+
     find_best_mode() {
       local monitor="$1"
       local resolution="$2"
@@ -188,6 +194,14 @@ let
       if [ -z "$monitor" ]; then
         echo "No monitor found"
         return 1
+      fi
+
+      # Check if already at target rate
+      local current_rate
+      current_rate=$(get_current_rate "$monitor")
+      if [ "$current_rate" = "$rate" ]; then
+        echo "Already at ''${rate}Hz, skipping"
+        return 0
       fi
 
       local resolution
@@ -402,7 +416,7 @@ in
 
     # Auto-switch display refresh rate based on AC/battery (COSMIC/Wayland)
     (lib.mkIf (cfg.auto-refresh-rate.enable && config.smind.desktop.cosmic.enable) {
-      environment.systemPackages = [ pkgs.cosmic-randr ];
+      environment.systemPackages = [ pkgs.wlr-randr ];
 
       systemd.user.services.auto-refresh-rate-cosmic = {
         description = "Automatic display refresh rate switching based on power state (COSMIC)";
@@ -417,12 +431,13 @@ in
           RestartSec = 5;
         };
 
-        # cosmic-randr needs Wayland environment
-        environment = {
-          WAYLAND_DISPLAY = "wayland-1";
-          XDG_RUNTIME_DIR = "%t";
+        # Delay start to ensure COSMIC output management is ready
+        unitConfig = {
+          StartLimitIntervalSec = 60;
+          StartLimitBurst = 3;
         };
       };
+
     })
   ];
 }
