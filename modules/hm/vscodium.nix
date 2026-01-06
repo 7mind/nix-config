@@ -197,6 +197,10 @@
           "nix.formatterPath" = "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt";
           "nix.serverPath" = "${pkgs.nixd}/bin/nixd";
           "nix.serverSettings" = {
+            "nil" = {
+              "formatting" = { "command" = [ "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt" ]; };
+              "nix" = { "flake" = { autoArchive = true; autoEvalInputs = true; }; };
+            };
             "nixd" = {
               "formatting" = {
                 "command" = [ "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt" ];
