@@ -49,11 +49,12 @@
     };
 
     # Keyring and SSH agent via shared module
+    # Include GDM PAM services for when COSMIC is selected from GDM session picker
     smind.security.keyring = {
       enable = true;
       backend = "gnome-keyring";
       sshAgent = "gcr";
-      displayManagers = [ "login" "greetd" "cosmic-greeter" ];
+      displayManagers = [ "login" "greetd" "cosmic-greeter" "gdm" "gdm-password" "gdm-fingerprint" "gdm-autologin" ];
     };
 
     xdg.portal.enable = true;

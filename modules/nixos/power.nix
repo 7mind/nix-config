@@ -29,10 +29,13 @@ let
         echo "$output" | ${pkgs.gawk}/bin/awk -v mon="$MONITOR" '
           $1 == mon { found=1 }
           found && /\(current\)/ {
-            # Line format: "    2560x1600 @ 165.000 Hz (current) (preferred)"
-            gsub(/^[[:space:]]+/, "")
-            split($1, res, "x")
-            print mon, res[1], res[2]
+            # Line: "    2560x1600 @ 165.000 Hz (current)"
+            # Extract resolution by finding NNNNxNNNN pattern
+            if (match($0, /[0-9]+x[0-9]+/)) {
+              res = substr($0, RSTART, RLENGTH)
+              split(res, dims, "x")
+              print mon, dims[1], dims[2]
+            }
             exit
           }
         '
@@ -43,9 +46,11 @@ let
         echo "$output" | ${pkgs.gawk}/bin/awk '
           /^[A-Za-z]+-?[0-9]/ { mon=$1 }
           mon && /\(current\)/ {
-            gsub(/^[[:space:]]+/, "")
-            split($1, res, "x")
-            print mon, res[1], res[2]
+            if (match($0, /[0-9]+x[0-9]+/)) {
+              res = substr($0, RSTART, RLENGTH)
+              split(res, dims, "x")
+              print mon, dims[1], dims[2]
+            }
             exit
           }
         '
