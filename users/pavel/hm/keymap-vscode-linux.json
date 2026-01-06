@@ -6745,22 +6745,12 @@
   },
   {
     "when" : "terminalTextSelectedInFocused || terminalFocus && terminalHasBeenCreated && terminalTextSelected || terminalFocus && terminalProcessSupported && terminalTextSelected || terminalFocus && terminalTextSelected && terminalTextSelectedInFocused || terminalHasBeenCreated && terminalTextSelected && terminalTextSelectedInFocused || terminalProcessSupported && terminalTextSelected && terminalTextSelectedInFocused",
-    "key" : "ctrl+[KeyC]",
-    "command" : "workbench.action.terminal.copyAndClearSelection"
-  },
-  {
-    "when" : "terminalTextSelectedInFocused || terminalFocus && terminalHasBeenCreated && terminalTextSelected || terminalFocus && terminalProcessSupported && terminalTextSelected || terminalFocus && terminalTextSelected && terminalTextSelectedInFocused || terminalHasBeenCreated && terminalTextSelected && terminalTextSelectedInFocused || terminalProcessSupported && terminalTextSelected && terminalTextSelectedInFocused",
-    "key" : "meta+[KeyC]",
+    "key" : "ctrl+shift+[KeyC]",
     "command" : "workbench.action.terminal.copyAndClearSelection"
   },
   {
     "when" : "terminalFocus && terminalHasBeenCreated || terminalFocus && terminalProcessSupported",
-    "key" : "ctrl+[KeyV]",
-    "command" : "workbench.action.terminal.paste"
-  },
-  {
-    "when" : "terminalFocus && terminalHasBeenCreated || terminalFocus && terminalProcessSupported",
-    "key" : "meta+[KeyV]",
+    "key" : "ctrl+shift+[KeyV]",
     "command" : "workbench.action.terminal.paste"
   },
   {

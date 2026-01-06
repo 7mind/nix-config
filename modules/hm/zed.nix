@@ -43,14 +43,7 @@
             milliseconds = 250;
           };
         };
-        features = {
-          copilot = false;
-          inline_completion_provider = "none";
-        };
-        assistant = {
-          enabled = false;
-          version = "2";
-        };
+        inline_completion_provider = "none";
         agent = {
           enabled = false;
         };
@@ -64,6 +57,12 @@
           button = false;
         };
         show_call_status_icon = false;
+        title_bar = {
+          show_menus = true;
+        };
+        minimap = {
+          show = "always";
+        };
         telemetry = {
           diagnostics = false;
           metrics = false;
@@ -98,11 +97,10 @@
           "git_diff" = true; # Show git diff indicators.
           "search_results" = true; # Show buffer search results.
           "selected_symbol" = true; # Show selected symbol occurrences.
-          "diagnostics" = true; # Show diagnostic indicators.
+          "diagnostics" = "warning"; # "hint", "information", "warning", "error"
         };
         "gutter" = {
           "line_numbers" = true; # Show line numbers.
-          "code_actions" = true; # Show code action buttons.
           "runnables" = true; # Show runnables buttons.
           "folds" = true; # Show fold buttons.
         };
