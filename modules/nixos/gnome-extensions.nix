@@ -80,10 +80,12 @@ in
         mkdir -p $out/bin
         cp ${batteryHealthChargingPatched}/share/gnome-shell/extensions/Battery-Health-Charging@maniacx.github.com/resources/batteryhealthchargingctl $out/bin/batteryhealthchargingctl
         chmod +x $out/bin/batteryhealthchargingctl
-        # Patch CHECKINSTALLATION to always succeed on NixOS
+        # Patch CHECKINSTALLATION case to always succeed on NixOS
         # We configure polkit declaratively, so no need to check file-based rules
-        substituteInPlace $out/bin/batteryhealthchargingctl \
-          --replace-fail 'check_installation' 'echo "Battery Health Charging: NixOS polkit configured declaratively"; exit 0 #'
+        # Only replace the call site, not the function definition
+        sed -i '/^    CHECKINSTALLATION)$/,/^        ;;$/{
+          s/check_installation/echo "NixOS: polkit configured declaratively"; exit 0/
+        }' $out/bin/batteryhealthchargingctl
       '')
     ];
 
