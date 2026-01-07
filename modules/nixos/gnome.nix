@@ -261,6 +261,7 @@
     # Workaround: Reset GNOME idle state after resume to prevent suspend loop
     # gsd-power doesn't reset its internal idle counter after resume, causing immediate re-suspend
     # See: https://github.com/NixOS/nixpkgs/issues/336723
+    # See: https://gitlab.gnome.org/World/Phosh/phosh/-/merge_requests/1016
     systemd.services.reset-gnome-idle-on-resume = lib.mkIf (config.smind.desktop.gnome.suspend.enable || config.smind.desktop.gnome.hibernate.enable) {
       description = "Reset GNOME idle state after resume to prevent suspend loop";
       after = [ "suspend.target" "hibernate.target" "hybrid-sleep.target" ];
@@ -271,13 +272,26 @@
           # Wait for desktop session to fully resume
           sleep 2
 
-          # Reset idle hint for all sessions
+          # Reset idle hint for all logind sessions
           ${pkgs.systemd}/bin/loginctl list-sessions --no-legend | while read -r session rest; do
             ${pkgs.systemd}/bin/loginctl set-idle-hint "$session" no 2>/dev/null || true
           done
 
-          # Also unlock sessions to ensure activity is registered
-          ${pkgs.systemd}/bin/loginctl unlock-sessions
+          # Reset GNOME session presence to "available" (0) for all graphical users
+          # This signals gnome-session that user is active, resetting gsd-power's idle timer
+          for uid in $(${pkgs.systemd}/bin/loginctl list-users --no-legend | ${pkgs.gawk}/bin/awk '{print $1}'); do
+            user=$(${pkgs.coreutils}/bin/id -nu "$uid" 2>/dev/null) || continue
+            runtime_dir="/run/user/$uid"
+            [ -S "$runtime_dir/bus" ] || continue
+
+            ${pkgs.sudo}/bin/sudo -u "$user" \
+              DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime_dir/bus" \
+              ${pkgs.dbus}/bin/dbus-send --session --type=method_call \
+                --dest=org.gnome.SessionManager \
+                /org/gnome/SessionManager/Presence \
+                org.gnome.SessionManager.Presence.SetStatus \
+                uint32:0 2>/dev/null || true
+          done
         '';
       };
     };
