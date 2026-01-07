@@ -48,6 +48,7 @@
 
     # Polkit authentication agent - cosmic-osd should handle this but has NixOS issues
     # Using polkit_gnome as a reliable fallback for apps like virt-manager
+    # Only start in COSMIC sessions - GNOME Shell has its own built-in polkit agent
     systemd.user.services.polkit-gnome-authentication-agent-1 = {
       description = "polkit-gnome-authentication-agent-1";
       wantedBy = [ "graphical-session.target" ];
@@ -55,6 +56,7 @@
       after = [ "graphical-session.target" ];
       serviceConfig = {
         Type = "simple";
+        ExecCondition = ''/bin/sh -c '[ "$XDG_CURRENT_DESKTOP" = "COSMIC" ]' '';
         ExecStart = "${pkgs.polkit_gnome}/libexec/polkit-gnome-authentication-agent-1";
         Restart = "on-failure";
         RestartSec = 1;

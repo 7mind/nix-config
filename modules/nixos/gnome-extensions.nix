@@ -99,10 +99,11 @@ in
       });
 
       // Allow Battery Health Charging extension to set thresholds
+      // Note: Don't check subject.active - after suspend/resume it may not be set immediately
       polkit.addRule(function(action, subject) {
-        if (action.id === "org.freedesktop.policykit.exec" &&
-            action.lookup("program") === "/run/current-system/sw/bin/batteryhealthchargingctl" &&
-            subject.local && subject.active)
+        if (action.id == "org.freedesktop.policykit.exec" &&
+            action.lookup("program") == "/run/current-system/sw/bin/batteryhealthchargingctl" &&
+            subject.local && subject.isInGroup("wheel"))
         {
           return polkit.Result.YES;
         }
