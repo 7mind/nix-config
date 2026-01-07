@@ -140,6 +140,7 @@
 
     zfs.initrd-unlock.enable = true;
     zfs.initrd-unlock.macaddr = "d0:94:66:55:aa:ab";
+    zfs.initrd-unlock.bridge-slave = "eth-main";
 
     net.main-interface = "eth-main";
 

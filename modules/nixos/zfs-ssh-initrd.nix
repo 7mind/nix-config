@@ -18,6 +18,11 @@
       description = "network interface to configure / mac";
     };
 
+    smind.zfs.initrd-unlock.bridge-slave = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Physical interface to enslave to the bridge (required when interface is a bridge)";
+    };
 
     smind.zfs.initrd-unlock.hostname = lib.mkOption {
       type = lib.types.str;
@@ -83,30 +88,56 @@
             wait-online.timeout = 10;
             wait-online.extraArgs = [ config.smind.zfs.initrd-unlock.interface ];
 
-            # Main system network config is copied to initrd but mangled (bridge slave configs lose bridge= directive)
-            # See: https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/system/boot/networkd.nix#L3306
-            # Use 99- prefix to override any inherited config (e.g. 40-sfp-main.network with DHCP=no)
-            networks."99-${config.smind.zfs.initrd-unlock.interface}" = {
-              enable = true;
-              name = config.smind.zfs.initrd-unlock.interface;
-              DHCP = "ipv4";
+            # Main system network config is partially copied to initrd but bridge configs are missing:
+            # - Bridge netdevs are NOT copied
+            # - Bridge slave network configs lose bridge= directive
+            # See: https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/system/boot/networkd.nix
+            # We explicitly create bridge and slave config when bridge-slave is set
 
-              linkConfig = {
-                MACAddress = config.smind.zfs.initrd-unlock.macaddr;
-                RequiredForOnline = "routable";
-              };
-
-              networkConfig = {
-                # Override any VLAN/bridge config from inherited files
-                VLAN = [ ];
-                Bridge = "";
-              };
-
-              dhcpV4Config = {
-                SendHostname = true;
-                Hostname = config.smind.zfs.initrd-unlock.hostname;
+            netdevs = lib.mkIf (config.smind.zfs.initrd-unlock.bridge-slave != null) {
+              "10-${config.smind.zfs.initrd-unlock.interface}" = {
+                netdevConfig = {
+                  Kind = "bridge";
+                  Name = config.smind.zfs.initrd-unlock.interface;
+                  MACAddress = config.smind.zfs.initrd-unlock.macaddr;
+                };
               };
             };
+
+            networks = lib.mkMerge [
+              # Bridge slave config (physical interface -> bridge)
+              (lib.mkIf (config.smind.zfs.initrd-unlock.bridge-slave != null) {
+                "20-${config.smind.zfs.initrd-unlock.bridge-slave}-initrd" = {
+                  name = config.smind.zfs.initrd-unlock.bridge-slave;
+                  bridge = [ config.smind.zfs.initrd-unlock.interface ];
+                  networkConfig = {
+                    # Clear any VLAN config from inherited files
+                    VLAN = [ ];
+                  };
+                };
+              })
+
+              # Bridge/interface network config with DHCP
+              {
+                "99-${config.smind.zfs.initrd-unlock.interface}" = {
+                  enable = true;
+                  name = config.smind.zfs.initrd-unlock.interface;
+                  DHCP = "ipv4";
+
+                  linkConfig = {
+                    RequiredForOnline = "routable";
+                  } // lib.optionalAttrs (config.smind.zfs.initrd-unlock.bridge-slave == null) {
+                    # Only set MAC on interface directly if not using a bridge
+                    MACAddress = config.smind.zfs.initrd-unlock.macaddr;
+                  };
+
+                  dhcpV4Config = {
+                    SendHostname = true;
+                    Hostname = config.smind.zfs.initrd-unlock.hostname;
+                  };
+                };
+              }
+            ];
 
           };
         };
