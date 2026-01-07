@@ -59,7 +59,7 @@ diff -ruN a/src/application.rs b/src/application.rs
              // Watch the network to log its state.
              let network_monitor = gio::NetworkMonitor::default();
              network_monitor.connect_network_changed(clone!(
-@@ -149,7 +177,26 @@
+@@ -149,7 +177,22 @@
          ///
          /// Returns the main window.
          fn present_main_window(&self) -> Window {
@@ -79,11 +79,7 @@ diff -ruN a/src/application.rs b/src/application.rs
 +                return window;
 +            }
 +
-+            let window = if let Some(window) = self.obj().active_window().and_downcast::<Window>() {
-+                // Force minimize then unminimize to trigger compositor window restoration
-+                window.set_visible(true);
-+                window.minimize();
-+                window.unminimize();
++            let window = if let Some(window) = self.obj().active_window().and_downcast() {
                  window
              } else {
                  Window::new(&self.obj())

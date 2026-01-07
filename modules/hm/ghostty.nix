@@ -52,7 +52,7 @@ in
         window-width = 160;
         window-height = defaultRows;
 
-        scrollback-limit = 50000;
+        scrollback-limit = 100000000;  # ~50k lines at 160 columns (bytes, not lines)
 
         # Inherit CWD when creating new splits/tabs
         window-inherit-working-directory = true;
