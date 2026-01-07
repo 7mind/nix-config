@@ -71,6 +71,13 @@ BWRAP_ARGS=(
   --tmpfs /tmp
 )
 
+# Bind /tmp/exchange for host<->sandbox file sharing (create if missing)
+EXCHANGE_DIR="/tmp/exchange"
+if [[ ! -d "$EXCHANGE_DIR" ]]; then
+  mkdir -p "$EXCHANGE_DIR"
+fi
+BWRAP_ARGS+=(--bind "$EXCHANGE_DIR" "$EXCHANGE_DIR")
+
 # Nix store must be bound first (other paths are symlinks into it)
 NIX_PATHS=(
   /nix/store

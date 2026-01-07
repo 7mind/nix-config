@@ -63,8 +63,8 @@
           - Deliver sound, generic, universal solutions. Avoid workarounds.
           - **Ask questions**: when instructions or requirements are unclear or incomplete or you see contradictions - always ask for clarifications before proceeding.
           - **No workarounds**: whey you discover a bug or a problem, don't hide it. Attempt to fix underlying issues, ask for assistance when you can't
-          - **Sandboxed**: You run in a bubblewrap sandbox and cannot read files in $HOME nor interact with system. You can only observe the project and files in /nix. /tmp is also available
-          - **Prepare scripts for user**: When you need to interact with the system, prepare a shell script file writing output into temporary file in /tmp, ask user to run it, then read output
+          - **Sandboxed**: You run in a bubblewrap sandbox and cannot read files in $HOME nor interact with system. You can only observe the project and files in /nix. /tmp/exchange is also available
+          - **Prepare scripts for user**: When you need to interact with the system, prepare a shell script file writing output into temporary file in /tmp/exchange, ask user to run it, then read output
 
           ### Code Style
 
@@ -215,7 +215,6 @@
               --rw "''${HOME}/.claude.json" \
               --rw "''${HOME}/.config/claude" \
               --rw "''${HOME}/.cache" \
-              --rw /tmp \
               --ro "''${HOME}/.config/git" \
               "''${ENV_ARGS[@]}" \
               -- claude --permission-mode bypassPermissions "''${CMD_ARGS[@]}"
@@ -235,7 +234,6 @@
               --rw "''${HOME}/.codex" \
               --rw "''${HOME}/.config/codex" \
               --rw "''${HOME}/.cache" \
-              --rw /tmp \
               --ro "''${HOME}/.config/git" \
               "''${ENV_ARGS[@]}" \
               -- codex --dangerously-bypass-approvals-and-sandbox "''${CMD_ARGS[@]}"
@@ -254,7 +252,6 @@
               --rw "''${PWD}" \
               --rw "''${HOME}/.gemini" \
               --rw "''${HOME}/.cache" \
-              --rw /tmp \
               --ro "''${HOME}/.config/git" \
               "''${ENV_ARGS[@]}" \
               -- gemini --yolo "''${CMD_ARGS[@]}"
@@ -273,7 +270,6 @@
               --rw "''${PWD}" \
               --rw "''${HOME}/.gemini-work" \
               --rw "''${HOME}/.cache" \
-              --rw /tmp \
               --ro "''${HOME}/.config/git" \
               "''${ENV_ARGS[@]}" \
               --bind "''${HOME}/.gemini-work,''${HOME}/.gemini" \
@@ -294,7 +290,6 @@
               --rw "''${HOME}/.config/opencode" \
               --rw "''${HOME}/.local/share/opencode" \
               --rw "''${HOME}/.cache" \
-              --rw /tmp \
               --ro "''${HOME}/.config/git" \
               "''${ENV_ARGS[@]}" \
               -- opencode "''${CMD_ARGS[@]}"

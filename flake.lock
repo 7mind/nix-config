@@ -57,11 +57,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1765070808,
-        "narHash": "sha256-rS1QKAcHRgeV5ZK3nZPQbJ/23wcGfRKcJcQNzQMdX7Q=",
+        "lastModified": 1767815183,
+        "narHash": "sha256-2usaZVMET7uSX4alEQmQUjhw+irEyBQokPFLEA5KiVo=",
         "owner": "pshirshov",
         "repo": "browservice",
-        "rev": "98959d270b74691cd829807252771cf62e2434ff",
+        "rev": "2969e1fccc168106adcd7366260dced6df46c3ea",
         "type": "github"
       },
       "original": {
