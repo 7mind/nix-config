@@ -91,10 +91,16 @@ in
       description = "Autostart Slack on login";
     };
 
-    slack.autostartDelay = lib.mkOption {
+    slack.autostartWaitForTray = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Wait for StatusNotifierWatcher D-Bus service before starting (ensures tray icon works)";
+    };
+
+    slack.autostartTimeout = lib.mkOption {
       type = lib.types.int;
-      default = 5;
-      description = "Delay in seconds before autostarting Slack (allows tray extension to initialize)";
+      default = 30;
+      description = "Timeout in seconds when waiting for tray service";
     };
 
     element.enable = lib.mkOption {
@@ -124,6 +130,18 @@ in
         extraFlags = [ "--hidden" ];
         netns = cfg.element.netns;
       };
+
+      # Wrapper that waits for StatusNotifierWatcher D-Bus service before launching
+      waitForTrayWrapper = app: timeout: pkgs.writeShellScript "wait-for-tray-${app.name}" ''
+        # Wait for the StatusNotifierWatcher D-Bus service (provided by AppIndicator extension)
+        ${pkgs.glib}/bin/gdbus wait --session --timeout=${toString timeout} org.kde.StatusNotifierWatcher || true
+        exec ${app}/bin/${app.meta.mainProgram or app.name}
+      '';
+
+      slackAutostartExec =
+        if cfg.slack.autostartWaitForTray
+        then waitForTrayWrapper slackWrapped cfg.slack.autostartTimeout
+        else "${slackWrapped}/bin/slack";
     in {
       systemd.user.slices.app-heavy = {
         Unit.Description = "Slice for resource-heavy apps (Slack, Element, etc.)";
@@ -143,8 +161,7 @@ in
       smind.hm.autostart.programs = lib.flatten [
         (lib.optional (cfg.slack.enable && cfg.slack.autostart) {
           name = "Slack";
-          exec = "${slackWrapped}/bin/slack";
-          delay = cfg.slack.autostartDelay;
+          exec = toString slackAutostartExec;
         })
       ];
     }
