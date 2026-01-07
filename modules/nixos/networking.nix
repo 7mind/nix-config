@@ -152,13 +152,19 @@
 
             dhcpV4Config = {
               SendHostname = true;
-              Hostname = "${config.networking.hostName}.${config.networking.domain}";
+              Hostname =
+                if config.networking.domain != null
+                then "${config.networking.hostName}.${config.networking.domain}"
+                else config.networking.hostName;
               UseDomains = true;
             };
 
             dhcpV6Config = {
               SendHostname = true;
-              Hostname = "${config.networking.hostName}-ipv6.${config.networking.domain}";
+              Hostname =
+                if config.networking.domain != null
+                then "${config.networking.hostName}-ipv6.${config.networking.domain}"
+                else "${config.networking.hostName}-ipv6";
               UseDomains = true;
             };
 

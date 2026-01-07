@@ -46,6 +46,11 @@
       sessionVariables = { };
 
       initContent = ''
+        # Ghostty CWD inheritance requires short hostname, not FQDN.
+        # NixOS sets HOST to FQDN when networking.domain is configured.
+        # Uncomment if networking.domain is set and Ghostty splits open in ~ instead of CWD:
+        # HOST=''${HOST%%.*}
+
         # alt+backspace deletes by word, symbols in this list ARE word parts
         #export WORDCHARS='*?_-.[]~=&;!#$%^(){}<>'
         export WORDCHARS='*?_-.[]~=&;!$%^(){}<>'
