@@ -24,6 +24,12 @@ in
       default = "Builtin Pastel Dark";
       description = "Ghostty color theme (use 'ghostty +list-themes' to see available)";
     };
+
+    smind.hm.ghostty.ctrl-keybindings = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Add keybindings also on Ctrl (not just Super)";
+    };
   };
 
   config = lib.mkIf config.smind.hm.ghostty.enable {
@@ -69,14 +75,11 @@ in
         selection-clear-on-copy = true;
         clipboard-paste-protection = false;
 
-        # Clear all default keybindings and define our own
         keybind = [
           "clear"
 
           # Copy/Paste - performable: only triggers if there's a selection, otherwise passes through
-          "performable:ctrl+c=copy_to_clipboard"
           "performable:super+c=copy_to_clipboard"
-          "ctrl+v=paste_from_clipboard"
           "super+v=paste_from_clipboard"
 
           # Clear screen and scrollback
@@ -100,19 +103,35 @@ in
 
           # Tabs (both super and ctrl for kanata compatibility)
           "super+t=new_tab"
-          "ctrl+t=new_tab"
           "super+bracket_left=previous_tab"
           "super+bracket_right=next_tab"
 
-          # Window (both super and ctrl for kanata compatibility)
           "super+n=new_window"
-          "ctrl+n=new_window"
           "super+w=close_surface"
-          "ctrl+w=close_surface"
 
           # Scrolling
           "shift+page_up=scroll_page_fractional:-0.5"
           "shift+page_down=scroll_page_fractional:0.5"
+
+          # Essential defaults to keep
+          "super+shift+comma=reload_config"
+          "super+plus=increase_font_size:1"
+          "super+minus=decrease_font_size:1"
+          "super+zero=reset_font_size"
+        ];
+      } // lib.optionalAttrs config.smind.hm.ghostty.ctrl-keybindings {
+        # Clear all default keybindings and define our own
+        keybind = [
+          # Copy/Paste - performable: only triggers if there's a selection, otherwise passes through
+          "performable:ctrl+c=copy_to_clipboard"
+          "ctrl+v=paste_from_clipboard"
+
+          # Tabs (both super and ctrl for kanata compatibility)
+          "ctrl+t=new_tab"
+
+          # Window (both super and ctrl for kanata compatibility)
+          "ctrl+n=new_window"
+          "ctrl+w=close_surface"
 
           # Essential defaults to keep
           "ctrl+shift+comma=reload_config"

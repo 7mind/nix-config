@@ -192,12 +192,11 @@
       };
     };
 
-
     services.gvfs.enable = true;
 
     services.udev.packages = [ pkgs.gnome-settings-daemon ];
 
-    # Display manager (GDM) configuration handled by smind.displayManager module
+    # Display manager (GDM) configuration handled by smind.display-manager module
 
     # PAM keyring integration handled by smind.security.keyring module
 

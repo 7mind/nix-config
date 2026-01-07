@@ -4,7 +4,7 @@ let
   # Priority-based backend selection
   # Priority: KDE > GNOME > COSMIC
   selectedBackend =
-    if config.smind.displayManager != "auto" then config.smind.displayManager
+    if config.smind.display-manager != "auto" then config.smind.display-manager
     else if config.smind.desktop.kde.enable then "sddm"
     else if config.smind.desktop.gnome.enable then "gdm"
     else if config.smind.desktop.cosmic.enable then "cosmic-greeter"
@@ -20,11 +20,12 @@ let
 
 in
 {
-  options.smind = {displayManager = lib.mkOption {
-    type = lib.types.enum [ "auto" "gdm" "sddm" "cosmic-greeter" "greetd" "none" ];
-    default = "auto";
-    description = ''
-      Display manager to use.
+  options.smind = {
+    display-manager = lib.mkOption {
+      type = lib.types.enum [ "auto" "gdm" "sddm" "cosmic-greeter" "greetd" "none" ];
+      default = "auto";
+      description = ''
+        Display manager to use.
 
       - auto: Automatically select based on priority: KDE > GNOME > COSMIC
       - gdm: GNOME Display Manager
@@ -33,20 +34,23 @@ in
       - greetd: Generic greeter
       - none: No display manager (manual startx/login)
 
-      Priority ensures deterministic selection regardless of module evaluation order.
-    '';
-  };};
+        Priority ensures deterministic selection regardless of module evaluation order.
+      '';
+    };
+
+    x11.enable = lib.mkEnableOption "x11-server";
+  };
 
   config = lib.mkMerge [
     # Info message for multiple desktops
     {
-      warnings = lib.optionals (hasMultipleDesktops && config.smind.displayManager == "auto") [
+      warnings = lib.optionals (hasMultipleDesktops && config.smind.display-manager == "auto") [
         ''
           Multiple desktop environments enabled: ${lib.concatStringsSep ", " enabledDesktops}
           Auto-selected display manager: ${selectedBackend} (priority: KDE > GNOME > COSMIC)
 
           All desktops will be available as sessions at login.
-          To override, set: smind.displayManager = "gdm" | "sddm" | "cosmic-greeter"
+          To override, set: smind.display-manager = "gdm" | "sddm" | "cosmic-greeter"
         ''
       ];
 
@@ -126,6 +130,11 @@ in
           default_session.command = lib.mkDefault "${pkgs.greetd.tuigreet}/bin/tuigreet --time --cmd sway";
         };
       };
+    })
+
+    # x11
+    (lib.mkIf (config.smind.x11.enable) {
+      services.xserver.enable = true;
     })
   ];
 }

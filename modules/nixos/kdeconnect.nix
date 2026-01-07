@@ -76,7 +76,7 @@ in
     })
 
     (lib.mkIf (cfg.enable && selectedBackend == "gsconnect") {
-      programs.kdeconnect.package = pkgs.gnomeExtensions.gsconnect;
+      programs.kdeconnect.package = lib.mkForce pkgs.gnomeExtensions.gsconnect;
     })
 
     (lib.mkIf (cfg.enable && selectedBackend == "kde-connect-kde") {

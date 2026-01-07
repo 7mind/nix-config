@@ -25,6 +25,7 @@
       zed.enable = lib.mkDefault true;
       wezterm.enable = lib.mkDefault false;
       ghostty.enable = lib.mkDefault true;
+      ghostty.ctrl-keybindings = lib.mkDefault true;
       autostart.programs = [ ];
       cleanups.enable = lib.mkDefault true;
       environment.sane-defaults.generic.enable = lib.mkDefault true;
