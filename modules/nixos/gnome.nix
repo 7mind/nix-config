@@ -114,6 +114,11 @@
               "stickykeys-enable" = true;
               "stickykeys-modifier-beep" = true;
             };
+          } // lib.optionalAttrs (!config.smind.isLaptop) {
+            "org/gnome/settings-daemon/plugins/power" = {
+              sleep-inactive-ac-type = "nothing";
+              sleep-inactive-battery-type = "nothing";
+            };
           };
         }
       ];
