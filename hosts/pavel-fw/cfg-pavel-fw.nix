@@ -177,6 +177,7 @@ in
     desktop.gnome.fractional-scaling.enable = true;
     desktop.gnome.vrr.enable = true;
     desktop.gnome.ambient-light-sensor.enable = false;
+    desktop.gnome.framework-fan-control.enable = true;
     desktop.gnome.gdm.monitors-xml = ./monitors.xml;
 
     desktop.cosmic.enable = true;

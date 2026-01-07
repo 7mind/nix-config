@@ -3,6 +3,7 @@
 let
   hibernateCfg = config.smind.desktop.gnome.hibernate;
   alsCfg = config.smind.desktop.gnome.ambient-light-sensor;
+  fanControlCfg = config.smind.desktop.gnome.framework-fan-control;
 
   # Patch extensions to support current GNOME shell version
   patchGnomeExtension = ext: ext.overrideAttrs (old: {
@@ -29,7 +30,8 @@ let
     # tray-icons-reloaded
   ]
   ++ lib.optional hibernateCfg.enable hibernateExtensionPatched
-  ++ lib.optional config.smind.desktop.gnome.sticky-keys.enable gnomeExtensions.keyboard-modifiers-status;
+  ++ lib.optional config.smind.desktop.gnome.sticky-keys.enable gnomeExtensions.keyboard-modifiers-status
+  ++ lib.optional fanControlCfg.enable gnomeExtensions.framework-fan-control;
 in
 {
   options = {
@@ -37,6 +39,12 @@ in
       type = lib.types.bool;
       default = false;
       description = "Enable ambient light sensor support for GNOME's automatic screen brightness";
+    };
+
+    smind.desktop.gnome.framework-fan-control.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Enable Framework fan control GNOME extension for Framework laptops";
     };
   };
 
