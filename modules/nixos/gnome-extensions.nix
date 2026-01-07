@@ -73,6 +73,9 @@ in
 
     environment.systemPackages = extensions;
 
+    # Enable fw-fanctrl service for Framework fan control extension
+    hardware.fw-fanctrl.enable = lib.mkIf fanControlCfg.enable true;
+
     programs.dconf = {
       enable = true;
       profiles.user.databases = [
