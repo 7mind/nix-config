@@ -73,9 +73,18 @@ in
     '';
 
     environment.systemPackages = extensions ++ [
-      # Battery Health Charging extension control script
-      (pkgs.writeShellScriptBin "batteryhealthchargingctl" (builtins.readFile
-        "${batteryHealthChargingPatched}/share/gnome-shell/extensions/Battery-Health-Charging@maniacx.github.com/resources/batteryhealthchargingctl"))
+      # Battery Health Charging extension control script (patched for NixOS)
+      # The original script's CHECKINSTALLATION tries to compare polkit rules files
+      # which don't exist on NixOS (we use security.polkit.extraConfig instead)
+      (pkgs.runCommand "batteryhealthchargingctl" { } ''
+        mkdir -p $out/bin
+        cp ${batteryHealthChargingPatched}/share/gnome-shell/extensions/Battery-Health-Charging@maniacx.github.com/resources/batteryhealthchargingctl $out/bin/batteryhealthchargingctl
+        chmod +x $out/bin/batteryhealthchargingctl
+        # Patch CHECKINSTALLATION to always succeed on NixOS
+        # We configure polkit declaratively, so no need to check file-based rules
+        substituteInPlace $out/bin/batteryhealthchargingctl \
+          --replace-fail 'check_installation' 'echo "Battery Health Charging: NixOS polkit configured declaratively"; exit 0 #'
+      '')
     ];
 
     # Polkit rules for GNOME extensions
