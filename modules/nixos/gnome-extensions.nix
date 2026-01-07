@@ -15,6 +15,16 @@ let
 
   hibernateExtensionPatched = patchGnomeExtension pkgs.gnomeExtensions.hibernate-status-button;
 
+  # Patch battery-health-charging to use NixOS paths instead of /usr/local/bin
+  batteryHealthChargingPatched = pkgs.gnomeExtensions.battery-health-charging.overrideAttrs (old: {
+    postPatch = (old.postPatch or "") + ''
+      # Replace hardcoded /usr/local/bin path with NixOS system path
+      substituteInPlace lib/driver.js \
+        --replace-fail '/usr/local/bin/batteryhealthchargingctl-''${user}' \
+                       '/run/current-system/sw/bin/batteryhealthchargingctl'
+    '';
+  });
+
   extensions = with pkgs; [
     # This is a dirty fix for annoying "allow inhibit shortcuts?" popups
     # https://discourse.gnome.org/t/virtual-machine-manager-wants-to-inhibit-shortcuts/26017/8
@@ -28,7 +38,7 @@ let
     gnomeExtensions.caffeine
     gnomeExtensions.vicinae
     gnomeExtensions.grand-theft-focus
-    gnomeExtensions.battery-health-charging
+    batteryHealthChargingPatched
     # tray-icons-reloaded
   ]
   ++ lib.optional hibernateCfg.enable hibernateExtensionPatched
@@ -65,7 +75,7 @@ in
     environment.systemPackages = extensions ++ [
       # Battery Health Charging extension control script
       (pkgs.writeShellScriptBin "batteryhealthchargingctl" (builtins.readFile
-        "${pkgs.gnomeExtensions.battery-health-charging}/share/gnome-shell/extensions/Battery-Health-Charging@maniacx.github.com/resources/batteryhealthchargingctl"))
+        "${batteryHealthChargingPatched}/share/gnome-shell/extensions/Battery-Health-Charging@maniacx.github.com/resources/batteryhealthchargingctl"))
     ];
 
     # Polkit rules for GNOME extensions
