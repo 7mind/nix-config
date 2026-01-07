@@ -62,18 +62,31 @@ in
       ACTION=="add", SUBSYSTEM=="iio", ATTR{name}=="als", ATTR{scan_elements/in_illuminance_en}="1"
     '';
 
-    # Allow any local session to claim sensors from iio-sensor-proxy
-    # The default policy requires "allow_active=yes" but D-Bus bus name subjects
-    # may not properly resolve session state, so we allow unconditionally
-    security.polkit.extraConfig = lib.mkIf alsCfg.enable ''
+    environment.systemPackages = extensions ++ [
+      # Battery Health Charging extension control script
+      (pkgs.writeShellScriptBin "batteryhealthchargingctl" (builtins.readFile
+        "${pkgs.gnomeExtensions.battery-health-charging}/share/gnome-shell/extensions/Battery-Health-Charging@maniacx.github.com/resources/batteryhealthchargingctl"))
+    ];
+
+    # Polkit rules for GNOME extensions
+    security.polkit.extraConfig = ''
+      // Allow any local session to claim sensors from iio-sensor-proxy (ALS)
       polkit.addRule(function(action, subject) {
         if (action.id == "net.hadess.SensorProxy.claim-sensor") {
           return polkit.Result.YES;
         }
       });
-    '';
 
-    environment.systemPackages = extensions;
+      // Allow Battery Health Charging extension to set thresholds
+      polkit.addRule(function(action, subject) {
+        if (action.id === "org.freedesktop.policykit.exec" &&
+            action.lookup("program") === "/run/current-system/sw/bin/batteryhealthchargingctl" &&
+            subject.local && subject.active)
+        {
+          return polkit.Result.YES;
+        }
+      });
+    '';
 
     # Enable fw-fanctrl service for Framework fan control extension
     hardware.fw-fanctrl.enable = lib.mkIf fanControlCfg.enable true;
