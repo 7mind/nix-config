@@ -81,6 +81,8 @@ in
 
   environment.systemPackages = [
     pkgs.fw-ectool # Framework EC tool for fan control, battery charge limit, etc.
+    pkgs.framework-tool # Swiss army knife CLI for Framework laptops
+    pkgs.framework-tool-tui # TUI for controlling Framework hardware
     pkgs.powertop # Power consumption analysis
 
     (pkgs.writeShellScriptBin "tpm-enroll-luks" ''
@@ -118,6 +120,10 @@ in
 
   # Framework-specific services
   hardware.sensor.iio.enable = true; # ALS sensor for wluma
+
+  # Framework laptop kernel module for battery charge limit and LED control
+  boot.extraModulePackages = [ config.boot.kernelPackages.framework-laptop-kmod ];
+  boot.kernelModules = [ "framework_laptop" ];
 
   # Allow wluma to claim sensors from iio-sensor-proxy
   security.polkit.extraConfig = ''
