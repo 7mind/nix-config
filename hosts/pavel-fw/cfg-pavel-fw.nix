@@ -199,30 +199,6 @@ in
     };
   };
 
-  # Workaround: Reset GNOME idle state after resume to prevent suspend loop
-  # gsd-power doesn't reset its internal idle counter after resume, causing immediate re-suspend
-  # See: https://github.com/NixOS/nixpkgs/issues/336723
-  systemd.services.reset-idle-on-resume = {
-    description = "Reset GNOME idle state after resume to prevent suspend loop";
-    after = [ "suspend.target" "hibernate.target" "hybrid-sleep.target" ];
-    wantedBy = [ "suspend.target" "hibernate.target" "hybrid-sleep.target" ];
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = pkgs.writeShellScript "reset-gnome-idle" ''
-        # Wait for desktop session to fully resume
-        sleep 2
-
-        # Reset idle hint for all sessions
-        ${pkgs.systemd}/bin/loginctl list-sessions --no-legend | while read -r session rest; do
-          ${pkgs.systemd}/bin/loginctl set-idle-hint "$session" no 2>/dev/null || true
-        done
-
-        # Also unlock sessions to ensure activity is registered
-        ${pkgs.systemd}/bin/loginctl unlock-sessions
-      '';
-    };
-  };
-
   smind = {
     age.enable = true;
     roles.desktop.generic-gnome = true;

@@ -250,6 +250,38 @@
     systemd.targets.hibernate.enable = lib.mkIf config.smind.desktop.gnome.hibernate.enable true;
     systemd.targets.hybrid-sleep.enable = lib.mkIf config.smind.desktop.gnome.hibernate.enable true;
 
+    # Workaround: Disable systemd 256+ user session freezing during sleep
+    # This feature doesn't work reliably with NVIDIA/AMD drivers and causes suspend failures
+    # See: https://github.com/NixOS/nixpkgs/issues/371058
+    systemd.services.systemd-suspend.environment.SYSTEMD_SLEEP_FREEZE_USER_SESSIONS = lib.mkIf config.smind.desktop.gnome.suspend.enable "false";
+    systemd.services.systemd-hibernate.environment.SYSTEMD_SLEEP_FREEZE_USER_SESSIONS = lib.mkIf config.smind.desktop.gnome.hibernate.enable "false";
+    systemd.services.systemd-hybrid-sleep.environment.SYSTEMD_SLEEP_FREEZE_USER_SESSIONS = lib.mkIf config.smind.desktop.gnome.hibernate.enable "false";
+    systemd.services.systemd-suspend-then-hibernate.environment.SYSTEMD_SLEEP_FREEZE_USER_SESSIONS = lib.mkIf config.smind.desktop.gnome.hibernate.enable "false";
+
+    # Workaround: Reset GNOME idle state after resume to prevent suspend loop
+    # gsd-power doesn't reset its internal idle counter after resume, causing immediate re-suspend
+    # See: https://github.com/NixOS/nixpkgs/issues/336723
+    systemd.services.reset-gnome-idle-on-resume = lib.mkIf (config.smind.desktop.gnome.suspend.enable || config.smind.desktop.gnome.hibernate.enable) {
+      description = "Reset GNOME idle state after resume to prevent suspend loop";
+      after = [ "suspend.target" "hibernate.target" "hybrid-sleep.target" ];
+      wantedBy = [ "suspend.target" "hibernate.target" "hybrid-sleep.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = pkgs.writeShellScript "reset-gnome-idle" ''
+          # Wait for desktop session to fully resume
+          sleep 2
+
+          # Reset idle hint for all sessions
+          ${pkgs.systemd}/bin/loginctl list-sessions --no-legend | while read -r session rest; do
+            ${pkgs.systemd}/bin/loginctl set-idle-hint "$session" no 2>/dev/null || true
+          done
+
+          # Also unlock sessions to ensure activity is registered
+          ${pkgs.systemd}/bin/loginctl unlock-sessions
+        '';
+      };
+    };
+
     services.gnome = {
       gnome-settings-daemon.enable = true;
       core-apps.enable = true;
