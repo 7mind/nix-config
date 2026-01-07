@@ -158,6 +158,18 @@ in
     resumeCommands = "${pkgs.kmod}/bin/modprobe mt7925e";
   };
 
+  # Workaround: Reset idle hint after resume to prevent GNOME suspend loop
+  # GNOME's gsd-power doesn't reset its idle timer on resume, causing immediate re-suspend
+  systemd.services.reset-idle-on-resume = {
+    description = "Reset idle hint after resume to prevent suspend loop";
+    after = [ "suspend.target" "hibernate.target" "hybrid-sleep.target" ];
+    wantedBy = [ "suspend.target" "hibernate.target" "hybrid-sleep.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${pkgs.systemd}/bin/loginctl unlock-sessions";
+    };
+  };
+
   smind = {
     age.enable = true;
     roles.desktop.generic-gnome = true;
