@@ -89,22 +89,6 @@
     desktop.cosmic.minimal-keybindings = true;
 
     autostart.programs = [
-      # {
-      #   name = "element-main";
-      #   exec = "${config.home.profileDirectory}/bin/element-desktop";
-      # }
-      # {
-      #   name = "element-main";
-      #   exec = "${element-desktop}/bin/element-desktop --hidden";
-      # }
-      # {
-      #   name = "element-2nd";
-      #   exec = "${element-desktop}/bin/element-desktop --hidden --profile secondary";
-      # }
-      {
-        name = "slack";
-        exec = "${config.home.profileDirectory}/bin/slack -u";
-      }
       {
         name = "fractal";
         exec = "${config.home.profileDirectory}/bin/fractal --minimized";

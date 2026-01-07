@@ -87,7 +87,7 @@ in
 
     slack.autostart = lib.mkOption {
       type = lib.types.bool;
-      default = false;
+      default = cfg.slack.enable;
       description = "Autostart Slack on login";
     };
 
