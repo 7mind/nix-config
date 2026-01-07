@@ -120,6 +120,7 @@
   smind = {
     roles.desktop.generic-gnome = true;
     desktop.gnome.gdm.monitors-xml = ./monitors.xml;
+    desktop.gnome.switch-input-source-keybinding = [ "<Ctrl><Alt><Super>space" ];
 
     dev.adb.users = [ "pavel" "test" ];
     dev.wireshark.users = [ "pavel" "test" ];

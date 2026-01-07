@@ -278,8 +278,10 @@
                 cycle-group = [ "<Super>grave" ]; # app windows without overview
 
                 close = [ "<Super>q" ];
-                # Input source switching handled by XKB grp:menu_toggle (Caps->Menu via kanata)
-                switch-input-source = empty;
+                switch-input-source =
+                  if config.smind.desktop.gnome.switch-input-source-keybinding != [ ]
+                  then config.smind.desktop.gnome.switch-input-source-keybinding
+                  else empty;
                 toggle-maximized = [ "<Primary><Alt>f" ];
               };
               "org/gnome/desktop/wm/preferences" =

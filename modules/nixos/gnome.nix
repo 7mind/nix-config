@@ -52,6 +52,13 @@
       description = "XKB options (e.g. layout toggle, caps behavior)";
     };
 
+    smind.desktop.gnome.switch-input-source-keybinding = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "<Ctrl><Alt><Super>space" ];
+      description = "Keybinding(s) for switching to next input source (in addition to xkb-options)";
+    };
+
     smind.desktop.gnome.sticky-keys.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;

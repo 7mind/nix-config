@@ -48,7 +48,8 @@
   };
 
   home.pointerCursor = {
-    gtk.enable = true;
+    # Disable dconf cursor settings - managed at system level with lockAll
+    gtk.enable = lib.mkForce false;
     x11.enable = true;
     package = pkgs.adwaita-icon-theme;
     name = "Adwaita";
