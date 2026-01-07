@@ -4,6 +4,7 @@ let
   hibernateCfg = config.smind.desktop.gnome.hibernate;
   alsCfg = config.smind.desktop.gnome.ambient-light-sensor;
   fanControlCfg = config.smind.desktop.gnome.framework-fan-control;
+  batteryHealthCfg = config.smind.desktop.gnome.battery-health-charging;
 
   # Patch extensions to support current GNOME shell version
   patchGnomeExtension = ext: ext.overrideAttrs (old: {
@@ -38,12 +39,12 @@ let
     gnomeExtensions.caffeine
     gnomeExtensions.vicinae
     gnomeExtensions.grand-theft-focus
-    batteryHealthChargingPatched
     # tray-icons-reloaded
   ]
   ++ lib.optional hibernateCfg.enable hibernateExtensionPatched
   ++ lib.optional config.smind.desktop.gnome.sticky-keys.enable gnomeExtensions.keyboard-modifiers-status
-  ++ lib.optional fanControlCfg.enable gnomeExtensions.framework-fan-control;
+  ++ lib.optional fanControlCfg.enable gnomeExtensions.framework-fan-control
+  ++ lib.optional batteryHealthCfg.enable batteryHealthChargingPatched;
 in
 {
   options = {
@@ -57,6 +58,12 @@ in
       type = lib.types.bool;
       default = false;
       description = "Enable Framework fan control GNOME extension for Framework laptops";
+    };
+
+    smind.desktop.gnome.battery-health-charging.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = config.smind.isLaptop;
+      description = "Enable Battery Health Charging GNOME extension for laptops";
     };
   };
 
@@ -72,11 +79,11 @@ in
       ACTION=="add", SUBSYSTEM=="iio", ATTR{name}=="als", ATTR{scan_elements/in_illuminance_en}="1"
     '';
 
-    environment.systemPackages = extensions ++ [
+    environment.systemPackages = extensions
       # Battery Health Charging extension control script (patched for NixOS)
       # The original script's CHECKINSTALLATION tries to compare polkit rules files
       # which don't exist on NixOS (we use security.polkit.extraConfig instead)
-      (pkgs.runCommand "batteryhealthchargingctl" { } ''
+      ++ lib.optional batteryHealthCfg.enable (pkgs.runCommand "batteryhealthchargingctl" { } ''
         mkdir -p $out/bin
         cp ${batteryHealthChargingPatched}/share/gnome-shell/extensions/Battery-Health-Charging@maniacx.github.com/resources/batteryhealthchargingctl $out/bin/batteryhealthchargingctl
         chmod +x $out/bin/batteryhealthchargingctl
@@ -86,29 +93,31 @@ in
         sed -i '/^    CHECKINSTALLATION)$/,/^        ;;$/{
           s/check_installation/echo "NixOS: polkit configured declaratively"; exit 0/
         }' $out/bin/batteryhealthchargingctl
-      '')
-    ];
+      '');
 
     # Polkit rules for GNOME extensions
-    security.polkit.extraConfig = ''
-      // Allow any local session to claim sensors from iio-sensor-proxy (ALS)
-      polkit.addRule(function(action, subject) {
-        if (action.id == "net.hadess.SensorProxy.claim-sensor") {
-          return polkit.Result.YES;
-        }
-      });
-
-      // Allow Battery Health Charging extension to set thresholds
-      // Note: Don't check subject.active - after suspend/resume it may not be set immediately
-      polkit.addRule(function(action, subject) {
-        if (action.id == "org.freedesktop.policykit.exec" &&
-            action.lookup("program") == "/run/current-system/sw/bin/batteryhealthchargingctl" &&
-            subject.local && subject.isInGroup("wheel"))
-        {
-          return polkit.Result.YES;
-        }
-      });
-    '';
+    security.polkit.extraConfig = lib.mkMerge [
+      ''
+        // Allow any local session to claim sensors from iio-sensor-proxy (ALS)
+        polkit.addRule(function(action, subject) {
+          if (action.id == "net.hadess.SensorProxy.claim-sensor") {
+            return polkit.Result.YES;
+          }
+        });
+      ''
+      (lib.mkIf batteryHealthCfg.enable ''
+        // Allow Battery Health Charging extension to set thresholds
+        // Note: Don't check subject.active - after suspend/resume it may not be set immediately
+        polkit.addRule(function(action, subject) {
+          if (action.id == "org.freedesktop.policykit.exec" &&
+              action.lookup("program") == "/run/current-system/sw/bin/batteryhealthchargingctl" &&
+              subject.local && subject.isInGroup("wheel"))
+          {
+            return polkit.Result.YES;
+          }
+        });
+      '')
+    ];
 
     # Enable fw-fanctrl service for Framework fan control extension
     hardware.fw-fanctrl.enable = lib.mkIf fanControlCfg.enable true;
@@ -124,7 +133,7 @@ in
               disable-user-extensions = false;
               enabled-extensions = map (e: e.extensionUuid) extensions;
             };
-
+          } // lib.optionalAttrs batteryHealthCfg.enable {
             # Tell Battery Health Charging extension that polkit is installed
             "org/gnome/shell/extensions/Battery-Health-Charging" = {
               polkit-status = "installed";
