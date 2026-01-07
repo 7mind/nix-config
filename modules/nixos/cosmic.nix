@@ -8,10 +8,16 @@
       description = "Enable COSMIC desktop environment";
     };
 
+    smind.desktop.cosmic.suspend.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = config.smind.isLaptop;
+      description = "Enable suspend support in COSMIC";
+    };
+
     smind.desktop.cosmic.hibernate.enable = lib.mkOption {
       type = lib.types.bool;
       default = config.smind.isLaptop;
-      description = "Enable hibernate/suspend support in COSMIC";
+      description = "Enable hibernate and hybrid-sleep support in COSMIC";
     };
   };
 
@@ -77,10 +83,10 @@
 
     services.gvfs.enable = true;
 
-    systemd.targets.sleep.enable = config.smind.desktop.cosmic.hibernate.enable;
-    systemd.targets.suspend.enable = config.smind.desktop.cosmic.hibernate.enable;
-    systemd.targets.hibernate.enable = config.smind.desktop.cosmic.hibernate.enable;
-    systemd.targets.hybrid-sleep.enable = config.smind.desktop.cosmic.hibernate.enable;
+    systemd.targets.sleep.enable = lib.mkIf (config.smind.desktop.cosmic.suspend.enable || config.smind.desktop.cosmic.hibernate.enable) true;
+    systemd.targets.suspend.enable = lib.mkIf config.smind.desktop.cosmic.suspend.enable true;
+    systemd.targets.hibernate.enable = lib.mkIf config.smind.desktop.cosmic.hibernate.enable true;
+    systemd.targets.hybrid-sleep.enable = lib.mkIf config.smind.desktop.cosmic.hibernate.enable true;
 
     environment.systemPackages = with pkgs; [
       cosmic-files

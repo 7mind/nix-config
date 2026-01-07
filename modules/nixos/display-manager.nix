@@ -113,6 +113,11 @@ in
                   "scale-monitor-framebuffer"
                 ];
             };
+          } // lib.optionalAttrs (!config.smind.desktop.gnome.auto-suspend.enable) {
+            "org/gnome/settings-daemon/plugins/power" = {
+              sleep-inactive-ac-type = "nothing";
+              sleep-inactive-battery-type = "nothing";
+            };
           };
         }
       ];

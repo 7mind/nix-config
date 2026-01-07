@@ -2,6 +2,7 @@
   ./autostart.nix
   ./cleanups.nix
   ./cosmic-keybindings.nix
+  ./kde.nix
   ./dev-generic.nix
   ./dev-git.nix
   ./dev-llm.nix

@@ -4,7 +4,7 @@
   options = {
     smind.dev.adb.enable = lib.mkOption {
       type = lib.types.bool;
-      default = config.smind.isDesktop or false;
+      default = config.smind.isDesktop;
       description = "Enable Android Debug Bridge (ADB) support";
     };
 

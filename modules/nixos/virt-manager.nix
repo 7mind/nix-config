@@ -3,7 +3,7 @@
 let
   cfg = config.smind.vm.virt-manager;
   nvidiaCfg = config.smind.hw.nvidia;
-  isAmd = config.smind.hw.cpu.isAmd or false;
+  isAmd = config.smind.hw.cpu.isAmd;
   mainBridge = config.smind.net.main-bridge or null;
 
   # Libvirt QEMU hook for automatic GPU passthrough
@@ -143,7 +143,7 @@ in
     # Automatic GPU passthrough via libvirt hooks
     (lib.mkIf (cfg.gpuPassthrough.enable && cfg.gpuPassthrough.vmNames != [ ]) {
       assertions = [{
-        assertion = nvidiaCfg.enable or false;
+        assertion = nvidiaCfg.enable;
         message = "gpuPassthrough requires smind.hw.nvidia.enable = true";
       }];
 

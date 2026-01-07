@@ -7,6 +7,18 @@
       default = false;
       description = "Enable KDE Plasma 6 desktop environment with SDDM";
     };
+
+    smind.desktop.kde.suspend.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = config.smind.isLaptop;
+      description = "Enable suspend support in KDE";
+    };
+
+    smind.desktop.kde.hibernate.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = config.smind.isLaptop;
+      description = "Enable hibernate and hybrid-sleep support in KDE";
+    };
   };
 
   config = lib.mkIf config.smind.desktop.kde.enable {
@@ -96,6 +108,11 @@
       kdePackages.konsole
       kdePackages.plasma-browser-integration
     ];
+
+    systemd.targets.sleep.enable = lib.mkIf (config.smind.desktop.kde.suspend.enable || config.smind.desktop.kde.hibernate.enable) true;
+    systemd.targets.suspend.enable = lib.mkIf config.smind.desktop.kde.suspend.enable true;
+    systemd.targets.hibernate.enable = lib.mkIf config.smind.desktop.kde.hibernate.enable true;
+    systemd.targets.hybrid-sleep.enable = lib.mkIf config.smind.desktop.kde.hibernate.enable true;
 
     xdg.mime.defaultApplications = {
       "application/pdf" = "okularApplication_pdf.desktop";

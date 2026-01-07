@@ -8,10 +8,22 @@
       description = "Enable GNOME desktop environment with GDM";
     };
 
+    smind.desktop.gnome.suspend.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = config.smind.isLaptop;
+      description = "Enable suspend support";
+    };
+
     smind.desktop.gnome.hibernate.enable = lib.mkOption {
       type = lib.types.bool;
       default = config.smind.isLaptop;
-      description = "Enable hibernate support with GNOME hibernate-status-button extension";
+      description = "Enable hibernate and hybrid-sleep support with GNOME hibernate-status-button extension";
+    };
+
+    smind.desktop.gnome.auto-suspend.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = config.smind.isLaptop;
+      description = "Enable automatic suspend on idle (typically for laptops)";
     };
 
     smind.desktop.gnome.fractional-scaling.enable = lib.mkOption {
@@ -114,7 +126,7 @@
               "stickykeys-enable" = true;
               "stickykeys-modifier-beep" = true;
             };
-          } // lib.optionalAttrs (!config.smind.isLaptop) {
+          } // lib.optionalAttrs (!config.smind.desktop.gnome.auto-suspend.enable) {
             "org/gnome/settings-daemon/plugins/power" = {
               sleep-inactive-ac-type = "nothing";
               sleep-inactive-battery-type = "nothing";
@@ -226,10 +238,10 @@
     #networking.firewall.allowedTCPPorts = [ 3389 ];
     #networking.firewall.allowedUDPPorts = [ 3389 ];
 
-    systemd.targets.sleep.enable = config.smind.desktop.gnome.hibernate.enable;
-    systemd.targets.suspend.enable = config.smind.desktop.gnome.hibernate.enable;
-    systemd.targets.hibernate.enable = config.smind.desktop.gnome.hibernate.enable;
-    systemd.targets.hybrid-sleep.enable = config.smind.desktop.gnome.hibernate.enable;
+    systemd.targets.sleep.enable = lib.mkIf (config.smind.desktop.gnome.suspend.enable || config.smind.desktop.gnome.hibernate.enable) true;
+    systemd.targets.suspend.enable = lib.mkIf config.smind.desktop.gnome.suspend.enable true;
+    systemd.targets.hibernate.enable = lib.mkIf config.smind.desktop.gnome.hibernate.enable true;
+    systemd.targets.hybrid-sleep.enable = lib.mkIf config.smind.desktop.gnome.hibernate.enable true;
 
     services.gnome = {
       gnome-settings-daemon.enable = true;

@@ -121,11 +121,11 @@ in
   config = lib.mkIf cfg.enable {
     assertions = [
       {
-        assertion = config.services.pipewire.enable or false;
+        assertion = config.services.pipewire.enable;
         message = "smind.audio.autoswitch requires PipeWire to be enabled";
       }
       {
-        assertion = config.services.pipewire.wireplumber.enable or false;
+        assertion = config.services.pipewire.wireplumber.enable;
         message = "smind.audio.autoswitch requires WirePlumber to be enabled";
       }
     ];

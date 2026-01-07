@@ -8,7 +8,7 @@
   options = {
     smind.audio.quirks.enable = lib.mkOption {
       type = lib.types.bool;
-      default = config.smind.isDesktop or false;
+      default = config.smind.isDesktop;
       description = "Enable audio device quirks";
     };
 

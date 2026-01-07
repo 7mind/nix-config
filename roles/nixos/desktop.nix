@@ -42,6 +42,9 @@ in
       # This does NOT affect systemd user services or lingering - only session-scoped processes
       services.logind.settings.Login.KillUserProcesses = true;
 
+      # Disable automatic suspend on idle for non-laptop desktops
+      services.logind.settings.Login.IdleAction = lib.mkIf (!config.smind.isLaptop) "ignore";
+
       smind = {
         isDesktop = lib.mkDefault true;
 

@@ -107,7 +107,7 @@ rec {
           ];
 
           hm-modules = [
-
+            inputs.plasma-manager.homeModules.plasma-manager
           ];
         } else {
           generator = inputs.darwin.lib.darwinSystem;
