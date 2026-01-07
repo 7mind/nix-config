@@ -134,7 +134,6 @@ in
     });
   '';
 
-  services.fwupd.enable = true;
   services.power-profiles-daemon.enable = true;
   smind.power-management.auto-profile.enable = true;
   smind.power-management.auto-profile.onAC = "performance";

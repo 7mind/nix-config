@@ -7,6 +7,12 @@
       default = true;
       description = "Enable default kernel configuration and sysctl settings";
     };
+
+    smind.hw.fwupd.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = config.smind.isDesktop;
+      description = "Enable fwupd firmware update service";
+    };
   };
 
   config = lib.mkIf config.smind.kernel.sane-defaults.enable {
@@ -59,5 +65,7 @@
       cpu.intel.updateMicrocode = config.smind.hw.cpu.isIntel;
       cpu.amd.updateMicrocode = config.smind.hw.cpu.isAmd;
     };
+
+    services.fwupd.enable = config.smind.hw.fwupd.enable;
   };
 }

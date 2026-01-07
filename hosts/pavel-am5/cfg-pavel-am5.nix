@@ -218,7 +218,6 @@
     allowedTCPPorts = [ 8234 ];
   };
 
-  services.fwupd.enable = true;
   smind.gaming.steam.enable = true;
 
   boot.initrd = {

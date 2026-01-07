@@ -16,7 +16,7 @@
 
     smind.desktop.gnome.hibernate.enable = lib.mkOption {
       type = lib.types.bool;
-      default = config.smind.isLaptop;
+      default = config.smind.isLaptop && !config.smind.zfs.enable; # hibernate breaks ZFS
       description = "Enable hibernate and hybrid-sleep support with GNOME hibernate-status-button extension";
     };
 

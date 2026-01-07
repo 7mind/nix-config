@@ -1,4 +1,4 @@
-{ config, lib, pkgs, cfg-meta, ... }:
+{ config, lib, pkgs, cfg-meta, outerConfig, ... }:
 
 let
   defaultFontSize = if cfg-meta.isDarwin then 14 else 10;
@@ -55,10 +55,12 @@ in
         window-padding-x = 8;
         window-padding-y = 5;
 
+        window-decoration = lib.mkIf outerConfig.smind.desktop.kde.enable "client"; # workaround for https://github.com/ghostty-org/ghostty/discussions/7439 on KDE
+
         window-width = 160;
         window-height = defaultRows;
 
-        scrollback-limit = 100000000;  # ~50k lines at 160 columns (bytes, not lines)
+        scrollback-limit = 100000000; # ~50k lines at 160 columns (bytes, not lines)
 
         # Inherit CWD when creating new splits/tabs
         window-inherit-working-directory = true;
