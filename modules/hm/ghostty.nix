@@ -118,22 +118,13 @@ in
           "super+plus=increase_font_size:1"
           "super+minus=decrease_font_size:1"
           "super+zero=reset_font_size"
-        ];
-      } // lib.optionalAttrs config.smind.hm.ghostty.ctrl-keybindings {
-        # Clear all default keybindings and define our own
-        keybind = [
-          # Copy/Paste - performable: only triggers if there's a selection, otherwise passes through
+        ] ++ lib.optionals config.smind.hm.ghostty.ctrl-keybindings [
+          # Additional Ctrl keybindings (in addition to Super)
           "performable:ctrl+c=copy_to_clipboard"
           "ctrl+v=paste_from_clipboard"
-
-          # Tabs (both super and ctrl for kanata compatibility)
           "ctrl+t=new_tab"
-
-          # Window (both super and ctrl for kanata compatibility)
           "ctrl+n=new_window"
           "ctrl+w=close_surface"
-
-          # Essential defaults to keep
           "ctrl+shift+comma=reload_config"
           "ctrl+plus=increase_font_size:1"
           "ctrl+minus=decrease_font_size:1"
