@@ -54,9 +54,10 @@
 
       # GCC 15 enables -Wunterminated-string-initialization by default which breaks wimboot
       # The BOOTAPP_SIGNATURE arrays intentionally lack null terminators
+      # Use EXTRA_CFLAGS (not CFLAGS) to avoid overriding Makefile's internal CFLAGS (which sets VERSION)
       wimboot = super.wimboot.overrideAttrs (old: {
         makeFlags = (old.makeFlags or [ ]) ++ [
-          "CFLAGS+=-Wno-unterminated-string-initialization"
+          "EXTRA_CFLAGS=-Wno-unterminated-string-initialization"
         ];
       });
     })
