@@ -38,6 +38,10 @@ in
       # GNOME enables it by default, but we don't use CJK input methods
       i18n.inputMethod.enable = false;
 
+      # Kill session processes (GUI apps) on logout
+      # This does NOT affect systemd user services or lingering - only session-scoped processes
+      services.logind.settings.Login.KillUserProcesses = true;
+
       smind = {
         isDesktop = lib.mkDefault true;
 
