@@ -83,9 +83,10 @@
             wait-online.timeout = 10;
             wait-online.extraArgs = [ config.smind.zfs.initrd-unlock.interface ];
 
-            # in fact, main config is being copied there: https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/system/boot/networkd.nix#L3306
-            # though it's mangled
-            networks."20-${config.smind.zfs.initrd-unlock.interface}" = {
+            # Main system network config is copied to initrd but mangled (bridge slave configs lose bridge= directive)
+            # See: https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/system/boot/networkd.nix#L3306
+            # Use 99- prefix to override any inherited config (e.g. 40-sfp-main.network with DHCP=no)
+            networks."99-${config.smind.zfs.initrd-unlock.interface}" = {
               enable = true;
               name = config.smind.zfs.initrd-unlock.interface;
               DHCP = "ipv4";
@@ -93,6 +94,12 @@
               linkConfig = {
                 MACAddress = config.smind.zfs.initrd-unlock.macaddr;
                 RequiredForOnline = "routable";
+              };
+
+              networkConfig = {
+                # Override any VLAN/bridge config from inherited files
+                VLAN = [ ];
+                Bridge = "";
               };
 
               dhcpV4Config = {
