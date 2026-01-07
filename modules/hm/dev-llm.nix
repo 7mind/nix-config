@@ -62,7 +62,7 @@
           - **Ask questions**: when instructions or requirements are unclear or incomplete or you see contradictions - always ask for clarifications before proceeding.
           - **No workarounds**: whey you discover a bug or a problem, don't hide it. Attempt to fix underlying issues, ask for assistance when you can't
           - **Sandboxed**: You run in a bubblewrap sandbox and cannot read files in $HOME nor interact with system. You can only observe the project and files in /nix. /tmp is also available
-          - **Prepare scripts for user**: When you need to interact with the system, prepare a script writing output into temporary file in /tmp, ask user to run it, then read output
+          - **Prepare scripts for user**: When you need to interact with the system, prepare a shell script file writing output into temporary file in /tmp, ask user to run it, then read output
 
           ### Code Style
 
