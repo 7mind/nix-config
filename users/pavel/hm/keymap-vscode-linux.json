@@ -5344,6 +5344,16 @@
     "command" : "closeReferenceSearch"
   },
   {
+    "when" : "suggestWidgetMultipleSuggestions && suggestWidgetVisible && textInputFocus || suggestWidgetVisible && textInputFocus && !suggestWidgetHasFocusedSuggestion",
+    "key" : "pageup",
+    "command" : "selectPrevPageSuggestion"
+  },
+  {
+    "when" : "suggestWidgetMultipleSuggestions && suggestWidgetVisible && textInputFocus || suggestWidgetVisible && textInputFocus && !suggestWidgetHasFocusedSuggestion",
+    "key" : "pagedown",
+    "command" : "selectNextPageSuggestion"
+  },
+  {
     "key" : "down",
     "command" : "continue.quickEditHistoryDown"
   },
@@ -6400,18 +6410,8 @@
   },
   {
     "when" : "suggestWidgetMultipleSuggestions && suggestWidgetVisible && textInputFocus || suggestWidgetVisible && textInputFocus && !suggestWidgetHasFocusedSuggestion",
-    "key" : "pagedown",
-    "command" : "selectNextPageSuggestion"
-  },
-  {
-    "when" : "suggestWidgetMultipleSuggestions && suggestWidgetVisible && textInputFocus || suggestWidgetVisible && textInputFocus && !suggestWidgetHasFocusedSuggestion",
     "key" : "down",
     "command" : "selectNextSuggestion"
-  },
-  {
-    "when" : "suggestWidgetMultipleSuggestions && suggestWidgetVisible && textInputFocus || suggestWidgetVisible && textInputFocus && !suggestWidgetHasFocusedSuggestion",
-    "key" : "pageup",
-    "command" : "selectPrevPageSuggestion"
   },
   {
     "when" : "suggestWidgetMultipleSuggestions && suggestWidgetVisible && textInputFocus || suggestWidgetVisible && textInputFocus && !suggestWidgetHasFocusedSuggestion",

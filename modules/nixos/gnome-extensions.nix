@@ -28,6 +28,7 @@ let
     gnomeExtensions.caffeine
     gnomeExtensions.vicinae
     gnomeExtensions.grand-theft-focus
+    gnomeExtensions.battery-health-charging
     # tray-icons-reloaded
   ]
   ++ lib.optional hibernateCfg.enable hibernateExtensionPatched

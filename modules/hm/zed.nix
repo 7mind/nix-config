@@ -58,6 +58,7 @@
 
       userSettings = {
         #  base_keymap = "None";
+        load_direnv = "direct";
         autosave = {
           after_delay = {
             milliseconds = 250;
