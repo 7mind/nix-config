@@ -99,7 +99,8 @@
 
         };
 
-        bridges."${config.smind.net.main-bridge}".interfaces = [ config.smind.net.main-interface ];
+        # Bridge is now created via systemd.network.netdevs for proper MAC control
+        # bridges."${config.smind.net.main-bridge}".interfaces = [ config.smind.net.main-interface ];
       };
 
       services.resolved = {
@@ -133,13 +134,31 @@
           };
         };
 
+        netdevs = {
+          "10-${config.smind.net.main-bridge}" = {
+            netdevConfig = {
+              Kind = "bridge";
+              Name = config.smind.net.main-bridge;
+              MACAddress = config.smind.net.main-bridge-macaddr;
+            };
+          };
+        };
+
         networks = {
+          # Bridge slave: main-interface -> main-bridge
+          "10-${config.smind.net.main-interface}-bridge" = {
+            name = config.smind.net.main-interface;
+            bridge = [ config.smind.net.main-bridge ];
+            linkConfig = {
+              RequiredForOnline = "enslaved";
+            };
+          };
+
           "20-${config.smind.net.main-bridge}" = {
             name = "${config.smind.net.main-bridge}";
             DHCP = "yes";
 
             linkConfig = {
-              MACAddress = "${config.smind.net.main-bridge-macaddr}";
               RequiredForOnline = "routable";
             };
 
