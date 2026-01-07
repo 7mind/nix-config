@@ -85,6 +85,18 @@ in
       description = "Network namespace to run Slack in (e.g., 'vpn')";
     };
 
+    slack.autostart = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Autostart Slack on login";
+    };
+
+    slack.autostartDelay = lib.mkOption {
+      type = lib.types.int;
+      default = 5;
+      description = "Delay in seconds before autostarting Slack (allows tray extension to initialize)";
+    };
+
     element.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -98,30 +110,43 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
-    systemd.user.slices.app-heavy = {
-      Unit.Description = "Slice for resource-heavy apps (Slack, Element, etc.)";
-      Slice = {
-        CPUQuota = cfg.cpuQuota;
-        CPUWeight = cfg.cpuWeight;
-        MemoryMax = cfg.memoryMax;
-      };
-      Install.WantedBy = [ "default.target" ];
-    };
-
-    home.packages = lib.flatten [
-      (lib.optional cfg.slack.enable (wrapElectronApp {
+  config = lib.mkIf cfg.enable (
+    let
+      slackWrapped = wrapElectronApp {
         pkg = pkgs.slack;
         name = "slack";
         extraFlags = [ "-u" ];
         netns = cfg.slack.netns;
-      }))
-      (lib.optional cfg.element.enable (wrapElectronApp {
+      };
+      elementWrapped = wrapElectronApp {
         pkg = pkgs.element-desktop;
         name = "element-desktop";
         extraFlags = [ "--hidden" ];
         netns = cfg.element.netns;
-      }))
-    ];
-  };
+      };
+    in {
+      systemd.user.slices.app-heavy = {
+        Unit.Description = "Slice for resource-heavy apps (Slack, Element, etc.)";
+        Slice = {
+          CPUQuota = cfg.cpuQuota;
+          CPUWeight = cfg.cpuWeight;
+          MemoryMax = cfg.memoryMax;
+        };
+        Install.WantedBy = [ "default.target" ];
+      };
+
+      home.packages = lib.flatten [
+        (lib.optional cfg.slack.enable slackWrapped)
+        (lib.optional cfg.element.enable elementWrapped)
+      ];
+
+      smind.hm.autostart.programs = lib.flatten [
+        (lib.optional (cfg.slack.enable && cfg.slack.autostart) {
+          name = "Slack";
+          exec = "${slackWrapped}/bin/slack";
+          delay = cfg.slack.autostartDelay;
+        })
+      ];
+    }
+  );
 }

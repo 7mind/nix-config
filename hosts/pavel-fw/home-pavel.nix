@@ -45,6 +45,8 @@
       memoryMax = "4G";
       slack.enable = true;
       slack.netns = "vpn";
+      slack.autostart = true;
+      slack.autostartDelay = 5;
       element.enable = true;
     };
 
