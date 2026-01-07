@@ -103,6 +103,10 @@ in
               enabled-extensions = map (e: e.extensionUuid) extensions;
             };
 
+            # Tell Battery Health Charging extension that polkit is installed
+            "org/gnome/shell/extensions/Battery-Health-Charging" = {
+              polkit-status = "installed";
+            };
           };
         }
       ];
