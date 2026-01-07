@@ -38,6 +38,20 @@ in
       '';
     };
 
+    auto-login = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Enable automatic login (use with disk encryption for security)";
+      };
+
+      user = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "User to automatically log in";
+      };
+    };
+
     x11.enable = lib.mkEnableOption "x11-server";
   };
 
@@ -61,6 +75,19 @@ in
         }
       ];
     }
+
+    # Auto-login configuration
+    (lib.mkIf config.smind.auto-login.enable {
+      assertions = [{
+        assertion = config.smind.auto-login.user != "";
+        message = "smind.auto-login.user must be set when auto-login is enabled";
+      }];
+
+      services.displayManager.autoLogin = {
+        enable = true;
+        user = config.smind.auto-login.user;
+      };
+    })
 
     # GDM configuration
     (lib.mkIf (selectedBackend == "gdm") {

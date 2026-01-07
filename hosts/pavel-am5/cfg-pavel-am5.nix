@@ -128,6 +128,10 @@
 
     security.sudo.wheel-permissive-rules = true;
     security.sudo.wheel-passwordless = true;
+    security.keyring.tpmUnlock.enable = true;
+
+    auto-login.enable = true;
+    auto-login.user = "pavel";
 
     zfs.email.enable = true;
     host.email.to = "team@7mind.io";
