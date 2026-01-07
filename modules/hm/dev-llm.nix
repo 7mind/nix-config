@@ -36,7 +36,9 @@
         settings = {
           alwaysThinkingEnabled = true;
           theme = "dark";
-          permissions = { };
+          permissions = {
+            allow = [ "Edit(/tmp/**)" ];
+          };
           includeCoAuthoredBy = true;
           #model = "claude-3-5-sonnet-20241022";
           statusLine = {
@@ -213,6 +215,7 @@
               --rw "''${HOME}/.claude.json" \
               --rw "''${HOME}/.config/claude" \
               --rw "''${HOME}/.cache" \
+              --rw /tmp \
               --ro "''${HOME}/.config/git" \
               "''${ENV_ARGS[@]}" \
               -- claude --permission-mode bypassPermissions "''${CMD_ARGS[@]}"
@@ -232,6 +235,7 @@
               --rw "''${HOME}/.codex" \
               --rw "''${HOME}/.config/codex" \
               --rw "''${HOME}/.cache" \
+              --rw /tmp \
               --ro "''${HOME}/.config/git" \
               "''${ENV_ARGS[@]}" \
               -- codex --dangerously-bypass-approvals-and-sandbox "''${CMD_ARGS[@]}"
@@ -250,6 +254,7 @@
               --rw "''${PWD}" \
               --rw "''${HOME}/.gemini" \
               --rw "''${HOME}/.cache" \
+              --rw /tmp \
               --ro "''${HOME}/.config/git" \
               "''${ENV_ARGS[@]}" \
               -- gemini --yolo "''${CMD_ARGS[@]}"
@@ -268,6 +273,7 @@
               --rw "''${PWD}" \
               --rw "''${HOME}/.gemini-work" \
               --rw "''${HOME}/.cache" \
+              --rw /tmp \
               --ro "''${HOME}/.config/git" \
               "''${ENV_ARGS[@]}" \
               --bind "''${HOME}/.gemini-work,''${HOME}/.gemini" \
@@ -288,6 +294,7 @@
               --rw "''${HOME}/.config/opencode" \
               --rw "''${HOME}/.local/share/opencode" \
               --rw "''${HOME}/.cache" \
+              --rw /tmp \
               --ro "''${HOME}/.config/git" \
               "''${ENV_ARGS[@]}" \
               -- opencode "''${CMD_ARGS[@]}"

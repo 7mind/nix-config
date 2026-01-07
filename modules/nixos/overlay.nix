@@ -51,6 +51,14 @@
           runHook postInstall
         '';
       }));
+
+      # GCC 15 enables -Wunterminated-string-initialization by default which breaks wimboot
+      # The BOOTAPP_SIGNATURE arrays intentionally lack null terminators
+      wimboot = super.wimboot.overrideAttrs (old: {
+        makeFlags = (old.makeFlags or [ ]) ++ [
+          "CFLAGS+=-Wno-unterminated-string-initialization"
+        ];
+      });
     })
   ];
 }
