@@ -46,6 +46,9 @@
       programs.firejail.enable = true;
 
       environment.systemPackages = with pkgs; [
+        # terminal support
+        ghostty.terminfo
+
         # nix tools
         nixpkgs-fmt
         nix-converter
