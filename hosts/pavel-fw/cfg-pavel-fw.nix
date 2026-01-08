@@ -203,7 +203,7 @@ in
     age.enable = true;
     roles.desktop.generic-gnome = true;
     isLaptop = true;
-
+    desktop.gnome.auto-suspend.timeoutBattery = 120;
     dev.adb.users = [ "pavel" ];
     dev.wireshark.users = [ "pavel" ];
 
