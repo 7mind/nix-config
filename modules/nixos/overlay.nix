@@ -22,11 +22,11 @@
       fractal-tray = pkgs.callPackage "${cfg-meta.paths.pkg}/fractal-tray/default.nix" { };
 
       # Pending upstream merge of https://github.com/NixOS/nixpkgs/pull/478140
-      keyd = pkgs.keyd.overrideAttrs
+      keyd = super.keyd.overrideAttrs
         (drv: {
           postInstall =
             let
-              pypkgs = pkgs.python3.pkgs;
+              pypkgs = super.python3.pkgs;
 
               appMap = pypkgs.buildPythonApplication rec {
                 pname = "keyd-application-mapper";
@@ -36,7 +36,7 @@
 
                 postPatch = ''
                   substituteInPlace scripts/${pname} \
-                    --replace-fail /bin/sh ${pkgs.runtimeShell}
+                    --replace-fail /bin/sh ${super.runtimeShell}
                 '';
 
                 propagatedBuildInputs = with pypkgs; [
@@ -55,7 +55,7 @@
               };
             in
             ''
-              ln -sf ${pkgs.lib.getExe appMap} $out/bin/${appMap.pname}
+              ln -sf ${super.lib.getExe appMap} $out/bin/${appMap.pname}
               rm -rf $out/etc
             '';
         });
