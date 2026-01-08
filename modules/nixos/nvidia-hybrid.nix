@@ -181,9 +181,18 @@ in
 
         # Enable NVIDIA RTD3 (Runtime D3) power management
         # 0x02 = Fine-grained power management, allows GPU to power down when idle
+        # NVreg_PreserveVideoMemoryAllocations=1 is REQUIRED for suspend/resume
+        # NVreg_TemporaryFilePath sets where VRAM is saved during suspend
         boot.extraModprobeConfig = ''
           options nvidia NVreg_DynamicPowerManagement=0x02
+          options nvidia NVreg_PreserveVideoMemoryAllocations=1
+          options nvidia NVreg_TemporaryFilePath=/var/tmp
         '';
+
+        # NVIDIA suspend/resume/hibernate services - required for proper power management
+        systemd.services.nvidia-suspend.enable = true;
+        systemd.services.nvidia-resume.enable = true;
+        systemd.services.nvidia-hibernate.enable = true;
 
         environment.systemPackages = [
           gpuBindVfio
