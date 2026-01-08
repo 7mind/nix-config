@@ -68,30 +68,30 @@
           - **Sandboxed**: You run in a bubblewrap sandbox and cannot read files in $HOME nor interact with the system. You can only observe the project and files in /nix. /tmp/exchange is also available
           - **Prepare scripts for user**: When you need to interact with the system, prepare a shell script that writes output to /tmp/exchange, ask user to run it, then read the output
           - **Verbose debug scripts**: Use `set -x` so the user can see commands together with output
-          - Use nix environment with flake.nix and direnv for dependencies
-          - Use `direnv exec DIR COMMAND [...ARGS]` and `nix run`
+          - **Nix environment**: Use flake.nix and direnv for dependencies
+          - **Commands**: Use `direnv exec DIR COMMAND [...ARGS]` and `nix run`
 
           ### Code Style
 
-          - **Type safety**: Use interfaces/classes/records/data classes, avoid tuples/any/dictionaries
+          - **Type safety**: Encode domain concepts as named types (interfaces/classes/records), avoid catch-all types (Object, any) and untyped containers (string-keyed maps)
           - **SOLID**: Adhere to SOLID principles
-          - No magic constants - use named constants
-          - No backwards compatibility concerns - refactor freely
-          - Prefer composition over conditional logic
-          - Never duplicate, always generalize
+          - **No magic constants**: Use named constants
+          - **No backwards compatibility**: Refactor freely
+          - **Composition over conditionals**: Prefer composition over conditional logic
+          - **DRY**: Never duplicate, always generalize
 
           ### Project Structure
 
           - Docs: ./docs/drafts/{YYYYMMDD-HHMM}-{name}.md
           - Debug scripts: ./debug/{YYYYMMDD-HHMMSS}-{name}.{ext} (use appropriate extension for project language)
-          - Services: Use interface + implementation pattern when possible
-          - Always create and maintain reasonable .gitignore files
+          - **Services**: Use interface + implementation pattern when possible
+          - **Gitignore**: Always create and maintain reasonable .gitignore files
 
           ### Tools
 
-          - Use debuggers! You can use gdb, lldb, jdb, pdb and any other debuggers!
-          - Use nproc when you need to figure out how many parallel processes you can run
-          - Always run tools in unattended/batch mode, especially tools like SBT which expect user input by default!
+          - **Debuggers**: Use gdb, lldb, jdb, pdb and any other debuggers
+          - **Parallelism**: Use nproc to determine available parallel processes
+          - **Unattended mode**: Always run tools in batch mode, especially tools like SBT which expect user input by default
         '';
       };
 
