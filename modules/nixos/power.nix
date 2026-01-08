@@ -257,10 +257,13 @@ in
       services.upower.enable = true; # Required for battery detection
 
       # Configure TuneD profiles for AC/battery states
-      # Note: Only override profiles that differ from defaults to avoid duplicate mappings
-      # Defaults: power-saver=powersave, balanced=balanced, performance=throughput-performance
+      # All three PPD profiles must be defined (tuned-ppd requires them)
       services.tuned.ppdSettings = {
-        profiles.balanced = cfg.tuned.onAC;
+        profiles = {
+          power-saver = "powersave";
+          balanced = cfg.tuned.onAC;
+          performance = "throughput-performance";
+        };
         battery.balanced = cfg.tuned.onBattery;
       };
     })

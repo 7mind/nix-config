@@ -136,7 +136,8 @@ in
 
   # Power management via TuneD (replaces power-profiles-daemon)
   # TuneD automatically switches profiles based on AC/battery via UPower
-  smind.power-management.tuned.onAC = "throughput-performance";
+  # Note: Can't use "throughput-performance" - it's reserved for PPD "performance" profile
+  smind.power-management.tuned.onAC = "latency-performance";
 
   # QMK keyboard firmware support (Framework 16 uses QMK)
   # Use https://keyboard.frame.work/ for configuration
