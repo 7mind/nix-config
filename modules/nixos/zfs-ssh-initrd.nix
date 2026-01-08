@@ -20,8 +20,8 @@
 
     smind.zfs.initrd-unlock.bridge-slave = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
-      default = null;
-      description = "Physical interface to enslave to the bridge (required when interface is a bridge)";
+      default = if config.smind.net.enable then config.smind.net.main-interface else null;
+      description = "Physical interface to enslave to the bridge (auto-detected from smind.net.main-interface when smind.net.enable is true)";
     };
 
     smind.zfs.initrd-unlock.hostname = lib.mkOption {
@@ -88,12 +88,8 @@
             wait-online.timeout = 10;
             wait-online.extraArgs = [ config.smind.zfs.initrd-unlock.interface ];
 
-            # Main system network config is partially copied to initrd but bridge configs are missing:
-            # - Bridge netdevs are NOT copied
-            # - Bridge slave network configs lose bridge= directive
-            # See: https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/system/boot/networkd.nix
-            # We explicitly create bridge and slave config when bridge-slave is set
-
+            # systemd.network.netdevs from main system are NOT copied to initrd
+            # We must explicitly create bridge and slave config here
             netdevs = lib.mkIf (config.smind.zfs.initrd-unlock.bridge-slave != null) {
               "10-${config.smind.zfs.initrd-unlock.interface}" = {
                 netdevConfig = {
@@ -104,40 +100,32 @@
               };
             };
 
-            networks = lib.mkMerge [
-              # Bridge slave config (physical interface -> bridge)
-              (lib.mkIf (config.smind.zfs.initrd-unlock.bridge-slave != null) {
-                "20-${config.smind.zfs.initrd-unlock.bridge-slave}-initrd" = {
-                  name = config.smind.zfs.initrd-unlock.bridge-slave;
-                  bridge = [ config.smind.zfs.initrd-unlock.interface ];
-                  networkConfig = {
-                    # Clear any VLAN config from inherited files
-                    VLAN = [ ];
-                  };
+            networks = {
+              # Bridge slave config (when using a bridge)
+              "10-${config.smind.zfs.initrd-unlock.interface}-slave" = lib.mkIf (config.smind.zfs.initrd-unlock.bridge-slave != null) {
+                name = config.smind.zfs.initrd-unlock.bridge-slave;
+                bridge = [ config.smind.zfs.initrd-unlock.interface ];
+              };
+
+              # DHCP config for bridge/interface
+              "20-${config.smind.zfs.initrd-unlock.interface}" = {
+                enable = true;
+                name = config.smind.zfs.initrd-unlock.interface;
+                DHCP = "ipv4";
+
+                linkConfig = {
+                  RequiredForOnline = "routable";
+                } // lib.optionalAttrs (config.smind.zfs.initrd-unlock.bridge-slave == null) {
+                  # Only set MAC directly on interface if not using a bridge (bridge has MAC in netdev)
+                  MACAddress = config.smind.zfs.initrd-unlock.macaddr;
                 };
-              })
 
-              # Bridge/interface network config with DHCP
-              {
-                "99-${config.smind.zfs.initrd-unlock.interface}" = {
-                  enable = true;
-                  name = config.smind.zfs.initrd-unlock.interface;
-                  DHCP = "ipv4";
-
-                  linkConfig = {
-                    RequiredForOnline = "routable";
-                  } // lib.optionalAttrs (config.smind.zfs.initrd-unlock.bridge-slave == null) {
-                    # Only set MAC on interface directly if not using a bridge
-                    MACAddress = config.smind.zfs.initrd-unlock.macaddr;
-                  };
-
-                  dhcpV4Config = {
-                    SendHostname = true;
-                    Hostname = config.smind.zfs.initrd-unlock.hostname;
-                  };
+                dhcpV4Config = {
+                  SendHostname = true;
+                  Hostname = config.smind.zfs.initrd-unlock.hostname;
                 };
-              }
-            ];
+              };
+            };
 
           };
         };

@@ -99,8 +99,8 @@
 
         };
 
-        # Bridge is now created via systemd.network.netdevs for proper MAC control
-        # bridges."${config.smind.net.main-bridge}".interfaces = [ config.smind.net.main-interface ];
+        # Bridge is created via systemd.network.netdevs for proper MAC control
+        # networking.bridges doesn't support MAC address setting
       };
 
       services.resolved = {

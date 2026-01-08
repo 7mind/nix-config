@@ -1,10 +1,5 @@
 # NixOS Configuration
 
-## Core principles
-
-- You run in a sandbox and cannot read files in $HOME nor interact with system. You can only observe the project and files in /nix. 
-- When you need to interact with the system, prepare a script writing output into temporary file in /tmp, ask user to run it, then read output
-
 ## Building and Testing
 
 This repository uses git submodules. Always use `?submodules=1` when building:
