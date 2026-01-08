@@ -61,8 +61,8 @@
 
           ### References
 
-          - **RTFM**: Read documentation, code, and samples thoroughly, download docs when necessary, use search.
-          - **Prefer recent docs**: when you search, prioritize
+          - **RTFM**: Read documentation, code, and samples thoroughly, download docs when necessary, use search
+          - **Prefer recent docs**: When searching, prioritize results from the current year over older sources
 
           ### Environment
 
@@ -83,8 +83,8 @@
 
           ### Project Structure
 
-          - Docs: ./docs/drafts/{timestamp}-{name}.md
-          - Debug scripts: ./debug/{timestamp}-{name}.ts
+          - Docs: ./docs/drafts/{YYYYMMDD-HHMM}-{name}.md
+          - Debug scripts: ./debug/{YYYYMMDD-HHMMSS}-{name}.{ext} (use appropriate extension for project language)
           - Services: Use interface + implementation pattern when possible
           - Always create and maintain reasonable .gitignore files
 
