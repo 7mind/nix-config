@@ -110,6 +110,7 @@
                 clock-show-weekday = true;
                 color-scheme = "prefer-dark";
                 enable-hot-corners = false;
+                show-battery-percentage = true;
               };
               "org/gnome/mutter" = {
                 dynamic-workspaces = false;
@@ -128,6 +129,9 @@
               "org/gnome/shell" = {
                 "remember-mount-password" = true;
                 "always-show-log-out" = true;
+              };
+              "org/gnome/desktop/notifications" = {
+                show-in-lock-screen = false;
               };
             }
           ] ++ lib.optional (config.smind.desktop.gnome.keyboard-layouts != [ ]) {
