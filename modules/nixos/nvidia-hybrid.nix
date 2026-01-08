@@ -194,10 +194,14 @@ in
         systemd.services.nvidia-resume.enable = true;
         systemd.services.nvidia-hibernate.enable = true;
 
-        # hybrid-sleep needs nvidia-hibernate (writes to disk before suspending)
+        # hybrid-sleep needs nvidia-hibernate before sleep and nvidia-resume after wake
         systemd.services."systemd-hybrid-sleep" = {
           requires = [ "nvidia-hibernate.service" ];
           after = [ "nvidia-hibernate.service" ];
+        };
+        systemd.services.nvidia-resume = {
+          wantedBy = [ "systemd-hybrid-sleep.service" ];
+          after = [ "systemd-hybrid-sleep.service" ];
         };
 
         environment.systemPackages = [
