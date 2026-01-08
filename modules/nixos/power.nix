@@ -131,15 +131,15 @@ in
     tuned = {
       onAC = lib.mkOption {
         type = lib.types.str;
-        default = "balanced";
-        example = "throughput-performance";
-        description = "TuneD profile to use when on AC power";
+        default = "latency-performance";
+        example = "balanced";
+        description = "TuneD profile to use when on AC power (can't use throughput-performance - reserved for PPD performance profile)";
       };
 
       onBattery = lib.mkOption {
         type = lib.types.str;
-        default = "balanced-battery";
-        example = "powersave";
+        default = "powersave";
+        example = "balanced-battery";
         description = "TuneD profile to use when on battery";
       };
     };
