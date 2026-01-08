@@ -54,14 +54,14 @@
             busybox
           ];
 
-          extraBin = {
-            zfs-unlock-shell = pkgs.writeScript "zfs-unlock-shell" ''
-              #!/bin/sh
-              exec /bin/systemd-tty-ask-password-agent --watch
-            '';
-          };
+          #extraBin = {
+          ##  zfs-unlock-shell = pkgs.writeScript "zfs-unlock-shell" ''
+          #    #!/bin/sh
+          #    exec /bin/systemd-tty-ask-password-agent --watch
+          #  '';
+          #};
 
-          users.root.shell = "/bin/zfs-unlock-shell";
+          #users.root.shell = "/bin/zfs-unlock-shell";
 
           services.zfs-remote-unlock = {
             description = "Prepare for ZFS remote unlock";
