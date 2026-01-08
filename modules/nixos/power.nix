@@ -96,7 +96,7 @@ let
     [ -n "$args" ] && ${pkgs.mutter}/bin/gdctl set $args 2>&1 || true
   '';
 
-  # System script to signal user services (called by acpid)
+  # System script to signal user services (called by udev on power state change)
   triggerRefreshRateUpdate = pkgs.writeShellScript "trigger-refresh-rate-update" ''
     # Signal all graphical user sessions to update refresh rate
     ${pkgs.systemd}/bin/loginctl list-sessions --no-legend | while read -r session rest; do
@@ -280,11 +280,22 @@ in
           message = "auto-profile requires services.power-profiles-daemon.enable = true";
         }];
 
-        # Use acpid for AC plug/unplug events
-        services.acpid.enable = true;
-        services.acpid.acEventCommands = "${setProfileScript}";
+        # udev rule triggers systemd service on AC plug/unplug
+        services.udev.extraRules = ''
+          SUBSYSTEM=="power_supply", ATTR{type}=="Mains", ACTION=="change", TAG+="systemd", ENV{SYSTEMD_WANTS}="power-profile-switch.service"
+        '';
 
-        # Set correct power profile at boot (acpid only fires on events, not boot)
+        systemd.services.power-profile-switch = {
+          description = "Switch power profile based on AC status";
+          after = [ "power-profiles-daemon.service" ];
+          requires = [ "power-profiles-daemon.service" ];
+          serviceConfig = {
+            Type = "oneshot";
+            ExecStart = setProfileScript;
+          };
+        };
+
+        # Set correct power profile at boot
         systemd.services.power-profile-boot = {
           description = "Set power profile based on AC status at boot";
           wantedBy = [ "multi-user.target" ];
@@ -299,11 +310,11 @@ in
       }
     ))
 
-    # Auto-switch display refresh rate based on AC/battery (shared acpid trigger)
+    # Auto-switch display refresh rate based on AC/battery (udev trigger)
     (lib.mkIf cfg.auto-refresh-rate.enable {
-      services.acpid.enable = true;
-      # Use lib.mkAfter to append to acEventCommands if auto-profile also sets it
-      services.acpid.acEventCommands = lib.mkAfter "${triggerRefreshRateUpdate}";
+      services.udev.extraRules = ''
+        SUBSYSTEM=="power_supply", ATTR{type}=="Mains", ACTION=="change", RUN+="${triggerRefreshRateUpdate}"
+      '';
     })
 
     # Auto-switch display refresh rate based on AC/battery (GNOME/Wayland)
