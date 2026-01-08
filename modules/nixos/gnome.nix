@@ -29,7 +29,7 @@
 
     smind.desktop.gnome.auto-suspend.timeoutBattery = lib.mkOption {
       type = lib.types.int;
-      default = 600; # 10 minutes
+      default = 900; # 15 minutes
       description = "Idle timeout in seconds before action on battery";
     };
 
