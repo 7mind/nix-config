@@ -36,10 +36,17 @@ in
       ]);
       default =
         if config.smind.isLaptop then
-          (if cfg.hibernate.enable then "hybrid-sleep" else "suspend")
+          (if cfg.hibernate.enable then "suspend-then-hibernate" else "suspend")
         else
           "poweroff";
       description = "Power button action (null to use system default)";
+    };
+
+    hibernateDelaySec = lib.mkOption {
+      type = lib.types.str;
+      default = "2h";
+      example = "30min";
+      description = "Delay before hibernating when using suspend-then-hibernate";
     };
   };
 
@@ -87,6 +94,12 @@ in
     (lib.mkIf cfg.hibernate.enable {
       systemd.targets.hibernate.enable = true;
       systemd.targets.hybrid-sleep.enable = true;
+      systemd.targets.suspend-then-hibernate.enable = true;
+
+      # Configure delay for suspend-then-hibernate
+      systemd.sleep.extraConfig = ''
+        HibernateDelaySec=${cfg.hibernateDelaySec}
+      '';
     })
 
     # Power button behavior

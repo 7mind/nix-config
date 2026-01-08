@@ -194,14 +194,41 @@ in
         systemd.services.nvidia-resume.enable = true;
         systemd.services.nvidia-hibernate.enable = true;
 
-        # hybrid-sleep needs nvidia-hibernate before sleep and nvidia-resume after wake
+        # All sleep targets need appropriate NVIDIA services before sleep and nvidia-resume after wake
+        # suspend needs nvidia-suspend
+        systemd.services."systemd-suspend" = {
+          requires = [ "nvidia-suspend.service" ];
+          after = [ "nvidia-suspend.service" ];
+        };
+        # hibernate needs nvidia-hibernate
+        systemd.services."systemd-hibernate" = {
+          requires = [ "nvidia-hibernate.service" ];
+          after = [ "nvidia-hibernate.service" ];
+        };
+        # hybrid-sleep needs nvidia-hibernate (writes to disk then suspends)
         systemd.services."systemd-hybrid-sleep" = {
           requires = [ "nvidia-hibernate.service" ];
           after = [ "nvidia-hibernate.service" ];
         };
+        # suspend-then-hibernate needs both (creates hibernate image, then suspends)
+        systemd.services."systemd-suspend-then-hibernate" = {
+          requires = [ "nvidia-hibernate.service" "nvidia-suspend.service" ];
+          after = [ "nvidia-hibernate.service" "nvidia-suspend.service" ];
+        };
+        # nvidia-resume should run after all sleep services wake
         systemd.services.nvidia-resume = {
-          wantedBy = [ "systemd-hybrid-sleep.service" ];
-          after = [ "systemd-hybrid-sleep.service" ];
+          wantedBy = [
+            "systemd-suspend.service"
+            "systemd-hibernate.service"
+            "systemd-hybrid-sleep.service"
+            "systemd-suspend-then-hibernate.service"
+          ];
+          after = [
+            "systemd-suspend.service"
+            "systemd-hibernate.service"
+            "systemd-hybrid-sleep.service"
+            "systemd-suspend-then-hibernate.service"
+          ];
         };
 
         environment.systemPackages = [
