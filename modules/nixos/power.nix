@@ -266,6 +266,12 @@ in
         };
         battery.balanced = cfg.tuned.onBattery;
       };
+
+      # CLI tools: tuned-adm, powerprofilesctl
+      environment.systemPackages = [
+        config.services.tuned.package
+        pkgs.power-profiles-daemon # for powerprofilesctl CLI
+      ];
     })
 
     # Auto-switch display refresh rate based on AC/battery (udev trigger)
