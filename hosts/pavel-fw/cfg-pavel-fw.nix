@@ -144,8 +144,9 @@ in
   # Framework keyboard udev rules for web configurator access
   services.udev.extraRules = ''
     # Framework Laptop 16 Keyboard Module - ANSI (32ac:0012)
-    SUBSYSTEM=="hidraw", ATTRS{idVendor}=="32ac", ATTRS{idProduct}=="0012", MODE="0660", GROUP="users", TAG+="uaccess"
-    SUBSYSTEM=="usb", ATTRS{idVendor}=="32ac", ATTRS{idProduct}=="0012", MODE="0660", GROUP="users", TAG+="uaccess"
+    # uaccess tag grants access to logged-in users via ACLs
+    SUBSYSTEM=="hidraw", ATTRS{idVendor}=="32ac", ATTRS{idProduct}=="0012", MODE="0660", TAG+="uaccess"
+    SUBSYSTEM=="usb", ATTRS{idVendor}=="32ac", ATTRS{idProduct}=="0012", MODE="0660", TAG+="uaccess"
 
     # Enable illuminance scan element for ALS buffer mode (Framework 16)
     ACTION=="add", SUBSYSTEM=="iio", ATTR{name}=="als", ATTR{scan_elements/in_illuminance_en}="1"
