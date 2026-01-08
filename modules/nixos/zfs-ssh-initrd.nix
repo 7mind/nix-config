@@ -45,6 +45,9 @@
     ];
 
     boot.initrd = {
+      # Load bridge module when using a bridge interface
+      kernelModules = lib.mkIf (config.smind.zfs.initrd-unlock.bridge-slave != null) [ "bridge" ];
+
       systemd =
         {
           enable = true;
