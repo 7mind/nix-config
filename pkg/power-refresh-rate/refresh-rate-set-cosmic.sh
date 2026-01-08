@@ -1,9 +1,6 @@
 # Set refresh rate for COSMIC using wlr-randr
 # Arguments: $1 = display config (DISPLAY:MODE_AC:MODE_BATTERY per line), $2 = wlr-randr path
-
-set -euo pipefail
-
-# is_on_ac function will be included by nix
+# Note: is_on_ac function and set -euo pipefail included via is-on-ac.sh
 
 main() {
   local DISPLAY_CONFIG="$1"

@@ -1,6 +1,8 @@
 # Check if system is on AC power
 # Returns 0 if on AC, 1 if on battery
 
+set -euo pipefail
+
 is_on_ac() {
   for supply in /sys/class/power_supply/*/; do
     if [ -f "$supply/type" ] && [ "$(cat "$supply/type")" = "Mains" ]; then
