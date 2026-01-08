@@ -51,24 +51,31 @@
 
           ### Core Principles
 
-          - Use nix environment with flake.nix and direnv for dependencies
-          - Use `direnv exec DIR COMMAND [...ARGS]` and `nix run`
           - **Don't give up**: Provide comprehensive solutions
           - **Fail fast**: Use assertions, throw errors early - no graceful fallbacks
           - **Explicit over implicit**: No default parameters or optional chaining for required values
-          - **Type safety**: Use interfaces/classes/records/data classes, avoid tuples/any/dictionaries
-          - **SOLID**: Adhere to SOLID principles
-          - **RTFM**: Read documentation, code, and samples thoroughly, download docs when necessary
           - Don't write obvious comments. Only write comments to explain something important
           - Deliver sound, generic, universal solutions. Avoid workarounds.
           - **Ask questions**: when instructions or requirements are unclear or incomplete or you see contradictions - always ask for clarifications before proceeding.
           - **No workarounds**: whey you discover a bug or a problem, don't hide it. Attempt to fix underlying issues, ask for assistance when you can't
+
+          ### References
+
+          - **RTFM**: Read documentation, code, and samples thoroughly, download docs when necessary, use search.
+          - **Prefer recent docs**: when you search, prioritize
+
+          ### Environment
+
           - **Sandboxed**: You run in a bubblewrap sandbox and cannot read files in $HOME nor interact with system. You can only observe the project and files in /nix. /tmp/exchange is also available
           - **Prepare scripts for user**: When you need to interact with the system, prepare a shell script file writing output into temporary file in /tmp/exchange, ask user to run it, then read output
           - **Verbose debug scripts**: use `set -x` so the user can see the commands together with the output
+          - Use nix environment with flake.nix and direnv for dependencies
+          - Use `direnv exec DIR COMMAND [...ARGS]` and `nix run`
 
           ### Code Style
 
+          - **Type safety**: Use interfaces/classes/records/data classes, avoid tuples/any/dictionaries
+          - **SOLID**: Adhere to SOLID principles
           - No magic constants - use named constants
           - No backwards compatibility concerns - refactor freely
           - Prefer composition over conditional logic

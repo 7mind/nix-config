@@ -92,6 +92,18 @@ in
     # Power button behavior
     (lib.mkIf (cfg.enable && cfg.powerButton != null) {
       services.logind.settings.Login.HandlePowerKey = cfg.powerButton;
+
+      # Deny gsd-media-keys from inhibiting power/suspend/hibernate keys
+      # so logind can handle them directly (requires systemd 256+ with PR #33838 fix)
+      security.polkit.extraConfig = ''
+        polkit.addRule(function(action, subject) {
+          if (action.id == "org.freedesktop.login1.inhibit-handle-power-key" ||
+              action.id == "org.freedesktop.login1.inhibit-handle-suspend-key" ||
+              action.id == "org.freedesktop.login1.inhibit-handle-hibernate-key") {
+            return polkit.Result.NO;
+          }
+        });
+      '';
     })
   ];
 }

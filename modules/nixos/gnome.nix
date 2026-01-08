@@ -149,7 +149,7 @@
               sleep-inactive-ac-timeout = lib.gvariant.mkInt32 config.smind.desktop.gnome.auto-suspend.timeoutAC;
               sleep-inactive-battery-timeout = lib.gvariant.mkInt32 config.smind.desktop.gnome.auto-suspend.timeoutBattery;
             } // lib.optionalAttrs (config.smind.power-management.powerButton != null) {
-              # Let logind handle power button
+              # Let logind handle power button (polkit rule denies gsd-media-keys inhibitor)
               power-button-action = "nothing";
             };
           }]);
