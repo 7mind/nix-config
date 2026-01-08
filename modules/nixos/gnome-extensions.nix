@@ -128,17 +128,19 @@ in
         {
           lockAll = true; # prevents overriding
 
-          settings = {
-            "org/gnome/shell" = {
-              disable-user-extensions = false;
-              enabled-extensions = map (e: e.extensionUuid) extensions;
-            };
-          } // lib.optionalAttrs batteryHealthCfg.enable {
+          settings = lib.mkMerge ([
+            {
+              "org/gnome/shell" = {
+                disable-user-extensions = false;
+                enabled-extensions = map (e: e.extensionUuid) extensions;
+              };
+            }
+          ] ++ lib.optional batteryHealthCfg.enable {
             # Tell Battery Health Charging extension that polkit is installed
             "org/gnome/shell/extensions/Battery-Health-Charging" = {
               polkit-status = "installed";
             };
-          };
+          });
         }
       ];
     };

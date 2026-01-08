@@ -101,24 +101,26 @@ in
       programs.dconf.profiles.gdm.databases = lib.mkIf config.smind.desktop.gnome.enable [
         {
           lockAll = true;
-          settings = {
-            "org/gnome/desktop/interface" = {
-              cursor-size = lib.gvariant.mkInt32 36;
-              color-scheme = "prefer-dark";
-            };
-            # Required for fractional scaling in monitors.xml to work
-            "org/gnome/mutter" = {
-              experimental-features =
-                lib.optionals config.smind.desktop.gnome.fractional-scaling.enable [
-                  "scale-monitor-framebuffer"
-                ];
-            };
-          } // lib.optionalAttrs (!config.smind.desktop.gnome.auto-suspend.enable) {
+          settings = lib.mkMerge ([
+            {
+              "org/gnome/desktop/interface" = {
+                cursor-size = lib.gvariant.mkInt32 36;
+                color-scheme = "prefer-dark";
+              };
+              # Required for fractional scaling in monitors.xml to work
+              "org/gnome/mutter" = {
+                experimental-features =
+                  lib.optionals config.smind.desktop.gnome.fractional-scaling.enable [
+                    "scale-monitor-framebuffer"
+                  ];
+              };
+            }
+          ] ++ lib.optional (!config.smind.desktop.gnome.auto-suspend.enable) {
             "org/gnome/settings-daemon/plugins/power" = {
               sleep-inactive-ac-type = "nothing";
               sleep-inactive-battery-type = "nothing";
             };
-          };
+          });
         }
       ];
 

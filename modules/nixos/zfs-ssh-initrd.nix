@@ -117,9 +117,8 @@
 
                 linkConfig = {
                   RequiredForOnline = "routable";
-                } // lib.optionalAttrs (config.smind.zfs.initrd-unlock.bridge-slave == null) {
                   # Only set MAC directly on interface if not using a bridge (bridge has MAC in netdev)
-                  MACAddress = config.smind.zfs.initrd-unlock.macaddr;
+                  MACAddress = lib.mkIf (config.smind.zfs.initrd-unlock.bridge-slave == null) config.smind.zfs.initrd-unlock.macaddr;
                 };
 
                 dhcpV4Config = {

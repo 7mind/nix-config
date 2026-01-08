@@ -99,64 +99,65 @@
       profiles.user.databases = [
         {
           lockAll = true; # prevents overriding
-          settings = {
-            "org/gnome/desktop/wm/preferences" = {
-              # button-layout = ":minimize,maximize,close";
-              button-layout = "close,minimize,maximize:";
-              num-workspaces = lib.gvariant.mkInt32 1;
-            };
-            "org/gnome/mutter/wayland" = {
-              #xwayland-allow-grabs = true;
-              #xwayland-grab-access-rules=['parsecd']
-            };
-            "org/gnome/desktop/interface" = {
-              gtk-theme = "adw-gtk3-dark";
-              document-font-name = "Noto Sans 11";
-              monospace-font-name = "Hack Nerd Font Mono 12";
-              cursor-theme = "Adwaita";
-              cursor-size = lib.gvariant.mkInt32 36;
-              font-antialiasing = "rgba";
-              clock-show-weekday = true;
-              color-scheme = "prefer-dark";
-              enable-hot-corners = false;
-            };
-            "org/gnome/mutter" = {
-              dynamic-workspaces = false;
-              edge-tiling = true;
-              overlay-key = "";
-              #workspaces-only-on-primary = true;
-              experimental-features =
-                lib.optionals config.smind.desktop.gnome.fractional-scaling.enable [
-                  "scale-monitor-framebuffer"
-                  "xwayland-native-scaling"
-                ]
-                ++ lib.optionals config.smind.desktop.gnome.vrr.enable [
-                  "variable-refresh-rate"
-                ];
-            };
-
-            "org/gnome/shell" = {
-              "remember-mount-password" = true;
-              "always-show-log-out" = true;
-            };
-          } // lib.optionalAttrs (config.smind.desktop.gnome.keyboard-layouts != [ ]) {
+          settings = lib.mkMerge ([
+            {
+              "org/gnome/desktop/wm/preferences" = {
+                # button-layout = ":minimize,maximize,close";
+                button-layout = "close,minimize,maximize:";
+                num-workspaces = lib.gvariant.mkInt32 1;
+              };
+              "org/gnome/mutter/wayland" = {
+                #xwayland-allow-grabs = true;
+                #xwayland-grab-access-rules=['parsecd']
+              };
+              "org/gnome/desktop/interface" = {
+                gtk-theme = "adw-gtk3-dark";
+                document-font-name = "Noto Sans 11";
+                monospace-font-name = "Hack Nerd Font Mono 12";
+                cursor-theme = "Adwaita";
+                cursor-size = lib.gvariant.mkInt32 36;
+                font-antialiasing = "rgba";
+                clock-show-weekday = true;
+                color-scheme = "prefer-dark";
+                enable-hot-corners = false;
+              };
+              "org/gnome/mutter" = {
+                dynamic-workspaces = false;
+                edge-tiling = true;
+                overlay-key = "";
+                #workspaces-only-on-primary = true;
+                experimental-features =
+                  lib.optionals config.smind.desktop.gnome.fractional-scaling.enable [
+                    "scale-monitor-framebuffer"
+                    "xwayland-native-scaling"
+                  ]
+                  ++ lib.optionals config.smind.desktop.gnome.vrr.enable [
+                    "variable-refresh-rate"
+                  ];
+              };
+              "org/gnome/shell" = {
+                "remember-mount-password" = true;
+                "always-show-log-out" = true;
+              };
+            }
+          ] ++ lib.optional (config.smind.desktop.gnome.keyboard-layouts != [ ]) {
             "org/gnome/desktop/input-sources" = {
               sources = map (layout: lib.gvariant.mkTuple [ "xkb" layout ]) config.smind.desktop.gnome.keyboard-layouts;
               per-window = true;
               xkb-options = config.smind.desktop.gnome.xkb-options;
             };
-          } // lib.optionalAttrs config.smind.desktop.gnome.sticky-keys.enable {
+          } ++ lib.optional config.smind.desktop.gnome.sticky-keys.enable {
             "org/gnome/desktop/a11y/keyboard" = {
               "stickykeys-enable" = true;
               "stickykeys-modifier-beep" = true;
             };
-          } // lib.optionalAttrs (!config.smind.desktop.gnome.auto-suspend.enable || config.smind.desktop.gnome.auto-suspend.useLogind) {
+          } ++ lib.optional (!config.smind.desktop.gnome.auto-suspend.enable || config.smind.desktop.gnome.auto-suspend.useLogind) {
             # Disable gsd-power auto-suspend (either fully disabled, or using logind instead)
             "org/gnome/settings-daemon/plugins/power" = {
               sleep-inactive-ac-type = "nothing";
               sleep-inactive-battery-type = "nothing";
             };
-          };
+          });
         }
       ];
     };

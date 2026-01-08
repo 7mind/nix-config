@@ -102,6 +102,7 @@
         dool
         iotop
         powertop
+        powerstat
 
         # benchmark
         stress
@@ -131,4 +132,3 @@
     })
   ];
 }
-
