@@ -21,6 +21,45 @@
 
       fractal-tray = pkgs.callPackage "${cfg-meta.paths.pkg}/fractal-tray/default.nix" { };
 
+      # Pending upstream merge of https://github.com/NixOS/nixpkgs/pull/478140
+      keyd = pkgs.keyd.overrideAttrs
+        (drv: {
+          postInstall =
+            let
+              pypkgs = pkgs.python3.pkgs;
+
+              appMap = pypkgs.buildPythonApplication rec {
+                pname = "keyd-application-mapper";
+                version = drv.version;
+                src = drv.src;
+                format = "other";
+
+                postPatch = ''
+                  substituteInPlace scripts/${pname} \
+                    --replace-fail /bin/sh ${pkgs.runtimeShell}
+                '';
+
+                propagatedBuildInputs = with pypkgs; [
+                  xlib
+                  pygobject3
+                  dbus-python
+                ];
+
+                dontBuild = true;
+
+                installPhase = ''
+                  install -Dm555 -t $out/bin scripts/${pname}
+                '';
+
+                meta.mainProgram = "keyd-application-mapper";
+              };
+            in
+            ''
+              ln -sf ${pkgs.lib.getExe appMap} $out/bin/${appMap.pname}
+              rm -rf $out/etc
+            '';
+        });
+
       # GNOME adaptive brightness patches disabled - using wluma instead
       # gnome-settings-daemon = super.gnome-settings-daemon.overrideAttrs (old: {
       #   patches = (old.patches or []) ++ [
