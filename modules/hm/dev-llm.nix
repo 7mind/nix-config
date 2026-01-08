@@ -68,7 +68,15 @@
           - **Sandboxed**: You run in a bubblewrap sandbox and cannot read files in $HOME nor interact with the system. You can only observe the project and files in /nix. /tmp/exchange is also available
           - **System interaction workflow**:
             1. Write a shell script to /tmp/exchange/{name}.sh
-            2. Script MUST use `tee` to write output to both terminal and /tmp/exchange/{name}.out, e.g.: `command 2>&1 | tee /tmp/exchange/{name}.out`
+            2. Script structure MUST be:
+               ```bash
+               #!/usr/bin/env bash
+               set -x
+               bat --paging=never "$0"  # Show script contents first
+               read -p "Press Enter to run, Ctrl+C to abort..."
+               # Your commands here, with output captured:
+               command 2>&1 | tee /tmp/exchange/{name}.out
+               ```
             3. Ask user to run: `bash /tmp/exchange/{name}.sh`
             4. After user confirms execution, use Read tool to read /tmp/exchange/{name}.out
             5. NEVER proceed without reading the output file - it contains the information you need
