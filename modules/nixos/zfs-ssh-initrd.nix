@@ -60,7 +60,6 @@
           #    exec /bin/systemd-tty-ask-password-agent --watch
           #  '';
           #};
-
           #users.root.shell = "/bin/zfs-unlock-shell";
 
           services.zfs-remote-unlock = {
