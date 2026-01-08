@@ -16,6 +16,18 @@ in
       default = cfg.enable && config.smind.hw.cpu.isAmd;
       description = "Enable AMD-specific power management (amd_pstate, auto-epp)";
     };
+
+    suspend.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = config.smind.isLaptop;
+      description = "Enable suspend support";
+    };
+
+    hibernate.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = config.smind.isLaptop && !config.smind.zfs.enable;
+      description = "Enable hibernate and hybrid-sleep support (disabled by default with ZFS)";
+    };
   };
 
   config = lib.mkMerge [
@@ -50,6 +62,18 @@ in
       services.cpupower-gui.enable = true;
 
       environment.systemPackages = [ pkgs.cpupower-gui ];
+    })
+
+    # Suspend/hibernate systemd targets
+    (lib.mkIf (cfg.suspend.enable || cfg.hibernate.enable) {
+      systemd.targets.sleep.enable = true;
+    })
+    (lib.mkIf cfg.suspend.enable {
+      systemd.targets.suspend.enable = true;
+    })
+    (lib.mkIf cfg.hibernate.enable {
+      systemd.targets.hibernate.enable = true;
+      systemd.targets.hybrid-sleep.enable = true;
     })
   ];
 }

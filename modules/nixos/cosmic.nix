@@ -7,18 +7,6 @@
       default = false;
       description = "Enable COSMIC desktop environment";
     };
-
-    smind.desktop.cosmic.suspend.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = config.smind.isLaptop;
-      description = "Enable suspend support in COSMIC";
-    };
-
-    smind.desktop.cosmic.hibernate.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = config.smind.isLaptop && !config.smind.zfs.enable; # hibernate breaks ZFS
-      description = "Enable hibernate and hybrid-sleep support in COSMIC";
-    };
   };
 
   config = lib.mkIf config.smind.desktop.cosmic.enable {
@@ -82,11 +70,6 @@
     xdg.portal.enable = true;
 
     services.gvfs.enable = true;
-
-    systemd.targets.sleep.enable = lib.mkIf (config.smind.desktop.cosmic.suspend.enable || config.smind.desktop.cosmic.hibernate.enable) true;
-    systemd.targets.suspend.enable = lib.mkIf config.smind.desktop.cosmic.suspend.enable true;
-    systemd.targets.hibernate.enable = lib.mkIf config.smind.desktop.cosmic.hibernate.enable true;
-    systemd.targets.hybrid-sleep.enable = lib.mkIf config.smind.desktop.cosmic.hibernate.enable true;
 
     environment.systemPackages = with pkgs; [
       cosmic-files
