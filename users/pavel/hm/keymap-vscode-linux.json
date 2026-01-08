@@ -6459,6 +6459,11 @@
     "command" : "toggleFindInSelection"
   },
   {
+    "when" : "findInputFocussed",
+    "key" : "alt+[KeyS]",
+    "command" : "toggleFindInSelection"
+  },
+  {
     "when" : "editorFocus",
     "key" : "alt+[KeyO] alt+[KeyX]",
     "command" : "toggleFindRegex"

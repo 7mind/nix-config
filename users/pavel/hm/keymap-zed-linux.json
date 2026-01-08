@@ -44,6 +44,7 @@
       "alt-x" : "search::ToggleRegex",
       "alt-c" : "search::ToggleCaseSensitive",
       "alt-h" : "search::SelectAllMatches",
+      "alt-s" : "search::ToggleSelection",
       "shift-enter" : "search::SelectPreviousMatch",
       "alt-shift-m" : "search::SelectPreviousMatch",
       "alt-m" : "search::SelectNextMatch",
@@ -208,25 +209,27 @@
     "context" : "Pane",
     "bindings" : {
       "ctrl-k ctrl-w" : "pane::CloseOtherItems",
-      "ctrl-shift-t" : "pane::ReopenClosedItem",
       "ctrl-[bracketleft]" : "pane::GoBack",
       "ctrl-k ctrl-v" : "pane::SplitRight",
       "alt-o w" : "search::ToggleWholeWord",
       "ctrl-k v" : "pane::SplitRight",
       "alt-h" : "search::SelectAllMatches",
       "ctrl-k w" : "pane::CloseOtherItems",
-      "alt-o x" : "search::ToggleRegex",
       "alt-o alt-x" : "search::ToggleRegex",
       "cmd-w" : "pane::CloseActiveItem",
       "ctrl-shift-f" : "pane::DeploySearch",
       "alt-o alt-w" : "search::ToggleWholeWord",
       "cmd-[bracketleft]" : "pane::ActivatePreviousItem",
       "alt-o c" : "search::ToggleCaseSensitive",
+      "alt-o alt-s" : "search::ToggleSelection",
+      "ctrl-shift-t" : "pane::ReopenClosedItem",
       "ctrl-[bracketright]" : "pane::GoForward",
       "alt-o alt-c" : "search::ToggleCaseSensitive",
       "cmd-[bracketright]" : "pane::ActivateNextItem",
       "ctrl-w" : "pane::CloseActiveItem",
-      "ctrl-shift-r" : "pane::DeploySearch"
+      "ctrl-shift-r" : "pane::DeploySearch",
+      "alt-o x" : "search::ToggleRegex",
+      "alt-o s" : "search::ToggleSelection"
     }
   },
   {
