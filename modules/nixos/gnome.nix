@@ -32,6 +32,30 @@
       description = "Idle time before suspend when using logind (useLogind = true)";
     };
 
+    smind.desktop.gnome.auto-suspend.onAC = lib.mkOption {
+      type = lib.types.enum [ "nothing" "suspend" "hibernate" "blank" ];
+      default = if config.smind.isLaptop then "suspend" else "nothing";
+      description = "Action when idle on AC power";
+    };
+
+    smind.desktop.gnome.auto-suspend.onBattery = lib.mkOption {
+      type = lib.types.enum [ "nothing" "suspend" "hibernate" "blank" ];
+      default = "suspend";
+      description = "Action when idle on battery";
+    };
+
+    smind.desktop.gnome.auto-suspend.timeoutAC = lib.mkOption {
+      type = lib.types.int;
+      default = 7200; # 2 hours
+      description = "Idle timeout in seconds before action on AC power";
+    };
+
+    smind.desktop.gnome.auto-suspend.timeoutBattery = lib.mkOption {
+      type = lib.types.int;
+      default = 600; # 10 minutes
+      description = "Idle timeout in seconds before action on battery";
+    };
+
     smind.desktop.gnome.fractional-scaling.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -140,11 +164,19 @@
               "stickykeys-enable" = true;
               "stickykeys-modifier-beep" = true;
             };
-          } ++ lib.optional (!config.smind.desktop.gnome.auto-suspend.enable || config.smind.desktop.gnome.auto-suspend.useLogind) {
-            # Disable gsd-power auto-suspend (either fully disabled, or using logind instead)
+          } ++ lib.optional config.smind.desktop.gnome.auto-suspend.useLogind {
+            # Disable gsd-power auto-suspend when using logind instead
             "org/gnome/settings-daemon/plugins/power" = {
               sleep-inactive-ac-type = "nothing";
               sleep-inactive-battery-type = "nothing";
+            };
+          } ++ lib.optional (!config.smind.desktop.gnome.auto-suspend.useLogind) {
+            # Configure gsd-power auto-suspend
+            "org/gnome/settings-daemon/plugins/power" = {
+              sleep-inactive-ac-type = config.smind.desktop.gnome.auto-suspend.onAC;
+              sleep-inactive-battery-type = config.smind.desktop.gnome.auto-suspend.onBattery;
+              sleep-inactive-ac-timeout = lib.gvariant.mkInt32 config.smind.desktop.gnome.auto-suspend.timeoutAC;
+              sleep-inactive-battery-timeout = lib.gvariant.mkInt32 config.smind.desktop.gnome.auto-suspend.timeoutBattery;
             };
           });
         }

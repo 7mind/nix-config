@@ -115,10 +115,19 @@ in
                   ];
               };
             }
-          ] ++ lib.optional (!config.smind.desktop.gnome.auto-suspend.enable) {
+          ] ++ lib.optional config.smind.desktop.gnome.auto-suspend.useLogind {
+            # Disable gsd-power auto-suspend when using logind instead
             "org/gnome/settings-daemon/plugins/power" = {
               sleep-inactive-ac-type = "nothing";
               sleep-inactive-battery-type = "nothing";
+            };
+          } ++ lib.optional (!config.smind.desktop.gnome.auto-suspend.useLogind) {
+            # Configure gsd-power auto-suspend (same as user session)
+            "org/gnome/settings-daemon/plugins/power" = {
+              sleep-inactive-ac-type = config.smind.desktop.gnome.auto-suspend.onAC;
+              sleep-inactive-battery-type = config.smind.desktop.gnome.auto-suspend.onBattery;
+              sleep-inactive-ac-timeout = lib.gvariant.mkInt32 config.smind.desktop.gnome.auto-suspend.timeoutAC;
+              sleep-inactive-battery-timeout = lib.gvariant.mkInt32 config.smind.desktop.gnome.auto-suspend.timeoutBattery;
             };
           });
         }
