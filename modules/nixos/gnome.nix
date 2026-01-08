@@ -148,6 +148,9 @@
               sleep-inactive-battery-type = config.smind.desktop.gnome.auto-suspend.onBattery;
               sleep-inactive-ac-timeout = lib.gvariant.mkInt32 config.smind.desktop.gnome.auto-suspend.timeoutAC;
               sleep-inactive-battery-timeout = lib.gvariant.mkInt32 config.smind.desktop.gnome.auto-suspend.timeoutBattery;
+            } // lib.optionalAttrs (config.smind.power-management.powerButton != null) {
+              # Let logind handle power button
+              power-button-action = "nothing";
             };
           }]);
         }

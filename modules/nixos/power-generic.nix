@@ -28,6 +28,19 @@ in
       default = config.smind.isLaptop && !config.smind.zfs.enable;
       description = "Enable hibernate and hybrid-sleep support (disabled by default with ZFS)";
     };
+
+    powerButton = lib.mkOption {
+      type = lib.types.nullOr (lib.types.enum [
+        "ignore" "poweroff" "reboot" "halt" "kexec"
+        "suspend" "hibernate" "hybrid-sleep" "suspend-then-hibernate" "lock"
+      ]);
+      default =
+        if config.smind.isLaptop then
+          (if cfg.hibernate.enable then "hybrid-sleep" else "suspend")
+        else
+          "poweroff";
+      description = "Power button action (null to use system default)";
+    };
   };
 
   config = lib.mkMerge [
@@ -74,6 +87,11 @@ in
     (lib.mkIf cfg.hibernate.enable {
       systemd.targets.hibernate.enable = true;
       systemd.targets.hybrid-sleep.enable = true;
+    })
+
+    # Power button behavior
+    (lib.mkIf (cfg.enable && cfg.powerButton != null) {
+      services.logind.settings.Login.HandlePowerKey = cfg.powerButton;
     })
   ];
 }
