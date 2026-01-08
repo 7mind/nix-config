@@ -65,6 +65,7 @@
           - **No workarounds**: whey you discover a bug or a problem, don't hide it. Attempt to fix underlying issues, ask for assistance when you can't
           - **Sandboxed**: You run in a bubblewrap sandbox and cannot read files in $HOME nor interact with system. You can only observe the project and files in /nix. /tmp/exchange is also available
           - **Prepare scripts for user**: When you need to interact with the system, prepare a shell script file writing output into temporary file in /tmp/exchange, ask user to run it, then read output
+          - **Verbose debug scripts**: use `set -x` so the user can see the commands together with the output
 
           ### Code Style
 
