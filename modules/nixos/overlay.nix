@@ -28,6 +28,15 @@
       #   ];
       # });
 
+      # Fix for suspend loop on GNOME with NVIDIA drivers
+      # MR !462: https://gitlab.gnome.org/GNOME/gnome-settings-daemon/-/merge_requests/462
+      # Issue #903: https://gitlab.gnome.org/GNOME/gnome-settings-daemon/-/issues/903
+      gnome-settings-daemon = super.gnome-settings-daemon.overrideAttrs (old: {
+        patches = (old.patches or []) ++ [
+          ../../patches/gnome-settings-daemon-suspend-loop-fix.patch
+        ];
+      });
+
 
 
       # https://github.com/NixOS/nixpkgs/issues/408853
