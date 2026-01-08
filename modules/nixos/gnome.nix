@@ -26,6 +26,23 @@
       description = "Enable automatic suspend on idle (typically for laptops)";
     };
 
+    smind.desktop.gnome.auto-suspend.useLogind = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Use systemd-logind for idle suspend instead of GNOME's gsd-power.
+        This bypasses gsd-power's buggy idle timer that can cause suspend loops after resume.
+        See: https://github.com/NixOS/nixpkgs/issues/336723
+      '';
+    };
+
+    smind.desktop.gnome.auto-suspend.idleActionSec = lib.mkOption {
+      type = lib.types.str;
+      default = "15min";
+      example = "20min";
+      description = "Idle time before suspend when using logind (useLogind = true)";
+    };
+
     smind.desktop.gnome.fractional-scaling.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -133,7 +150,8 @@
               "stickykeys-enable" = true;
               "stickykeys-modifier-beep" = true;
             };
-          } // lib.optionalAttrs (!config.smind.desktop.gnome.auto-suspend.enable) {
+          } // lib.optionalAttrs (!config.smind.desktop.gnome.auto-suspend.enable || config.smind.desktop.gnome.auto-suspend.useLogind) {
+            # Disable gsd-power auto-suspend (either fully disabled, or using logind instead)
             "org/gnome/settings-daemon/plugins/power" = {
               sleep-inactive-ac-type = "nothing";
               sleep-inactive-battery-type = "nothing";
@@ -263,6 +281,13 @@
     # Uses system-sleep hook for immediate execution on resume (before gsd-power can react)
     # See: https://github.com/NixOS/nixpkgs/issues/336723
     # See: https://gitlab.gnome.org/World/Phosh/phosh/-/merge_requests/1016
+    # Use logind for idle suspend instead of gsd-power (optional, disabled by default)
+    # This bypasses gsd-power's buggy idle timer entirely
+    services.logind.settings.Login = lib.mkIf config.smind.desktop.gnome.auto-suspend.useLogind {
+      IdleAction = "suspend";
+      IdleActionSec = config.smind.desktop.gnome.auto-suspend.idleActionSec;
+    };
+
     powerManagement.powerDownCommands = lib.mkIf (config.smind.desktop.gnome.suspend.enable || config.smind.desktop.gnome.hibernate.enable) "";
     powerManagement.resumeCommands = lib.mkIf (config.smind.desktop.gnome.suspend.enable || config.smind.desktop.gnome.hibernate.enable) ''
       # Reset idle hint for all logind sessions immediately on resume

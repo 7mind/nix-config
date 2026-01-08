@@ -35,6 +35,7 @@
   };
 
   systemd.network.enable = true;
+  systemd.network.wait-online.enable = false;
 
   services.resolved = {
     enable = true;
