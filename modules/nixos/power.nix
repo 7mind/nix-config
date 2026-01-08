@@ -128,23 +128,19 @@ in
       description = "Enable AMD-specific power management (amd_pstate, auto-epp)";
     };
 
-    auto-profile = {
-      enable = lib.mkOption {
-        type = lib.types.bool;
-        default = false;
-        description = "Automatically switch power profiles based on AC/battery status";
-      };
-
+    tuned = {
       onAC = lib.mkOption {
-        type = lib.types.enum [ "power-saver" "balanced" "performance" ];
+        type = lib.types.str;
         default = "balanced";
-        description = "Power profile to use when on AC power";
+        example = "throughput-performance";
+        description = "TuneD profile to use when on AC power";
       };
 
       onBattery = lib.mkOption {
-        type = lib.types.enum [ "power-saver" "balanced" "performance" ];
-        default = "power-saver";
-        description = "Power profile to use when on battery";
+        type = lib.types.str;
+        default = "balanced-battery";
+        example = "powersave";
+        description = "TuneD profile to use when on battery";
       };
     };
 
@@ -250,65 +246,28 @@ in
     (lib.mkIf cfg.amd.enable {
       powerManagement.cpuFreqGovernor = "powersave"; # amd-pstate uses powersave governor
 
-      # Note: auto-epp is not used when power-profiles-daemon is enabled
-      # PPD already manages EPP states and integrates with GNOME
-
       services.cpupower-gui.enable = true;
 
       environment.systemPackages = [ pkgs.cpupower-gui ];
     })
 
-    # Auto-switch power-profiles-daemon profiles based on AC/battery
-    (lib.mkIf cfg.auto-profile.enable (
-      let
-        setProfileScript = pkgs.writeShellScript "power-profile-set" ''
-          # Check if any AC adapter is online
-          for supply in /sys/class/power_supply/*/; do
-            if [ -f "$supply/type" ] && [ "$(cat "$supply/type")" = "Mains" ]; then
-              if [ -f "$supply/online" ] && [ "$(cat "$supply/online")" = "1" ]; then
-                ${pkgs.power-profiles-daemon}/bin/powerprofilesctl set ${cfg.auto-profile.onAC}
-                exit 0
-              fi
-            fi
-          done
-          # No AC found, use battery profile
-          ${pkgs.power-profiles-daemon}/bin/powerprofilesctl set ${cfg.auto-profile.onBattery}
-        '';
-      in {
-        assertions = [{
-          assertion = config.services.power-profiles-daemon.enable;
-          message = "auto-profile requires services.power-profiles-daemon.enable = true";
-        }];
+    # TuneD - automatic AC/battery profile switching via UPower
+    (lib.mkIf cfg.enable {
+      services.tuned.enable = true;
+      services.upower.enable = true; # Required for battery detection
 
-        # udev rule triggers systemd service on AC plug/unplug
-        services.udev.extraRules = ''
-          SUBSYSTEM=="power_supply", ATTR{type}=="Mains", ACTION=="change", TAG+="systemd", ENV{SYSTEMD_WANTS}="power-profile-switch.service"
-        '';
-
-        systemd.services.power-profile-switch = {
-          description = "Switch power profile based on AC status";
-          after = [ "power-profiles-daemon.service" ];
-          requires = [ "power-profiles-daemon.service" ];
-          serviceConfig = {
-            Type = "oneshot";
-            ExecStart = setProfileScript;
-          };
+      # Map PPD profiles to TuneD profiles for AC/battery states
+      services.tuned.ppdSettings = {
+        profiles = {
+          power-saver = "powersave";
+          balanced = cfg.tuned.onAC;
+          performance = "throughput-performance";
         };
-
-        # Set correct power profile at boot
-        systemd.services.power-profile-boot = {
-          description = "Set power profile based on AC status at boot";
-          wantedBy = [ "multi-user.target" ];
-          after = [ "power-profiles-daemon.service" ];
-          requires = [ "power-profiles-daemon.service" ];
-          serviceConfig = {
-            Type = "oneshot";
-            RemainAfterExit = true;
-            ExecStart = setProfileScript;
-          };
+        battery = {
+          balanced = cfg.tuned.onBattery;
         };
-      }
-    ))
+      };
+    })
 
     # Auto-switch display refresh rate based on AC/battery (udev trigger)
     (lib.mkIf cfg.auto-refresh-rate.enable {

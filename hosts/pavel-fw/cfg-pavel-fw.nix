@@ -134,9 +134,9 @@ in
     });
   '';
 
-  services.power-profiles-daemon.enable = true;
-  smind.power-management.auto-profile.enable = true;
-  smind.power-management.auto-profile.onAC = "performance";
+  # Power management via TuneD (replaces power-profiles-daemon)
+  # TuneD automatically switches profiles based on AC/battery via UPower
+  smind.power-management.tuned.onAC = "throughput-performance";
 
   # QMK keyboard firmware support (Framework 16 uses QMK)
   # Use https://keyboard.frame.work/ for configuration
