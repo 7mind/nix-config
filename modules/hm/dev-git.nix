@@ -46,6 +46,7 @@
 
         receive = { fsckObjects = true; };
         status = { submodulesummary = true; };
+        submodule = { recurse = true; };
         pack = { packSizeLimit = "2g"; };
         fetch = { prune = "false"; };
         rebase = { autoStash = true; };
