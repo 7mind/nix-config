@@ -54,10 +54,9 @@
           - **Don't give up**: Provide comprehensive solutions
           - **Fail fast**: Use assertions, throw errors early - no graceful fallbacks
           - **Explicit over implicit**: No default parameters or optional chaining for required values
-          - Don't write obvious comments. Only write comments to explain something important
-          - Deliver sound, generic, universal solutions. Avoid workarounds.
-          - **Ask questions**: when instructions or requirements are unclear or incomplete or you see contradictions - always ask for clarifications before proceeding.
-          - **No workarounds**: whey you discover a bug or a problem, don't hide it. Attempt to fix underlying issues, ask for assistance when you can't
+          - **Minimal comments**: Only write comments to explain something non-obvious
+          - **No workarounds**: Deliver sound, generic, universal solutions. When you discover a bug or problem, don't hide it - attempt to fix underlying issues, ask for assistance when you can't
+          - **Ask questions**: When instructions or requirements are unclear, incomplete, or contradictory - always ask for clarifications before proceeding
 
           ### References
 
@@ -66,9 +65,9 @@
 
           ### Environment
 
-          - **Sandboxed**: You run in a bubblewrap sandbox and cannot read files in $HOME nor interact with system. You can only observe the project and files in /nix. /tmp/exchange is also available
-          - **Prepare scripts for user**: When you need to interact with the system, prepare a shell script file writing output into temporary file in /tmp/exchange, ask user to run it, then read output
-          - **Verbose debug scripts**: use `set -x` so the user can see the commands together with the output
+          - **Sandboxed**: You run in a bubblewrap sandbox and cannot read files in $HOME nor interact with the system. You can only observe the project and files in /nix. /tmp/exchange is also available
+          - **Prepare scripts for user**: When you need to interact with the system, prepare a shell script that writes output to /tmp/exchange, ask user to run it, then read the output
+          - **Verbose debug scripts**: Use `set -x` so the user can see commands together with output
           - Use nix environment with flake.nix and direnv for dependencies
           - Use `direnv exec DIR COMMAND [...ARGS]` and `nix run`
 
