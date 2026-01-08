@@ -121,6 +121,7 @@ in
 
     # Enable fw-fanctrl service for Framework fan control extension
     hardware.fw-fanctrl.enable = lib.mkIf fanControlCfg.enable true;
+    hardware.fw-fanctrl.disableBatteryTempCheck = lib.mkIf fanControlCfg.enable true;
 
     programs.dconf = {
       enable = true;
