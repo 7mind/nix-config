@@ -35,10 +35,8 @@ in
         "suspend" "hibernate" "hybrid-sleep" "suspend-then-hibernate" "lock"
       ]);
       default =
-        if config.smind.isLaptop then
-          (if cfg.hibernate.enable then "suspend-then-hibernate" else "suspend")
-        else
-          "poweroff";
+        if config.smind.isLaptop then "suspend"
+        else "poweroff";
       description = "Power button action (null to use system default)";
     };
 

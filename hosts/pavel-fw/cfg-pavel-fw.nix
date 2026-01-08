@@ -207,7 +207,6 @@ in
     dev.wireshark.users = [ "pavel" ];
 
     power-management.enable = true;
-    power-management.hibernateDelaySec = "1min"; # Testing - change back to "2h" after
     power-management.auto-refresh-rate = {
       enable = true;
       displays."eDP-1" = {
