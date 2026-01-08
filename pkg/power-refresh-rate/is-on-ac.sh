@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 # Check if system is on AC power
 # Returns 0 if on AC, 1 if on battery
 
