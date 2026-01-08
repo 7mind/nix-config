@@ -194,6 +194,12 @@ in
         systemd.services.nvidia-resume.enable = true;
         systemd.services.nvidia-hibernate.enable = true;
 
+        # hybrid-sleep needs nvidia-hibernate (writes to disk before suspending)
+        systemd.services."systemd-hybrid-sleep" = {
+          requires = [ "nvidia-hibernate.service" ];
+          after = [ "nvidia-hibernate.service" ];
+        };
+
         environment.systemPackages = [
           gpuBindVfio
           gpuBindNvidia

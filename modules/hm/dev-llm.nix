@@ -66,7 +66,7 @@
           ### Environment
 
           - **Sandboxed**: You run in a bubblewrap sandbox and cannot read files in $HOME nor interact with the system. You can only observe the project and files in /nix. /tmp/exchange is also available
-          - **Prepare scripts for user**: When you need to interact with the system, prepare a shell script that writes output to /tmp/exchange, ask user to run it, then read the output
+          - **Prepare scripts for user**: When you need to interact with the system, prepare a shell script in /tmp/exchange and ask user to run it. The script should write output to both the terminal and a file in /tmp/exchange. Await until the file appears, then read the output.
           - **Verbose debug scripts**: Use `set -x` so the user can see commands together with output
           - **Nix environment**: Use flake.nix and direnv for dependencies
           - **Commands**: Use `direnv exec DIR COMMAND [...ARGS]` and `nix run`
