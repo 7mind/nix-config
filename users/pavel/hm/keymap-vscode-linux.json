@@ -5882,11 +5882,6 @@
     "command" : "editor.action.nextMatchFindAction"
   },
   {
-    "when" : "editorFocus && findInputFocussed",
-    "key" : "enter",
-    "command" : "editor.action.nextMatchFindAction"
-  },
-  {
     "key" : "ctrl+[KeyT] ctrl+[KeyI]",
     "command" : "editor.action.organizeImports"
   },
@@ -6401,6 +6396,16 @@
     "command" : "search.action.cancel"
   },
   {
+    "when" : "editorFocus && findInputFocussed && !replaceInputFocussed",
+    "key" : "enter",
+    "command" : "editor.action.nextMatchFindAction"
+  },
+  {
+    "when" : "editorFocus && findInputFocussed && !replaceInputFocussed",
+    "key" : "shift+enter",
+    "command" : "editor.action.previousMatchFindAction"
+  },
+  {
     "key" : "ctrl+[KeyK] ctrl+[KeyA]",
     "command" : "editor.action.selectAll"
   },
@@ -6439,6 +6444,11 @@
     "command" : "toggleFindCaseSensitive"
   },
   {
+    "when" : "findInputFocussed",
+    "key" : "alt+[KeyC]",
+    "command" : "toggleFindCaseSensitive"
+  },
+  {
     "when" : "editorFocus",
     "key" : "alt+[KeyO] alt+[KeyS]",
     "command" : "toggleFindInSelection"
@@ -6459,6 +6469,11 @@
     "command" : "toggleFindRegex"
   },
   {
+    "when" : "findInputFocussed",
+    "key" : "alt+[KeyX]",
+    "command" : "toggleFindRegex"
+  },
+  {
     "when" : "editorFocus",
     "key" : "alt+[KeyO] alt+[KeyW]",
     "command" : "toggleFindWholeWord"
@@ -6466,6 +6481,11 @@
   {
     "when" : "editorFocus",
     "key" : "alt+[KeyO] [KeyW]",
+    "command" : "toggleFindWholeWord"
+  },
+  {
+    "when" : "findInputFocussed",
+    "key" : "alt+[KeyW]",
     "command" : "toggleFindWholeWord"
   },
   {

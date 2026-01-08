@@ -41,10 +41,20 @@
   {
     "context" : "BufferSearchBar",
     "bindings" : {
-      "alt-m" : "search::SelectNextMatch",
+      "alt-x" : "search::ToggleRegex",
+      "alt-c" : "search::ToggleCaseSensitive",
+      "alt-h" : "search::SelectAllMatches",
       "shift-enter" : "search::SelectPreviousMatch",
       "alt-shift-m" : "search::SelectPreviousMatch",
-      "alt-h" : "search::SelectAllMatches"
+      "alt-m" : "search::SelectNextMatch",
+      "alt-w" : "search::ToggleWholeWord"
+    }
+  },
+  {
+    "context" : "BufferSearchBar && !in_replace",
+    "bindings" : {
+      "enter" : "search::SelectNextMatch",
+      "shift-enter" : "search::SelectPreviousMatch"
     }
   },
   {

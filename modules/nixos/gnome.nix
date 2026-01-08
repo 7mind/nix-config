@@ -9,29 +9,6 @@
     };
 
 
-    smind.desktop.gnome.auto-suspend.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = config.smind.isLaptop;
-      description = "Enable automatic suspend on idle (typically for laptops)";
-    };
-
-    smind.desktop.gnome.auto-suspend.useLogind = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = ''
-        Use systemd-logind for idle suspend instead of GNOME's gsd-power.
-        This bypasses gsd-power's buggy idle timer that can cause suspend loops after resume.
-        See: https://github.com/NixOS/nixpkgs/issues/336723
-      '';
-    };
-
-    smind.desktop.gnome.auto-suspend.idleActionSec = lib.mkOption {
-      type = lib.types.str;
-      default = "15min";
-      example = "20min";
-      description = "Idle time before suspend when using logind (useLogind = true)";
-    };
-
     smind.desktop.gnome.auto-suspend.onAC = lib.mkOption {
       type = lib.types.enum [ "nothing" "suspend" "hibernate" "blank" ];
       default = if config.smind.isLaptop then "suspend" else "nothing";
@@ -164,13 +141,7 @@
               "stickykeys-enable" = true;
               "stickykeys-modifier-beep" = true;
             };
-          } ++ lib.optional config.smind.desktop.gnome.auto-suspend.useLogind {
-            # Disable gsd-power auto-suspend when using logind instead
-            "org/gnome/settings-daemon/plugins/power" = {
-              sleep-inactive-ac-type = "nothing";
-              sleep-inactive-battery-type = "nothing";
-            };
-          } ++ lib.optional (!config.smind.desktop.gnome.auto-suspend.useLogind) {
+          } ++ [{
             # Configure gsd-power auto-suspend
             "org/gnome/settings-daemon/plugins/power" = {
               sleep-inactive-ac-type = config.smind.desktop.gnome.auto-suspend.onAC;
@@ -178,7 +149,7 @@
               sleep-inactive-ac-timeout = lib.gvariant.mkInt32 config.smind.desktop.gnome.auto-suspend.timeoutAC;
               sleep-inactive-battery-timeout = lib.gvariant.mkInt32 config.smind.desktop.gnome.auto-suspend.timeoutBattery;
             };
-          });
+          }]);
         }
       ];
     };
@@ -281,13 +252,6 @@
     # };
 
     # Suspend/hibernate quirks (targets, FREEZE workaround, GNOME idle reset) handled by power-suspend-quirks module
-
-    # Use logind for idle suspend instead of gsd-power (optional, disabled by default)
-    # This bypasses gsd-power's buggy idle timer entirely
-    services.logind.settings.Login = lib.mkIf config.smind.desktop.gnome.auto-suspend.useLogind {
-      IdleAction = "suspend";
-      IdleActionSec = config.smind.desktop.gnome.auto-suspend.idleActionSec;
-    };
 
     services.gnome = {
       gnome-settings-daemon.enable = true;

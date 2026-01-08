@@ -152,6 +152,8 @@
     <keyboard-shortcut first-keystroke="ctrl b" second-keystroke="e"/>
   </action>
   <action id="FindNext">
+    <!--search.nextMatchOnEnter-->
+    <keyboard-shortcut first-keystroke="enter"/>
     <!--editor.action.nextMatchFindAction:find-widget-focused-->
     <keyboard-shortcut first-keystroke="alt m"/>
   </action>
@@ -529,7 +531,7 @@
   <action id="FindPrevious">
     <!--editor.action.previousMatchFindAction-->
     <keyboard-shortcut first-keystroke="alt shift m"/>
-    <!--editor.action.previousMatchFindAction-->
+    <!--editor.action.previousMatchFindAction, search.previousMatchOnShiftEnter-->
     <keyboard-shortcut first-keystroke="shift enter"/>
   </action>
   <action id="GotoAction">
