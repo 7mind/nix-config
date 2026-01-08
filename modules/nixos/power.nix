@@ -128,20 +128,16 @@ in
       description = "Enable AMD-specific power management (amd_pstate, auto-epp)";
     };
 
-    tuned = {
-      onAC = lib.mkOption {
-        type = lib.types.str;
-        default = "latency-performance";
-        example = "balanced";
-        description = "TuneD profile to use when on AC power (can't use throughput-performance - reserved for PPD performance profile)";
-      };
+    profileOnAC = lib.mkOption {
+      type = lib.types.enum [ "power-saver" "balanced" "performance" ];
+      default = "performance";
+      description = "Power profile to use when on AC power";
+    };
 
-      onBattery = lib.mkOption {
-        type = lib.types.str;
-        default = "powersave";
-        example = "balanced-battery";
-        description = "TuneD profile to use when on battery";
-      };
+    profileOnBattery = lib.mkOption {
+      type = lib.types.enum [ "power-saver" "balanced" "performance" ];
+      default = "power-saver";
+      description = "Power profile to use when on battery";
     };
 
     auto-refresh-rate = {
@@ -251,69 +247,51 @@ in
       environment.systemPackages = [ pkgs.cpupower-gui ];
     })
 
-    # TuneD - automatic AC/battery profile switching via UPower
+    # Power profile switching via power-profiles-daemon + udev
     (lib.mkIf cfg.enable (
       let
-        setPpdProfile = pkgs.writeShellScript "set-ppd-profile" ''
+        setProfile = pkgs.writeShellScript "power-profile-set" ''
           # Check if any AC adapter is online
           for supply in /sys/class/power_supply/*/; do
             if [ -f "$supply/type" ] && [ "$(cat "$supply/type")" = "Mains" ]; then
               if [ -f "$supply/online" ] && [ "$(cat "$supply/online")" = "1" ]; then
-                ${pkgs.power-profiles-daemon}/bin/powerprofilesctl set balanced
+                ${pkgs.power-profiles-daemon}/bin/powerprofilesctl set ${cfg.profileOnAC}
                 exit 0
               fi
             fi
           done
-          # No AC found, use power-saver
-          ${pkgs.power-profiles-daemon}/bin/powerprofilesctl set power-saver
+          ${pkgs.power-profiles-daemon}/bin/powerprofilesctl set ${cfg.profileOnBattery}
         '';
       in {
-        services.tuned.enable = true;
-        services.upower.enable = true; # Required for tuned battery detection
+        services.power-profiles-daemon.enable = true;
 
-        # Configure TuneD profiles for AC/battery states
-        # All three PPD profiles must be defined (tuned-ppd requires them)
-        services.tuned.ppdSettings = {
-          profiles = {
-            power-saver = cfg.tuned.onBattery;
-            balanced = cfg.tuned.onAC;
-            performance = "throughput-performance";
-          };
-        };
-
-        # Switch PPD profile on AC plug/unplug so GNOME UI reflects power state
+        # Switch profile on AC plug/unplug
         services.udev.extraRules = ''
-          SUBSYSTEM=="power_supply", ATTR{type}=="Mains", ACTION=="change", TAG+="systemd", ENV{SYSTEMD_WANTS}="ppd-profile-switch.service"
+          SUBSYSTEM=="power_supply", ATTR{type}=="Mains", ACTION=="change", TAG+="systemd", ENV{SYSTEMD_WANTS}="power-profile-switch.service"
         '';
 
-        systemd.services.ppd-profile-switch = {
-          description = "Switch PPD profile based on AC status";
-          after = [ "tuned-ppd.service" ];
-          wants = [ "tuned-ppd.service" ];
+        systemd.services.power-profile-switch = {
+          description = "Switch power profile based on AC status";
+          after = [ "power-profiles-daemon.service" ];
+          wants = [ "power-profiles-daemon.service" ];
           serviceConfig = {
             Type = "oneshot";
-            ExecStart = setPpdProfile;
+            ExecStart = setProfile;
           };
         };
 
-        # Set correct PPD profile at boot
-        systemd.services.ppd-profile-boot = {
-          description = "Set PPD profile based on AC status at boot";
+        # Set correct profile at boot
+        systemd.services.power-profile-boot = {
+          description = "Set power profile based on AC status at boot";
           wantedBy = [ "multi-user.target" ];
-          after = [ "tuned-ppd.service" ];
-          wants = [ "tuned-ppd.service" ];
+          after = [ "power-profiles-daemon.service" ];
+          wants = [ "power-profiles-daemon.service" ];
           serviceConfig = {
             Type = "oneshot";
             RemainAfterExit = true;
-            ExecStart = setPpdProfile;
+            ExecStart = setProfile;
           };
         };
-
-        # CLI tools: tuned-adm, powerprofilesctl
-        environment.systemPackages = [
-          config.services.tuned.package
-          pkgs.power-profiles-daemon # for powerprofilesctl CLI
-        ];
       }
     ))
 
