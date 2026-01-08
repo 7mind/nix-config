@@ -8,17 +8,6 @@
       description = "Enable GNOME desktop environment with GDM";
     };
 
-    smind.desktop.gnome.suspend.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = config.smind.isLaptop;
-      description = "Enable suspend support";
-    };
-
-    smind.desktop.gnome.hibernate.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = config.smind.isLaptop && !config.smind.zfs.enable; # hibernate breaks ZFS
-      description = "Enable hibernate and hybrid-sleep support with GNOME hibernate-status-button extension";
-    };
 
     smind.desktop.gnome.auto-suspend.enable = lib.mkOption {
       type = lib.types.bool;
@@ -259,23 +248,7 @@
     #   wantedBy = [ "graphical.target" ];
     # };
 
-    #services.xrdp.enable = true;
-    #services.xrdp.defaultWindowManager = "${pkgs.icewm}/bin/icewm";
-    #networking.firewall.allowedTCPPorts = [ 3389 ];
-    #networking.firewall.allowedUDPPorts = [ 3389 ];
-
-    systemd.targets.sleep.enable = lib.mkIf (config.smind.desktop.gnome.suspend.enable || config.smind.desktop.gnome.hibernate.enable) true;
-    systemd.targets.suspend.enable = lib.mkIf config.smind.desktop.gnome.suspend.enable true;
-    systemd.targets.hibernate.enable = lib.mkIf config.smind.desktop.gnome.hibernate.enable true;
-    systemd.targets.hybrid-sleep.enable = lib.mkIf config.smind.desktop.gnome.hibernate.enable true;
-
-    # Workaround: Disable systemd 256+ user session freezing during sleep
-    # This feature doesn't work reliably with NVIDIA/AMD drivers and causes suspend failures
-    # See: https://github.com/NixOS/nixpkgs/issues/371058
-    systemd.services.systemd-suspend.environment.SYSTEMD_SLEEP_FREEZE_USER_SESSIONS = lib.mkIf config.smind.desktop.gnome.suspend.enable "false";
-    systemd.services.systemd-hibernate.environment.SYSTEMD_SLEEP_FREEZE_USER_SESSIONS = lib.mkIf config.smind.desktop.gnome.hibernate.enable "false";
-    systemd.services.systemd-hybrid-sleep.environment.SYSTEMD_SLEEP_FREEZE_USER_SESSIONS = lib.mkIf config.smind.desktop.gnome.hibernate.enable "false";
-    systemd.services.systemd-suspend-then-hibernate.environment.SYSTEMD_SLEEP_FREEZE_USER_SESSIONS = lib.mkIf config.smind.desktop.gnome.hibernate.enable "false";
+    # Suspend/hibernate targets and FREEZE workaround handled by power-suspend-quirks module
 
     # Workaround: Reset GNOME idle state after resume to prevent suspend loop
     # gsd-power doesn't reset its internal idle counter after resume, causing immediate re-suspend
@@ -289,8 +262,8 @@
       IdleActionSec = config.smind.desktop.gnome.auto-suspend.idleActionSec;
     };
 
-    powerManagement.powerDownCommands = lib.mkIf (config.smind.desktop.gnome.suspend.enable || config.smind.desktop.gnome.hibernate.enable) "";
-    powerManagement.resumeCommands = lib.mkIf (config.smind.desktop.gnome.suspend.enable || config.smind.desktop.gnome.hibernate.enable) ''
+    powerManagement.powerDownCommands = lib.mkIf config.smind.power-management.suspend-quirks.enable "";
+    powerManagement.resumeCommands = lib.mkIf config.smind.power-management.suspend-quirks.enable ''
       # Reset idle hint for all logind sessions immediately on resume
       ${pkgs.systemd}/bin/loginctl list-sessions --no-legend | while read -r session rest; do
         ${pkgs.systemd}/bin/loginctl set-idle-hint "$session" no 2>/dev/null || true

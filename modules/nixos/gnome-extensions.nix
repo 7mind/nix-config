@@ -1,7 +1,7 @@
 { config, lib, pkgs, cfg-meta, ... }:
 
 let
-  hibernateCfg = config.smind.desktop.gnome.hibernate;
+  hibernateCfg = config.smind.power-management.suspend-quirks.hibernate;
   alsCfg = config.smind.desktop.gnome.ambient-light-sensor;
   fanControlCfg = config.smind.desktop.gnome.framework-fan-control;
   batteryHealthCfg = config.smind.desktop.gnome.battery-health-charging;

@@ -39,7 +39,10 @@
   ./nushell.nix
   ./oracle-cloud.nix
   ./overlay.nix
-  ./power.nix
+  ./power-generic.nix
+  ./power-profiles.nix
+  ./power-refresh-rate.nix
+  ./power-suspend-quirks.nix
   ./realtek-kernel-hack.nix
   ./rocm.nix
   ./router.nix
