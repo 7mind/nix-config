@@ -237,6 +237,9 @@
               --rw "''${HOME}/.config/claude" \
               --rw "''${HOME}/.cache" \
               --ro "''${HOME}/.config/git" \
+              --ro "''${HOME}/.config/direnv" \
+              --ro "''${HOME}/.local/share/direnv" \
+              --ro "''${HOME}/.direnvrc" \
               "''${ENV_ARGS[@]}" \
               -- claude --permission-mode bypassPermissions "''${CMD_ARGS[@]}"
           '')
@@ -256,6 +259,9 @@
               --rw "''${HOME}/.config/codex" \
               --rw "''${HOME}/.cache" \
               --ro "''${HOME}/.config/git" \
+              --ro "''${HOME}/.config/direnv" \
+              --ro "''${HOME}/.local/share/direnv" \
+              --ro "''${HOME}/.direnvrc" \
               "''${ENV_ARGS[@]}" \
               -- codex --dangerously-bypass-approvals-and-sandbox "''${CMD_ARGS[@]}"
           '')
@@ -274,6 +280,9 @@
               --rw "''${HOME}/.gemini" \
               --rw "''${HOME}/.cache" \
               --ro "''${HOME}/.config/git" \
+              --ro "''${HOME}/.config/direnv" \
+              --ro "''${HOME}/.local/share/direnv" \
+              --ro "''${HOME}/.direnvrc" \
               "''${ENV_ARGS[@]}" \
               -- gemini --yolo "''${CMD_ARGS[@]}"
           '')
@@ -292,6 +301,9 @@
               --rw "''${HOME}/.gemini-work" \
               --rw "''${HOME}/.cache" \
               --ro "''${HOME}/.config/git" \
+              --ro "''${HOME}/.config/direnv" \
+              --ro "''${HOME}/.local/share/direnv" \
+              --ro "''${HOME}/.direnvrc" \
               "''${ENV_ARGS[@]}" \
               --bind "''${HOME}/.gemini-work,''${HOME}/.gemini" \
               -- gemini --yolo "''${CMD_ARGS[@]}"
@@ -312,6 +324,9 @@
               --rw "''${HOME}/.local/share/opencode" \
               --rw "''${HOME}/.cache" \
               --ro "''${HOME}/.config/git" \
+              --ro "''${HOME}/.config/direnv" \
+              --ro "''${HOME}/.local/share/direnv" \
+              --ro "''${HOME}/.direnvrc" \
               "''${ENV_ARGS[@]}" \
               -- opencode "''${CMD_ARGS[@]}"
           '')
