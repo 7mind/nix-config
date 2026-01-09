@@ -65,8 +65,8 @@
 
           ### Environment
 
-          - **Sandboxed**: You run in a bubblewrap sandbox and cannot read files in $HOME nor interact with the system. You can only observe the project and files in /nix. /tmp/exchange is also available
-          - **System interaction workflow**:
+          - **Sandboxed**: You run in a bubblewrap sandbox with access to the project directory, /nix, and /tmp/exchange
+          - **For system interaction**: When you need to access $HOME, run system commands, or reach anything outside the sandbox, use this workflow. Avoid this for regular project work - use direct execution instead:
             1. Write a shell script to /tmp/exchange/{name}.sh
             2. Script structure MUST be:
                ```bash
