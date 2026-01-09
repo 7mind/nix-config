@@ -12,6 +12,11 @@
       default = false;
       description = "Disable Super key window drag modifier";
     };
+    smind.desktop.gnome.switch-applications = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Whether to switch applications or windows with Super-Tab";
+    };
   };
 
   config = lib.mkIf config.smind.desktop.gnome.minimal-hotkeys {
@@ -272,8 +277,8 @@
                 toggle-on-all-workspaces = empty;
                 unmaximize = empty;
 
-                switch-applications = empty; # system windows with overview
-                switch-windows = [ "<Super>tab" ]; # app windows with overview
+                switch-applications = if config.smind.desktop.gnome.switch-applications then [ "<Super>tab" ] else empty; # system windows with overview
+                switch-windows = if !config.smind.desktop.gnome.switch-applications then [ "<Super>tab" ] else empty; # app windows with overview
 
                 cycle-group = [ "<Super>grave" ]; # app windows without overview
 

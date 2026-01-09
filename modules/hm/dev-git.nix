@@ -46,9 +46,10 @@
 
         receive = { fsckObjects = true; };
         status = { submodulesummary = true; };
-        submodule = { recurse = true; };
+        submodule = { recurse = false; };
+        diff = { submodule = "log"; };
         pack = { packSizeLimit = "2g"; };
-        fetch = { prune = "false"; };
+        fetch = { prune = "false";  recurseSubmodules = "true"; };
         rebase = { autoStash = true; };
         help = { autocorrect = 3; };
         init = { defaultBranch = "main"; };
