@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
-set -x
 set -e
 
+# Host configurations: "platform owner fqn"
+# fqn="!" means use hostname as-is (local)
 declare -A known_hosts
 known_hosts["pavel-am5"]="linux pavel !"
 known_hosts["pavel-fw"]="linux pavel !"
@@ -18,187 +19,273 @@ declare -A owner_identities
 owner_identities["pavel"]="age1ax4x0pwe00clawkp5zn7qdf5e2tvuu0echvachd0pv5hm8hq9qnswqpzek"
 owner_identities["infra"]="age1ax4x0pwe00clawkp5zn7qdf5e2tvuu0echvachd0pv5hm8hq9qnswqpzek"
 
-THISHOST="`hostname -s`"
-HOSTS=()
-DO_REFRESH=0
-DO_SWITCH=0
-DO_REKEY=0
-DO_GIT=1
-MESSAGE=""
+THISHOST="$(hostname -s)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOTS=/nix/var/nix/gcroots/my-builds
 
-function workdir() {
-    ORIGIN="$(cd "$(dirname "$0")" && pwd)"
-    pushd .
-    cd "$ORIGIN"
+# Options
+HOSTS=()
+DO_REFRESH=false
+DO_SWITCH=false
+DO_REKEY=false
+DO_GIT=true
+DO_LIST=false
+MESSAGE=""
+VERBOSE=false
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS] [HOST...]
+
+Build and deploy NixOS/nix-darwin configurations.
+
+If no HOST is specified, builds the current host (${THISHOST}).
+
+Options:
+  -s, --switch      Switch to the new configuration after building
+  -k, --rekey       Rekey age secrets for the specified hosts before building
+  -r, --refresh     Update flake inputs before building
+  -n, --no-git      Skip git commit and push
+  -m, --message=MSG Custom git commit message (default: "autosave (<host> / <os>)")
+  -l, --list        List known hosts and exit
+  -v, --verbose     Enable verbose output (set -x)
+  -h, --help        Show this help message
+
+Examples:
+  $(basename "$0")                  # Build current host
+  $(basename "$0") -s               # Build and switch current host
+  $(basename "$0") -k -s            # Rekey, build, and switch current host
+  $(basename "$0") o1 o2            # Build o1 and o2
+  $(basename "$0") -k o1 o2         # Rekey and build o1 and o2
+  $(basename "$0") -r -s            # Update flake, build, and switch
+  $(basename "$0") -n               # Build without git operations
+
+Known hosts:
+EOF
+    for host in "${!known_hosts[@]}"; do
+        IFS=' ' read -r platform owner fqn <<< "${known_hosts[$host]}"
+        printf "  %-16s %s (%s)\n" "$host" "$platform" "$owner"
+    done | sort
+    exit 0
 }
 
-function variables() {
-    ROOTS=/nix/var/nix/gcroots/my-builds
-    if [ "$MESSAGE" == "" ]; then
+list_hosts() {
+    echo "Known hosts:"
+    for host in "${!known_hosts[@]}"; do
+        IFS=' ' read -r platform owner fqn <<< "${known_hosts[$host]}"
+        printf "  %-16s %-8s %-8s %s\n" "$host" "$platform" "$owner" "$fqn"
+    done | sort
+    exit 0
+}
+
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -s|--switch)
+                DO_SWITCH=true
+                shift
+                ;;
+            -k|--rekey)
+                DO_REKEY=true
+                shift
+                ;;
+            -r|--refresh)
+                DO_REFRESH=true
+                shift
+                ;;
+            -n|--no-git)
+                DO_GIT=false
+                shift
+                ;;
+            -m|--message)
+                MESSAGE="$2"
+                shift 2
+                ;;
+            --message=*)
+                MESSAGE="${1#*=}"
+                shift
+                ;;
+            -m=*)
+                MESSAGE="${1#*=}"
+                shift
+                ;;
+            -l|--list)
+                DO_LIST=true
+                shift
+                ;;
+            -v|--verbose)
+                VERBOSE=true
+                shift
+                ;;
+            -h|--help)
+                usage
+                ;;
+            -*)
+                echo "Error: Unknown option: $1" >&2
+                echo "Use --help for usage information." >&2
+                exit 1
+                ;;
+            *)
+                HOSTS+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    # Default to current host if none specified
+    if [[ ${#HOSTS[@]} -eq 0 ]]; then
+        HOSTS=("$THISHOST")
+    fi
+
+    # Default commit message
+    if [[ -z "$MESSAGE" ]]; then
         MESSAGE="autosave ($(hostname) / $(uname))"
     fi
 }
 
-function sethosts() {
-    hosts=("$@")
-
-    if [[ ${#hosts[@]} == 0 ]]; then
-        hosts=("$THISHOST")
-    fi
-
-    if [[ "${hosts[0]}" == "all" ]]; then
-        hosts=("$THISHOST")
-    fi
+validate_hosts() {
+    for host in "${HOSTS[@]}"; do
+        if [[ -z "${known_hosts[$host]}" ]]; then
+            echo "Error: Unknown host '$host'" >&2
+            echo "Use --list to see known hosts." >&2
+            exit 1
+        fi
+    done
 }
 
-function refresh() {
-    if [[ $DO_REFRESH == "1" ]]; then
-        echo "Will update..."
-        nix flake update
-    else
-        echo "Using existing version"
-    fi
-}
-
-function add_all() {
+add_all() {
     git add .
     git submodule foreach git add .
 }
-function commit_and_push() {
-    if [[ $DO_GIT == "1" ]]; then
+
+commit_and_push() {
+    if [[ "$DO_GIT" == "true" ]]; then
         git submodule foreach "git diff-index --quiet HEAD || (git add -A && git commit -m \"${MESSAGE}\")"
         git diff-index --quiet HEAD || (git add -A && git commit -m "${MESSAGE}")
-        # if [[ $(git diff --stat) != '' || $(git diff --staged --stat) != '' ]]; then
-        #     git commit -am "${MESSAGE}"
-        # fi
         git push --recurse-submodules=on-demand
     fi
 }
 
-function rekey() {
-    if [[ $DO_REKEY == "1" ]]; then
-        echo "Will rekey: ${hosts[*]}"
-        add_all
-        for HOST in "${hosts[@]}"; do
-            re="^([a-z0-9]+)[[:space:]]+([A-Za-z0-9]+)[[:space:]]+(.+)$"
-            host_data=${known_hosts["$HOST"]}
-            [[ "${host_data}" =~ $re ]] && HOST_OWNER="${BASH_REMATCH[2]}"
+do_refresh() {
+    if [[ "$DO_REFRESH" == "true" ]]; then
+        echo "==> Updating flake inputs..."
+        nix flake update
+    fi
+}
 
-            IDENTITY="${owner_identities[$HOST_OWNER]}"
-            if [[ -z "$IDENTITY" ]]; then
-                echo "Warning: No identity configured for owner '$HOST_OWNER', skipping rekey for $HOST"
+do_rekey() {
+    if [[ "$DO_REKEY" == "true" ]]; then
+        echo "==> Rekeying secrets for: ${HOSTS[*]}"
+        add_all
+        local system
+        system="$(uname -m)-$(uname -s | tr '[:upper:]' '[:lower:]')"
+
+        for host in "${HOSTS[@]}"; do
+            IFS=' ' read -r _ owner _ <<< "${known_hosts[$host]}"
+
+            local identity="${owner_identities[$owner]}"
+            if [[ -z "$identity" ]]; then
+                echo "Warning: No identity configured for owner '$owner', skipping rekey for $host"
                 continue
             fi
 
-            export AGENIX_REKEY_PRIMARY_IDENTITY="$IDENTITY"
+            echo "    Rekeying $host (owner: $owner)..."
+            export AGENIX_REKEY_PRIMARY_IDENTITY="$identity"
             export AGENIX_REKEY_PRIMARY_IDENTITY_ONLY=true
-            # Use per-host agenix-rekey configuration to only evaluate/rekey this host
-            nix run ".?submodules=1#agenix-rekey-hosts.${HOST}.$(uname -m)-$(uname -s | tr '[:upper:]' '[:lower:]').rekey"
+            nix run ".?submodules=1#agenix-rekey-hosts.${host}.${system}.rekey"
         done
     fi
 }
 
-function rebuild() {
-    echo "Will build: ${hosts[*]}"
+do_build() {
+    echo "==> Building: ${HOSTS[*]}"
     add_all
-    for HOST in "${hosts[@]}"; do
-        re="^([a-z0-9]+)[[:space:]]+([A-Za-z0-9]+)[[:space:]]+(.+)$"
-        host_data=${known_hosts["$HOST"]}
-        [[ "${host_data}" =~ $re ]] && HOST_PLATFORM="${BASH_REMATCH[1]}" && HOST_OWNER="${BASH_REMATCH[2]}"
+    mkdir -p "$ROOTS"
 
-        case "${HOST_PLATFORM}" in
-        darwin)
-            set -x
-            nix build ".?submodules=1#darwinConfigurations.${HOST}.system" --out-link "${ROOTS}/${HOST}" --extra-experimental-features 'nix-command flakes'
-            set +x
-            ;;
-        linux)
-            mkdir -p "$ROOTS"
-            set -x
-            nix build ".?submodules=1#nixosConfigurations.${HOST}.config.system.build.toplevel" --out-link "${ROOTS}/${HOST}" --extra-experimental-features 'nix-command flakes'
-            #set +x
-            ;;
+    for host in "${HOSTS[@]}"; do
+        IFS=' ' read -r platform _ _ <<< "${known_hosts[$host]}"
+
+        echo "    Building $host ($platform)..."
+        case "$platform" in
+            darwin)
+                nix build ".?submodules=1#darwinConfigurations.${host}.system" \
+                    --out-link "${ROOTS}/${host}"
+                ;;
+            linux)
+                nix build ".?submodules=1#nixosConfigurations.${host}.config.system.build.toplevel" \
+                    --out-link "${ROOTS}/${host}"
+                ;;
+            *)
+                echo "Error: Unknown platform '$platform' for host '$host'" >&2
+                exit 1
+                ;;
         esac
     done
 
     commit_and_push
 }
 
-function switch() {
-    if [[ $DO_SWITCH == "1" ]]; then
-        echo "Will switch: " "${hosts[@]}"
+do_switch() {
+    if [[ "$DO_SWITCH" == "true" ]]; then
+        echo "==> Switching: ${HOSTS[*]}"
         add_all
-        for HOST in "${hosts[@]}"; do
-            re="^([a-z0-9]+)[[:space:]]+([A-Za-z0-9]+)[[:space:]]+(.+)$"
-            host_data=${known_hosts["$HOST"]}
-            [[ "${host_data}" =~ $re ]] && HOST_PLATFORM="${BASH_REMATCH[1]}" && HOST_OWNER="${BASH_REMATCH[2]}" && HOST_FQN="${BASH_REMATCH[3]}"
 
-            if [[ "$HOST_FQN" == "!" ]]; then
-                HOST_FQN=$HOST
-            fi
+        for host in "${HOSTS[@]}"; do
+            IFS=' ' read -r platform _ fqn <<< "${known_hosts[$host]}"
+            local closure
+            closure=$(readlink -f "${ROOTS}/${host}")
 
-            case "${HOST_PLATFORM}" in
-            darwin)
-                CLOSURE=$(readlink -f "${ROOTS}/${HOST}")
-                set -x
-                if [[ "$THISHOST" == "$HOST" ]]; then
-                    "${CLOSURE}/sw/bin/darwin-rebuild" switch --flake .
-                else
-                    nix copy --to "ssh://${HOST_FQN}" "${ROOTS}/${HOST}" --extra-experimental-features 'nix-command flakes'
-                    # full disk access must be enabled for ssh users (same pref pane where you enable ssh)
-                    ssh -t "${HOST_FQN}" sudo -H --preserve-env=PATH env nix-env -p /nix/var/nix/profiles/system --set "$CLOSURE"
-                    ssh -t "${HOST_FQN}" "sudo ${CLOSURE}/sw/bin/darwin-rebuild" activate
-                fi
-                set +x
-                ;;
-            linux)
-                CLOSURE=$(readlink -f "${ROOTS}/${HOST}")
-                set -x
-                #nixos-rebuild --flake ".#${HOST}" --target-host "root@${HOST}" --option --out-link "./retain/${HOST}" --build-host localhost switch
-                if [[ "$THISHOST" == "$HOST" ]]; then
-                    sudo nix-env -p /nix/var/nix/profiles/system --set "$CLOSURE"
-                    sudo /nix/var/nix/profiles/system/bin/switch-to-configuration switch
-                else
-                    nix copy --to "ssh://root@${HOST_FQN}" "${ROOTS}/${HOST}" --extra-experimental-features 'nix-command flakes'
-                    ssh "root@$HOST_FQN" nix-env -p /nix/var/nix/profiles/system --set "$CLOSURE"
-                    ssh "root@$HOST_FQN" /nix/var/nix/profiles/system/bin/switch-to-configuration switch
-                fi
-                ;;
+            # Use hostname if fqn is "!"
+            [[ "$fqn" == "!" ]] && fqn="$host"
+
+            echo "    Switching $host..."
+            case "$platform" in
+                darwin)
+                    if [[ "$THISHOST" == "$host" ]]; then
+                        "${closure}/sw/bin/darwin-rebuild" switch --flake .
+                    else
+                        nix copy --to "ssh://${fqn}" "${ROOTS}/${host}"
+                        ssh -t "${fqn}" sudo -H --preserve-env=PATH env nix-env -p /nix/var/nix/profiles/system --set "$closure"
+                        ssh -t "${fqn}" "sudo ${closure}/sw/bin/darwin-rebuild" activate
+                    fi
+                    ;;
+                linux)
+                    if [[ "$THISHOST" == "$host" ]]; then
+                        sudo nix-env -p /nix/var/nix/profiles/system --set "$closure"
+                        sudo /nix/var/nix/profiles/system/bin/switch-to-configuration switch
+                    else
+                        nix copy --to "ssh://root@${fqn}" "${ROOTS}/${host}"
+                        ssh "root@$fqn" nix-env -p /nix/var/nix/profiles/system --set "$closure"
+                        ssh "root@$fqn" /nix/var/nix/profiles/system/bin/switch-to-configuration switch
+                    fi
+                    ;;
             esac
         done
+
         commit_and_push
     fi
 }
 
-for i in "$@"; do
-    case $i in
-    -r | --refresh)
-        DO_REFRESH=1
-        ;;
-    -s | --switch)
-        DO_SWITCH=1
-        ;;
-    -k | --rekey)
-        DO_REKEY=1
-        ;;
-    -ng | --no-git)
-        DO_GIT=0
-        ;;
-    -m=*)
-        MESSAGE="${i#*=}"
-        ;;
-    *)
-        HOSTS+=("$i")
-        ;;
-    esac
-    shift
-done
+main() {
+    parse_args "$@"
 
-variables
-sethosts "${HOSTS[@]}"
-workdir
-refresh
-rekey
-rebuild
-switch
-popd
+    if [[ "$DO_LIST" == "true" ]]; then
+        list_hosts
+    fi
+
+    if [[ "$VERBOSE" == "true" ]]; then
+        set -x
+    fi
+
+    validate_hosts
+    cd "$SCRIPT_DIR"
+
+    do_refresh
+    do_rekey
+    do_build
+    do_switch
+
+    echo "==> Done!"
+}
+
+main "$@"
