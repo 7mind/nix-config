@@ -54,6 +54,7 @@ in
       (writeShellScriptBin "iperfc" ''
         set -e
         export IPERF3_PASSWORD="$(cat '${config.age.secrets.iperf-password.path}')"
+        set -x
         ${iperf}/bin/iperf --username "${user}" --rsa-public-key-path "${config.age.secrets.iperf-public-key.path}" -c $*
       '')
     ] else [ ]);

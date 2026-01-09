@@ -14,7 +14,7 @@ in
     description = "Enable automatic suspend on idle (typically for laptops)";
   };
 
-  config = lib.mkIf (kdeEnabled && !cfg.auto-suspend.enable) {
-    programs.plasma.powerdevil.AC.autoSuspend.action = "nothing";
-  };
+  #config = lib.mkIf (kdeEnabled && !cfg.auto-suspend.enable) {
+  #  programs.plasma.powerdevil.AC.autoSuspend.action = "nothing";
+  #};
 }

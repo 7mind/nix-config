@@ -257,6 +257,8 @@ in
 
     ssh.mode = "safe";
 
+    iperf.enable = true;
+
     isDesktop = true;
     hw.cpu.isAmd = true;
     hw.amd.gpu.enable = true;
