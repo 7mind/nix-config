@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+set -e
+
+# TPM Enrollment for Age Master Identity
+#
+# This script sets up TPM-protected age identity for rekeying secrets.
+# It takes a password-protected age key and re-encrypts it to the TPM.
+#
+# Files:
+#   ~/age-key.age            - Password-protected master key (input, kept as backup)
+#   ~/.age/tpm-identity.txt  - TPM-bound identity (handle, not the actual key)
+#   ~/.age/master-key.age    - Master key encrypted to TPM identity
+#
+# The master key can only be decrypted on this machine with working TPM.
+
+AGE_DIR="${HOME}/.age"
+TPM_IDENTITY="${AGE_DIR}/tpm-identity.txt"
+MASTER_KEY_TPM="${AGE_DIR}/master-key.age"
+MASTER_KEY_PASSWORD="${1:-${HOME}/age-key.age}"
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [PASSWORD_PROTECTED_KEY]
+
+Enroll this machine's TPM to protect the age master identity.
+
+Arguments:
+  PASSWORD_PROTECTED_KEY    Path to password-protected age key (default: ~/age-key.age)
+
+This script will:
+  1. Generate a TPM-bound age identity (if not exists)
+  2. Decrypt your password-protected key (prompts for password)
+  3. Re-encrypt it to the TPM identity
+  4. Store the TPM-encrypted key at ~/.age/master-key.age
+
+The original password-protected key is kept as backup for other machines.
+EOF
+    exit 0
+}
+
+[[ "$1" == "-h" || "$1" == "--help" ]] && usage
+
+# Check for age-plugin-tpm
+if ! command -v age-plugin-tpm &>/dev/null; then
+    echo "Error: age-plugin-tpm not found"
+    echo "Add it to your system packages or run: nix shell nixpkgs#age-plugin-tpm"
+    exit 1
+fi
+
+# Check TPM availability by trying to generate a test (dry run not available, so just check help works)
+if ! age-plugin-tpm --help &>/dev/null; then
+    echo "Error: age-plugin-tpm not working properly"
+    exit 1
+fi
+
+# Check if TPM device is accessible
+if [[ ! -e /dev/tpmrm0 && ! -e /dev/tpm0 ]]; then
+    echo "Error: No TPM device found (/dev/tpmrm0 or /dev/tpm0)"
+    echo "Make sure TPM is enabled in BIOS and kernel module is loaded"
+    exit 1
+fi
+
+mkdir -p "$AGE_DIR"
+chmod 700 "$AGE_DIR"
+
+# Generate TPM identity if not exists
+if [[ ! -f "$TPM_IDENTITY" ]]; then
+    echo "==> Generating TPM-bound identity..."
+    age-plugin-tpm --generate -o "$TPM_IDENTITY"
+    chmod 600 "$TPM_IDENTITY"
+    echo "    Created: $TPM_IDENTITY"
+else
+    echo "==> TPM identity exists: $TPM_IDENTITY"
+fi
+
+# Extract public key from TPM identity
+# Format: "# Recipient: age1tpm1..."
+TPM_PUBKEY=$(grep -o 'age1tpm1[a-z0-9]*' "$TPM_IDENTITY" | head -1)
+if [[ -z "$TPM_PUBKEY" ]]; then
+    # Try converting identity to recipient
+    TPM_PUBKEY=$(age-plugin-tpm --convert < "$TPM_IDENTITY" 2>/dev/null | grep -o 'age1[a-z0-9]*' | head -1)
+fi
+if [[ -z "$TPM_PUBKEY" ]]; then
+    echo "Error: Could not extract public key from TPM identity"
+    exit 1
+fi
+echo "    TPM public key: $TPM_PUBKEY"
+
+# Check for password-protected master key
+if [[ ! -f "$MASTER_KEY_PASSWORD" ]]; then
+    echo "Error: Password-protected master key not found: $MASTER_KEY_PASSWORD"
+    echo ""
+    echo "Create one with:"
+    echo "    age -p -o ~/age-key.age ~/age-key.txt && rm ~/age-key.txt"
+    exit 1
+fi
+
+# Check if already enrolled
+if [[ -f "$MASTER_KEY_TPM" ]]; then
+    echo "==> TPM-encrypted master key already exists: $MASTER_KEY_TPM"
+    read -p "    Re-enroll from password-protected key? [y/N] " -n 1 -r
+    echo
+    [[ ! $REPLY =~ ^[Yy]$ ]] && exit 0
+fi
+
+echo "==> Decrypting password-protected master key..."
+echo "    (Enter password for $MASTER_KEY_PASSWORD)"
+
+# Decrypt password-protected key to memory, re-encrypt to TPM
+# Using /dev/shm for temporary storage (in-memory)
+TEMP_KEY="/dev/shm/age-enroll-$$"
+trap 'rm -f "$TEMP_KEY"' EXIT
+
+if ! age -d -o "$TEMP_KEY" "$MASTER_KEY_PASSWORD"; then
+    echo "Error: Failed to decrypt password-protected key"
+    exit 1
+fi
+chmod 600 "$TEMP_KEY"
+
+echo "==> Encrypting master key to TPM identity..."
+age -e -r "$TPM_PUBKEY" -o "$MASTER_KEY_TPM" "$TEMP_KEY"
+chmod 600 "$MASTER_KEY_TPM"
+echo "    Created: $MASTER_KEY_TPM"
+
+# Clean up temp key immediately
+rm -f "$TEMP_KEY"
+
+# Verify decryption works
+echo "==> Verifying TPM decryption..."
+if age -d -i "$TPM_IDENTITY" "$MASTER_KEY_TPM" >/dev/null 2>&1; then
+    echo "    Decryption successful!"
+else
+    echo "Error: Failed to decrypt with TPM identity"
+    echo "TPM enrollment may have failed. Check TPM status."
+    rm -f "$MASTER_KEY_TPM"
+    exit 1
+fi
+
+echo ""
+echo "==> Enrollment complete!"
+echo ""
+echo "The master key is now TPM-protected and can only be used on this machine."
+echo "Keep ~/age-key.age as backup for enrolling other machines."
+echo ""
+echo "To use with ./setup -k, the script will automatically decrypt via TPM."

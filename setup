@@ -2,8 +2,19 @@
 
 set -e
 
-# Master identity pubkeys for each group (used for rekeying)
-declare -A group_identities
+# Master identity pubkeys for each group
+declare -A group_pubkeys
+
+# TPM-protected identity paths (can be overridden in private/setup-env)
+AGE_TPM_IDENTITY="${AGE_TPM_IDENTITY:-${HOME}/.age/tpm-identity.txt}"
+AGE_MASTER_KEY_TPM="${AGE_MASTER_KEY_TPM:-${HOME}/.age/master-key.age}"
+# Runtime decryption path - must match defaults in age.nix module
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    AGE_RUNTIME_KEY="/tmp/age-master-key"
+else
+    AGE_RUNTIME_KEY="/dev/shm/age-master-key"
+fi
+AGE_DECRYPTED_KEY=""  # Set during rekey
 
 THISHOST="$(hostname -s)"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -259,10 +270,81 @@ do_refresh() {
     fi
 }
 
+get_master_identity() {
+    # Returns path to the master identity file
+    # Linux: Uses TPM to decrypt
+    # macOS: Prompts for password to decrypt
+
+    AGE_DECRYPTED_KEY="$AGE_RUNTIME_KEY"
+    trap 'rm -f "$AGE_DECRYPTED_KEY"' EXIT
+
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        # macOS: Use password-protected key
+        local password_key="${HOME}/age-key.age"
+        if [[ ! -f "$password_key" ]]; then
+            echo "Error: Password-protected master key not found: $password_key" >&2
+            return 1
+        fi
+
+        echo "    Decrypting master key (enter password)..." >&2
+        if age -d -o "$AGE_DECRYPTED_KEY" "$password_key"; then
+            chmod 600 "$AGE_DECRYPTED_KEY"
+            echo "$AGE_DECRYPTED_KEY"
+            return 0
+        else
+            echo "Error: Failed to decrypt master key" >&2
+            rm -f "$AGE_DECRYPTED_KEY"
+            return 1
+        fi
+    else
+        # Linux: Use TPM
+        if [[ ! -f "$AGE_MASTER_KEY_TPM" ]]; then
+            echo "Error: TPM-encrypted master key not found: $AGE_MASTER_KEY_TPM" >&2
+            echo "Run ./scripts/enroll-tpm to set up TPM protection" >&2
+            return 1
+        fi
+
+        if [[ ! -f "$AGE_TPM_IDENTITY" ]]; then
+            echo "Error: TPM identity not found: $AGE_TPM_IDENTITY" >&2
+            echo "Run ./scripts/enroll-tpm to set up TPM protection" >&2
+            return 1
+        fi
+
+        if ! command -v age-plugin-tpm &>/dev/null; then
+            echo "Error: age-plugin-tpm not found" >&2
+            echo "Install it or run: nix shell nixpkgs#age-plugin-tpm" >&2
+            return 1
+        fi
+
+        echo "    Decrypting master key via TPM..." >&2
+        if age -d -i "$AGE_TPM_IDENTITY" -o "$AGE_DECRYPTED_KEY" "$AGE_MASTER_KEY_TPM" 2>/dev/null; then
+            chmod 600 "$AGE_DECRYPTED_KEY"
+            echo "$AGE_DECRYPTED_KEY"
+            return 0
+        else
+            echo "Error: Failed to decrypt master key with TPM" >&2
+            echo "Is the TPM available? Try: age -d -i $AGE_TPM_IDENTITY $AGE_MASTER_KEY_TPM" >&2
+            rm -f "$AGE_DECRYPTED_KEY"
+            return 1
+        fi
+    fi
+}
+
+cleanup_decrypted_key() {
+    if [[ -n "$AGE_DECRYPTED_KEY" && -f "$AGE_DECRYPTED_KEY" ]]; then
+        rm -f "$AGE_DECRYPTED_KEY"
+        AGE_DECRYPTED_KEY=""
+    fi
+}
+
 do_rekey() {
     if [[ "$DO_REKEY" == "true" ]]; then
         echo "==> Rekeying secrets for: ${HOSTS[*]}"
         add_all
+
+        # Decrypt master key to the path expected by Nix config
+        get_master_identity >/dev/null || exit 1
+
         local system
         system="$(uname -m)-$(uname -s | tr '[:upper:]' '[:lower:]')"
 
@@ -270,17 +352,17 @@ do_rekey() {
             local group
             group=$(get_host_attr "$host" "group")
 
-            local identity="${group_identities[$group]}"
-            if [[ -z "$identity" ]]; then
-                echo "Warning: No identity configured for group '$group', skipping rekey for $host"
+            local pubkey="${group_pubkeys[$group]}"
+            if [[ -z "$pubkey" ]]; then
+                echo "Warning: No pubkey configured for group '$group', skipping rekey for $host"
                 continue
             fi
 
             echo "    Rekeying $host (group: $group)..."
-            export AGENIX_REKEY_PRIMARY_IDENTITY="$identity"
-            export AGENIX_REKEY_PRIMARY_IDENTITY_ONLY=true
             nix run ".?submodules=1#agenix-rekey-hosts.${host}.${system}.rekey"
         done
+
+        cleanup_decrypted_key
     fi
 }
 

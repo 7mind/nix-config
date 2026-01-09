@@ -2,7 +2,9 @@
 
 let
   cfg = config.smind.age;
-  hasMasterIdentity = cfg.masterIdentity.identity != null && cfg.masterIdentity.pubkey != null;
+  # Runtime path for TPM-decrypted master key (setup script writes here)
+  defaultIdentityPath = if cfg-meta.isLinux then "/dev/shm/age-master-key" else "/tmp/age-master-key";
+  hasMasterIdentity = cfg.masterIdentity.pubkey != null;
 
   # Load owner's secrets directly
   owner = config.smind.host.owner;
@@ -23,9 +25,9 @@ in
 
   options.smind.age.masterIdentity = {
     identity = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
-      description = "Path to the age identity file (e.g., /home/pavel/age-key.txt)";
+      type = lib.types.str;
+      default = defaultIdentityPath;
+      description = "Path to the age identity file. Defaults to /dev/shm/age-master-key (Linux) or /tmp/age-master-key (Darwin). The setup script decrypts the TPM-protected key to this location at runtime.";
     };
 
     pubkey = lib.mkOption {

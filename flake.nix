@@ -129,6 +129,7 @@
       devShells.default = pkgs.mkShell {
         packages = with pkgs; [
           agenix-rekey
+          age-plugin-tpm
           nixfmt-classic
           # inputs.json2nix.packages."${system}".json2nix
         ];
