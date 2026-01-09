@@ -77,6 +77,10 @@ in
         selection-clear-on-copy = true;
         clipboard-paste-protection = false;
 
+        # Always use block cursor, ignore app requests to change it
+        cursor-style = "block";
+        cursor-style-blink = false;
+
         keybind = [
           "clear"
 

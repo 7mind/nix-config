@@ -1,4 +1,4 @@
-{ config, lib, ... }:
+{ config, lib, pkgs, ... }:
 
 {
   options = {
@@ -7,20 +7,10 @@
       default = config.smind.isDesktop;
       description = "Enable Android Debug Bridge (ADB) support";
     };
-
-    smind.dev.adb.users = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      default = [ ];
-      example = [ "pavel" ];
-      description = "Users to add to adbusers group";
-    };
   };
 
   config = lib.mkIf config.smind.dev.adb.enable {
-    programs.adb.enable = true;
-
-    users.users = lib.genAttrs config.smind.dev.adb.users (user: {
-      extraGroups = [ "adbusers" ];
-    });
+    # systemd 258+ handles uaccess rules automatically, just need the package
+    environment.systemPackages = [ pkgs.android-tools ];
   };
 }

@@ -175,6 +175,8 @@
 
       # Electron apps: use native Wayland instead of XWayland
       ELECTRON_OZONE_PLATFORM_HINT = "wayland";
+
+      GNOME_SHELL_SLOWDOWN_FACTOR = "0.4";
     };
 
     # Keyring and SSH agent via shared module

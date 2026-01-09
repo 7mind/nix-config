@@ -91,7 +91,6 @@ in
 
     # GDM configuration
     (lib.mkIf (selectedBackend == "gdm") {
-      services.xserver.enable = true;
       services.displayManager.gdm.enable = true;
 
       # Speed up GDM startup
@@ -172,6 +171,7 @@ in
     # x11
     (lib.mkIf (config.smind.x11.enable) {
       services.xserver.enable = true;
+      services.xserver.desktopManager.xterm.enable = false;
     })
   ];
 }

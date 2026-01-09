@@ -11,6 +11,10 @@ in
       (import_if_exists "${cfg-meta.paths.secrets}/pavel/age-secrets.nix")
     ];
 
+  nixpkgs.config.permittedInsecurePackages = [
+    "python3.13-ecdsa-0.19.1" # trezor dependency, CVE-2024-23342
+  ];
+
   nix = {
     settings = {
       max-jobs = 2;
@@ -203,7 +207,6 @@ in
     age.enable = true;
     roles.desktop.generic-gnome = true;
     isLaptop = true;
-    dev.adb.users = [ "pavel" ];
     dev.wireshark.users = [ "pavel" ];
 
     power-management.enable = true;
@@ -256,7 +259,7 @@ in
       nvidiaBusId = "PCI:194:0:0";
       amdgpuBusId = "PCI:195:0:0";
     };
-    # hw.trezor.enable = true;
+    hw.trezor.enable = true;
     hw.ledger.enable = true;
     containers.docker.enable = true;
 
