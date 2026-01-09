@@ -1,11 +1,9 @@
-{ config, cfg-meta, lib, pkgs, cfg-const, import_if_exists, import_if_exists_or, cfg-flakes, ... }:
+{ config, cfg-meta, lib, pkgs, cfg-const, import_if_exists, cfg-flakes, ... }:
 
 {
-  imports =
-    [
-      ./hardware-configuration.nix
-      (import_if_exists_or "${cfg-meta.paths.secrets}/pavel/age-rekey.nix" (import "${cfg-meta.paths.modules}/age-dummy.nix"))
-    ];
+  imports = [
+    ./hardware-configuration.nix
+  ];
 
   nix = {
     settings = {

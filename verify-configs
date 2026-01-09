@@ -29,6 +29,9 @@ run_nix() {
     "$@"
 }
 
+git add .
+git submodule foreach git add .
+
 echo "=== Discovering configurations ==="
 
 nixos_hosts=$(run_nix nix eval ".?submodules=1#nixosConfigurations" --apply 'x: builtins.attrNames x' --json 2>/dev/null | jq -r '.[]')

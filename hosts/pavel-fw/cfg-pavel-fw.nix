@@ -1,15 +1,12 @@
-{ config, cfg-meta, lib, pkgs, cfg-const, import_if_exists, import_if_exists_or, cfg-flakes, ... }:
+{ config, cfg-meta, lib, pkgs, cfg-const, import_if_exists, cfg-flakes, ... }:
 
 let
   luksDevice = "/dev/disk/by-uuid/ebeec38b-52cd-4113-8d91-84e71df293af";
 in
 {
-  imports =
-    [
-      ./hardware-configuration.nix
-      (import_if_exists_or "${cfg-meta.paths.secrets}/pavel/age-rekey.nix" (import "${cfg-meta.paths.modules}/age-dummy.nix"))
-      (import_if_exists "${cfg-meta.paths.secrets}/pavel/age-secrets.nix")
-    ];
+  imports = [
+    ./hardware-configuration.nix
+  ];
 
   nixpkgs.config.permittedInsecurePackages = [
     "python3.13-ecdsa-0.19.1" # trezor dependency, CVE-2024-23342

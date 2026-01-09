@@ -1,9 +1,8 @@
-{ lib, pkgs, cfg-meta, import_if_exists, import_if_exists_or, ... }:
+{ lib, pkgs, cfg-meta, import_if_exists, ... }:
 
 {
   imports = [
     (import_if_exists "${cfg-meta.paths.private}/users/pavel/hm/home-pavel-generic-private.nix")
-    (import_if_exists_or "${cfg-meta.paths.secrets}/pavel/age-rekey.nix" (import "${cfg-meta.paths.modules}/age-dummy.nix"))
   ];
 
   # home.activation.aider-config =

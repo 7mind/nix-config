@@ -67,7 +67,8 @@
 
           - **Sandboxed**: You run in a bubblewrap sandbox with access to the project directory, /nix, and /tmp/exchange
           - **Write restrictions**: Only write to the project directory and /tmp/exchange - all other locations are sandboxed and changes will be lost!
-          - **For system interaction**: When you need to access $HOME, run system commands, or reach anything outside the sandbox, use this workflow. Avoid this for regular project work - use direct execution instead:
+          - **Direct execution**: Always run project commands directly (compilation, tests, linting, git, formatting, etc.) - these work fine in the sandbox. Only use the script workflow for true sandbox escapes.
+          - **For system interaction**: When you need to access $HOME, modify system configuration, or reach files outside the sandbox, use this workflow:
             1. Write a shell script to /tmp/exchange/{name}.sh
             2. Script structure MUST be:
                ```bash
@@ -210,7 +211,8 @@
         rules = config.programs.claude-code.memory.text;
       };
 
-      home.packages = with pkgs;
+      # Linux-only: bubblewrap sandbox and yolo-* wrapper scripts
+      home.packages = lib.optionals cfg-meta.isLinux (with pkgs;
         let
           inherit (pkgs) firejail-wrap;
         in
@@ -330,7 +332,7 @@
               "''${ENV_ARGS[@]}" \
               -- opencode "''${CMD_ARGS[@]}"
           '')
-        ];
+        ]);
     })
   ];
 }

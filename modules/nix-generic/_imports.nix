@@ -1,4 +1,5 @@
 [
+  ./age.nix
   ./builders.nix
   ./env-settings.nix
   ./fonts-apple.nix

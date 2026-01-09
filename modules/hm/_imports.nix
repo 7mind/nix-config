@@ -1,4 +1,5 @@
 [
+  ./age.nix
   ./autostart.nix
   ./cleanups.nix
   ./cosmic-keybindings.nix

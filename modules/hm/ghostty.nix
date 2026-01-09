@@ -45,6 +45,7 @@ in
 
     programs.ghostty = {
       enable = true;
+      package = lib.mkIf cfg-meta.isDarwin null; # On macOS, Ghostty is installed via Homebrew/DMG
       enableZshIntegration = true;
 
       settings = {
@@ -55,7 +56,7 @@ in
         window-padding-x = 8;
         window-padding-y = 5;
 
-        window-decoration = lib.mkIf outerConfig.smind.desktop.kde.enable "client"; # workaround for https://github.com/ghostty-org/ghostty/discussions/7439 on KDE
+        window-decoration = lib.mkIf (outerConfig.smind.desktop.kde.enable or false) "client"; # workaround for https://github.com/ghostty-org/ghostty/discussions/7439 on KDE
 
         window-width = 160;
         window-height = defaultRows;
@@ -139,6 +140,6 @@ in
       };
     };
 
-    home.packages = [ pkgs.ghostty ];
+    home.packages = lib.mkIf cfg-meta.isLinux [ pkgs.ghostty ];
   };
 }

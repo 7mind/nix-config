@@ -1,5 +1,8 @@
 { config, lib, ... }:
 
+let
+  ownerSecretsEnabled = config.smind.age.enable && config.smind.age.load-owner-secrets;
+in
 {
   options = {
     smind.infra.nix-build.enable = lib.mkOption {
@@ -23,7 +26,7 @@
         protocol = "ssh-ng";
         sshUser = "root";
         maxJobs = 2;
-        sshKey = lib.mkIf config.smind.age.enable "${config.age.secrets.builder-key.path}";
+        sshKey = lib.mkIf ownerSecretsEnabled "${config.age.secrets.builder-key.path}";
         publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSUxqclA0bHIrV1NnTDNrNWVBNis0Q0dZbXR6NlVpdEltWSszUkFSYU0wcnkgcm9vdEBmcmVzaG5peAo=";
         speedFactor = 32;
         supportedFeatures = [ "benchmark" "big-parallel" "kvm" ];
@@ -48,7 +51,7 @@
         system = "aarch64-linux";
         protocol = "ssh-ng";
         sshUser = "root";
-        sshKey = lib.mkIf config.smind.age.enable "${config.age.secrets.builder-key.path}";
+        sshKey = lib.mkIf ownerSecretsEnabled "${config.age.secrets.builder-key.path}";
         publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSU1ybldtV3hBa25nMXp4NktjUXVHYUpnQ1JWYUxjaDl4TXZrVnpTZSs2ekkgcm9vdEBuaXhvcwo=";
         maxJobs = 4;
         speedFactor = 4;
@@ -61,7 +64,7 @@
         system = "aarch64-linux";
         protocol = "ssh-ng";
         sshUser = "root";
-        sshKey = lib.mkIf config.smind.age.enable "${config.age.secrets.builder-key.path}";
+        sshKey = lib.mkIf ownerSecretsEnabled "${config.age.secrets.builder-key.path}";
         publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSUZPRFREbUZsUHVKM1hIVzI0TFlMY0pyVFpGNStmZzZITlVpSEtLdUpYZkQgcm9vdEBuaXhvcwo=";
         maxJobs = 4;
         speedFactor = 2;

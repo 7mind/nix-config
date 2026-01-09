@@ -8,4 +8,9 @@
       description = "Host is a macOS desktop system";
     };
   };
+
+  config = {
+    # macOS hosts are always desktops, so load owner secrets by default
+    smind.age.load-owner-secrets = lib.mkDefault true;
+  };
 }

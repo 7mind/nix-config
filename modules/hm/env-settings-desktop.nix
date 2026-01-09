@@ -16,7 +16,7 @@
       daemon.enable = true;
     };
 
-    programs.vicinae = {
+    programs.vicinae = lib.mkIf cfg-meta.isLinux {
       enable = true;
       systemd.enable = true;
       settings = {

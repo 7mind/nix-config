@@ -48,6 +48,9 @@ in
       smind = {
         isDesktop = lib.mkDefault true;
 
+        # Load owner-specific secrets (SSH keys, API tokens, etc.) on desktops
+        age.load-owner-secrets = lib.mkDefault true;
+
         hw.ledger.enable = lib.mkDefault false;
         hw.trezor.enable = lib.mkDefault false;
         hw.uhk-keyboard.enable = lib.mkDefault false;

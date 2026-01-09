@@ -1,11 +1,6 @@
-{ config, cfg-meta, import_if_exists, cfg-const, import_if_exists_or, ... }:
+{ config, cfg-meta, cfg-const, ... }:
 
 {
-  imports =
-    [
-      (import_if_exists_or "${cfg-meta.paths.secrets}/pavel/age-rekey.nix" (import "${cfg-meta.paths.modules}/age-dummy.nix"))
-    ];
-
   smind = {
     darwin.sysconfig.enable = true;
     darwin.brew.enable = true;

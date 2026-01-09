@@ -25,8 +25,11 @@
     '';
 
     # force overwrite config files to prevent "would be clobbered" errors
-    home.file."${config.xdg.configHome}/VSCodium/User/keybindings.json".force = true;
-    home.file."${config.xdg.configHome}/VSCodium/User/settings.json".force = true;
+    # Only needed on Linux where VSCodium may have existing config files
+    home.file = lib.optionalAttrs cfg-meta.isLinux {
+      "${config.xdg.configHome}/VSCodium/User/settings.json".force = true;
+      "${config.xdg.configHome}/VSCodium/User/keybindings.json".force = true;
+    };
 
     programs.vscode =
       {
