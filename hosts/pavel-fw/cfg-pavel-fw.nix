@@ -88,7 +88,6 @@ in
     pkgs.framework-tool # Swiss army knife CLI for Framework laptops
     pkgs.framework-tool-tui # TUI for controlling Framework hardware
     pkgs.powertop # Power consumption analysis
-    pkgs.qmk # QMK keyboard firmware CLI
 
     (pkgs.writeShellScriptBin "tpm-enroll-luks" ''
       set -euo pipefail
@@ -142,11 +141,7 @@ in
   # Power management via TuneD (replaces power-profiles-daemon)
   # Defaults: latency-performance on AC, powersave on battery
 
-  # QMK keyboard firmware support (Framework 16 uses QMK)
-  # Use https://keyboard.frame.work/ for configuration
-  hardware.keyboard.qmk.enable = true;
-
-  # Framework keyboard udev rules for web configurator access
+  # Framework keyboard udev rules for VIA web configurator access
   services.udev.extraRules = ''
     # Framework Laptop 16 Keyboard Module - ANSI (32ac:0012)
     # uaccess tag grants access to logged-in users via ACLs
