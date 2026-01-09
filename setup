@@ -4,12 +4,13 @@ set -e
 
 # Master identity pubkeys for each group (used for rekeying)
 declare -A group_identities
-group_identities["pavel"]="age1ax4x0pwe00clawkp5zn7qdf5e2tvuu0echvachd0pv5hm8hq9qnswqpzek"
-group_identities["infra"]="age1ax4x0pwe00clawkp5zn7qdf5e2tvuu0echvachd0pv5hm8hq9qnswqpzek"
 
 THISHOST="$(hostname -s)"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOTS=/nix/var/nix/gcroots/my-builds
+
+# Source private environment if it exists
+[[ -f "$SCRIPT_DIR/private/setup-env" ]] && source "$SCRIPT_DIR/private/setup-env"
 
 # Options
 HOSTS=()
