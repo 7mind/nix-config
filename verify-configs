@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")"
+
+show_trace=""
+parallel=""
+verbose=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -t|--trace) show_trace="--show-trace"; shift ;;
+        -p|--parallel) parallel=1; shift ;;
+        -v|--verbose) verbose=1; shift ;;
+        -h|--help)
+            echo "Usage: $0 [-t|--trace] [-p|--parallel] [-v|--verbose]"
+            echo "  -t, --trace     Show full stack trace on errors"
+            echo "  -p, --parallel  Evaluate all hosts in parallel"
+            echo "  -v, --verbose   Print nix commands being executed"
+            exit 0
+            ;;
+        *) echo "Unknown option: $1"; exit 1 ;;
+    esac
+done
+
+run_nix() {
+    if [[ -n "$verbose" ]]; then
+        echo "+ $*" >&2
+    fi
+    "$@"
+}
+
+echo "=== Discovering configurations ==="
+
+nixos_hosts=$(run_nix nix eval ".?submodules=1#nixosConfigurations" --apply 'x: builtins.attrNames x' --json 2>/dev/null | jq -r '.[]')
+darwin_hosts=$(run_nix nix eval ".?submodules=1#darwinConfigurations" --apply 'x: builtins.attrNames x' --json 2>/dev/null | jq -r '.[]')
+
+echo "NixOS hosts: $(echo $nixos_hosts | tr '\n' ' ')"
+echo "Darwin hosts: $(echo $darwin_hosts | tr '\n' ' ')"
+echo
+
+verify_host() {
+    local type=$1
+    local host=$2
+    local flake_attr
+
+    if [[ "$type" == "nixos" ]]; then
+        flake_attr=".?submodules=1#nixosConfigurations.$host.config.system.build.toplevel"
+    else
+        flake_attr=".?submodules=1#darwinConfigurations.$host.config.system.build.toplevel"
+    fi
+
+    echo "=== Verifying $type: $host ===" >&2
+    local cmd=(nix build "$flake_attr" --dry-run $show_trace)
+    if [[ -n "$verbose" ]]; then
+        echo "+ ${cmd[*]}" >&2
+    fi
+    if "${cmd[@]}" >/dev/null 2>&1; then
+        echo "OK: $host" >&2
+        echo "ok"
+    else
+        echo "FAILED: $host" >&2
+        "${cmd[@]}" >&2 || true
+        echo "fail"
+    fi
+}
+
+if [[ -n "$parallel" ]]; then
+    export -f verify_host
+    export show_trace verbose
+
+    results=$(
+        {
+            for host in $nixos_hosts; do echo "nixos $host"; done
+            for host in $darwin_hosts; do echo "darwin $host"; done
+        } | parallel --colsep ' ' verify_host {1} {2}
+    )
+
+    succeeded=$(echo "$results" | grep -c "^ok$" || true)
+    failed=$(echo "$results" | grep -c "^fail$" || true)
+else
+    failed=0
+    succeeded=0
+
+    for host in $nixos_hosts; do
+        result=$(verify_host nixos "$host")
+        if [[ "$result" == "ok" ]]; then
+            succeeded=$((succeeded + 1))
+        else
+            failed=$((failed + 1))
+        fi
+        echo
+    done
+
+    for host in $darwin_hosts; do
+        result=$(verify_host darwin "$host")
+        if [[ "$result" == "ok" ]]; then
+            succeeded=$((succeeded + 1))
+        else
+            failed=$((failed + 1))
+        fi
+        echo
+    done
+fi
+
+echo "=== Summary ==="
+echo "Succeeded: $succeeded"
+echo "Failed: $failed"
+
+exit $failed
