@@ -300,13 +300,13 @@ get_master_identity() {
         # Linux: Use TPM
         if [[ ! -f "$AGE_MASTER_KEY_TPM" ]]; then
             echo "Error: TPM-encrypted master key not found: $AGE_MASTER_KEY_TPM" >&2
-            echo "Run ./scripts/enroll-tpm to set up TPM protection" >&2
+            echo "Run ./enroll-tpm to set up TPM protection" >&2
             return 1
         fi
 
         if [[ ! -f "$AGE_TPM_IDENTITY" ]]; then
             echo "Error: TPM identity not found: $AGE_TPM_IDENTITY" >&2
-            echo "Run ./scripts/enroll-tpm to set up TPM protection" >&2
+            echo "Run ./enroll-tpm to set up TPM protection" >&2
             return 1
         fi
 
