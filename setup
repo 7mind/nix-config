@@ -43,12 +43,17 @@ Options:
   -v, --verbose     Enable verbose output (set -x)
   -h, --help        Show this help message
 
+Host specifiers:
+  HOST                 Individual host name (e.g., o1, pavel-fw)
+  +GROUP               All hosts in a group (e.g., +infra, +pavel)
+
 Examples:
   $(basename "$0")                  # Build current host
   $(basename "$0") -s               # Build and switch current host
   $(basename "$0") -k -s            # Rekey, build, and switch current host
   $(basename "$0") o1 o2            # Build o1 and o2
-  $(basename "$0") -k o1 o2         # Rekey and build o1 and o2
+  $(basename "$0") +infra           # Build all hosts in 'infra' group
+  $(basename "$0") -k +infra        # Rekey and build all infra hosts
   $(basename "$0") -r -s            # Update flake, build, and switch
   $(basename "$0") -n               # Build without git operations
 EOF
@@ -75,6 +80,72 @@ get_host_attr() {
         return
     fi
     echo "$meta" | jq -r ".$attr // empty"
+}
+
+get_hosts_by_group() {
+    local target_group="$1"
+    local hosts=()
+    for host in "${!HOST_META[@]}"; do
+        local group
+        group=$(get_host_attr "$host" "group")
+        if [[ "$group" == "$target_group" ]]; then
+            hosts+=("$host")
+        fi
+    done
+    echo "${hosts[@]}"
+}
+
+get_current_platform() {
+    case "$(uname -s)" in
+        Darwin) echo "darwin" ;;
+        Linux)  echo "linux" ;;
+        *)      echo "unknown" ;;
+    esac
+}
+
+expand_host_specifiers() {
+    local current_platform
+    current_platform=$(get_current_platform)
+    local expanded=()
+
+    for spec in "${HOSTS[@]}"; do
+        if [[ "$spec" == +* ]]; then
+            local group="${spec:1}"
+            local group_hosts=()
+            local skipped=()
+
+            for host in "${!HOST_META[@]}"; do
+                local host_group host_platform
+                host_group=$(get_host_attr "$host" "group")
+                host_platform=$(get_host_attr "$host" "platform")
+
+                if [[ "$host_group" == "$group" ]]; then
+                    if [[ "$host_platform" == "$current_platform" ]]; then
+                        group_hosts+=("$host")
+                    else
+                        skipped+=("$host")
+                    fi
+                fi
+            done
+
+            if [[ ${#group_hosts[@]} -eq 0 ]]; then
+                echo "Error: No buildable hosts found in group '$group' for platform '$current_platform'" >&2
+                [[ ${#skipped[@]} -gt 0 ]] && echo "    (skipped incompatible: ${skipped[*]})" >&2
+                echo "Use --list to see known hosts and their groups." >&2
+                exit 1
+            fi
+
+            echo "    Expanding +$group: ${group_hosts[*]}"
+            [[ ${#skipped[@]} -gt 0 ]] && echo "    (skipped incompatible: ${skipped[*]})"
+
+            for h in "${group_hosts[@]}"; do
+                expanded+=("$h")
+            done
+        else
+            expanded+=("$spec")
+        fi
+    done
+    HOSTS=("${expanded[@]}")
 }
 
 list_hosts() {
@@ -297,6 +368,7 @@ main() {
 
     cd "$SCRIPT_DIR"
     load_host_meta
+    expand_host_specifiers
     validate_hosts
 
     do_refresh
