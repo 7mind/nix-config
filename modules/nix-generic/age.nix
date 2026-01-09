@@ -64,16 +64,16 @@ in
       age.secrets = ownerSecrets;
     })
 
-    # Dummy config when age is disabled - satisfies agenix-rekey requirements
-    (lib.mkIf (!config.smind.age.enable) {
+    # Dummy config when age is disabled or no master identity - satisfies agenix-rekey requirements
+    (lib.mkIf (!config.smind.age.enable || !hasMasterIdentity) {
       age.rekey = {
-        masterIdentities = [
+        masterIdentities = lib.mkDefault [
           {
             identity = "/does-not-exist";
             pubkey = "age";
           }
         ];
-        storageMode = "derivation";
+        storageMode = lib.mkDefault "derivation";
       };
     })
   ];

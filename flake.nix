@@ -92,10 +92,19 @@
 
       darwinConfigurations = builtins.listToAttrs ((hosts-public builders).darwin ++ (hosts-private builders).darwin);
 
+      # Default agenix-rekey for all hosts
       agenix-rekey = inputs.agenix-rekey.configure {
         userFlake = self;
         nixosConfigurations = self.nixosConfigurations // self.darwinConfigurations;
       };
+
+      # Per-host agenix-rekey configurations for selective rekeying
+      agenix-rekey-hosts = builtins.mapAttrs (name: _:
+        inputs.agenix-rekey.configure {
+          userFlake = self;
+          nixosConfigurations = { ${name} = (self.nixosConfigurations // self.darwinConfigurations).${name}; };
+        }
+      ) (self.nixosConfigurations // self.darwinConfigurations);
     } // inputs.flake-utils.lib.eachDefaultSystem (system: rec {
       pkgs = import inputs.nixpkgs {
         inherit system;

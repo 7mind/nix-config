@@ -6,17 +6,23 @@ set -e
 declare -A known_hosts
 known_hosts["pavel-am5"]="linux pavel !"
 known_hosts["pavel-fw"]="linux pavel !"
+known_hosts["pavel-mba-m3"]="darwin pavel !"
 known_hosts["o1"]="linux infra o1.7mind.io"
 known_hosts["o2"]="linux infra o2.7mind.io"
 known_hosts["nas"]="linux infra nas.home.7mind.io"
 known_hosts["vm"]="linux infra vm.home.7mind.io"
 known_hosts["testbench"]="linux infra testbench.home.7mind.io"
 
+# Master identity pubkeys for each owner (used for rekeying)
+declare -A owner_identities
+owner_identities["pavel"]="age1ax4x0pwe00clawkp5zn7qdf5e2tvuu0echvachd0pv5hm8hq9qnswqpzek"
+owner_identities["infra"]="age1ax4x0pwe00clawkp5zn7qdf5e2tvuu0echvachd0pv5hm8hq9qnswqpzek"
 
 THISHOST="`hostname -s`"
 HOSTS=()
 DO_REFRESH=0
 DO_SWITCH=0
+DO_REKEY=0
 DO_GIT=1
 MESSAGE=""
 
@@ -66,6 +72,29 @@ function commit_and_push() {
         #     git commit -am "${MESSAGE}"
         # fi
         git push --recurse-submodules=on-demand
+    fi
+}
+
+function rekey() {
+    if [[ $DO_REKEY == "1" ]]; then
+        echo "Will rekey: ${hosts[*]}"
+        add_all
+        for HOST in "${hosts[@]}"; do
+            re="^([a-z0-9]+)[[:space:]]+([A-Za-z0-9]+)[[:space:]]+(.+)$"
+            host_data=${known_hosts["$HOST"]}
+            [[ "${host_data}" =~ $re ]] && HOST_OWNER="${BASH_REMATCH[2]}"
+
+            IDENTITY="${owner_identities[$HOST_OWNER]}"
+            if [[ -z "$IDENTITY" ]]; then
+                echo "Warning: No identity configured for owner '$HOST_OWNER', skipping rekey for $HOST"
+                continue
+            fi
+
+            export AGENIX_REKEY_PRIMARY_IDENTITY="$IDENTITY"
+            export AGENIX_REKEY_PRIMARY_IDENTITY_ONLY=true
+            # Use per-host agenix-rekey configuration to only evaluate/rekey this host
+            nix run ".?submodules=1#agenix-rekey-hosts.${HOST}.$(uname -m)-$(uname -s | tr '[:upper:]' '[:lower:]').rekey"
+        done
     fi
 }
 
@@ -149,6 +178,9 @@ for i in "$@"; do
     -s | --switch)
         DO_SWITCH=1
         ;;
+    -k | --rekey)
+        DO_REKEY=1
+        ;;
     -ng | --no-git)
         DO_GIT=0
         ;;
@@ -166,6 +198,7 @@ variables
 sethosts "${HOSTS[@]}"
 workdir
 refresh
+rekey
 rebuild
 switch
 popd
