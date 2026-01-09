@@ -88,6 +88,7 @@ in
     pkgs.framework-tool # Swiss army knife CLI for Framework laptops
     pkgs.framework-tool-tui # TUI for controlling Framework hardware
     pkgs.powertop # Power consumption analysis
+    pkgs.qmk # QMK keyboard firmware CLI
 
     (pkgs.writeShellScriptBin "tpm-enroll-luks" ''
       set -euo pipefail
