@@ -2,22 +2,10 @@
 
 set -e
 
-# Host configurations: "platform owner fqn"
-# fqn="!" means use hostname as-is (local)
-declare -A known_hosts
-known_hosts["pavel-am5"]="linux pavel !"
-known_hosts["pavel-fw"]="linux pavel !"
-known_hosts["pavel-mba-m3"]="darwin pavel !"
-known_hosts["o1"]="linux infra o1.7mind.io"
-known_hosts["o2"]="linux infra o2.7mind.io"
-known_hosts["nas"]="linux infra nas.home.7mind.io"
-known_hosts["vm"]="linux infra vm.home.7mind.io"
-known_hosts["testbench"]="linux infra testbench.home.7mind.io"
-
-# Master identity pubkeys for each owner (used for rekeying)
-declare -A owner_identities
-owner_identities["pavel"]="age1ax4x0pwe00clawkp5zn7qdf5e2tvuu0echvachd0pv5hm8hq9qnswqpzek"
-owner_identities["infra"]="age1ax4x0pwe00clawkp5zn7qdf5e2tvuu0echvachd0pv5hm8hq9qnswqpzek"
+# Master identity pubkeys for each group (used for rekeying)
+declare -A group_identities
+group_identities["pavel"]="age1ax4x0pwe00clawkp5zn7qdf5e2tvuu0echvachd0pv5hm8hq9qnswqpzek"
+group_identities["infra"]="age1ax4x0pwe00clawkp5zn7qdf5e2tvuu0echvachd0pv5hm8hq9qnswqpzek"
 
 THISHOST="$(hostname -s)"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -32,6 +20,9 @@ DO_GIT=true
 DO_LIST=false
 MESSAGE=""
 VERBOSE=false
+
+# Cache for host metadata
+declare -A HOST_META
 
 usage() {
     cat <<EOF
@@ -59,21 +50,44 @@ Examples:
   $(basename "$0") -k o1 o2         # Rekey and build o1 and o2
   $(basename "$0") -r -s            # Update flake, build, and switch
   $(basename "$0") -n               # Build without git operations
-
-Known hosts:
 EOF
-    for host in "${!known_hosts[@]}"; do
-        IFS=' ' read -r platform owner fqn <<< "${known_hosts[$host]}"
-        printf "  %-16s %s (%s)\n" "$host" "$platform" "$owner"
-    done | sort
     exit 0
 }
 
+load_host_meta() {
+    echo "Loading host metadata from flake..."
+    local json
+    json=$(nix eval ".?submodules=1#hostMeta" --json 2>/dev/null)
+
+    # Parse JSON and populate HOST_META
+    while IFS="=" read -r key value; do
+        HOST_META["$key"]="$value"
+    done < <(echo "$json" | jq -r 'to_entries[] | "\(.key)=\(.value | @json)"')
+}
+
+get_host_attr() {
+    local host="$1"
+    local attr="$2"
+    local meta="${HOST_META[$host]}"
+    if [[ -z "$meta" ]]; then
+        echo ""
+        return
+    fi
+    echo "$meta" | jq -r ".$attr // empty"
+}
+
 list_hosts() {
+    load_host_meta
     echo "Known hosts:"
-    for host in "${!known_hosts[@]}"; do
-        IFS=' ' read -r platform owner fqn <<< "${known_hosts[$host]}"
-        printf "  %-16s %-8s %-8s %s\n" "$host" "$platform" "$owner" "$fqn"
+    printf "  %-16s %-8s %-8s %s\n" "HOST" "PLATFORM" "GROUP" "FQN"
+    printf "  %-16s %-8s %-8s %s\n" "----" "--------" "-----" "---"
+    for host in "${!HOST_META[@]}"; do
+        local platform group fqn
+        platform=$(get_host_attr "$host" "platform")
+        group=$(get_host_attr "$host" "group")
+        fqn=$(get_host_attr "$host" "fqn")
+        [[ "$fqn" == "null" || -z "$fqn" ]] && fqn="(local)"
+        printf "  %-16s %-8s %-8s %s\n" "$host" "$platform" "$group" "$fqn"
     done | sort
     exit 0
 }
@@ -145,7 +159,7 @@ parse_args() {
 
 validate_hosts() {
     for host in "${HOSTS[@]}"; do
-        if [[ -z "${known_hosts[$host]}" ]]; then
+        if [[ -z "${HOST_META[$host]}" ]]; then
             echo "Error: Unknown host '$host'" >&2
             echo "Use --list to see known hosts." >&2
             exit 1
@@ -181,15 +195,16 @@ do_rekey() {
         system="$(uname -m)-$(uname -s | tr '[:upper:]' '[:lower:]')"
 
         for host in "${HOSTS[@]}"; do
-            IFS=' ' read -r _ owner _ <<< "${known_hosts[$host]}"
+            local group
+            group=$(get_host_attr "$host" "group")
 
-            local identity="${owner_identities[$owner]}"
+            local identity="${group_identities[$group]}"
             if [[ -z "$identity" ]]; then
-                echo "Warning: No identity configured for owner '$owner', skipping rekey for $host"
+                echo "Warning: No identity configured for group '$group', skipping rekey for $host"
                 continue
             fi
 
-            echo "    Rekeying $host (owner: $owner)..."
+            echo "    Rekeying $host (group: $group)..."
             export AGENIX_REKEY_PRIMARY_IDENTITY="$identity"
             export AGENIX_REKEY_PRIMARY_IDENTITY_ONLY=true
             nix run ".?submodules=1#agenix-rekey-hosts.${host}.${system}.rekey"
@@ -203,7 +218,8 @@ do_build() {
     mkdir -p "$ROOTS"
 
     for host in "${HOSTS[@]}"; do
-        IFS=' ' read -r platform _ _ <<< "${known_hosts[$host]}"
+        local platform
+        platform=$(get_host_attr "$host" "platform")
 
         echo "    Building $host ($platform)..."
         case "$platform" in
@@ -231,17 +247,18 @@ do_switch() {
         add_all
 
         for host in "${HOSTS[@]}"; do
-            IFS=' ' read -r platform _ fqn <<< "${known_hosts[$host]}"
-            local closure
+            local platform fqn closure
+            platform=$(get_host_attr "$host" "platform")
+            fqn=$(get_host_attr "$host" "fqn")
             closure=$(readlink -f "${ROOTS}/${host}")
 
-            # Use hostname if fqn is "!"
-            [[ "$fqn" == "!" ]] && fqn="$host"
+            # null fqn means local deployment
+            [[ "$fqn" == "null" || -z "$fqn" ]] && fqn=""
 
             echo "    Switching $host..."
             case "$platform" in
                 darwin)
-                    if [[ "$THISHOST" == "$host" ]]; then
+                    if [[ "$THISHOST" == "$host" || -z "$fqn" ]]; then
                         "${closure}/sw/bin/darwin-rebuild" switch --flake .
                     else
                         nix copy --to "ssh://${fqn}" "${ROOTS}/${host}"
@@ -250,7 +267,7 @@ do_switch() {
                     fi
                     ;;
                 linux)
-                    if [[ "$THISHOST" == "$host" ]]; then
+                    if [[ "$THISHOST" == "$host" || -z "$fqn" ]]; then
                         sudo nix-env -p /nix/var/nix/profiles/system --set "$closure"
                         sudo /nix/var/nix/profiles/system/bin/switch-to-configuration switch
                     else
@@ -277,8 +294,9 @@ main() {
         set -x
     fi
 
-    validate_hosts
     cd "$SCRIPT_DIR"
+    load_host_meta
+    validate_hosts
 
     do_refresh
     do_rekey

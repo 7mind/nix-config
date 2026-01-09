@@ -15,13 +15,6 @@ let
     else {};
 in
 {
-
-  options.smind.host.owner = lib.mkOption {
-    type = lib.types.nullOr lib.types.str;
-    default = null;
-    description = "Primary owner/user of this host (e.g., 'pavel'). Used for loading user-specific secrets.";
-  };
-
   options.smind.age.load-owner-secrets = lib.mkOption {
     type = lib.types.bool;
     default = false;

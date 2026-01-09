@@ -5,6 +5,7 @@
   ./fonts-apple.nix
   ./fonts-nerd.nix
   ./home-manager.nix
+  ./host-metadata.nix
   ./nix.nix
   ./overlay.nix
 ]
