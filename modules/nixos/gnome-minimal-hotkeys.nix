@@ -139,7 +139,7 @@
                 power-static = empty;
                 previous = empty;
                 previous-static = empty;
-                rfkill = empty;
+                rfkill = [ "XF86RFKill" ];
                 rfkill-bluetooth = empty;
                 rfkill-bluetooth-static = empty;
                 rfkill-static = empty;
