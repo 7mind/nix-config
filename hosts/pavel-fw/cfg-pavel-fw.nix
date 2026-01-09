@@ -141,14 +141,8 @@ in
   # Power management via TuneD (replaces power-profiles-daemon)
   # Defaults: latency-performance on AC, powersave on battery
 
-  # Framework keyboard udev rules for VIA web configurator access
+  # Enable illuminance scan element for ALS buffer mode (Framework 16)
   services.udev.extraRules = ''
-    # Framework Laptop 16 Keyboard Module - ANSI (32ac:0012)
-    # uaccess tag grants access to logged-in users via ACLs
-    SUBSYSTEM=="hidraw", ATTRS{idVendor}=="32ac", ATTRS{idProduct}=="0012", MODE="0660", TAG+="uaccess"
-    SUBSYSTEM=="usb", ATTRS{idVendor}=="32ac", ATTRS{idProduct}=="0012", MODE="0660", TAG+="uaccess"
-
-    # Enable illuminance scan element for ALS buffer mode (Framework 16)
     ACTION=="add", SUBSYSTEM=="iio", ATTR{name}=="als", ATTR{scan_elements/in_illuminance_en}="1"
   '';
 
@@ -257,6 +251,8 @@ in
     };
     hw.trezor.enable = true;
     hw.ledger.enable = true;
+    hw.qmk-keyboard.enable = true;
+    hw.qmk-keyboard.frameworkKeyboard = true;
     containers.docker.enable = true;
 
     ssh.mode = "safe";

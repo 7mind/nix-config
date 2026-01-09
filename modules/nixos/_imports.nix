@@ -43,6 +43,7 @@
   ./power-profiles.nix
   ./power-refresh-rate.nix
   ./power-suspend-quirks.nix
+  ./qmk-keyboard.nix
   ./realtek-kernel-hack.nix
   ./rocm.nix
   ./router.nix
