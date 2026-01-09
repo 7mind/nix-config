@@ -71,7 +71,7 @@
             2. Script structure MUST be:
                ```bash
                #!/usr/bin/env bash
-               set -x
+               set -euxo pipefail
                bat --paging=never "$0"  # Show script contents first
                read -p "Press Enter to run, Ctrl+C to abort..."
                # Your commands here, with output captured:
