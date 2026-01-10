@@ -13,6 +13,13 @@
       default = config.smind.with-private;
       description = "Enable age secrets support. Defaults to with-private, but can be disabled per-host.";
     };
+
+    smind.age.active = lib.mkOption {
+      type = lib.types.bool;
+      readOnly = true;
+      default = config.smind.age.enable && config.smind.with-private;
+      description = "Whether age secrets are both enabled and the private secrets directory is available.";
+    };
   };
 
   config = { };

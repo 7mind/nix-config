@@ -44,7 +44,7 @@
           # host = "smtp.sendgrid.net";
           # user = "apikey";
 
-          passwordeval = if (config.smind.age.enable && config.smind.with-private) then "cat ${config.age.secrets.msmtp-password.path}" else "exit 1";
+          passwordeval = if config.smind.age.active then "cat ${config.age.secrets.msmtp-password.path}" else "exit 1";
           from = "%U.${config.smind.host.email.sender}";
         };
       };
@@ -52,7 +52,7 @@
 
     environment.etc.aliases.text = "default: ${config.smind.host.email.to}";
 
-    age.secrets.msmtp-password = lib.mkIf (config.smind.age.enable && config.smind.with-private) {
+    age.secrets.msmtp-password = lib.mkIf config.smind.age.active {
       rekeyFile = "${cfg-meta.paths.secrets}/generic/msmtp-password.age";
       mode = "444";
     };

@@ -50,7 +50,7 @@ in
       #       chmod +x $out/bin/$name
       #     '';
       #   })
-    ] ++ (if (config.smind.age.enable && config.smind.with-private && config.smind.iperf.protected.client.enable) then [
+    ] ++ (if (config.smind.age.active && config.smind.iperf.protected.client.enable) then [
       (writeShellScriptBin "iperfc" ''
         set -e
         export IPERF3_PASSWORD="$(cat '${config.age.secrets.iperf-password.path}')"
@@ -71,7 +71,7 @@ in
     # cat ./tmp/public.pem  | age -e -i ~/age-key.txt > ./private/secrets/generic/iperf-public-key.age
     # cat ./tmp/private_not_protected.pem | age -e -i ~/age-key.txt > ./private/secrets/generic/iperf-private-key.age
 
-    age.secrets = lib.mkIf (config.smind.age.enable && config.smind.with-private && (config.smind.iperf.protected.server.enable || config.smind.iperf.protected.client.enable)) {
+    age.secrets = lib.mkIf (config.smind.age.active && (config.smind.iperf.protected.server.enable || config.smind.iperf.protected.client.enable)) {
       iperf-private-key = {
         rekeyFile = "${cfg-meta.paths.secrets}/generic/iperf-private-key.age";
         group = "users";
@@ -93,11 +93,11 @@ in
     services.iperf3 = {
       enable = true;
       openFirewall = true;
-      rsaPrivateKey = lib.mkIf (config.smind.age.enable && config.smind.with-private && config.smind.iperf.protected.server.enable) config.age.secrets.iperf-private-key.path;
+      rsaPrivateKey = lib.mkIf (config.smind.age.active && config.smind.iperf.protected.server.enable) config.age.secrets.iperf-private-key.path;
       authorizedUsersFile = lib.mkIf config.smind.iperf.protected.server.enable "/run/iperf-creds";
     };
 
-    system.activationScripts."iperf-password" = lib.mkIf (config.smind.age.enable && config.smind.with-private && config.smind.iperf.protected.server.enable)
+    system.activationScripts."iperf-password" = lib.mkIf (config.smind.age.active && config.smind.iperf.protected.server.enable)
       ''
         secret=$(cat "${config.age.secrets.iperf-password.path}")
         sha=$(echo -n "{${user}}$secret" | ${pkgs.coreutils}/bin/sha256sum | ${pkgs.gawk}/bin/awk '{ print $1 }')
