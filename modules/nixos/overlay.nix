@@ -4,7 +4,7 @@
   nixpkgs.overlays = [
     (self: super: {
       ip-update = pkgs.callPackage "${cfg-meta.paths.pkg}/ip-update/ip-update.nix" { };
-      
+
       qendercore-pull = pkgs.callPackage "${cfg-meta.paths.pkg}/qendercore-pull/qendercore-pull.nix" { };
 
       nordvpn-wireguard-extractor = pkgs.callPackage "${cfg-meta.paths.pkg}/nordvpn-wireguard-extractor/default.nix" { };
@@ -61,11 +61,7 @@
         });
 
       # GNOME adaptive brightness patches disabled - using wluma instead
-      # gnome-settings-daemon = super.gnome-settings-daemon.overrideAttrs (old: {
-      #   patches = (old.patches or []) ++ [
-      #     ../../patches/gnome-settings-daemon-ambient-brightness-fixes.patch
-      #   ];
-      # });
+      # patch can be found in git history
 
       # Fix suspend loop with GNOME+NVIDIA
       # https://github.com/NixOS/nixpkgs/issues/336723#issuecomment-3724194485
