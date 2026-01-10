@@ -1,0 +1,163 @@
+From d5c2e10e012dbdbc3049d398e49d8ff58c65c34d Mon Sep 17 00:00:00 2001
+From: Peter Hutterer <peter.hutterer@who-t.net>
+Date: Tue, 9 Dec 2025 11:52:28 +1000
+Subject: [PATCH] input-settings: Hook up disable-while-typing timeout
+
+Requires libinput 1.31 and the corresponding gsettings-desktop-schemas
+updates.
+---
+ meson.build                                    |  2 +-
+ src/backends/meta-input-settings-dummy.c       |  9 +++++++++
+ src/backends/meta-input-settings-private.h     |  3 +++
+ src/backends/meta-input-settings.c             | 18 +++++++++++++++---
+ .../native/meta-input-settings-native.c        | 17 +++++++++++++++++
+ 5 files changed, 45 insertions(+), 4 deletions(-)
+
+diff --git a/meson.build b/meson.build
+index 679982c2f83..4c1e38116c4 100644
+--- a/meson.build
++++ b/meson.build
+@@ -51,7 +51,7 @@ wayland_server_req = '>= 1.24'
+ wayland_protocols_req = '>= 1.45'
+ 
+ # native backend version requirements
+-libinput_req = '>= 1.30.0'
++libinput_req = '>= 1.29.0'
+ gbm_req = '>= 21.3'
+ libdrm_req = '>= 2.4.118'
+ 
+diff --git a/src/backends/meta-input-settings-dummy.c b/src/backends/meta-input-settings-dummy.c
+index 2abac056984..4afe30e825d 100644
+--- a/src/backends/meta-input-settings-dummy.c
++++ b/src/backends/meta-input-settings-dummy.c
+@@ -90,6 +90,13 @@ meta_input_settings_dummy_set_disable_while_typing (MetaInputSettings  *settings
+ {
+ }
+ 
++static void
++meta_input_settings_dummy_set_disable_while_typing_timeout (MetaInputSettings  *settings,
++                                                            ClutterInputDevice *device,
++                                                            uint32_t            timeout)
++{
++}
++
+ static void
+ meta_input_settings_dummy_set_invert_scroll (MetaInputSettings  *settings,
+                                              ClutterInputDevice *device,
+@@ -274,6 +281,8 @@ meta_input_settings_dummy_class_init (MetaInputSettingsDummyClass *klass)
+     meta_input_settings_dummy_set_tap_and_drag_lock_enabled;
+   input_settings_class->set_disable_while_typing =
+     meta_input_settings_dummy_set_disable_while_typing;
++  input_settings_class->set_disable_while_typing_timeout =
++    meta_input_settings_dummy_set_disable_while_typing_timeout;
+   input_settings_class->set_invert_scroll =
+     meta_input_settings_dummy_set_invert_scroll;
+   input_settings_class->set_edge_scroll =
+diff --git a/src/backends/meta-input-settings-private.h b/src/backends/meta-input-settings-private.h
+index bb1e4bbb4d1..367c9be5ac6 100644
+--- a/src/backends/meta-input-settings-private.h
++++ b/src/backends/meta-input-settings-private.h
+@@ -84,6 +84,9 @@ struct _MetaInputSettingsClass
+   void (* set_disable_while_typing) (MetaInputSettings  *settings,
+                                      ClutterInputDevice *device,
+                                      gboolean            enabled);
++  void (* set_disable_while_typing_timeout) (MetaInputSettings  *settings,
++                                             ClutterInputDevice *device,
++                                             uint32_t            millis);
+   void (* set_invert_scroll) (MetaInputSettings  *settings,
+                               ClutterInputDevice *device,
+                               gboolean            inverted);
+diff --git a/src/backends/meta-input-settings.c b/src/backends/meta-input-settings.c
+index bdb24064d23..67d523123c4 100644
+--- a/src/backends/meta-input-settings.c
++++ b/src/backends/meta-input-settings.c
+@@ -574,7 +574,9 @@ update_touchpad_disable_while_typing (MetaInputSettings  *input_settings,
+   MetaInputSettingsClass *input_settings_class;
+   MetaInputSettingsPrivate *priv;
+   gboolean enabled;
+-  const gchar *key = "disable-while-typing";
++  uint32_t timeout;
++  const gchar *key_dwt = "disable-while-typing-dwt";
++  const gchar *key_timeout = "disable-while-typing-timeout";
+ 
+   if (device &&
+       !device_matches_capabilities (device,
+@@ -584,13 +586,17 @@ update_touchpad_disable_while_typing (MetaInputSettings  *input_settings,
+ 
+   priv = meta_input_settings_get_instance_private (input_settings);
+   input_settings_class = META_INPUT_SETTINGS_GET_CLASS (input_settings);
+-  enabled = g_settings_get_boolean (priv->touchpad_settings, key);
++  enabled = g_settings_get_boolean (priv->touchpad_settings, key_dwt);
++  timeout = g_settings_get_uint (priv->touchpad_settings, key_timeout);
+ 
+   if (device)
+    {
+       settings_device_set_bool_setting (input_settings, device,
+                                         input_settings_class->set_disable_while_typing,
+                                         enabled);
++      settings_device_set_uint_setting (input_settings, device,
++                                        input_settings_class->set_disable_while_typing_timeout,
++                                        timeout);
+     }
+   else
+     {
+@@ -600,6 +606,11 @@ update_touchpad_disable_while_typing (MetaInputSettings  *input_settings,
+                                  NULL,
+                                  input_settings_class->set_disable_while_typing,
+                                  enabled);
++      settings_set_uint_setting (input_settings,
++                                 CLUTTER_INPUT_CAPABILITY_TOUCHPAD,
++                                 CLUTTER_INPUT_CAPABILITY_NONE,
++                                 input_settings_class->set_disable_while_typing_timeout,
++                                 timeout);
+     }
+ }
+ 
+@@ -1213,7 +1224,8 @@ meta_input_settings_changed_cb (GSettings  *settings,
+         update_touchpad_tap_and_drag_enabled (input_settings, NULL);
+       else if (strcmp (key, "tap-and-drag-lock") == 0)
+         update_touchpad_tap_and_drag_lock_enabled (input_settings, NULL);
+-      else if (strcmp (key, "disable-while-typing") == 0)
++      else if (strcmp (key, "disable-while-typing") == 0 ||
++               strcmp (key, "disable-while-typing-timeout") == 0)
+         update_touchpad_disable_while_typing (input_settings, NULL);
+       else if (strcmp (key, "send-events") == 0)
+         update_touchpad_send_events (input_settings, NULL);
+diff --git a/src/backends/native/meta-input-settings-native.c b/src/backends/native/meta-input-settings-native.c
+index 09eddc3651c..024ec4254c4 100644
+--- a/src/backends/native/meta-input-settings-native.c
++++ b/src/backends/native/meta-input-settings-native.c
+@@ -272,6 +272,22 @@ meta_input_settings_native_set_disable_while_typing (MetaInputSettings  *setting
+                                             LIBINPUT_CONFIG_DWT_DISABLED);
+ }
+ 
++static void
++meta_input_settings_native_set_disable_while_typing_timeout (MetaInputSettings  *settings,
++                                                             ClutterInputDevice *device,
++                                                             uint32_t            millis)
++{
++  struct libinput_device *libinput_device;
++
++  libinput_device = meta_input_device_native_get_libinput_device (device);
++
++  if (!libinput_device)
++    return;
++
++  if (libinput_device_config_dwt_is_available (libinput_device))
++    libinput_device_config_dwt_set_timeout (libinput_device, millis);
++}
++
+ static void
+ meta_input_settings_native_set_invert_scroll (MetaInputSettings  *settings,
+                                               ClutterInputDevice *device,
+@@ -836,6 +852,7 @@ meta_input_settings_native_class_init (MetaInputSettingsNativeClass *klass)
+   input_settings_class->set_click_method = meta_input_settings_native_set_click_method;
+   input_settings_class->set_keyboard_repeat = meta_input_settings_native_set_keyboard_repeat;
+   input_settings_class->set_disable_while_typing = meta_input_settings_native_set_disable_while_typing;
++  input_settings_class->set_disable_while_typing_timeout = meta_input_settings_native_set_disable_while_typing_timeout;
+ 
+   input_settings_class->set_tablet_mapping = meta_input_settings_native_set_tablet_mapping;
+   input_settings_class->set_tablet_aspect_ratio = meta_input_settings_native_set_tablet_aspect_ratio;
+-- 
+GitLab
+
