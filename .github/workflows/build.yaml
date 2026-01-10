@@ -37,7 +37,7 @@ jobs:
       - name: Verify configurations
         run: |
           nix flake check --no-build
-          ./verify-configs
+          ./verify-configs --no-submodules
   build-max:
     strategy:
       fail-fast: false
@@ -57,4 +57,4 @@ jobs:
       - name: Verify configurations
         run: |
           nix flake check --no-build --extra-experimental-features 'nix-command flakes'
-          ./verify-configs
+          ./verify-configs --no-submodules

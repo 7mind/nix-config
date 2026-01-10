@@ -6,16 +6,20 @@ cd "$(dirname "$0")"
 show_trace=""
 parallel=""
 verbose=""
+flake_ref=".?submodules=1"
+
 while [[ $# -gt 0 ]]; do
     case $1 in
         -t|--trace) show_trace="--show-trace"; shift ;;
         -p|--parallel) parallel=1; shift ;;
         -v|--verbose) verbose=1; shift ;;
+        --no-submodules) flake_ref="."; shift ;;
         -h|--help)
-            echo "Usage: $0 [-t|--trace] [-p|--parallel] [-v|--verbose]"
-            echo "  -t, --trace     Show full stack trace on errors"
-            echo "  -p, --parallel  Evaluate all hosts in parallel"
-            echo "  -v, --verbose   Print nix commands being executed"
+            echo "Usage: $0 [-t|--trace] [-p|--parallel] [-v|--verbose] [--no-submodules]"
+            echo "  -t, --trace       Show full stack trace on errors"
+            echo "  -p, --parallel    Evaluate all hosts in parallel"
+            echo "  -v, --verbose     Print nix commands being executed"
+            echo "  --no-submodules   Do not include submodules in flake evaluation"
             exit 0
             ;;
         *) echo "Unknown option: $1"; exit 1 ;;
@@ -34,8 +38,8 @@ git submodule foreach git add .
 
 echo "=== Discovering configurations ==="
 
-nixos_hosts=$(run_nix nix eval ".?submodules=1#nixosConfigurations" --apply 'x: builtins.attrNames x' --json 2>/dev/null | jq -r '.[]')
-darwin_hosts=$(run_nix nix eval ".?submodules=1#darwinConfigurations" --apply 'x: builtins.attrNames x' --json 2>/dev/null | jq -r '.[]')
+nixos_hosts=$(run_nix nix eval "${flake_ref}#nixosConfigurations" --apply 'x: builtins.attrNames x' --json 2>/dev/null | jq -r '.[]')
+darwin_hosts=$(run_nix nix eval "${flake_ref}#darwinConfigurations" --apply 'x: builtins.attrNames x' --json 2>/dev/null | jq -r '.[]')
 
 echo "NixOS hosts: $(echo $nixos_hosts | tr '\n' ' ')"
 echo "Darwin hosts: $(echo $darwin_hosts | tr '\n' ' ')"
@@ -47,9 +51,9 @@ verify_host() {
     local flake_attr
 
     if [[ "$type" == "nixos" ]]; then
-        flake_attr=".?submodules=1#nixosConfigurations.$host.config.system.build.toplevel"
+        flake_attr="${flake_ref}#nixosConfigurations.$host.config.system.build.toplevel"
     else
-        flake_attr=".?submodules=1#darwinConfigurations.$host.config.system.build.toplevel"
+        flake_attr="${flake_ref}#darwinConfigurations.$host.config.system.build.toplevel"
     fi
 
     echo "=== Verifying $type: $host ===" >&2
