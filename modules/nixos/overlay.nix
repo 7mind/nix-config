@@ -78,6 +78,18 @@
         ];
       });
 
+      # Fix for black screen on resume (remove lock screen animation during suspend)
+      # MR !3742: https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/3742
+      gnome-shell = super.gnome-shell.overrideAttrs (old: {
+        patches = (old.patches or [ ]) ++ [
+          (pkgs.fetchpatch {
+            url = "https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/3742.patch";
+            name = "gnome-shell-remove-lock-animation-on-suspend.patch";
+            hash = "sha256-ZJ+Mq7VbYYZLC4/3iM9L7ZAiZX2FcrRZCOI2s7cSQCw=";
+          })
+        ];
+      });
+
 
 
       # https://github.com/NixOS/nixpkgs/issues/408853
