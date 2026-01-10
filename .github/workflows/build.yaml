@@ -34,10 +34,10 @@ jobs:
       - uses: 7mind/github-env@minimal
         with:
           setup-nix: ${{ matrix.preconfigured != true }}
-      - name: Check flake syntax and evaluation
+      - name: Verify configurations
         run: |
           nix flake check --no-build
-          nix eval ".#nixosConfigurations.pavel-am5.config.system.build.toplevel" --raw > /dev/null
+          ./verify-configs
   build-max:
     strategy:
       fail-fast: false
@@ -54,7 +54,7 @@ jobs:
       - uses: 7mind/github-env@minimal
         with:
           setup-nix: ${{ matrix.preconfigured != true }}
-      - name: Check flake syntax and evaluation
+      - name: Verify configurations
         run: |
           nix flake check --no-build --extra-experimental-features 'nix-command flakes'
-          nix eval ".#darwinConfigurations.pavel-mba-m3.system" --raw --extra-experimental-features 'nix-command flakes' > /dev/null
+          ./verify-configs
