@@ -18,9 +18,10 @@
   config = lib.mkIf config.smind.hm.environment.sane-defaults.generic.enable {
     home.enableNixpkgsReleaseCheck = false;
 
-    manual = lib.mkIf config.smind.hm.environment.all-docs.enable {
-      html.enable = true;
-    };
+    # Disable home-manager HTML/JSON docs to avoid builtins.toFile warnings
+    # (home-manager uses builtins.toFile for options.json which can't handle store path refs)
+    manual.html.enable = false;
+    manual.json.enable = false;
 
     # SSH agent: use Home Manager's ssh-agent only if system keyring uses "standalone" or is disabled
     # When system uses gcr-ssh-agent (GNOME/COSMIC), don't start a competing agent

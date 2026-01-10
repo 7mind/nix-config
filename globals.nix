@@ -161,8 +161,8 @@ rec {
       value = cfg-platform.generator
         {
           inherit specialArgs;
-          system = "${arch}";
           modules = cfg-platform.flake-modules ++ [
+            { nixpkgs.hostPlatform = arch; }
             { system.stateVersion = cfg-meta.state-version-system; }
             (cfg-args.import_if_exists ./hosts/${hostname}/cfg-${hostname}.nix)
             (cfg-args.import_if_exists ./private/hosts/${hostname}/cfg-${hostname}.nix)
