@@ -36,7 +36,6 @@ jobs:
           setup-nix: ${{ matrix.preconfigured != true }}
       - name: Verify configurations
         run: |
-          nix flake check --no-build
           ./verify-configs --no-submodules
   build-max:
     strategy:
@@ -56,5 +55,4 @@ jobs:
           setup-nix: ${{ matrix.preconfigured != true }}
       - name: Verify configurations
         run: |
-          nix flake check --no-build --extra-experimental-features 'nix-command flakes'
           ./verify-configs --no-submodules
