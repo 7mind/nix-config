@@ -191,6 +191,7 @@ in
   };
 
   smind = {
+    nix.determinate.enable = true;
     age.enable = true;
     roles.desktop.generic-gnome = true;
     isLaptop = true;

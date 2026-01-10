@@ -102,6 +102,7 @@ rec {
             inputs.home-manager.nixosModules.home-manager
             inputs.agenix.nixosModules.default
             inputs.agenix-rekey.nixosModules.default
+            inputs.determinate.nixosModules.default
 
             { nixpkgs.overlays = [ inputs.nix-vscode-extensions.overlays.default ]; }
           ];
