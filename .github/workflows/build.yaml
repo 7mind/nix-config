@@ -37,6 +37,15 @@ jobs:
       - name: Verify configurations
         run: |
           ./verify-configs --no-submodules
+      - name: Check flake
+        run: |
+          # Workaround for uninitialized submodules (empty dirs) causing invalid path errors in Nix
+          git submodule status | grep '^-' | awk '{print $2}' | while read -r mod; do
+            if [[ -d "$mod" ]] && [ -z "$(ls -A "$mod")" ]; then
+              rmdir "$mod"
+            fi
+          done
+          nix flake check --no-build
   build-max:
     strategy:
       fail-fast: false
@@ -56,3 +65,12 @@ jobs:
       - name: Verify configurations
         run: |
           ./verify-configs --no-submodules
+      - name: Check flake
+        run: |
+          # Workaround for uninitialized submodules (empty dirs) causing invalid path errors in Nix
+          git submodule status | grep '^-' | awk '{print $2}' | while read -r mod; do
+            if [[ -d "$mod" ]] && [ -z "$(ls -A "$mod")" ]; then
+              rmdir "$mod"
+            fi
+          done
+          nix flake check --no-build
