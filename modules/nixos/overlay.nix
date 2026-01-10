@@ -90,6 +90,20 @@
         ];
       });
 
+      # Fix for cursor stutter/lag
+      # Issue: https://gitlab.gnome.org/GNOME/mutter/-/issues/4518
+      # MR !4795: https://gitlab.gnome.org/GNOME/mutter/-/merge_requests/4795
+      # DISABLED: Requires libinput >= 1.31, NixOS 25.11 currently has 1.29
+      # mutter = super.mutter.overrideAttrs (old: {
+      #   patches = (old.patches or [ ]) ++ [
+      #     (pkgs.fetchpatch {
+      #       url = "https://gitlab.gnome.org/GNOME/mutter/-/merge_requests/4795.patch";
+      #       name = "mutter-fix-cursor-stutter.patch";
+      #       hash = "sha256-3el2d7c7ryWwRDJZ7s5pjcG5/LfJx6sK8ydWQolvfLQ=";
+      #     })
+      #   ];
+      # });
+
 
 
       # https://github.com/NixOS/nixpkgs/issues/408853
