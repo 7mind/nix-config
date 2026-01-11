@@ -9,7 +9,7 @@
 
   config = lib.mkIf config.smind.nix.customize {
     nix = {
-      package = pkgs.nixVersions.stable;
+      package = lib.mkDefault pkgs.nixVersions.stable;
       gc.automatic = true;
       gc.options = "--delete-older-than 8d";
       extraOptions = ''

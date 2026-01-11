@@ -39,6 +39,7 @@ let
     gnomeExtensions.caffeine
     gnomeExtensions.vicinae
     gnomeExtensions.grand-theft-focus
+    gnomeExtensions.highlight-focus
     # tray-icons-reloaded
   ]
   ++ lib.optional hibernateCfg.enable hibernateExtensionPatched
@@ -84,16 +85,16 @@ in
       # The original script's CHECKINSTALLATION tries to compare polkit rules files
       # which don't exist on NixOS (we use security.polkit.extraConfig instead)
       ++ lib.optional batteryHealthCfg.enable (pkgs.runCommand "batteryhealthchargingctl" { } ''
-        mkdir -p $out/bin
-        cp ${batteryHealthChargingPatched}/share/gnome-shell/extensions/Battery-Health-Charging@maniacx.github.com/resources/batteryhealthchargingctl $out/bin/batteryhealthchargingctl
-        chmod +x $out/bin/batteryhealthchargingctl
-        # Patch CHECKINSTALLATION case to always succeed on NixOS
-        # We configure polkit declaratively, so no need to check file-based rules
-        # Only replace the call site, not the function definition
-        sed -i '/^    CHECKINSTALLATION)$/,/^        ;;$/{
-          s/check_installation/echo "NixOS: polkit configured declaratively"; exit 0/
-        }' $out/bin/batteryhealthchargingctl
-      '');
+      mkdir -p $out/bin
+      cp ${batteryHealthChargingPatched}/share/gnome-shell/extensions/Battery-Health-Charging@maniacx.github.com/resources/batteryhealthchargingctl $out/bin/batteryhealthchargingctl
+      chmod +x $out/bin/batteryhealthchargingctl
+      # Patch CHECKINSTALLATION case to always succeed on NixOS
+      # We configure polkit declaratively, so no need to check file-based rules
+      # Only replace the call site, not the function definition
+      sed -i '/^    CHECKINSTALLATION)$/,/^        ;;$/{
+        s/check_installation/echo "NixOS: polkit configured declaratively"; exit 0/
+      }' $out/bin/batteryhealthchargingctl
+    '');
 
     # Polkit rules for GNOME extensions
     security.polkit.extraConfig = lib.mkMerge [
