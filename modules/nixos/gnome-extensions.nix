@@ -41,9 +41,9 @@ let
     gnomeExtensions.steal-my-focus-window
     gnomeExtensions.dim-completed-calendar-events
     gnomeExtensions.tiling-shell
-    gnomeExtensions.open-bar
+    # gnomeExtensions.open-bar
 
-    
+
     # gnomeExtensions.grand-theft-focus
     # gnomeExtensions.highlight-focus
     # tray-icons-reloaded
