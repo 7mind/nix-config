@@ -5300,12 +5300,12 @@
   },
   {
     "when" : "editorFocus || editorIsOpen",
-    "key" : "ctrl+[KeyF]",
+    "key" : "ctrl+f",
     "command" : "actions.find"
   },
   {
     "when" : "editorFocus || editorIsOpen",
-    "key" : "meta+[KeyF]",
+    "key" : "meta+f",
     "command" : "actions.find"
   },
   {
@@ -5366,43 +5366,43 @@
     "command" : "continue.acceptDiff"
   },
   {
-    "key" : "ctrl+[KeyJ] ctrl+[KeyA]",
+    "key" : "ctrl+j ctrl+a",
     "command" : "continue.focusContinueInput"
   },
   {
-    "key" : "ctrl+[KeyJ] [KeyA]",
+    "key" : "ctrl+j a",
     "command" : "continue.focusContinueInput"
   },
   {
-    "key" : "ctrl+[KeyJ] ctrl+[KeyB]",
+    "key" : "ctrl+j ctrl+b",
     "command" : "continue.focusContinueInputWithoutClear"
   },
   {
-    "key" : "ctrl+[KeyJ] [KeyB]",
+    "key" : "ctrl+j b",
     "command" : "continue.focusContinueInputWithoutClear"
   },
   {
-    "key" : "ctrl+[KeyJ] ctrl+[KeyA]",
+    "key" : "ctrl+j ctrl+a",
     "command" : "continue.applyCodeFromChat"
   },
   {
-    "key" : "ctrl+[KeyJ] [KeyA]",
+    "key" : "ctrl+j a",
     "command" : "continue.applyCodeFromChat"
   },
   {
-    "key" : "ctrl+[KeyJ] ctrl+[KeyN]",
+    "key" : "ctrl+j ctrl+n",
     "command" : "continue.newSession"
   },
   {
-    "key" : "ctrl+[KeyJ] [KeyN]",
+    "key" : "ctrl+j n",
     "command" : "continue.newSession"
   },
   {
-    "key" : "ctrl+[KeyJ] ctrl+[KeyJ]",
+    "key" : "ctrl+j ctrl+j",
     "command" : "continue.quickEdit"
   },
   {
-    "key" : "ctrl+[KeyJ] [KeyJ]",
+    "key" : "ctrl+j j",
     "command" : "continue.quickEdit"
   },
   {
@@ -5410,19 +5410,19 @@
     "command" : "continue.rejectDiff"
   },
   {
-    "key" : "alt+[KeyC] alt+[KeyP]",
+    "key" : "alt+c alt+p",
     "command" : "copyFilePath"
   },
   {
-    "key" : "alt+[KeyC] [KeyP]",
+    "key" : "alt+c p",
     "command" : "copyFilePath"
   },
   {
-    "key" : "alt+[KeyC] alt+[KeyR]",
+    "key" : "alt+c alt+r",
     "command" : "copyRelativeFilePath"
   },
   {
-    "key" : "alt+[KeyC] [KeyR]",
+    "key" : "alt+c r",
     "command" : "copyRelativeFilePath"
   },
   {
@@ -5482,7 +5482,7 @@
   },
   {
     "when" : "textInputFocus",
-    "key" : "ctrl+[KeyE]",
+    "key" : "ctrl+e",
     "command" : "cursorEnd"
   },
   {
@@ -5492,7 +5492,7 @@
   },
   {
     "when" : "textInputFocus",
-    "key" : "ctrl+[KeyA]",
+    "key" : "ctrl+a",
     "command" : "cursorHome"
   },
   {
@@ -5517,7 +5517,7 @@
   },
   {
     "when" : "textInputFocus",
-    "key" : "meta+[ArrowDown]",
+    "key" : "meta+[arrowdown]",
     "command" : "cursorPageDown"
   },
   {
@@ -5537,7 +5537,7 @@
   },
   {
     "when" : "textInputFocus",
-    "key" : "meta+[ArrowUp]",
+    "key" : "meta+[arrowup]",
     "command" : "cursorPageUp"
   },
   {
@@ -5667,17 +5667,17 @@
   },
   {
     "when" : "textInputFocus && !editorReadonly && supportedCodeAction =~ /(\\s|^)quickfix\\b/",
-    "key" : "ctrl+shift+[Key.]",
+    "key" : "ctrl+shift+.",
     "command" : "editor.action.autoFix"
   },
   {
     "when" : "editorTextFocus && !editorReadonly",
-    "key" : "meta+shift+[Slash]",
+    "key" : "meta+shift+[slash]",
     "command" : "editor.action.blockComment"
   },
   {
     "when" : "editorTextFocus && !editorReadonly",
-    "key" : "ctrl+shift+[Slash]",
+    "key" : "ctrl+shift+[slash]",
     "command" : "editor.action.blockComment"
   },
   {
@@ -5686,37 +5686,37 @@
     "command" : "editor.action.cancelSelectionAnchor"
   },
   {
-    "key" : "ctrl+[KeyC]",
+    "key" : "ctrl+c",
     "command" : "editor.action.clipboardCopyAction"
   },
   {
-    "key" : "meta+[KeyC]",
+    "key" : "meta+c",
     "command" : "editor.action.clipboardCopyAction"
   },
   {
-    "key" : "ctrl+[KeyX]",
+    "key" : "ctrl+x",
     "command" : "editor.action.clipboardCutAction"
   },
   {
-    "key" : "meta+[KeyX]",
+    "key" : "meta+x",
     "command" : "editor.action.clipboardCutAction"
   },
   {
-    "key" : "ctrl+[KeyV]",
+    "key" : "ctrl+v",
     "command" : "editor.action.clipboardPasteAction"
   },
   {
-    "key" : "meta+[KeyV]",
+    "key" : "meta+v",
     "command" : "editor.action.clipboardPasteAction"
   },
   {
     "when" : "editorTextFocus && !editorReadonly",
-    "key" : "ctrl+[Slash]",
+    "key" : "ctrl+[slash]",
     "command" : "editor.action.commentLine"
   },
   {
     "when" : "editorTextFocus && !editorReadonly",
-    "key" : "meta+[Slash]",
+    "key" : "meta+[slash]",
     "command" : "editor.action.commentLine"
   },
   {
@@ -5731,12 +5731,12 @@
   },
   {
     "when" : "editorTextFocus && !editorReadonly",
-    "key" : "ctrl+[KeyD]",
+    "key" : "ctrl+d",
     "command" : "editor.action.duplicateSelection"
   },
   {
     "when" : "editorTextFocus && !editorReadonly",
-    "key" : "meta+[KeyD]",
+    "key" : "meta+d",
     "command" : "editor.action.duplicateSelection"
   },
   {
@@ -5751,59 +5751,59 @@
   },
   {
     "when" : "!editorFocus && activeEditor == 'workbench.editor.extension'",
-    "key" : "ctrl+[KeyF]",
+    "key" : "ctrl+f",
     "command" : "editor.action.extensioneditor.showfind"
   },
   {
     "when" : "editorHasDocumentFormattingProvider && editorTextFocus && !editorReadonly && !inCompositeEditor",
-    "key" : "ctrl+[KeyT] ctrl+[KeyF]",
+    "key" : "ctrl+t ctrl+f",
     "command" : "editor.action.formatDocument"
   },
   {
     "when" : "editorHasDocumentFormattingProvider && editorTextFocus && !editorReadonly && !inCompositeEditor",
-    "key" : "ctrl+[KeyT] [KeyF]",
+    "key" : "ctrl+t f",
     "command" : "editor.action.formatDocument"
   },
   {
     "when" : "editorTextFocus && !editorHasDocumentFormattingProvider && !editorReadonly",
-    "key" : "ctrl+[KeyT] ctrl+[KeyF]",
+    "key" : "ctrl+t ctrl+f",
     "command" : "editor.action.formatDocument.none"
   },
   {
     "when" : "editorTextFocus && !editorHasDocumentFormattingProvider && !editorReadonly",
-    "key" : "ctrl+[KeyT] [KeyF]",
+    "key" : "ctrl+t f",
     "command" : "editor.action.formatDocument.none"
   },
   {
-    "key" : "ctrl+[KeyN] shift+[KeyD]",
+    "key" : "ctrl+n shift+d",
     "command" : "editor.action.goToDeclaration"
   },
   {
     "when" : "editorHasImplementationProvider && editorTextFocus",
-    "key" : "ctrl+[KeyN] ctrl+[KeyI]",
+    "key" : "ctrl+n ctrl+i",
     "command" : "editor.action.goToImplementation"
   },
   {
     "when" : "editorHasImplementationProvider && editorTextFocus",
-    "key" : "ctrl+[KeyN] [KeyI]",
+    "key" : "ctrl+n i",
     "command" : "editor.action.goToImplementation"
   },
   {
     "when" : "editorHasReferenceProvider && editorTextFocus && !inReferenceSearchEditor && !isInEmbeddedEditor",
-    "key" : "ctrl+[KeyN] ctrl+[KeyU]",
+    "key" : "ctrl+n ctrl+u",
     "command" : "editor.action.goToReferences"
   },
   {
     "when" : "editorHasReferenceProvider && editorTextFocus && !inReferenceSearchEditor && !isInEmbeddedEditor",
-    "key" : "ctrl+[KeyN] [KeyU]",
+    "key" : "ctrl+n u",
     "command" : "editor.action.goToReferences"
   },
   {
-    "key" : "ctrl+[KeyN] ctrl+[KeyT]",
+    "key" : "ctrl+n ctrl+t",
     "command" : "editor.action.goToTypeDefinition"
   },
   {
-    "key" : "ctrl+[KeyN] [KeyT]",
+    "key" : "ctrl+n t",
     "command" : "editor.action.goToTypeDefinition"
   },
   {
@@ -5833,32 +5833,32 @@
   },
   {
     "when" : "editorTextFocus",
-    "key" : "ctrl+[KeyN] ctrl+[KeyB]",
+    "key" : "ctrl+n ctrl+b",
     "command" : "editor.action.jumpToBracket"
   },
   {
     "when" : "editorTextFocus",
-    "key" : "ctrl+[KeyN] [KeyB]",
+    "key" : "ctrl+n b",
     "command" : "editor.action.jumpToBracket"
   },
   {
     "when" : "editorFocus",
-    "key" : "alt+[KeyN]",
+    "key" : "alt+n",
     "command" : "editor.action.marker.next"
   },
   {
     "when" : "editorFocus",
-    "key" : "alt+shift+[KeyN]",
+    "key" : "alt+shift+n",
     "command" : "editor.action.marker.nextInFiles"
   },
   {
     "when" : "editorFocus",
-    "key" : "alt+[KeyP]",
+    "key" : "alt+p",
     "command" : "editor.action.marker.prev"
   },
   {
     "when" : "editorFocus",
-    "key" : "alt+shift+[KeyP]",
+    "key" : "alt+shift+p",
     "command" : "editor.action.marker.prevInFiles"
   },
   {
@@ -5873,20 +5873,20 @@
   },
   {
     "when" : "editorFocus",
-    "key" : "alt+[KeyM]",
+    "key" : "alt+m",
     "command" : "editor.action.nextMatchFindAction"
   },
   {
     "when" : "editorFocus && findInputFocussed",
-    "key" : "alt+[KeyM]",
+    "key" : "alt+m",
     "command" : "editor.action.nextMatchFindAction"
   },
   {
-    "key" : "ctrl+[KeyT] ctrl+[KeyI]",
+    "key" : "ctrl+t ctrl+i",
     "command" : "editor.action.organizeImports"
   },
   {
-    "key" : "ctrl+[KeyT] [KeyI]",
+    "key" : "ctrl+t i",
     "command" : "editor.action.organizeImports"
   },
   {
@@ -5895,11 +5895,11 @@
     "command" : "editor.action.outdentLines"
   },
   {
-    "key" : "ctrl+[KeyN] ctrl+[KeyD]",
+    "key" : "ctrl+n ctrl+d",
     "command" : "editor.action.peekDefinition"
   },
   {
-    "key" : "ctrl+[KeyN] [KeyD]",
+    "key" : "ctrl+n d",
     "command" : "editor.action.peekDefinition"
   },
   {
@@ -5914,42 +5914,42 @@
   },
   {
     "when" : "editorFocus && findInputFocussed",
-    "key" : "alt+shift+[KeyM]",
+    "key" : "alt+shift+m",
     "command" : "editor.action.previousMatchFindAction"
   },
   {
     "when" : "editorFocus",
-    "key" : "alt+shift+[KeyM]",
+    "key" : "alt+shift+m",
     "command" : "editor.action.previousMatchFindAction"
   },
   {
     "when" : "editorHasCodeActionsProvider && textInputFocus && !editorReadonly",
-    "key" : "ctrl+[Key.]",
+    "key" : "ctrl+.",
     "command" : "editor.action.quickFix"
   },
   {
     "when" : "editorHasCodeActionsProvider && textInputFocus && !editorReadonly",
-    "key" : "ctrl+[KeyT] ctrl+[KeyT]",
+    "key" : "ctrl+t ctrl+t",
     "command" : "editor.action.refactor"
   },
   {
     "when" : "editorHasCodeActionsProvider && textInputFocus && !editorReadonly",
-    "key" : "ctrl+[KeyT] [KeyT]",
+    "key" : "ctrl+t t",
     "command" : "editor.action.refactor"
   },
   {
     "when" : "editorHasRenameProvider && editorTextFocus && !editorReadonly",
-    "key" : "ctrl+[KeyT] ctrl+[KeyR]",
+    "key" : "ctrl+t ctrl+r",
     "command" : "editor.action.rename"
   },
   {
     "when" : "editorHasRenameProvider && editorTextFocus && !editorReadonly",
-    "key" : "ctrl+[KeyT] [KeyR]",
+    "key" : "ctrl+t r",
     "command" : "editor.action.rename"
   },
   {
     "when" : "editorFocus && findWidgetVisible",
-    "key" : "alt+[KeyA]",
+    "key" : "alt+a",
     "command" : "editor.action.replaceAll"
   },
   {
@@ -5959,55 +5959,55 @@
   },
   {
     "when" : "editorFocus && findWidgetVisible",
-    "key" : "alt+[KeyP]",
+    "key" : "alt+p",
     "command" : "editor.action.replaceOne"
   },
   {
     "when" : "editorHasDefinitionProvider && editorTextFocus",
-    "key" : "ctrl+[KeyN] ctrl+[KeyD]",
+    "key" : "ctrl+n ctrl+d",
     "command" : "editor.action.revealDefinition"
   },
   {
     "when" : "editorHasDefinitionProvider && editorTextFocus",
-    "key" : "ctrl+[KeyN] [KeyD]",
+    "key" : "ctrl+n d",
     "command" : "editor.action.revealDefinition"
   },
   {
     "when" : "editorHasDefinitionProvider && editorTextFocus && !isInEmbeddedEditor",
-    "key" : "ctrl+[KeyK] ctrl+[KeyD]",
+    "key" : "ctrl+k ctrl+d",
     "command" : "editor.action.revealDefinitionAside"
   },
   {
     "when" : "editorHasDefinitionProvider && editorTextFocus && !isInEmbeddedEditor",
-    "key" : "ctrl+[KeyK] [KeyD]",
+    "key" : "ctrl+k d",
     "command" : "editor.action.revealDefinitionAside"
   },
   {
     "when" : "editorFocus && findWidgetVisible",
-    "key" : "alt+[KeyH]",
+    "key" : "alt+h",
     "command" : "editor.action.selectAllMatches"
   },
   {
     "when" : "editorFocus && !findWidgetVisible",
-    "key" : "alt+[KeyH]",
+    "key" : "alt+h",
     "command" : "editor.action.selectHighlights"
   },
   {
     "when" : "editorFocus || editorIsOpen",
-    "key" : "ctrl+[KeyR]",
+    "key" : "ctrl+r",
     "command" : "editor.action.startFindReplaceAction"
   },
   {
     "when" : "editorFocus || editorIsOpen",
-    "key" : "meta+[KeyR]",
+    "key" : "meta+r",
     "command" : "editor.action.startFindReplaceAction"
   },
   {
-    "key" : "ctrl+[KeyT] ctrl+[KeyO]",
+    "key" : "ctrl+t ctrl+o",
     "command" : "editor.action.toggleOvertypeInsertMode"
   },
   {
-    "key" : "ctrl+[KeyT] [KeyO]",
+    "key" : "ctrl+t o",
     "command" : "editor.action.toggleOvertypeInsertMode"
   },
   {
@@ -6015,21 +6015,21 @@
     "command" : "editor.action.toggleOvertypeInsertMode"
   },
   {
-    "key" : "ctrl+[KeyM] ctrl+[KeyW]",
+    "key" : "ctrl+m ctrl+w",
     "command" : "editor.action.toggleWordWrap"
   },
   {
-    "key" : "ctrl+[KeyM] [KeyW]",
+    "key" : "ctrl+m w",
     "command" : "editor.action.toggleWordWrap"
   },
   {
     "when" : "editorHasSignatureHelpProvider && editorTextFocus",
-    "key" : "ctrl+[KeyI] ctrl+[KeyP]",
+    "key" : "ctrl+i ctrl+p",
     "command" : "editor.action.triggerParameterHints"
   },
   {
     "when" : "editorHasSignatureHelpProvider && editorTextFocus",
-    "key" : "ctrl+[KeyI] [KeyP]",
+    "key" : "ctrl+i p",
     "command" : "editor.action.triggerParameterHints"
   },
   {
@@ -6053,17 +6053,17 @@
   },
   {
     "when" : "filesExplorerFocus && foldersViewVisible && !explorerResourceIsRoot && !inputFocus",
-    "key" : "ctrl+[KeyC]",
+    "key" : "ctrl+c",
     "command" : "filesExplorer.copy"
   },
   {
     "when" : "filesExplorerFocus && foldersViewVisible && !explorerResourceIsRoot && !explorerResourceReadonly && !inputFocus",
-    "key" : "ctrl+[KeyX]",
+    "key" : "ctrl+x",
     "command" : "filesExplorer.cut"
   },
   {
     "when" : "explorerResourceIsFolder && filesExplorerFocus && foldersViewVisible && !inputFocus",
-    "key" : "alt+[KeyF]",
+    "key" : "alt+f",
     "command" : "filesExplorer.findInFolder"
   },
   {
@@ -6073,7 +6073,7 @@
   },
   {
     "when" : "filesExplorerFocus && foldersViewVisible && !explorerResourceReadonly && !inputFocus",
-    "key" : "ctrl+[KeyV]",
+    "key" : "ctrl+v",
     "command" : "filesExplorer.paste"
   },
   {
@@ -6087,11 +6087,11 @@
     "command" : "focusSuggestion"
   },
   {
-    "key" : "ctrl+[KeyU] ctrl+[KeyP]",
+    "key" : "ctrl+u ctrl+p",
     "command" : "git.pullFrom"
   },
   {
-    "key" : "ctrl+[KeyU] [KeyP]",
+    "key" : "ctrl+u p",
     "command" : "git.pullFrom"
   },
   {
@@ -6101,7 +6101,7 @@
   },
   {
     "when" : "editorTextFocus && !editorTabMovesFocus && !inSnippetMode",
-    "key" : "ctrl+[KeyL]",
+    "key" : "ctrl+l",
     "command" : "editor.action.insertSnippet"
   },
   {
@@ -6171,7 +6171,7 @@
   },
   {
     "when" : "listFocus && listSupportsFind",
-    "key" : "ctrl+[KeyF]",
+    "key" : "ctrl+f",
     "command" : "list.find"
   },
   {
@@ -6241,12 +6241,12 @@
   },
   {
     "when" : "listFocus && listSupportsMultiselect && !inputFocus && !treestickyScrollFocused",
-    "key" : "ctrl+[KeyK] ctrl+[KeyA]",
+    "key" : "ctrl+k ctrl+a",
     "command" : "list.selectAll"
   },
   {
     "when" : "listFocus && listSupportsMultiselect && !inputFocus && !treestickyScrollFocused",
-    "key" : "ctrl+[KeyK] [KeyA]",
+    "key" : "ctrl+k a",
     "command" : "list.selectAll"
   },
   {
@@ -6291,7 +6291,7 @@
   },
   {
     "when" : "inQuickInput && quickInputType == 'quickPick'",
-    "key" : "meta+[ArrowLeft]",
+    "key" : "meta+[arrowleft]",
     "command" : "quickInput.first"
   },
   {
@@ -6301,7 +6301,7 @@
   },
   {
     "when" : "inQuickInput && quickInputType == 'quickPick'",
-    "key" : "meta+[ArrowRight]",
+    "key" : "meta+[arrowright]",
     "command" : "quickInput.last"
   },
   {
@@ -6316,12 +6316,12 @@
   },
   {
     "when" : "inQuickInput && quickInputType == 'quickPick'",
-    "key" : "meta+[ArrowDown]",
+    "key" : "meta+[arrowdown]",
     "command" : "quickInput.pageNext"
   },
   {
     "when" : "inQuickInput && quickInputType == 'quickPick'",
-    "key" : "meta+[ArrowUp]",
+    "key" : "meta+[arrowup]",
     "command" : "quickInput.pagePrevious"
   },
   {
@@ -6335,11 +6335,11 @@
     "command" : "quickInput.previous"
   },
   {
-    "key" : "ctrl+shift+[KeyZ]",
+    "key" : "ctrl+shift+z",
     "command" : "redo"
   },
   {
-    "key" : "ctrl+[KeyY]",
+    "key" : "ctrl+y",
     "command" : "redo"
   },
   {
@@ -6359,12 +6359,12 @@
   },
   {
     "when" : "filesExplorerFocus && foldersViewVisible && !explorerResourceIsRoot && !explorerResourceReadonly && !inputFocus",
-    "key" : "ctrl+[KeyT] ctrl+[KeyR]",
+    "key" : "ctrl+t ctrl+r",
     "command" : "renameFile"
   },
   {
     "when" : "filesExplorerFocus && foldersViewVisible && !explorerResourceIsRoot && !explorerResourceReadonly && !inputFocus",
-    "key" : "ctrl+[KeyT] [KeyR]",
+    "key" : "ctrl+t r",
     "command" : "renameFile"
   },
   {
@@ -6374,15 +6374,15 @@
   },
   {
     "when" : "inDebugRepl && textInputFocus",
-    "key" : "ctrl+[KeyF]",
+    "key" : "ctrl+f",
     "command" : "repl.action.filter"
   },
   {
-    "key" : "ctrl+[KeyK] ctrl+[KeyF]",
+    "key" : "ctrl+k ctrl+f",
     "command" : "revealFileInOS"
   },
   {
-    "key" : "ctrl+[KeyK] [KeyF]",
+    "key" : "ctrl+k f",
     "command" : "revealFileInOS"
   },
   {
@@ -6406,11 +6406,11 @@
     "command" : "editor.action.previousMatchFindAction"
   },
   {
-    "key" : "ctrl+[KeyK] ctrl+[KeyA]",
+    "key" : "ctrl+k ctrl+a",
     "command" : "editor.action.selectAll"
   },
   {
-    "key" : "ctrl+[KeyK] [KeyA]",
+    "key" : "ctrl+k a",
     "command" : "editor.action.selectAll"
   },
   {
@@ -6435,72 +6435,72 @@
   },
   {
     "when" : "editorFocus",
-    "key" : "alt+[KeyO] alt+[KeyC]",
+    "key" : "alt+o alt+c",
     "command" : "toggleFindCaseSensitive"
   },
   {
     "when" : "editorFocus",
-    "key" : "alt+[KeyO] [KeyC]",
+    "key" : "alt+o c",
     "command" : "toggleFindCaseSensitive"
   },
   {
     "when" : "findInputFocussed",
-    "key" : "alt+[KeyC]",
+    "key" : "alt+c",
     "command" : "toggleFindCaseSensitive"
   },
   {
     "when" : "editorFocus",
-    "key" : "alt+[KeyO] alt+[KeyS]",
+    "key" : "alt+o alt+s",
     "command" : "toggleFindInSelection"
   },
   {
     "when" : "editorFocus",
-    "key" : "alt+[KeyO] [KeyS]",
+    "key" : "alt+o s",
     "command" : "toggleFindInSelection"
   },
   {
     "when" : "findInputFocussed",
-    "key" : "alt+[KeyS]",
+    "key" : "alt+s",
     "command" : "toggleFindInSelection"
   },
   {
     "when" : "editorFocus",
-    "key" : "alt+[KeyO] alt+[KeyX]",
+    "key" : "alt+o alt+x",
     "command" : "toggleFindRegex"
   },
   {
     "when" : "editorFocus",
-    "key" : "alt+[KeyO] [KeyX]",
+    "key" : "alt+o x",
     "command" : "toggleFindRegex"
   },
   {
     "when" : "findInputFocussed",
-    "key" : "alt+[KeyX]",
+    "key" : "alt+x",
     "command" : "toggleFindRegex"
   },
   {
     "when" : "editorFocus",
-    "key" : "alt+[KeyO] alt+[KeyW]",
+    "key" : "alt+o alt+w",
     "command" : "toggleFindWholeWord"
   },
   {
     "when" : "editorFocus",
-    "key" : "alt+[KeyO] [KeyW]",
+    "key" : "alt+o w",
     "command" : "toggleFindWholeWord"
   },
   {
     "when" : "findInputFocussed",
-    "key" : "alt+[KeyW]",
+    "key" : "alt+w",
     "command" : "toggleFindWholeWord"
   },
   {
     "when" : "editorFocus",
-    "key" : "alt+[KeyO] alt+[KeyC]",
+    "key" : "alt+o alt+c",
     "command" : "togglePreserveCase"
   },
   {
     "when" : "editorFocus",
-    "key" : "alt+[KeyO] [KeyC]",
+    "key" : "alt+o c",
     "command" : "togglePreserveCase"
   },
   {
@@ -6509,7 +6509,7 @@
     "command" : "toggleSuggestionDetails"
   },
   {
-    "key" : "ctrl+[KeyZ]",
+    "key" : "ctrl+z",
     "command" : "undo"
   },
   {
@@ -6523,27 +6523,27 @@
     "command" : "widgetNavigation.focusPrevious"
   },
   {
-    "key" : "ctrl+[KeyW]",
+    "key" : "ctrl+w",
     "command" : "workbench.action.closeActiveEditor"
   },
   {
-    "key" : "meta+[KeyW]",
+    "key" : "meta+w",
     "command" : "workbench.action.closeActiveEditor"
   },
   {
-    "key" : "ctrl+[KeyK] ctrl+[KeyW]",
+    "key" : "ctrl+k ctrl+w",
     "command" : "workbench.action.closeOtherEditors"
   },
   {
-    "key" : "ctrl+[KeyK] [KeyW]",
+    "key" : "ctrl+k w",
     "command" : "workbench.action.closeOtherEditors"
   },
   {
-    "key" : "meta+shift+[KeyW]",
+    "key" : "meta+shift+w",
     "command" : "workbench.action.closeWindow"
   },
   {
-    "key" : "ctrl+shift+[KeyW]",
+    "key" : "ctrl+shift+w",
     "command" : "workbench.action.closeWindow"
   },
   {
@@ -6555,27 +6555,27 @@
     "command" : "workbench.action.debug.restart"
   },
   {
-    "key" : "ctrl+[KeyB] ctrl+[KeyE]",
+    "key" : "ctrl+b ctrl+e",
     "command" : "workbench.action.debug.run"
   },
   {
-    "key" : "ctrl+[KeyB] [KeyE]",
+    "key" : "ctrl+b e",
     "command" : "workbench.action.debug.run"
   },
   {
-    "key" : "ctrl+[KeyB] ctrl+[KeyD]",
+    "key" : "ctrl+b ctrl+d",
     "command" : "workbench.action.debug.selectandstart"
   },
   {
-    "key" : "ctrl+[KeyB] [KeyD]",
+    "key" : "ctrl+b d",
     "command" : "workbench.action.debug.selectandstart"
   },
   {
-    "key" : "ctrl+[KeyB] ctrl+[KeyS]",
+    "key" : "ctrl+b ctrl+s",
     "command" : "workbench.action.debug.start"
   },
   {
-    "key" : "ctrl+[KeyB] [KeyS]",
+    "key" : "ctrl+b s",
     "command" : "workbench.action.debug.start"
   },
   {
@@ -6595,249 +6595,249 @@
     "command" : "workbench.action.debug.stop"
   },
   {
-    "key" : "ctrl+[KeyK] ctrl+[KeyN]",
+    "key" : "ctrl+k ctrl+n",
     "command" : "workbench.action.files.newUntitledFile"
   },
   {
-    "key" : "ctrl+[KeyK] [KeyN]",
+    "key" : "ctrl+k n",
     "command" : "workbench.action.files.newUntitledFile"
   },
   {
-    "key" : "ctrl+[KeyS]",
+    "key" : "ctrl+s",
     "command" : "workbench.action.files.save"
   },
   {
-    "key" : "meta+[KeyS]",
+    "key" : "meta+s",
     "command" : "workbench.action.files.save"
   },
   {
-    "key" : "ctrl+shift+[KeyS]",
+    "key" : "ctrl+shift+s",
     "command" : "workbench.action.files.saveAll"
   },
   {
-    "key" : "meta+shift+[KeyS]",
+    "key" : "meta+shift+s",
     "command" : "workbench.action.files.saveAll"
   },
   {
-    "key" : "ctrl+shift+[KeyF]",
+    "key" : "ctrl+shift+f",
     "command" : "workbench.action.findInFiles"
   },
   {
-    "key" : "ctrl+[KeyN] ctrl+[KeyL]",
+    "key" : "ctrl+n ctrl+l",
     "command" : "workbench.action.gotoLine"
   },
   {
-    "key" : "ctrl+[KeyN] [KeyL]",
+    "key" : "ctrl+n l",
     "command" : "workbench.action.gotoLine"
   },
   {
-    "key" : "ctrl+[KeyN] ctrl+[KeyS]",
+    "key" : "ctrl+n ctrl+s",
     "command" : "workbench.action.gotoSymbol"
   },
   {
-    "key" : "ctrl+[KeyN] [KeyS]",
+    "key" : "ctrl+n s",
     "command" : "workbench.action.gotoSymbol"
   },
   {
-    "key" : "ctrl+[BracketLeft]",
+    "key" : "ctrl+[bracketleft]",
     "command" : "workbench.action.navigateBack"
   },
   {
-    "key" : "ctrl+[BracketRight]",
+    "key" : "ctrl+[bracketright]",
     "command" : "workbench.action.navigateForward"
   },
   {
-    "key" : "ctrl+[KeyN] ctrl+[KeyP]",
+    "key" : "ctrl+n ctrl+p",
     "command" : "workbench.action.navigateToLastEditLocation"
   },
   {
-    "key" : "ctrl+[KeyN] [KeyP]",
+    "key" : "ctrl+n p",
     "command" : "workbench.action.navigateToLastEditLocation"
   },
   {
-    "key" : "ctrl+[KeyK] ctrl+[KeyC]",
+    "key" : "ctrl+k ctrl+c",
     "command" : "workbench.action.newWindow"
   },
   {
-    "key" : "ctrl+[KeyK] [KeyC]",
+    "key" : "ctrl+k c",
     "command" : "workbench.action.newWindow"
   },
   {
-    "key" : "meta+[BracketRight]",
+    "key" : "meta+[bracketright]",
     "command" : "workbench.action.nextEditor"
   },
   {
-    "key" : "ctrl+[KeyN] ctrl+[KeyR]",
+    "key" : "ctrl+n ctrl+r",
     "command" : "workbench.action.openRecent"
   },
   {
-    "key" : "ctrl+[KeyN] [KeyR]",
+    "key" : "ctrl+n r",
     "command" : "workbench.action.openRecent"
   },
   {
-    "key" : "ctrl+[Key,]",
+    "key" : "ctrl+,",
     "command" : "workbench.action.openSettings"
   },
   {
     "when" : "!activeEditorIsPinned",
-    "key" : "ctrl+[KeyK] ctrl+[KeyP]",
+    "key" : "ctrl+k ctrl+p",
     "command" : "workbench.action.pinEditor"
   },
   {
     "when" : "!activeEditorIsPinned",
-    "key" : "ctrl+[KeyK] [KeyP]",
+    "key" : "ctrl+k p",
     "command" : "workbench.action.pinEditor"
   },
   {
-    "key" : "meta+[BracketLeft]",
+    "key" : "meta+[bracketleft]",
     "command" : "workbench.action.previousEditor"
   },
   {
-    "key" : "ctrl+[KeyN] ctrl+[KeyF]",
+    "key" : "ctrl+n ctrl+f",
     "command" : "workbench.action.quickOpen"
   },
   {
-    "key" : "ctrl+[KeyN] [KeyF]",
+    "key" : "ctrl+n f",
     "command" : "workbench.action.quickOpen"
   },
   {
-    "key" : "ctrl+[KeyQ]",
+    "key" : "ctrl+q",
     "command" : "workbench.action.quit"
   },
   {
-    "key" : "meta+[KeyQ]",
+    "key" : "meta+q",
     "command" : "workbench.action.quit"
   },
   {
-    "key" : "ctrl+shift+[KeyT]",
+    "key" : "ctrl+shift+t",
     "command" : "workbench.action.reopenClosedEditor"
   },
   {
-    "key" : "ctrl+shift+[KeyR]",
+    "key" : "ctrl+shift+r",
     "command" : "workbench.action.replaceInFiles"
   },
   {
-    "key" : "ctrl+[KeyN] ctrl+[KeyE]",
+    "key" : "ctrl+n ctrl+e",
     "command" : "workbench.action.showAllEditors"
   },
   {
-    "key" : "ctrl+[KeyN] [KeyE]",
+    "key" : "ctrl+n e",
     "command" : "workbench.action.showAllEditors"
   },
   {
-    "key" : "ctrl+[KeyN] ctrl+[KeyG]",
+    "key" : "ctrl+n ctrl+g",
     "command" : "workbench.action.showAllSymbols"
   },
   {
-    "key" : "ctrl+[KeyN] [KeyG]",
+    "key" : "ctrl+n g",
     "command" : "workbench.action.showAllSymbols"
   },
   {
-    "key" : "ctrl+[KeyN] ctrl+[KeyN]",
+    "key" : "ctrl+n ctrl+n",
     "command" : "workbench.action.showCommands"
   },
   {
-    "key" : "ctrl+[KeyN] [KeyN]",
+    "key" : "ctrl+n n",
     "command" : "workbench.action.showCommands"
   },
   {
-    "key" : "ctrl+shift+[KeyP]",
+    "key" : "ctrl+shift+p",
     "command" : "workbench.action.showCommands"
   },
   {
-    "key" : "ctrl+[KeyK] ctrl+[KeyV]",
+    "key" : "ctrl+k ctrl+v",
     "command" : "workbench.action.splitEditorRight"
   },
   {
-    "key" : "ctrl+[KeyK] [KeyV]",
+    "key" : "ctrl+k v",
     "command" : "workbench.action.splitEditorRight"
   },
   {
-    "key" : "ctrl+[KeyB] ctrl+[KeyB]",
+    "key" : "ctrl+b ctrl+b",
     "command" : "workbench.action.tasks.build"
   },
   {
-    "key" : "ctrl+[KeyB] [KeyB]",
+    "key" : "ctrl+b b",
     "command" : "workbench.action.tasks.build"
   },
   {
-    "key" : "ctrl+[KeyB] ctrl+[KeyR]",
+    "key" : "ctrl+b ctrl+r",
     "command" : "workbench.action.tasks.runTask"
   },
   {
-    "key" : "ctrl+[KeyB] [KeyR]",
+    "key" : "ctrl+b r",
     "command" : "workbench.action.tasks.runTask"
   },
   {
     "when" : "terminalTextSelectedInFocused || terminalFocus && terminalHasBeenCreated && terminalTextSelected || terminalFocus && terminalProcessSupported && terminalTextSelected || terminalFocus && terminalTextSelected && terminalTextSelectedInFocused || terminalHasBeenCreated && terminalTextSelected && terminalTextSelectedInFocused || terminalProcessSupported && terminalTextSelected && terminalTextSelectedInFocused",
-    "key" : "ctrl+shift+[KeyC]",
+    "key" : "ctrl+shift+c",
     "command" : "workbench.action.terminal.copyAndClearSelection"
   },
   {
     "when" : "terminalFocus && terminalHasBeenCreated || terminalFocus && terminalProcessSupported",
-    "key" : "ctrl+shift+[KeyV]",
+    "key" : "ctrl+shift+v",
     "command" : "workbench.action.terminal.paste"
   },
   {
-    "key" : "ctrl+[KeyM] ctrl+[KeyT]",
+    "key" : "ctrl+m ctrl+t",
     "command" : "workbench.action.terminal.toggleTerminal"
   },
   {
-    "key" : "ctrl+[KeyM] [KeyT]",
+    "key" : "ctrl+m t",
     "command" : "workbench.action.terminal.toggleTerminal"
   },
   {
-    "key" : "ctrl+[Key`]",
+    "key" : "ctrl+`",
     "command" : "workbench.action.terminal.toggleTerminal"
   },
   {
-    "key" : "ctrl+[KeyM] ctrl+[KeyP]",
+    "key" : "ctrl+m ctrl+p",
     "command" : "workbench.action.togglePanel"
   },
   {
-    "key" : "ctrl+[KeyM] [KeyP]",
+    "key" : "ctrl+m p",
     "command" : "workbench.action.togglePanel"
   },
   {
-    "key" : "ctrl+[KeyM] ctrl+[KeyS]",
+    "key" : "ctrl+m ctrl+s",
     "command" : "workbench.action.toggleSidebarVisibility"
   },
   {
-    "key" : "ctrl+[KeyM] [KeyS]",
+    "key" : "ctrl+m s",
     "command" : "workbench.action.toggleSidebarVisibility"
   },
   {
     "when" : "activeEditorIsPinned",
-    "key" : "ctrl+[KeyK] ctrl+[KeyP]",
+    "key" : "ctrl+k ctrl+p",
     "command" : "workbench.action.unpinEditor"
   },
   {
     "when" : "activeEditorIsPinned",
-    "key" : "ctrl+[KeyK] [KeyP]",
+    "key" : "ctrl+k p",
     "command" : "workbench.action.unpinEditor"
   },
   {
-    "key" : "ctrl+[Key=]",
+    "key" : "ctrl+=",
     "command" : "workbench.action.zoomIn"
   },
   {
-    "key" : "ctrl+[Key-]",
+    "key" : "ctrl+-",
     "command" : "workbench.action.zoomOut"
   },
   {
-    "key" : "ctrl+[Key0]",
+    "key" : "ctrl+0",
     "command" : "workbench.action.zoomReset"
   },
   {
-    "key" : "ctrl+[KeyT] ctrl+[KeyC]",
+    "key" : "ctrl+t ctrl+c",
     "command" : "workbench.files.action.compareWithClipboard"
   },
   {
-    "key" : "ctrl+[KeyT] [KeyC]",
+    "key" : "ctrl+t c",
     "command" : "workbench.files.action.compareWithClipboard"
   },
   {
-    "key" : "ctrl+shift+[KeyD]",
+    "key" : "ctrl+shift+d",
     "command" : "workbench.view.debug"
   }
 ]
