@@ -38,8 +38,10 @@ let
     gnomeExtensions.native-window-placement
     gnomeExtensions.caffeine
     gnomeExtensions.vicinae
-    gnomeExtensions.grand-theft-focus
-    gnomeExtensions.highlight-focus
+    gnomeExtensions.steal-my-focus-window
+    gnomeExtensions.dim-completed-calendar-events
+    # gnomeExtensions.grand-theft-focus
+    # gnomeExtensions.highlight-focus
     # tray-icons-reloaded
   ]
   ++ lib.optional hibernateCfg.enable hibernateExtensionPatched
