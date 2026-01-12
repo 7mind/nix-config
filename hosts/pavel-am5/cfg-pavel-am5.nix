@@ -244,6 +244,7 @@
 
     users.pavel = {
       isNormalUser = true;
+      linger = true;
       home = "/home/pavel";
       extraGroups = [
         "wheel"

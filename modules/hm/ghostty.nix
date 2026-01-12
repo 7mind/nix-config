@@ -20,8 +20,7 @@ in
 
     smind.hm.ghostty.theme = lib.mkOption {
       type = lib.types.str;
-      # default = "GitHub Dark";
-      default = "Builtin Pastel Dark";
+      default = "7mind";
       description = "Ghostty color theme (use 'ghostty +list-themes' to see available)";
     };
 
@@ -33,6 +32,37 @@ in
   };
 
   config = lib.mkIf config.smind.hm.ghostty.enable {
+    # Custom WCAG-compliant theme
+    xdg.configFile."ghostty/themes/7mind".text = ''
+      # 7mind
+      #
+      palette = 0=#000000
+      palette = 1=#ee6a6a
+      palette = 2=#33aa33
+      palette = 3=#cdcd55
+      palette = 4=#3333bb
+      palette = 5=#bb55bb
+      palette = 6=#7acaca
+      palette = 7=#cccccc
+      palette = 8=#585858
+      palette = 9=#ff9999
+      palette = 10=#77ff77
+      palette = 11=#ffff77
+      palette = 12=#aaaaff
+      palette = 13=#ff77ff
+      palette = 14=#77ffff
+      palette = 15=#ffffff
+
+      background = #000000
+      foreground = #cccccc
+
+      cursor-color = #ffcc80
+      cursor-text = #804d00
+
+      selection-background = #85a3e0
+      selection-foreground = #152951
+    '';
+
     # Set as default terminal via xdg-terminal-exec (modern GNOME)
     # See: https://gitlab.freedesktop.org/terminal-wg/specifications
     xdg.configFile."xdg-terminals.list".text = ''
