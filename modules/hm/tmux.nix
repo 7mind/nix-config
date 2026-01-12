@@ -20,6 +20,7 @@
         # Mouse works as expected, incl. scrolling
         set-option -g mouse on
         set -g default-terminal "screen-256color"
+        set -as terminal-features ",gnome*:RGB"
 
         set -g @catppuccin_window_left_separator ""
         set -g @catppuccin_window_right_separator " "

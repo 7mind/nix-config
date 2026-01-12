@@ -20,7 +20,7 @@ in
 
     smind.hm.ghostty.theme = lib.mkOption {
       type = lib.types.str;
-      default = "7mind";
+      default = "7mind+";
       description = "Ghostty color theme (use 'ghostty +list-themes' to see available)";
     };
 
@@ -37,31 +37,94 @@ in
       # 7mind
       #
       palette = 0=#000000
-      palette = 1=#ee6a6a
-      palette = 2=#33aa33
-      palette = 3=#cdcd55
-      palette = 4=#3333bb
-      palette = 5=#bb55bb
-      palette = 6=#7acaca
-      palette = 7=#cccccc
-      palette = 8=#585858
-      palette = 9=#ff9999
-      palette = 10=#77ff77
-      palette = 11=#ffff77
-      palette = 12=#aaaaff
-      palette = 13=#ff77ff
-      palette = 14=#77ffff
+      palette = 1=#fe5b0e
+      palette = 2=#00a77d
+      palette = 3=#b4f700
+      palette = 4=#005ed1
+      palette = 5=#d859fe
+      palette = 6=#00d0e6
+      palette = 7=#cecdcd
+      palette = 8=#555555
+      palette = 9=#ffbd92
+      palette = 10=#4dffd2
+      palette = 11=#f9ffbc
+      palette = 12=#92d7ff
+      palette = 13=#dcceff
+      palette = 14=#68fefe
       palette = 15=#ffffff
 
       background = #000000
-      foreground = #cccccc
+      foreground = #cecdcd
 
       cursor-color = #ffcc80
       cursor-text = #804d00
 
-      selection-background = #85a3e0
-      selection-foreground = #152951
+      selection-background = #5276bf
+      selection-foreground = #0f2247
     '';
+    xdg.configFile."ghostty/themes/7mind+".text = ''
+      # 7mind+
+      #
+      palette = 0=#000000
+      palette = 1=#fe5b0e
+      palette = 2=#19ab00
+      palette = 3=#b4b400
+      palette = 4=#0d73cc
+      palette = 5=#d859fe
+      palette = 6=#00d0e6
+      palette = 7=#cecdcd
+      palette = 8=#555555
+      palette = 9=#ffbd92
+      palette = 10=#4dffd2
+      palette = 11=#f9ffbc
+      palette = 12=#92d7ff
+      palette = 13=#dcceff
+      palette = 14=#68fefe
+      palette = 15=#ffffff
+
+      background = #000000
+      foreground = #cecdcd
+
+      cursor-color = #ffcc80
+      cursor-text = #804d00
+
+      selection-background = #5276bf
+      selection-foreground = #0f2247
+    '';
+
+
+    # Default Kitty theme
+    xdg.configFile."ghostty/themes/kitty".text = ''
+      # kitty default
+      #
+      palette = 0=#000000
+      palette = 1=#cc0403
+      palette = 2=#19cb00
+      palette = 3=#cecb00
+      palette = 4=#0d73cc
+      palette = 5=#cb1ed1
+      palette = 6=#0dcdcd
+      palette = 7=#dddddd
+      palette = 8=#767676
+      palette = 9=#f2201f
+      palette = 10=#23fd00
+      palette = 11=#fffd00
+      palette = 12=#1a8fff
+      palette = 13=#fd28ff
+      palette = 14=#14ffff
+      palette = 15=#ffffff
+
+      background = #000000
+      foreground = #dddddd
+
+      cursor-color = #cccccc
+      cursor-text = #111111
+
+      selection-background = #5276bf
+      selection-foreground = #0f2247
+    '';
+
+
 
     # Set as default terminal via xdg-terminal-exec (modern GNOME)
     # See: https://gitlab.freedesktop.org/terminal-wg/specifications

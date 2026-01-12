@@ -4,6 +4,7 @@
   ./cleanups.nix
   ./cosmic-keybindings.nix
   ./kde.nix
+  ./mc.nix
   ./dev-generic.nix
   ./dev-git.nix
   ./dev-llm.nix

@@ -77,6 +77,8 @@
 
       # monitoring
       htop
+      btop
+      bottom
       zenith
       bandwhich
 
