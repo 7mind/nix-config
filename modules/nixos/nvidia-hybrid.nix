@@ -143,9 +143,15 @@ in
     open = lib.mkOption {
       type = lib.types.bool;
       default = true;
-      description = "Use NVIDIA open kernel modules (may not support all features on new GPUs)";
+      description = "Use NVIDIA open kernel modules (required for RTX 50 series Blackwell)";
     };
+
+    package = lib.mkOption {
+      type = lib.types.nullOr lib.types.package;
+      default = null;
+      description = "Override nvidia driver package (e.g., pkgs.linuxPackages.nvidiaPackages.beta)";
     };
+  };
 
   config =
     let
@@ -175,6 +181,8 @@ in
             amdgpuBusId = cfg.amdgpuBusId;
             nvidiaBusId = cfg.nvidiaBusId;
           };
+        } // lib.optionalAttrs (cfg.package != null) {
+          package = cfg.package;
         };
 
         boot.kernelModules = [ "vfio-pci" ];
