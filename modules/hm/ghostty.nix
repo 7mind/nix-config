@@ -20,7 +20,7 @@ in
 
     smind.hm.ghostty.theme = lib.mkOption {
       type = lib.types.str;
-      default = "7mind+";
+      default = "7mind-balanced";
       description = "Ghostty color theme (use 'ghostty +list-themes' to see available)";
     };
 
@@ -91,6 +91,36 @@ in
       selection-background = #5276bf
       selection-foreground = #0f2247
     '';
+    xdg.configFile."ghostty/themes/7mind-balanced".text = ''
+      # 7mind-balanced
+      #
+      palette = 0=#000000
+      palette = 1=#ff6734
+      palette = 2=#00ac20
+      palette = 3=#bf9900
+      palette = 4=#3897ff
+      palette = 5=#e369ff
+      palette = 6=#0baeb1
+      palette = 7=#cdcdcd
+      palette = 8=#555555
+      palette = 9=#fbbe97
+      palette = 10=#62ffbc
+      palette = 11=#fbed80
+      palette = 12=#92d7ff
+      palette = 13=#decdff
+      palette = 14=#74fff3
+      palette = 15=#ffffff
+
+      background = #000000
+      foreground = #cdcdcd
+
+      cursor-color = #ffcc80
+      cursor-text = #804d00
+
+      selection-background = #5276bf
+      selection-foreground = #0f2247
+    '';
+
 
 
     # Default Kitty theme
