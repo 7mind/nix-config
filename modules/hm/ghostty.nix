@@ -95,24 +95,24 @@ in
       # 7mind-balanced
       #
       palette = 0=#000000
-      palette = 1=#d18b65
-      palette = 2=#0bab59
-      palette = 3=#d0ba00
-      palette = 4=#3597ff
-      palette = 5=#bd9aec
-      palette = 6=#01ccd7
-      palette = 7=#cdcdcd
-      palette = 8=#555555
-      palette = 9=#fcbe96
-      palette = 10=#4dffd2
-      palette = 11=#f7ee8c
-      palette = 12=#92d7ff
-      palette = 13=#dcceff
-      palette = 14=#6bfffb
+      palette = 1=#ffa096
+      palette = 2=#00b54d
+      palette = 3=#e2b300
+      palette = 4=#3d65ff
+      palette = 5=#fd91ff
+      palette = 6=#00c1d5
+      palette = 7=#dcdcdc
+      palette = 8=#808080
+      palette = 9=#fecfd6
+      palette = 10=#bce893
+      palette = 11=#ffd67f
+      palette = 12=#d9d7fe
+      palette = 13=#fecafe
+      palette = 14=#9ae6ff
       palette = 15=#ffffff
 
       background = #000000
-      foreground = #cdcdcd
+      foreground = #dcdcdc
 
       cursor-color = #ffcc80
       cursor-text = #804d00
