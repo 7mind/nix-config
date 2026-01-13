@@ -69,7 +69,7 @@ in
 
     smind.desktop.gnome.battery-health-charging.enable = lib.mkOption {
       type = lib.types.bool;
-      default = config.smind.isLaptop;
+      default = false; #config.smind.isLaptop;
       description = "Enable Battery Health Charging GNOME extension for laptops";
     };
   };
