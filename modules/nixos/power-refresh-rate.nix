@@ -80,7 +80,7 @@ in
           };
         };
       });
-      default = {};
+      default = { };
       example = lib.literalExpression ''
         {
           "eDP-1" = {
@@ -116,6 +116,8 @@ in
         pathConfig = {
           PathChanged = "%t/refresh-rate-trigger";
           Unit = "auto-refresh-rate-gnome.service";
+          TriggerLimitIntervalSec = 2;
+          TriggerLimitBurst = 1;
         };
       };
 
@@ -152,6 +154,8 @@ in
         pathConfig = {
           PathChanged = "%t/refresh-rate-trigger";
           Unit = "auto-refresh-rate-cosmic.service";
+          TriggerLimitIntervalSec = 2;
+          TriggerLimitBurst = 1;
         };
       };
 
