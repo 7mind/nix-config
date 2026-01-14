@@ -184,6 +184,7 @@
         # Rust
         rustc
         cargo
+        rustup
         # Nix
         nixd
         nil
