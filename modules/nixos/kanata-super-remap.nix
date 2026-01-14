@@ -10,7 +10,7 @@ in
     kanata = {
       port = lib.mkOption {
         type = lib.types.port;
-        default = 10000;
+        default = 22334;
         description = "Port for kanata TCP server";
       };
     };
