@@ -181,6 +181,9 @@
         [ ];
 
       extraPackages = with pkgs; [
+        # Rust
+        rustc
+        cargo
         # Nix
         nixd
         nil

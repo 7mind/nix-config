@@ -15,7 +15,9 @@
       settings = {
         "Midnight-Commander" = {
           skin = "dark";
-          show_hints = 0;
+        };
+        "Layout" = {
+          message_visible = 0;
           command_prompt = 0;
         };
       };
