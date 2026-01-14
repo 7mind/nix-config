@@ -182,8 +182,8 @@
 
       extraPackages = with pkgs; [
         # Rust
-        rustc
-        cargo
+        #rustc
+        #cargo
         rustup
         tree-sitter
         nodejs_22
