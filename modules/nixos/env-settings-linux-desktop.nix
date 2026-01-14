@@ -24,6 +24,7 @@
         mission-center
         nvtopPackages.full
 
+        libnotify # notify-send command
 
         # neohtop # broken
         # vkmark

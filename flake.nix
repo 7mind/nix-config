@@ -73,6 +73,10 @@
     determinate = {
       url = "https://flakehub.com/f/DeterminateSystems/determinate/*";
     };
+    kanata-switcher = {
+      url = "github:7mind/kanata-switcher";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = inputs@{ self, ... }:

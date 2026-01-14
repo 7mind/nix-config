@@ -5,6 +5,7 @@ let
   alsCfg = config.smind.desktop.gnome.ambient-light-sensor;
   fanControlCfg = config.smind.desktop.gnome.framework-fan-control;
   batteryHealthCfg = config.smind.desktop.gnome.battery-health-charging;
+  kanataSwitcherCfg = config.smind.keyboard.super-remap.kanata-switcher;
 
   # Patch extensions to support current GNOME shell version
   patchGnomeExtension = ext: ext.overrideAttrs (old: {
@@ -51,7 +52,8 @@ let
   ++ lib.optional hibernateCfg.enable hibernateExtensionPatched
   ++ lib.optional config.smind.desktop.gnome.sticky-keys.enable gnomeExtensions.keyboard-modifiers-status
   ++ lib.optional fanControlCfg.enable gnomeExtensions.framework-fan-control
-  ++ lib.optional batteryHealthCfg.enable batteryHealthChargingPatched;
+  ++ lib.optional batteryHealthCfg.enable batteryHealthChargingPatched
+  ++ lib.optional kanataSwitcherCfg.enable config.services.kanata-switcher.gnomeExtension.package;
 in
 {
   options = {
@@ -71,6 +73,12 @@ in
       type = lib.types.bool;
       default = false; #config.smind.isLaptop;
       description = "Enable Battery Health Charging GNOME extension for laptops";
+    };
+
+    smind.desktop.gnome.allow-local-extensions = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Allow users to install GNOME Shell extensions locally (non-declaratively). When false, extension settings are locked via dconf.";
     };
   };
 
@@ -134,7 +142,7 @@ in
       enable = true;
       profiles.user.databases = [
         {
-          lockAll = true; # prevents overriding
+          lockAll = !config.smind.desktop.gnome.allow-local-extensions;
 
           settings = lib.mkMerge ([
             {
