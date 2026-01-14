@@ -82,7 +82,7 @@ in
       };
     })
 
-    (lib.mkIf (cfg.enable && cfg.kanata-switcher.enable) {
+    (lib.mkIf (cfg.kanata-switcher.enable) {
       services.kanata-switcher = {
         enable = true;
         kanataPort = cfg.kanata.port;
