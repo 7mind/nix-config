@@ -1,10 +1,6 @@
 { config, pkgs, lib, ... }: {
   options = {
-    smind.hw.bluetooth.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable Bluetooth support with blueman";
-    };
+    smind.hw.bluetooth.enable = lib.mkEnableOption "Bluetooth support with blueman";
   };
 
   config = lib.mkIf config.smind.hw.bluetooth.enable {

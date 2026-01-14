@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.fonts.apple.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Install Apple fonts (SF Pro, Menlo)";
-    };
+    smind.fonts.apple.enable = lib.mkEnableOption "Apple fonts (SF Pro, Menlo)";
   };
 
   config = lib.mkIf config.smind.fonts.apple.enable {

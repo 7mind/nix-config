@@ -8,11 +8,7 @@
       description = "ZFS, emails, snapshots, udev";
     };
 
-    smind.zfs.email.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable ZFS mailer";
-    };
+    smind.zfs.email.enable = lib.mkEnableOption "ZFS mailer";
   };
 
   config = lib.mkIf config.smind.zfs.enable {

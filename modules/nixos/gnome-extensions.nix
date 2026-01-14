@@ -57,29 +57,13 @@ let
 in
 {
   options = {
-    smind.desktop.gnome.ambient-light-sensor.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable ambient light sensor support for GNOME's automatic screen brightness";
-    };
+    smind.desktop.gnome.ambient-light-sensor.enable = lib.mkEnableOption "ambient light sensor support for GNOME's automatic screen brightness";
 
-    smind.desktop.gnome.framework-fan-control.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable Framework fan control GNOME extension for Framework laptops";
-    };
+    smind.desktop.gnome.framework-fan-control.enable = lib.mkEnableOption "Framework fan control GNOME extension for Framework laptops";
 
-    smind.desktop.gnome.battery-health-charging.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false; #config.smind.isLaptop;
-      description = "Enable Battery Health Charging GNOME extension for laptops";
-    };
+    smind.desktop.gnome.battery-health-charging.enable = lib.mkEnableOption "Battery Health Charging GNOME extension for laptops";
 
-    smind.desktop.gnome.allow-local-extensions = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Allow users to install GNOME Shell extensions locally (non-declaratively). When false, extension settings are locked via dconf.";
-    };
+    smind.desktop.gnome.allow-local-extensions = lib.mkEnableOption "local installation of GNOME Shell extensions (non-declaratively). When false, extension settings are locked via dconf";
   };
 
   config = lib.mkIf config.smind.desktop.gnome.enable {

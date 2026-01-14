@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.hm.dev.llm.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable LLM development environment variables";
-    };
+    smind.hm.dev.llm.enable = lib.mkEnableOption "LLM development environment variables";
 
     smind.hm.dev.llm.devstralContextSize = lib.mkOption {
       type = lib.types.int;

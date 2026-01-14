@@ -1,11 +1,7 @@
 { pkgs, lib, config, ... }:
 {
   options = {
-    smind.llm.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable LLM tools (Ollama, aider, Claude Code)";
-    };
+    smind.llm.enable = lib.mkEnableOption "LLM tools (Ollama, aider, Claude Code)";
 
     smind.llm.ollama.package = lib.mkOption {
       type = lib.types.package;

@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.kernel.hack-rtl8125.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable hacky patches for RTL8125";
-    };
+    smind.kernel.hack-rtl8125.enable = lib.mkEnableOption "hacky patches for RTL8125";
   };
 
   config = lib.mkIf config.smind.kernel.hack-rtl8125.enable {

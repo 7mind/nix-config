@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.hm.dev.scala.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable Scala/JVM development tools";
-    };
+    smind.hm.dev.scala.enable = lib.mkEnableOption "Scala/JVM development tools";
   };
 
   config = lib.mkIf config.smind.hm.dev.scala.enable {

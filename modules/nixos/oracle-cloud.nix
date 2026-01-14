@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.hw.oracle-cloud.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable Oracle Cloud instance optimizations";
-    };
+    smind.hw.oracle-cloud.enable = lib.mkEnableOption "Oracle Cloud instance optimizations";
   };
 
   config = lib.mkIf config.smind.hw.oracle-cloud.enable {

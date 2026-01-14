@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.zram-swap.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable zram-based swap with zstd compression";
-    };
+    smind.zram-swap.enable = lib.mkEnableOption "zram-based swap with zstd compression";
   };
 
   config = lib.mkIf config.smind.zram-swap.enable {

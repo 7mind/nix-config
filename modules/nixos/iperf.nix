@@ -5,11 +5,7 @@ let
 in
 {
   options = {
-    smind.iperf.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable iperf3 network performance testing";
-    };
+    smind.iperf.enable = lib.mkEnableOption "iperf3 network performance testing";
 
     smind.iperf.protected.server.enable = lib.mkOption {
       type = lib.types.bool;

@@ -1,10 +1,6 @@
 { pkgs, lib, config, ... }: {
   options = {
-    smind.shell.zsh.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Configure zsh as default shell for all users";
-    };
+    smind.shell.zsh.enable = lib.mkEnableOption "zsh as default shell for all users";
   };
 
   config = lib.mkIf config.smind.shell.zsh.enable {

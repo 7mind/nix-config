@@ -4,17 +4,9 @@ let
 in
 {
   options.smind.hw.qmk-keyboard = {
-    enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable QMK/VIA keyboard support (udev rules for flashing and VIA configurator)";
-    };
+    enable = lib.mkEnableOption "QMK/VIA keyboard support (udev rules for flashing and VIA configurator)";
 
-    frameworkKeyboard = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable Framework Laptop 16 keyboard module rules for VIA configurator";
-    };
+    frameworkKeyboard = lib.mkEnableOption "Framework Laptop 16 keyboard module rules for VIA configurator";
   };
 
   config = lib.mkIf cfg.enable {

@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.net.tailscale.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable tailscale service";
-    };
+    smind.net.tailscale.enable = lib.mkEnableOption "tailscale service";
     smind.net.tailscale.gro-interface = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;

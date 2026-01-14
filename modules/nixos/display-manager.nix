@@ -39,11 +39,7 @@ in
     };
 
     auto-login = {
-      enable = lib.mkOption {
-        type = lib.types.bool;
-        default = false;
-        description = "Enable automatic login (use with disk encryption for security)";
-      };
+      enable = lib.mkEnableOption "automatic login (use with disk encryption for security)";
 
       user = lib.mkOption {
         type = lib.types.str;

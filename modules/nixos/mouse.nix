@@ -25,10 +25,6 @@
       '';
     };
 
-    naturalScroll = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable natural (inverted) scrolling for mouse wheel.";
-    };
+    naturalScroll = lib.mkEnableOption "natural (inverted) scrolling for mouse wheel";
   };
 }

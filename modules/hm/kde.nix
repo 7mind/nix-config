@@ -18,11 +18,7 @@ lib.optionalAttrs cfg-meta.isLinux {
       description = "Enable automatic suspend on idle (typically for laptops)";
     };
 
-    smind.hm.desktop.kde.minimal-keybindings = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Configure minimal KDE keybindings for window switching";
-    };
+    smind.hm.desktop.kde.minimal-keybindings = lib.mkEnableOption "minimal KDE keybindings for window switching";
 
     smind.hm.desktop.kde.hotkey-modifier = lib.mkOption {
       type = lib.types.enum [ "super" "ctrl" "super+ctrl" ];

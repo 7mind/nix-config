@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.hm.roles.desktop = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable desktop home-manager role with dev tools";
-    };
+    smind.hm.roles.desktop = lib.mkEnableOption "desktop home-manager role with dev tools";
   };
 
   config = lib.mkIf config.smind.hm.roles.desktop {

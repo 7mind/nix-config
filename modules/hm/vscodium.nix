@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.hm.vscodium.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable VSCodium with extensions and settings";
-    };
+    smind.hm.vscodium.enable = lib.mkEnableOption "VSCodium with extensions and settings";
 
     smind.hm.vscodium.fontSize = lib.mkOption {
       type = lib.types.int;

@@ -15,11 +15,7 @@
 
 {
   options = {
-    smind.hw.fingerprint.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable fingerprint reader support with fprintd";
-    };
+    smind.hw.fingerprint.enable = lib.mkEnableOption "fingerprint reader support with fprintd";
   };
 
   config = lib.mkIf config.smind.hw.fingerprint.enable {

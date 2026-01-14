@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.desktop.gnome.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable GNOME desktop environment with GDM";
-    };
+    smind.desktop.gnome.enable = lib.mkEnableOption "GNOME desktop environment with GDM";
 
     smind.desktop.gnome.auto-suspend.onAC = lib.mkOption {
       type = lib.types.enum [ "nothing" "suspend" "hibernate" "blank" ];
@@ -44,11 +40,7 @@
       description = "Enable Variable Refresh Rate (VRR) via Mutter experimental features";
     };
 
-    smind.desktop.gnome.hot-corners.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable GNOME hot corners";
-    };
+    smind.desktop.gnome.hot-corners.enable = lib.mkEnableOption "GNOME hot corners";
 
     smind.desktop.gnome.switch-input-source-keybinding = lib.mkOption {
       type = lib.types.listOf lib.types.str;
@@ -57,11 +49,7 @@
       description = "Keybinding(s) for switching to next input source (in addition to xkb-options)";
     };
 
-    smind.desktop.gnome.sticky-keys.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable sticky keys with GNOME Shell keyboard-modifiers-status extension";
-    };
+    smind.desktop.gnome.sticky-keys.enable = lib.mkEnableOption "sticky keys with GNOME Shell keyboard-modifiers-status extension";
 
     smind.desktop.gnome.gdm.monitors-xml = lib.mkOption {
       type = lib.types.nullOr lib.types.path;

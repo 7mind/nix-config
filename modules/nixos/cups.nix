@@ -1,10 +1,6 @@
 { pkgs, lib, config, cfg-meta, ... }: {
   options = {
-    smind.environment.cups.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable CUPS printing with PDF printer and network discovery";
-    };
+    smind.environment.cups.enable = lib.mkEnableOption "CUPS printing with PDF printer and network discovery";
   };
 
   config = lib.mkIf config.smind.environment.cups.enable {

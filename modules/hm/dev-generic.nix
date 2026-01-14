@@ -2,17 +2,9 @@
 
 {
   options = {
-    smind.hm.dev.generic.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable generic development tools and packages";
-    };
+    smind.hm.dev.generic.enable = lib.mkEnableOption "generic development tools and packages";
 
-    smind.hm.dev.tex.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable TeX/LaTeX toolchain";
-    };
+    smind.hm.dev.tex.enable = lib.mkEnableOption "TeX/LaTeX toolchain";
   };
 
   config = lib.mkIf config.smind.hm.dev.generic.enable {

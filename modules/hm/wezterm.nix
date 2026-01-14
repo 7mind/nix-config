@@ -5,11 +5,7 @@ let
 in
 {
   options = {
-    smind.hm.wezterm.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable WezTerm terminal emulator";
-    };
+    smind.hm.wezterm.enable = lib.mkEnableOption "WezTerm terminal emulator";
 
     smind.hm.wezterm.fontSize = lib.mkOption {
       type = lib.types.int;

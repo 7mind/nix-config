@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.hm.dev.git.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable Git with lazygit, tig, and custom config";
-    };
+    smind.hm.dev.git.enable = lib.mkEnableOption "Git with lazygit, tig, and custom config";
   };
 
   config = lib.mkIf config.smind.hm.dev.git.enable {

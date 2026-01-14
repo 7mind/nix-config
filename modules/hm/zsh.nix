@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.hm.zsh.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable Zsh shell integrations";
-    };
+    smind.hm.zsh.enable = lib.mkEnableOption "Zsh shell integrations";
   };
 
   config = lib.mkIf config.smind.hm.zsh.enable {

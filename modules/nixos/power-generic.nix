@@ -5,11 +5,7 @@ let
 in
 {
   options.smind.power-management = {
-    enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable power management and CPU frequency scaling";
-    };
+    enable = lib.mkEnableOption "power management and CPU frequency scaling";
 
     amd.enable = lib.mkOption {
       type = lib.types.bool;

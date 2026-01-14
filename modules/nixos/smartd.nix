@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.smartd.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable S.M.A.R.T. disk monitoring";
-    };
+    smind.smartd.enable = lib.mkEnableOption "S.M.A.R.T. disk monitoring";
 
     smind.smartd.email.enable = lib.mkOption {
       type = lib.types.bool;

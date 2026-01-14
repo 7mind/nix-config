@@ -28,11 +28,7 @@ let
 in
 {
   options.smind.power-management.auto-refresh-rate = {
-    enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Automatically switch display refresh rate based on AC/battery status (GNOME/COSMIC Wayland)";
-    };
+    enable = lib.mkEnableOption "automatic display refresh rate switching based on AC/battery status (GNOME/COSMIC Wayland)";
 
     displays = lib.mkOption {
       type = lib.types.attrsOf (lib.types.submodule {

@@ -2,7 +2,7 @@
 
 let
   isDesktopRole = config.smind.roles.desktop.generic-gnome
-               || config.smind.roles.desktop.generic-cosmic;
+    || config.smind.roles.desktop.generic-cosmic;
 in
 {
   options = {
@@ -18,17 +18,9 @@ in
       description = "Host is a laptop (enables hibernate, suspend, etc.)";
     };
 
-    smind.roles.desktop.generic-gnome = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable GNOME-based desktop role with full defaults";
-    };
+    smind.roles.desktop.generic-gnome = lib.mkEnableOption "GNOME-based desktop role with full defaults";
 
-    smind.roles.desktop.generic-cosmic = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable COSMIC-based desktop role with full defaults";
-    };
+    smind.roles.desktop.generic-cosmic = lib.mkEnableOption "COSMIC-based desktop role with full defaults";
   };
 
   config = lib.mkMerge [
@@ -102,6 +94,7 @@ in
         desktop.gnome.enable = lib.mkDefault true;
         desktop.gnome.minimal-hotkeys = lib.mkDefault true;
         keyboard.super-remap.enable = lib.mkDefault true;
+        keyboard.super-remap.kanata-switcher.enable = lib.mkDefault true;
       };
     })
 

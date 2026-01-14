@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.roles.server.oracle-cloud = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable Oracle Cloud ARM server role";
-    };
+    smind.roles.server.oracle-cloud = lib.mkEnableOption "Oracle Cloud ARM server role";
   };
 
   config = lib.mkIf config.smind.roles.server.oracle-cloud {

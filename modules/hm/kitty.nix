@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.hm.kitty.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable Kitty terminal with custom keybindings";
-    };
+    smind.hm.kitty.enable = lib.mkEnableOption "Kitty terminal with custom keybindings";
   };
 
   config = lib.mkIf config.smind.hm.kitty.enable {

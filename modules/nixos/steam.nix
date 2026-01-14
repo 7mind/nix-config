@@ -3,11 +3,7 @@
 {
   options = {
     smind.gaming.steam = {
-      enable = lib.mkOption {
-        type = lib.types.bool;
-        default = false;
-        description = "Enable Steam with Proton-GE and Wayland support";
-      };
+      enable = lib.mkEnableOption "Steam with Proton-GE and Wayland support";
 
       heroic.enable = lib.mkOption {
         type = lib.types.bool;

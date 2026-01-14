@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.darwin.brew.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable Homebrew package management";
-    };
+    smind.darwin.brew.enable = lib.mkEnableOption "Homebrew package management";
   };
 
   config = {

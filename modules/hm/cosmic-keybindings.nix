@@ -7,11 +7,7 @@ let
 in
 {
   options = {
-    smind.hm.desktop.cosmic.minimal-keybindings = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Configure minimal COSMIC keybindings";
-    };
+    smind.hm.desktop.cosmic.minimal-keybindings = lib.mkEnableOption "minimal COSMIC keybindings";
 
     smind.hm.desktop.cosmic.dark-mode = lib.mkOption {
       type = lib.types.bool;

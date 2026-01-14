@@ -7,11 +7,7 @@ let
 in
 {
   options = {
-    smind.hm.ghostty.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable Ghostty terminal emulator";
-    };
+    smind.hm.ghostty.enable = lib.mkEnableOption "Ghostty terminal emulator";
 
     smind.hm.ghostty.fontSize = lib.mkOption {
       type = lib.types.int;
@@ -25,11 +21,7 @@ in
       description = "Ghostty color theme (use 'ghostty +list-themes' to see available)";
     };
 
-    smind.hm.ghostty.ctrl-keybindings = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Add keybindings also on Ctrl (not just Super)";
-    };
+    smind.hm.ghostty.ctrl-keybindings = lib.mkEnableOption "keybindings also on Ctrl (not just Super)";
 
     smind.hm.ghostty.small-window = lib.mkOption {
       type = lib.types.bool;
@@ -37,11 +29,7 @@ in
       description = "Spawn a smaller window by default";
     };
 
-    smind.hm.ghostty.copy-on-select = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Automatically copy selected text to clipboard";
-    };
+    smind.hm.ghostty.copy-on-select = lib.mkEnableOption "Automatically copy selected text to clipboard";
   };
 
   config = lib.mkIf config.smind.hm.ghostty.enable {

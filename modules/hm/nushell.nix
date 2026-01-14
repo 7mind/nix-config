@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.hm.nushell.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable Nushell with custom configuration";
-    };
+    smind.hm.nushell.enable = lib.mkEnableOption "Nushell with custom configuration";
   };
 
   config = lib.mkIf config.smind.hm.nushell.enable {

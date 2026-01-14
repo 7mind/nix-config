@@ -1,10 +1,6 @@
 { pkgs, lib, config, ... }: {
   options = {
-    smind.hw.uhk-keyboard.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable Ultimate Hacking Keyboard support";
-    };
+    smind.hw.uhk-keyboard.enable = lib.mkEnableOption "Ultimate Hacking Keyboard support";
   };
 
   config = lib.mkIf config.smind.hw.uhk-keyboard.enable {

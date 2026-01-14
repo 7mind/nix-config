@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.darwin.sysconfig.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable macOS system configuration defaults";
-    };
+    smind.darwin.sysconfig.enable = lib.mkEnableOption "macOS system configuration defaults";
   };
 
   config = lib.mkIf config.smind.darwin.sysconfig.enable {

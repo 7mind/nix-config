@@ -95,11 +95,7 @@ let
 in
 {
   options.smind.audio.autoswitch = {
-    enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable auto-switching to USB headsets when connected";
-    };
+    enable = lib.mkEnableOption "auto-switching to USB headsets when connected";
 
     formFactors = lib.mkOption {
       type = lib.types.listOf (lib.types.enum [

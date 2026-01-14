@@ -94,11 +94,7 @@ in
 {
   options = {
     smind.security.keyring = {
-      enable = lib.mkOption {
-        type = lib.types.bool;
-        default = false;
-        description = "Enable keyring and SSH agent services";
-      };
+      enable = lib.mkEnableOption "keyring and SSH agent services";
 
       backend = lib.mkOption {
         type = lib.types.enum [ "gnome-keyring" "kwallet" "none" ];
@@ -124,15 +120,11 @@ in
       };
 
       tpmUnlock = {
-        enable = lib.mkOption {
-          type = lib.types.bool;
-          default = false;
-          description = ''
-            Enable TPM-based keyring unlock.
+        enable = lib.mkEnableOption ''
+            TPM-based keyring unlock.
             Useful for fingerprint login where password is not available to unlock keyring.
             Requires initial setup: run 'tpm-enroll-keyring' after enabling.
           '';
-        };
 
         credentialPath = lib.mkOption {
           type = lib.types.str;

@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.desktop.kde.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable KDE Plasma 6 desktop environment with SDDM";
-    };
+    smind.desktop.kde.enable = lib.mkEnableOption "KDE Plasma 6 desktop environment with SDDM";
   };
 
   config = lib.mkIf config.smind.desktop.kde.enable {

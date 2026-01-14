@@ -7,11 +7,7 @@
       default = true;
       description = "Enable common Linux system packages and settings";
     };
-    smind.environment.linux.serial-debug.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable serial console debug output";
-    };
+    smind.environment.linux.serial-debug.enable = lib.mkEnableOption "serial console debug output";
   };
 
   config = lib.mkMerge [

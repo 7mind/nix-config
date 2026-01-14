@@ -8,11 +8,7 @@
       description = "Host is a server system";
     };
 
-    smind.roles.server.generic = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable generic server role";
-    };
+    smind.roles.server.generic = lib.mkEnableOption "generic server role";
   };
 
   config = lib.mkIf config.smind.roles.server.generic {

@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.bootloader.systemd-boot.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Use systemd-boot as EFI bootloader";
-    };
+    smind.bootloader.systemd-boot.enable = lib.mkEnableOption "systemd-boot as EFI bootloader";
   };
 
   config = lib.mkIf config.smind.bootloader.systemd-boot.enable {

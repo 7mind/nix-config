@@ -17,11 +17,7 @@ let
     else {};
 in
 {
-  options.smind.age.load-owner-secrets = lib.mkOption {
-    type = lib.types.bool;
-    default = false;
-    description = "Whether to load owner-specific secrets based on smind.host.owner. Typically enabled on desktops, disabled on servers.";
-  };
+  options.smind.age.load-owner-secrets = lib.mkEnableOption "loading of owner-specific secrets based on smind.host.owner. Typically enabled on desktops, disabled on servers";
 
   options.smind.age.masterIdentity = {
     identity = lib.mkOption {

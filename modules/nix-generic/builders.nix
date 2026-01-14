@@ -5,11 +5,7 @@ let
 in
 {
   options = {
-    smind.infra.nix-build.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable distributed nix builds";
-    };
+    smind.infra.nix-build.enable = lib.mkEnableOption "distributed nix builds";
   };
 
   config = lib.mkIf config.smind.infra.nix-build.enable {

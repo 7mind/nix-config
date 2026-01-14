@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.fonts.nerd.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Install Nerd Fonts collection";
-    };
+    smind.fonts.nerd.enable = lib.mkEnableOption "Nerd Fonts collection";
   };
 
   config = {

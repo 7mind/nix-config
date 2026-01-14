@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.hm.ssh.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable SSH client configuration";
-    };
+    smind.hm.ssh.enable = lib.mkEnableOption "SSH client configuration";
   };
 
   config = lib.mkIf config.smind.hm.ssh.enable {

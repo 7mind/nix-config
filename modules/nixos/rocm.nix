@@ -6,11 +6,7 @@
       description = "Enable AMD ROCm compute stack";
     };
 
-    smind.hw.amd.gpu.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable AMD GPU support with AMDGPU drivers";
-    };
+    smind.hw.amd.gpu.enable = lib.mkEnableOption "AMD GPU support with AMDGPU drivers";
 
   };
 

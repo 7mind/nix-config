@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.bootloader.grub.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Use GRUB as EFI bootloader with OS prober";
-    };
+    smind.bootloader.grub.enable = lib.mkEnableOption "GRUB as EFI bootloader with OS prober";
   };
 
   config = lib.mkIf config.smind.bootloader.grub.enable {

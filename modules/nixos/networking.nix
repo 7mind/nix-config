@@ -1,10 +1,6 @@
 { lib, config, cfg-meta, pkgs, ... }: {
   options = {
-    smind.net.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable systemd-networkd based networking";
-    };
+    smind.net.enable = lib.mkEnableOption "systemd-networkd based networking";
 
     smind.net.upnp.enable = lib.mkOption {
       type = lib.types.bool;

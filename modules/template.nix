@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.xxx = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "";
-    };
+    smind.xxx = lib.mkEnableOption "";
   };
 
   config = lib.mkIf config.smind.xxx {

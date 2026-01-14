@@ -2,21 +2,9 @@
 
 {
   options = {
-    smind.desktop.gnome.minimal-hotkeys = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Configure minimal GNOME hotkeys, disabling most defaults";
-    };
-    smind.desktop.gnome.disable-super-drag = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Disable Super key window drag modifier";
-    };
-    smind.desktop.gnome.switch-applications = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Whether to switch applications or windows with Super-Tab";
-    };
+    smind.desktop.gnome.minimal-hotkeys = lib.mkEnableOption "minimal GNOME hotkeys, disabling most defaults";
+    smind.desktop.gnome.disable-super-drag = lib.mkEnableOption "disabling of Super key window drag modifier";
+    smind.desktop.gnome.switch-applications = lib.mkEnableOption "switching applications (instead of windows) with Super-Tab";
     smind.desktop.gnome.hotkey-modifier = lib.mkOption {
       type = lib.types.enum [ "super" "ctrl" "super+ctrl" ];
       default = "super";

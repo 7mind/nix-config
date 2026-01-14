@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.desktop.cosmic.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable COSMIC desktop environment";
-    };
+    smind.desktop.cosmic.enable = lib.mkEnableOption "COSMIC desktop environment";
   };
 
   config = lib.mkIf config.smind.desktop.cosmic.enable {

@@ -1,11 +1,7 @@
 { pkgs, lib, config, ... }:
 {
   options = {
-    smind.zfs.initrd-unlock.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Allow ZFS to be unlocked through SSH running in initrd";
-    };
+    smind.zfs.initrd-unlock.enable = lib.mkEnableOption "ZFS to be unlocked through SSH running in initrd";
 
     smind.zfs.initrd-unlock.interface = lib.mkOption {
       type = lib.types.str;

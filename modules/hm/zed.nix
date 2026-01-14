@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.hm.zed.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable Zed editor with custom configuration";
-    };
+    smind.hm.zed.enable = lib.mkEnableOption "Zed editor with custom configuration";
 
     smind.hm.zed.uiFontSize = lib.mkOption {
       type = lib.types.int;

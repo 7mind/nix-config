@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.hm.firefox.no-tabbar = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Hide Firefox tab bar (for use with Tree Style Tab)";
-    };
+    smind.hm.firefox.no-tabbar = lib.mkEnableOption "Hide Firefox tab bar (for use with Tree Style Tab)";
   };
 
   config = lib.mkIf config.smind.hm.firefox.no-tabbar {

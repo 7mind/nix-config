@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.hm.roles.server = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable server home-manager role with CLI tools";
-    };
+    smind.hm.roles.server = lib.mkEnableOption "server home-manager role with CLI tools";
   };
 
   config = lib.mkIf config.smind.hm.roles.server {

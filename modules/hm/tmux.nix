@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.hm.tmux.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable tmux with custom configuration";
-    };
+    smind.hm.tmux.enable = lib.mkEnableOption "tmux with custom configuration";
   };
 
   config = lib.mkIf config.smind.hm.tmux.enable {

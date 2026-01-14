@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.hm.dev.cs.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable C#/.NET development tools";
-    };
+    smind.hm.dev.cs.enable = lib.mkEnableOption "C#/.NET development tools";
   };
 
   config = lib.mkIf config.smind.hm.dev.cs.enable {

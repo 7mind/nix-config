@@ -3,11 +3,7 @@
 {
 
   options = {
-    smind.home-manager.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable home-manager integration";
-    };
+    smind.home-manager.enable = lib.mkEnableOption "home-manager integration";
   };
 
   config = lib.mkIf config.smind.home-manager.enable {

@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.net.router.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "enable ipv4/ipv6 forwarding";
-    };
+    smind.net.router.enable = lib.mkEnableOption "ipv4/ipv6 forwarding";
   };
 
   config = lib.mkIf config.smind.net.router.enable {

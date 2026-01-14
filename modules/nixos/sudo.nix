@@ -2,16 +2,8 @@
 
 {
   options = {
-    smind.security.sudo.wheel-permissive-rules = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Allow passwordless access to nix and systemd commands for wheel group";
-    };
-    smind.security.sudo.wheel-passwordless = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Allow passwordless sudo wheel group";
-    };
+    smind.security.sudo.wheel-permissive-rules = lib.mkEnableOption "passwordless access to nix and systemd commands for wheel group";
+    smind.security.sudo.wheel-passwordless = lib.mkEnableOption "passwordless sudo wheel group";
   };
 
   config = {

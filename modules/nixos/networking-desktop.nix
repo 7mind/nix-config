@@ -6,11 +6,7 @@
       description = "Enable NetworkManager with iwd for desktop systems";
     };
 
-    smind.net.opensnitch.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable OpenSnitch application firewall";
-    };
+    smind.net.opensnitch.enable = lib.mkEnableOption "OpenSnitch application firewall";
   };
 
   config = lib.mkMerge [

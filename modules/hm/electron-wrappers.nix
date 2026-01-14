@@ -49,11 +49,7 @@ exec systemd-run --user --scope --slice=${slice} ${pkg}/bin/${binName} ${flags} 
 in
 {
   options.smind.hm.electron-wrappers = {
-    enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable resource-limited Electron app wrappers";
-    };
+    enable = lib.mkEnableOption "resource-limited Electron app wrappers";
 
     cpuQuota = lib.mkOption {
       type = lib.types.str;
@@ -73,11 +69,7 @@ in
       description = "Memory limit for heavy apps slice";
     };
 
-    slack.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Install wrapped Slack";
-    };
+    slack.enable = lib.mkEnableOption "wrapped Slack";
 
     slack.netns = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
@@ -103,11 +95,7 @@ in
       description = "Timeout in seconds when waiting for tray service";
     };
 
-    element.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Install wrapped Element";
-    };
+    element.enable = lib.mkEnableOption "wrapped Element";
 
     element.netns = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
