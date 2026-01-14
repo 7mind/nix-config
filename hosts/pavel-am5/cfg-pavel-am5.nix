@@ -20,6 +20,8 @@
     };
   };
 
+  virtualisation.vmware.host.enable = true;
+
   services = {
     samba = {
       # add user: sudo smbpasswd -a pavel
