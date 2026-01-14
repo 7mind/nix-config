@@ -3,28 +3,39 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-show_trace=""
-parallel=""
-verbose=""
-flake_ref=".?submodules=1"
+export show_trace=""
+export parallel="1"
+export verbose=""
+export flake_ref=".?submodules=1"
+selected_hosts=()
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         -t|--trace) show_trace="--show-trace"; shift ;;
         -p|--parallel) parallel=1; shift ;;
+        -np|--no-parallel) parallel=""; shift ;;
         -v|--verbose) verbose=1; shift ;;
         --no-submodules) flake_ref="."; shift ;;
         -h|--help)
-            echo "Usage: $0 [-t|--trace] [-p|--parallel] [-v|--verbose] [--no-submodules]"
-            echo "  -t, --trace       Show full stack trace on errors"
-            echo "  -p, --parallel    Evaluate all hosts in parallel"
-            echo "  -v, --verbose     Print nix commands being executed"
+            echo "Usage: $0 [-t|--trace] [-np|--no-parallel] [-v|--verbose] [--no-submodules] [host...]"
+            echo "  -t, --trace        Show full stack trace on errors"
+            echo "  -p, --parallel     Evaluate all hosts in parallel (default)"
+            echo "  -np, --no-parallel Evaluate hosts sequentially"
+            echo "  -v, --verbose      Print nix commands being executed"
             echo "  --no-submodules   Do not include submodules in flake evaluation"
+            echo ""
+            echo "If no hosts are specified, all hosts are verified."
             exit 0
             ;;
-        *) echo "Unknown option: $1"; exit 1 ;;
+        -*) echo "Unknown option: $1"; exit 1 ;;
+        *) selected_hosts+=("$1"); shift ;;
     esac
 done
+
+if [[ -n "$parallel" ]] && ! command -v parallel &>/dev/null; then
+    echo "Warning: 'parallel' not found, falling back to sequential execution" >&2
+    parallel=""
+fi
 
 run_nix() {
     if [[ -n "$verbose" ]]; then
@@ -41,9 +52,33 @@ echo "=== Discovering configurations ==="
 nixos_hosts=$(run_nix nix eval "${flake_ref}#nixosConfigurations" --apply 'x: builtins.attrNames x' --json 2>/dev/null | jq -r '.[]')
 darwin_hosts=$(run_nix nix eval "${flake_ref}#darwinConfigurations" --apply 'x: builtins.attrNames x' --json 2>/dev/null | jq -r '.[]')
 
+if [[ ${#selected_hosts[@]} -gt 0 ]]; then
+    filtered_nixos=""
+    filtered_darwin=""
+    for host in "${selected_hosts[@]}"; do
+        if echo "$nixos_hosts" | grep -qx "$host"; then
+            filtered_nixos+="$host"$'\n'
+        elif echo "$darwin_hosts" | grep -qx "$host"; then
+            filtered_darwin+="$host"$'\n'
+        else
+            echo "Error: Unknown host '$host'" >&2
+            echo "Available NixOS hosts: $(echo $nixos_hosts | tr '\n' ' ')" >&2
+            echo "Available Darwin hosts: $(echo $darwin_hosts | tr '\n' ' ')" >&2
+            exit 1
+        fi
+    done
+    nixos_hosts=$(echo -n "$filtered_nixos" | sed '/^$/d')
+    darwin_hosts=$(echo -n "$filtered_darwin" | sed '/^$/d')
+fi
+
 echo "NixOS hosts: $(echo $nixos_hosts | tr '\n' ' ')"
 echo "Darwin hosts: $(echo $darwin_hosts | tr '\n' ' ')"
 echo
+
+total_hosts=$(( $(wc -w <<< "$nixos_hosts") + $(wc -w <<< "$darwin_hosts") ))
+if [[ $total_hosts -le 1 ]] && [[ -n "$parallel" ]]; then
+    parallel=""
+fi
 
 verify_host() {
     local type=$1
@@ -73,13 +108,12 @@ verify_host() {
 
 if [[ -n "$parallel" ]]; then
     export -f verify_host
-    export show_trace verbose
 
     results=$(
         {
             for host in $nixos_hosts; do echo "nixos $host"; done
             for host in $darwin_hosts; do echo "darwin $host"; done
-        } | parallel --colsep ' ' verify_host {1} {2}
+        } | parallel --will-cite --colsep ' ' verify_host {1} {2}
     )
 
     succeeded=$(echo "$results" | grep -c "^ok$" || true)

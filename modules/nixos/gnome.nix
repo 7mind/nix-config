@@ -8,7 +8,6 @@
       description = "Enable GNOME desktop environment with GDM";
     };
 
-
     smind.desktop.gnome.auto-suspend.onAC = lib.mkOption {
       type = lib.types.enum [ "nothing" "suspend" "hibernate" "blank" ];
       default = if config.smind.isLaptop then "suspend" else "nothing";
@@ -45,18 +44,10 @@
       description = "Enable Variable Refresh Rate (VRR) via Mutter experimental features";
     };
 
-    smind.desktop.gnome.keyboard-layouts = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      default = [ "us+mac" "ru" ];
-      example = [ "us" "de" "fr" ];
-      description = "XKB keyboard layouts to configure (e.g. 'us+mac', 'ru', 'de')";
-    };
-
-    smind.desktop.gnome.xkb-options = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      default = [ "grp:caps_toggle" ];
-      example = [ "grp:alt_shift_toggle" "caps:escape" ];
-      description = "XKB options (e.g. layout toggle, caps behavior)";
+    smind.desktop.gnome.hot-corners.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Enable GNOME hot corners";
     };
 
     smind.desktop.gnome.switch-input-source-keybinding = lib.mkOption {
@@ -77,6 +68,55 @@
       default = null;
       example = lib.literalExpression "./monitors.xml";
       description = "Path to monitors.xml for GDM login screen display configuration";
+    };
+
+    smind.desktop.gnome.xkb.layouts = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = config.smind.desktop.xkb.layouts;
+      example = [ "us+dvorak" "de" "fr+azerty" ];
+      description = ''
+        XKB keyboard layouts for GNOME in "layout+variant" format.
+        Defaults to smind.desktop.xkb.layouts.
+      '';
+    };
+
+    smind.desktop.gnome.xkb.options = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = config.smind.desktop.xkb.options;
+      example = [ "grp:alt_shift_toggle" "caps:escape" ];
+      description = ''
+        XKB options for GNOME (e.g. layout toggle, caps behavior).
+        Defaults to smind.desktop.xkb.options.
+      '';
+    };
+
+    smind.desktop.gnome.mouse.acceleration = lib.mkOption {
+      type = lib.types.numbers.between (-1.0) 1.0;
+      default = config.smind.desktop.mouse.acceleration;
+      example = 0.2;
+      description = ''
+        Mouse pointer acceleration/speed for GNOME.
+        Defaults to smind.desktop.mouse.acceleration.
+      '';
+    };
+
+    smind.desktop.gnome.mouse.accelProfile = lib.mkOption {
+      type = lib.types.enum [ "default" "flat" "adaptive" ];
+      default = config.smind.desktop.mouse.accelProfile;
+      example = "adaptive";
+      description = ''
+        Mouse acceleration profile for GNOME.
+        Defaults to smind.desktop.mouse.accelProfile.
+      '';
+    };
+
+    smind.desktop.gnome.mouse.naturalScroll = lib.mkOption {
+      type = lib.types.bool;
+      default = config.smind.desktop.mouse.naturalScroll;
+      description = ''
+        Enable natural scrolling for mouse in GNOME.
+        Defaults to smind.desktop.mouse.naturalScroll.
+      '';
     };
   };
 
@@ -109,7 +149,7 @@
                 font-antialiasing = "rgba";
                 clock-show-weekday = true;
                 color-scheme = "prefer-dark";
-                enable-hot-corners = false;
+                enable-hot-corners = config.smind.desktop.gnome.hot-corners.enable;
                 show-battery-percentage = true;
               };
               "org/gnome/mutter" = {
@@ -133,13 +173,21 @@
               "org/gnome/desktop/notifications" = {
                 show-in-lock-screen = false;
               };
+              "org/gnome/desktop/peripherals/mouse" = {
+                speed = lib.gvariant.mkDouble config.smind.desktop.gnome.mouse.acceleration;
+                accel-profile = config.smind.desktop.gnome.mouse.accelProfile;
+                natural-scroll = config.smind.desktop.gnome.mouse.naturalScroll;
+              };
             }
-          ] ++ lib.optional (config.smind.desktop.gnome.keyboard-layouts != [ ]) {
-            "org/gnome/desktop/input-sources" = {
-              sources = map (layout: lib.gvariant.mkTuple [ "xkb" layout ]) config.smind.desktop.gnome.keyboard-layouts;
-              per-window = true;
-              xkb-options = config.smind.desktop.gnome.xkb-options;
-            };
+          ] ++ lib.optional (config.smind.desktop.gnome.xkb.layouts != [ ]) {
+            "org/gnome/desktop/input-sources" =
+              let xkb = config.smind.desktop.gnome.xkb;
+              in {
+                # Layouts already in GNOME's "layout+variant" format
+                sources = map (layout: lib.gvariant.mkTuple [ "xkb" layout ]) xkb.layouts;
+                per-window = true;
+                xkb-options = xkb.options;
+              };
           } ++ lib.optional config.smind.desktop.gnome.sticky-keys.enable {
             "org/gnome/desktop/a11y/keyboard" = {
               "stickykeys-enable" = true;

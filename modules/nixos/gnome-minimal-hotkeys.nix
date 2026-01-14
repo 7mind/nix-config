@@ -17,6 +17,16 @@
       default = false;
       description = "Whether to switch applications or windows with Super-Tab";
     };
+    smind.desktop.gnome.hotkey-modifier = lib.mkOption {
+      type = lib.types.enum [ "super" "ctrl" "super+ctrl" ];
+      default = "super";
+      description = ''
+        Modifier key for window switching hotkeys (Tab, grave, Space):
+        - "super": Use Super/Cmd key (macOS-style)
+        - "ctrl": Use Ctrl key (traditional Linux/Windows style)
+        - "super+ctrl": Require both Super+Ctrl pressed together
+      '';
+    };
   };
 
   config = lib.mkIf config.smind.desktop.gnome.minimal-hotkeys {
@@ -33,19 +43,17 @@
           settings =
             let
               empty = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
+              hotkeyMod = config.smind.desktop.gnome.hotkey-modifier;
+              # Generate bindings based on modifier choice
+              hotkeyBindings = key:
+                if hotkeyMod == "super" then [ "<Super>${key}" ]
+                else if hotkeyMod == "ctrl" then [ "<Primary>${key}" ]
+                else [ "<Super><Primary>${key}" ]; # super+ctrl
               toggleOverviewBinding = "<Alt><Super>space";
-              vicinaeToggleBinding = "<Super>space";
+              vicinaeToggleBindings = hotkeyBindings "space";
               vicinaeTogglePath = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/vicinae-toggle/";
             in
             {
-              "org/gnome/desktop/input-sources" = {
-                #xkb-options = [
-                # "terminate:ctrl_alt_bksp" # only works for xwayland
-                # "grp:sclk_toggle" # not working anymore under gnome wayland
-                # "lv3:ralt_switch"
-                # "eurosign:4"
-                #];
-              };
               "org/gnome/mutter/wayland/keybindings" = {
                 restore-shortcuts = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
               };
@@ -193,7 +201,7 @@
                 screensaver = [ "<Shift><Super>l" ];
               };
               "org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/vicinae-toggle" = {
-                binding = vicinaeToggleBinding;
+                binding = builtins.head vicinaeToggleBindings;
                 command = "vicinae toggle";
                 name = "Vicinae Toggle";
               };
@@ -277,10 +285,10 @@
                 toggle-on-all-workspaces = empty;
                 unmaximize = empty;
 
-                switch-applications = if config.smind.desktop.gnome.switch-applications then [ "<Super>tab" ] else empty; # system windows with overview
-                switch-windows = if !config.smind.desktop.gnome.switch-applications then [ "<Super>tab" ] else empty; # app windows with overview
+                switch-applications = if config.smind.desktop.gnome.switch-applications then hotkeyBindings "tab" else empty; # system windows with overview
+                switch-windows = if !config.smind.desktop.gnome.switch-applications then hotkeyBindings "tab" else empty; # app windows with overview
 
-                cycle-group = [ "<Super>grave" ]; # app windows without overview
+                cycle-group = hotkeyBindings "grave"; # app windows without overview
 
                 close = [ "<Super>q" ];
                 switch-input-source =

@@ -99,6 +99,7 @@
       # system tools
       killall
       coreutils
+      parallel
 
       # pipe tools
       pv

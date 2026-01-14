@@ -138,16 +138,16 @@ in
     (lib.mkIf (selectedBackend == "sddm") {
       services.displayManager.sddm = {
         enable = true;
-        wayland.enable = lib.mkDefault true;
-        enableHidpi = lib.mkDefault true;
+        wayland.enable = true;
+        enableHidpi = true;
 
         # KDE-specific SDDM settings (from kde.nix)
-        wayland.compositor = lib.mkIf config.smind.desktop.kde.enable (lib.mkDefault "kwin");
+        wayland.compositor = lib.mkIf config.smind.desktop.kde.enable ("kwin");
         settings = lib.mkIf config.smind.desktop.kde.enable {
-          Theme.CursorTheme = lib.mkDefault "breeze_cursors";
+          Theme.CursorTheme = "breeze_cursors";
           Users = {
-            RememberLastUser = lib.mkDefault true;
-            RememberLastSession = lib.mkDefault true;
+            RememberLastUser = true;
+            RememberLastSession = true;
           };
         };
       };
@@ -163,7 +163,7 @@ in
       services.greetd = {
         enable = true;
         settings = {
-          default_session.command = lib.mkDefault "${pkgs.greetd.tuigreet}/bin/tuigreet --time --cmd sway";
+          default_session.command = "${pkgs.greetd.tuigreet}/bin/tuigreet --time --cmd sway";
         };
       };
     })

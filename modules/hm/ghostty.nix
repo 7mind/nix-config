@@ -2,7 +2,8 @@
 
 let
   defaultFontSize = if cfg-meta.isDarwin then 14 else 10;
-  defaultRows = if cfg-meta.isDarwin then 40 else 60;
+  defaultRows = if config.smind.hm.ghostty.small-window then 40 else 60;
+  defaultWidth = if config.smind.hm.ghostty.small-window then 120 else 160;
 in
 {
   options = {
@@ -28,6 +29,18 @@ in
       type = lib.types.bool;
       default = false;
       description = "Add keybindings also on Ctrl (not just Super)";
+    };
+
+    smind.hm.ghostty.small-window = lib.mkOption {
+      type = lib.types.bool;
+      default = cfg-meta.isDarwin;
+      description = "Spawn a smaller window by default";
+    };
+
+    smind.hm.ghostty.copy-on-select = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Automatically copy selected text to clipboard";
     };
   };
 
@@ -179,9 +192,7 @@ in
         window-padding-x = 8;
         window-padding-y = 5;
 
-        window-decoration = lib.mkIf (outerConfig.smind.desktop.kde.enable or false) "client"; # workaround for https://github.com/ghostty-org/ghostty/discussions/7439 on KDE
-
-        window-width = 160;
+        window-width = defaultWidth;
         window-height = defaultRows;
 
         scrollback-limit = 100000000; # ~50k lines at 160 columns (bytes, not lines)
@@ -197,7 +208,7 @@ in
         # Don't dim inactive panes
         unfocused-split-opacity = 1;
 
-        copy-on-select = false;
+        copy-on-select = config.smind.hm.ghostty.copy-on-select;
         selection-clear-on-copy = true;
         clipboard-paste-protection = false;
 
@@ -260,6 +271,8 @@ in
           "ctrl+minus=decrease_font_size:1"
           "ctrl+zero=reset_font_size"
         ];
+      } // lib.optionalAttrs cfg-meta.isLinux {
+        window-decoration = lib.mkIf (outerConfig.smind.desktop.kde.enable or false) "client"; # workaround for https://github.com/ghostty-org/ghostty/discussions/7439 on KDE
       };
     };
 

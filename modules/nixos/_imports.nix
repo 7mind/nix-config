@@ -33,6 +33,7 @@
   ./llm.nix
   ./locale-ie.nix
   ./metrics.nix
+  ./mouse.nix
   ./networking-desktop.nix
   ./networking.nix
   ./nvidia-hybrid.nix
@@ -58,6 +59,7 @@
   ./virt-manager.nix
   ./zfs-ssh-initrd.nix
   ./zfs.nix
+  ./xkb.nix
   ./zsh.nix
   ./zswap.nix
 ]
