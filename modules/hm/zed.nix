@@ -185,6 +185,10 @@
         rustc
         cargo
         rustup
+        tree-sitter
+        nodejs_22
+        gcc
+
         # Nix
         nixd
         nil
