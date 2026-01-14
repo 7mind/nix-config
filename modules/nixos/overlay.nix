@@ -132,7 +132,7 @@
 
                   name = "mutter-fix-cursor-stutter.patch";
 
-                  hash = "sha256-NM5vO+oTL213KM7P7dfM7DlyZqDf0hMgzqVXNAbjYh0=";
+                  hash = "sha256-Rtew+2BsQN4XU8x4Ge0Sjr1BoFFSWYrahVHYN+fq5jk=";
 
                 })
 
