@@ -20,12 +20,7 @@
     };
   };
 
-  virtualisation.vmware.host = {
-    enable = true;
-    extraConfig = ''
-      installerDefaults.componentDownloadEnabled = "TRUE"
-    '';
-  };
+  virtualisation.vmware.host.enable = true;
 
   # VMware hardcodes paths to /usr/bin for various utilities
   systemd.tmpfiles.rules = [
@@ -34,7 +29,35 @@
     "L+ /usr/bin/vmnet-netifup - - - - ${config.virtualisation.vmware.host.package}/bin/vmnet-netifup"
     "L+ /usr/bin/vmnet-natd - - - - ${config.virtualisation.vmware.host.package}/bin/vmnet-natd"
     "L+ /usr/bin/vmnet-dhcpd - - - - ${config.virtualisation.vmware.host.package}/bin/vmnet-dhcpd"
+    # "d /etc/vmware/vmnet1/dhcpd 0755 root root -"
+    # "d /etc/vmware/vmnet8/dhcpd 0755 root root -"
+    # "f /etc/vmware/vmnet1/dhcpd/dhcpd.leases 0644 root root -"
+    # "f /etc/vmware/vmnet8/dhcpd/dhcpd.leases 0644 root root -"
   ];
+
+  # environment.etc."vmware/vmnet1/dhcpd/dhcpd.conf".text = ''
+  #   allow unknown-clients;
+  #   default-lease-time 1800;
+  #   max-lease-time 7200;
+  #   subnet 10.211.55.0 netmask 255.255.255.0 {
+  #       range 10.211.55.128 10.211.55.254;
+  #       option broadcast-address 10.211.55.255;
+  #       option domain-name-servers 10.211.55.1;
+  #       option routers 10.211.55.1;
+  #   }
+  # '';
+
+  # environment.etc."vmware/vmnet8/dhcpd/dhcpd.conf".text = ''
+  #   allow unknown-clients;
+  #   default-lease-time 1800;
+  #   max-lease-time 7200;
+  #   subnet 10.211.56.0 netmask 255.255.255.0 {
+  #       range 10.211.56.128 10.211.56.254;
+  #       option broadcast-address 10.211.56.255;
+  #       option domain-name-servers 10.211.56.2;
+  #       option routers 10.211.56.2;
+  #   }
+  # '';
 
   services = {
     samba = {
