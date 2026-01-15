@@ -239,7 +239,7 @@
                 move-to-workspace-right = empty;
                 move-to-workspace-up = empty;
                 panel-main-menu = empty;
-                panel-run-dialog = empty;
+                panel-run-dialog = [ "<Primary><Alt>F2" ];
                 raise = empty;
                 raise-or-lower = empty;
                 set-spew-mark = empty;

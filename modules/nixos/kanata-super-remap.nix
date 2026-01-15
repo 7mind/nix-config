@@ -77,6 +77,10 @@ in
             "class" = "jetbrains";
             "layer" = "unmapped";
           }
+          {
+            "class" = "Vmplayer|Vmware|virt-manager";
+            "layer" = "unmapped";
+          }
         ];
         description = "Layer switching rules for kanata-switcher";
       };
