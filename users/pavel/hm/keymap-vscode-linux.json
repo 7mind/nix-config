@@ -5300,11 +5300,6 @@
   },
   {
     "when" : "editorFocus || editorIsOpen",
-    "key" : "ctrl+f",
-    "command" : "actions.find"
-  },
-  {
-    "when" : "editorFocus || editorIsOpen",
     "key" : "meta+f",
     "command" : "actions.find"
   },
@@ -5686,24 +5681,12 @@
     "command" : "editor.action.cancelSelectionAnchor"
   },
   {
-    "key" : "ctrl+c",
-    "command" : "editor.action.clipboardCopyAction"
-  },
-  {
     "key" : "meta+c",
     "command" : "editor.action.clipboardCopyAction"
   },
   {
-    "key" : "ctrl+x",
-    "command" : "editor.action.clipboardCutAction"
-  },
-  {
     "key" : "meta+x",
     "command" : "editor.action.clipboardCutAction"
-  },
-  {
-    "key" : "ctrl+v",
-    "command" : "editor.action.clipboardPasteAction"
   },
   {
     "key" : "meta+v",
@@ -5731,11 +5714,6 @@
   },
   {
     "when" : "editorTextFocus && !editorReadonly",
-    "key" : "ctrl+d",
-    "command" : "editor.action.duplicateSelection"
-  },
-  {
-    "when" : "editorTextFocus && !editorReadonly",
     "key" : "meta+d",
     "command" : "editor.action.duplicateSelection"
   },
@@ -5751,7 +5729,7 @@
   },
   {
     "when" : "!editorFocus && activeEditor == 'workbench.editor.extension'",
-    "key" : "ctrl+f",
+    "key" : "meta+f",
     "command" : "editor.action.extensioneditor.showfind"
   },
   {
@@ -5991,11 +5969,6 @@
     "when" : "editorFocus && !findWidgetVisible",
     "key" : "alt+h",
     "command" : "editor.action.selectHighlights"
-  },
-  {
-    "when" : "editorFocus || editorIsOpen",
-    "key" : "ctrl+r",
-    "command" : "editor.action.startFindReplaceAction"
   },
   {
     "when" : "editorFocus || editorIsOpen",
@@ -6335,11 +6308,11 @@
     "command" : "quickInput.previous"
   },
   {
-    "key" : "ctrl+shift+z",
+    "key" : "meta+shift+z",
     "command" : "redo"
   },
   {
-    "key" : "ctrl+y",
+    "key" : "meta+y",
     "command" : "redo"
   },
   {
@@ -6374,7 +6347,7 @@
   },
   {
     "when" : "inDebugRepl && textInputFocus",
-    "key" : "ctrl+f",
+    "key" : "meta+f",
     "command" : "repl.action.filter"
   },
   {
@@ -6509,7 +6482,7 @@
     "command" : "toggleSuggestionDetails"
   },
   {
-    "key" : "ctrl+z",
+    "key" : "meta+z",
     "command" : "undo"
   },
   {
@@ -6521,10 +6494,6 @@
     "when" : "inputFocus && navigableContainerFocused || navigableContainerFocused && treestickyScrollFocused || navigableContainerFocused && !listFocus || navigableContainerFocused && listScrollAtBoundary == 'both' || navigableContainerFocused && listScrollAtBoundary == 'top'",
     "key" : "ctrl+up",
     "command" : "widgetNavigation.focusPrevious"
-  },
-  {
-    "key" : "ctrl+w",
-    "command" : "workbench.action.closeActiveEditor"
   },
   {
     "key" : "meta+w",
@@ -6540,10 +6509,6 @@
   },
   {
     "key" : "meta+shift+w",
-    "command" : "workbench.action.closeWindow"
-  },
-  {
-    "key" : "ctrl+shift+w",
     "command" : "workbench.action.closeWindow"
   },
   {
@@ -6603,23 +6568,15 @@
     "command" : "workbench.action.files.newUntitledFile"
   },
   {
-    "key" : "ctrl+s",
-    "command" : "workbench.action.files.save"
-  },
-  {
     "key" : "meta+s",
     "command" : "workbench.action.files.save"
-  },
-  {
-    "key" : "ctrl+shift+s",
-    "command" : "workbench.action.files.saveAll"
   },
   {
     "key" : "meta+shift+s",
     "command" : "workbench.action.files.saveAll"
   },
   {
-    "key" : "ctrl+shift+f",
+    "key" : "meta+shift+f",
     "command" : "workbench.action.findInFiles"
   },
   {
@@ -6675,7 +6632,7 @@
     "command" : "workbench.action.openRecent"
   },
   {
-    "key" : "ctrl+,",
+    "key" : "meta+,",
     "command" : "workbench.action.openSettings"
   },
   {
@@ -6713,7 +6670,7 @@
     "command" : "workbench.action.reopenClosedEditor"
   },
   {
-    "key" : "ctrl+shift+r",
+    "key" : "meta+shift+r",
     "command" : "workbench.action.replaceInFiles"
   },
   {
@@ -6741,7 +6698,7 @@
     "command" : "workbench.action.showCommands"
   },
   {
-    "key" : "ctrl+shift+p",
+    "key" : "meta+shift+p",
     "command" : "workbench.action.showCommands"
   },
   {
@@ -6770,12 +6727,12 @@
   },
   {
     "when" : "terminalTextSelectedInFocused || terminalFocus && terminalHasBeenCreated && terminalTextSelected || terminalFocus && terminalProcessSupported && terminalTextSelected || terminalFocus && terminalTextSelected && terminalTextSelectedInFocused || terminalHasBeenCreated && terminalTextSelected && terminalTextSelectedInFocused || terminalProcessSupported && terminalTextSelected && terminalTextSelectedInFocused",
-    "key" : "ctrl+shift+c",
-    "command" : "workbench.action.terminal.copyAndClearSelection"
+    "key" : "meta+c",
+    "command" : "workbench.action.terminal.copySelection"
   },
   {
     "when" : "terminalFocus && terminalHasBeenCreated || terminalFocus && terminalProcessSupported",
-    "key" : "ctrl+shift+v",
+    "key" : "meta+v",
     "command" : "workbench.action.terminal.paste"
   },
   {
@@ -6817,15 +6774,15 @@
     "command" : "workbench.action.unpinEditor"
   },
   {
-    "key" : "ctrl+=",
+    "key" : "meta+=",
     "command" : "workbench.action.zoomIn"
   },
   {
-    "key" : "ctrl+-",
+    "key" : "meta+-",
     "command" : "workbench.action.zoomOut"
   },
   {
-    "key" : "ctrl+0",
+    "key" : "meta+0",
     "command" : "workbench.action.zoomReset"
   },
   {

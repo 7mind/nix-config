@@ -51,7 +51,7 @@
   </action>
   <action id="ReplaceInPath">
     <!--workbench.action.replaceInFiles-->
-    <keyboard-shortcut first-keystroke="ctrl shift r"/>
+    <keyboard-shortcut first-keystroke="meta shift r"/>
   </action>
   <action id="GotoImplementation">
     <!--editor.action.goToImplementation-->
@@ -131,8 +131,6 @@
     <keyboard-shortcut first-keystroke="ctrl shift end"/>
   </action>
   <action id="Replace">
-    <!--editor.action.startFindReplaceAction-->
-    <keyboard-shortcut first-keystroke="ctrl r"/>
     <!--editor.action.startFindReplaceAction-->
     <keyboard-shortcut first-keystroke="meta r"/>
   </action>
@@ -229,7 +227,7 @@
   </action>
   <action id="ShowSettings">
     <!--workbench.action.openSettings-->
-    <keyboard-shortcut first-keystroke="ctrl comma"/>
+    <keyboard-shortcut first-keystroke="meta comma"/>
   </action>
   <action id="MoveStatementDown">
     <!--editor.action.moveLinesDownAction-->
@@ -248,7 +246,7 @@
   </action>
   <action id="EditorDecreaseFontSize">
     <!--workbench.action.zoomOut-->
-    <keyboard-shortcut first-keystroke="ctrl minus"/>
+    <keyboard-shortcut first-keystroke="meta minus"/>
   </action>
   <action id="EditorIndentLineOrSelection">
     <!--editor.action.indentLines-->
@@ -256,9 +254,9 @@
   </action>
   <action id="$Redo">
     <!--redo-->
-    <keyboard-shortcut first-keystroke="ctrl shift z"/>
+    <keyboard-shortcut first-keystroke="meta shift z"/>
     <!--redo-->
-    <keyboard-shortcut first-keystroke="ctrl y"/>
+    <keyboard-shortcut first-keystroke="meta y"/>
   </action>
   <action id="NextTemplateVariable">
     <!--jumpToNextSnippetPlaceholder-->
@@ -273,8 +271,6 @@
   </action>
   <action id="$Paste">
     <!--editor.action.clipboardPasteAction-->
-    <keyboard-shortcut first-keystroke="ctrl v"/>
-    <!--editor.action.clipboardPasteAction-->
     <keyboard-shortcut first-keystroke="meta v"/>
   </action>
   <action id="EditorRight">
@@ -283,7 +279,7 @@
   </action>
   <action id="FindInPath">
     <!--workbench.action.findInFiles-->
-    <keyboard-shortcut first-keystroke="ctrl shift f"/>
+    <keyboard-shortcut first-keystroke="meta shift f"/>
   </action>
   <action id="VcsShowNextChangeMarker">
     <!--editor.action.marker.next-->
@@ -341,8 +337,6 @@
   </action>
   <action id="Find">
     <!--actions.find-->
-    <keyboard-shortcut first-keystroke="ctrl f"/>
-    <!--actions.find-->
     <keyboard-shortcut first-keystroke="meta f"/>
   </action>
   <action id="Generate">
@@ -394,8 +388,6 @@
   </action>
   <action id="CloseContent">
     <!--workbench.action.closeActiveEditor-->
-    <keyboard-shortcut first-keystroke="ctrl w"/>
-    <!--workbench.action.closeActiveEditor-->
     <keyboard-shortcut first-keystroke="meta w"/>
   </action>
   <action id="CompileDirty">
@@ -411,12 +403,8 @@
   <action id="$Copy">
     <!--editor.action.clipboardCopyAction-->
     <keyboard-shortcut first-keystroke="meta c"/>
-    <!--editor.action.clipboardCopyAction-->
-    <keyboard-shortcut first-keystroke="ctrl c"/>
   </action>
   <action id="$Cut">
-    <!--editor.action.clipboardCutAction-->
-    <keyboard-shortcut first-keystroke="ctrl x"/>
     <!--editor.action.clipboardCutAction-->
     <keyboard-shortcut first-keystroke="meta x"/>
   </action>
@@ -427,7 +415,7 @@
   </action>
   <action id="EditorResetFontSize">
     <!--workbench.action.zoomReset-->
-    <keyboard-shortcut first-keystroke="ctrl 0"/>
+    <keyboard-shortcut first-keystroke="meta 0"/>
   </action>
   <action id="Compile">
     <!--build.file-->
@@ -487,7 +475,7 @@
   </action>
   <action id="$Undo">
     <!--undo-->
-    <keyboard-shortcut first-keystroke="ctrl z"/>
+    <keyboard-shortcut first-keystroke="meta z"/>
   </action>
   <action id="EditorRightWithSelection">
     <!--cursorRightSelect-->
@@ -523,8 +511,6 @@
   <action id="EditorDuplicate">
     <!--editor.action.duplicateSelection-->
     <keyboard-shortcut first-keystroke="meta d"/>
-    <!--editor.action.duplicateSelection-->
-    <keyboard-shortcut first-keystroke="ctrl d"/>
   </action>
   <action id="FindPrevious">
     <!--editor.action.previousMatchFindAction-->
@@ -534,7 +520,7 @@
   </action>
   <action id="GotoAction">
     <!--workbench.action.showCommands-->
-    <keyboard-shortcut first-keystroke="ctrl shift p"/>
+    <keyboard-shortcut first-keystroke="meta shift p"/>
     <!--workbench.action.showCommands-->
     <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="ctrl n"/>
     <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="n"/>
@@ -545,11 +531,7 @@
   </action>
   <action id="SaveAll">
     <!--workbench.action.files.saveAll-->
-    <keyboard-shortcut first-keystroke="ctrl shift s"/>
-    <!--workbench.action.files.saveAll-->
     <keyboard-shortcut first-keystroke="meta shift s"/>
-    <!--workbench.action.files.save-->
-    <keyboard-shortcut first-keystroke="ctrl s"/>
     <!--workbench.action.files.save-->
     <keyboard-shortcut first-keystroke="meta s"/>
   </action>
@@ -571,8 +553,6 @@
   <action id="CloseProject">
     <!--workbench.action.closeWindow-->
     <keyboard-shortcut first-keystroke="meta shift w"/>
-    <!--workbench.action.closeWindow-->
-    <keyboard-shortcut first-keystroke="ctrl shift w"/>
   </action>
   <action id="EditorMatchBrace">
     <!--editor.action.jumpToBracket-->
@@ -585,7 +565,7 @@
   </action>
   <action id="ZoomInIdeAction">
     <!--workbench.action.zoomIn-->
-    <keyboard-shortcut first-keystroke="ctrl equals"/>
+    <keyboard-shortcut first-keystroke="meta equals"/>
   </action>
   <action id="EditorPageUpWithSelection">
     <!--cursorPageUpSelect-->
