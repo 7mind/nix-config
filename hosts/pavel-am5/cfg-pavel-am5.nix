@@ -216,6 +216,7 @@
   networking.useDHCP = false;
   networking.firewall = {
     allowedTCPPorts = [ 8234 ];
+    trustedInterfaces = [ "vmnet*" ];
   };
 
   smind.gaming.steam.enable = true;
