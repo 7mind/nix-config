@@ -84,3 +84,5 @@
 
 (deflayermap (browser))
 
+(deflayermap (ide))
+

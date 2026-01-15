@@ -5,10 +5,11 @@ let
 
   # Bundle kanata config files together so includes work
   # Prepend defcfg with extraDefCfg settings to the main config
-  mkKanataConfigDir = extraDefCfg: pkgs.runCommand "kanata-config" {
-    inherit extraDefCfg;
-    passAsFile = [ "extraDefCfg" ];
-  } ''
+  mkKanataConfigDir = extraDefCfg: pkgs.runCommand "kanata-config"
+    {
+      inherit extraDefCfg;
+      passAsFile = [ "extraDefCfg" ];
+    } ''
     mkdir -p $out
     cp ${./kanata-lib.kbd} $out/kanata-lib.kbd
 
@@ -69,8 +70,12 @@ in
             "layer" = "browser";
           }
           {
-            "class" = "kitty|alacritty|wezterm|com.mitchellh.ghostty|code|jetbrains|codium|VSCodium";
+            "class" = "kitty|alacritty|wezterm|com.mitchellh.ghostty";
             "layer" = "terminal";
+          }
+          {
+            "class" = "code|jetbrains|codium|VSCodium";
+            "layer" = "ide";
           }
         ];
         description = "Layer switching rules for kanata-switcher";
