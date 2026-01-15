@@ -114,6 +114,8 @@
         };
       };
 
+      home.file.".codex/config.toml".force = true;
+
 
       programs.gemini-cli = {
         enable = true;
