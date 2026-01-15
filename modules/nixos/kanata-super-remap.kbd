@@ -14,7 +14,9 @@
   (t! mk-override (or lmet rmet) c (unmod lctl c))   ;; Copy
   (t! mk-override (or lmet rmet) v (unmod lctl v))   ;; Paste
   (t! mk-override (or lmet rmet) x (unmod lctl x))   ;; Cut
+  ;;
   (t! mk-override (or lmet rmet) z (unmod lctl z))   ;; Undo
+  (t! mk-override (or lmet rmet) y (unmod lctl y))   ;; Redo
   ;; File operations
   (t! mk-override (or lmet rmet) s (unmod lctl s))   ;; Save
   (t! mk-override (or lmet rmet) o (unmod lctl o))   ;; Open
@@ -28,8 +30,8 @@
   (t! mk-override (or lmet rmet) n (unmod lctl n))   ;; New window
   (t! mk-override (or lmet rmet) w (unmod lctl w))   ;; Close tab/window
   ;; Shift layer
-  lsft (multi (layer-while-held shift-layer) lsft)
-  rsft (multi (layer-while-held shift-layer) rsft)
+  ;; lsft (multi (layer-while-held shift-layer) lsft)
+  ;; rsft (multi (layer-while-held shift-layer) rsft)
 
   ;; 'a' key: Super+A → Ctrl+A (Select all), Ctrl+A → Home
   a (switch
@@ -54,23 +56,27 @@
   ;; (t! mk-override (and (or lmet rmet) (or lsft rsft)) b (unmod lctl spc))
 )
 
-(deflayermap (shift-layer)
-  ;; Super+Shift combinations
-  (t! mk-override (and (or lmet rmet) (or lsft rsft)) z (unmod lctl lsft z))  ;; Redo
-  (t! mk-override (and (or lmet rmet) (or lsft rsft)) f (unmod lctl lsft f))  ;; Find in files
-  (t! mk-override (and (or lmet rmet) (or lsft rsft)) t (unmod lctl lsft t))  ;; Reopen closed tab
-  (t! mk-override (and (or lmet rmet) (or lsft rsft)) n (unmod lctl lsft n))  ;; New incognito/private window
-  (t! mk-override (and (or lmet rmet) (or lsft rsft)) p (unmod lctl lsft p))  ;; Command palette (VS Code)
-)
+;; (deflayermap (shift-layer)
+;;   ;; Super+Shift combinations
+;;   (t! mk-override (and (or lmet rmet) (or lsft rsft)) z (unmod lctl lsft z))  ;; Redo
+;;   (t! mk-override (and (or lmet rmet) (or lsft rsft)) f (unmod lctl lsft f))  ;; Find in files
+;;   (t! mk-override (and (or lmet rmet) (or lsft rsft)) t (unmod lctl lsft t))  ;; Reopen closed tab
+;;   (t! mk-override (and (or lmet rmet) (or lsft rsft)) n (unmod lctl lsft n))  ;; New incognito/private window
+;;   (t! mk-override (and (or lmet rmet) (or lsft rsft)) p (unmod lctl lsft p))  ;; Command palette (VS Code)
+;; )
 
 ;; Terminal layer: disable all remaps (terminals handle shortcuts natively)
 (deflayermap (terminal)
   c c  ;; Keep Super+C as Super+C (not Ctrl+C) - terminal uses Ctrl+C for SIGINT
   v v  ;; Keep Super+V as Super+V (not Ctrl+V) - terminal uses Ctrl+Shift+V for paste
   x x  ;; Keep Super+X as Super+X (not Ctrl+X) - terminal uses Ctrl+X differently
+  ;;
   z z  ;; Keep Super+Z as Super+Z (not Ctrl+Z) - terminal uses Ctrl+Z for SIGTSTP
+  y y  ;; Keep Super+Y as Super+Y (not Ctrl+Y)
+  ;;
   a a  ;; Keep Ctrl+A as Ctrl+A (not Home) - terminal uses Ctrl+A for tmux/screen prefix
   e e  ;; Keep Ctrl+E as Ctrl+E (not End) - terminal uses Ctrl+E for end of line (readline)
+  ;;
   s s  ;; Keep Super+S as Super+S (not Ctrl+S) - terminal uses Ctrl+S for XOFF
   o o  ;; Keep Super+O as Super+O (not Ctrl+O) - midnight commander uses Ctrl+O
   p p  ;; Keep Super+P as Super+P (not Ctrl+P) - terminal uses Ctrl+P for previous command
@@ -88,5 +94,21 @@
   c c
   v v
   x x
+  ;;
+  z z
+  y y
+  ;;
+  a a
+  e e
+  ;;
+  s s
+  o o
+  p p
+  f f
+  l l
+  r r
+  t t
+  n n
+  w w
 )
 
