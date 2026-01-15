@@ -112,11 +112,29 @@ in
         settings = cfg.kanata-switcher.settings;
       };
 
-      # restartTriggers doesn't work for user services (NixOS limitation)
-      # https://github.com/NixOS/nixpkgs/issues/246611
-      # Workaround: embed settings hash in the service environment to force unit file change
-      systemd.user.services.kanata-switcher.environment.KANATA_SWITCHER_CONFIG_HASH =
-        builtins.hashString "sha256" (builtins.toJSON cfg.kanata-switcher.settings);
+      # restartTriggers adds X-Restart-Triggers to unit file, but NixOS doesn't
+      # process it for user services - only system services are handled.
+      # See: https://github.com/NixOS/nixpkgs/issues/246611
+      systemd.user.services.kanata-switcher.restartTriggers = [
+        (builtins.toJSON cfg.kanata-switcher.settings)
+      ];
+
+      # Workaround: restart kanata-switcher for all active users during activation
+      system.activationScripts.restart-kanata-switcher = let
+        settingsHash = builtins.hashString "sha256" (builtins.toJSON cfg.kanata-switcher.settings);
+      in ''
+        # Settings hash: ${settingsHash}
+        # Restart kanata-switcher user service for all logged-in users
+        for uid in $(${pkgs.systemd}/bin/loginctl list-users --no-legend 2>/dev/null | ${pkgs.gawk}/bin/awk '{print $1}'); do
+          user=$(${pkgs.systemd}/bin/loginctl show-user "$uid" -p Name --value 2>/dev/null || true)
+          if [ -n "$user" ] && [ "$user" != "root" ]; then
+            if ${pkgs.systemd}/bin/systemctl --user -M "$user@" is-active kanata-switcher.service >/dev/null 2>&1; then
+              echo "Restarting kanata-switcher for user $user"
+              ${pkgs.systemd}/bin/systemctl --user -M "$user@" restart kanata-switcher.service 2>/dev/null || true
+            fi
+          fi
+        done
+      '';
     })
   ];
 }
