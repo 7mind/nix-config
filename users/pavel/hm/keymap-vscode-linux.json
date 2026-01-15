@@ -6731,6 +6731,11 @@
     "command" : "workbench.action.terminal.copySelection"
   },
   {
+    "when" : "terminalFocus",
+    "key" : "meta+t",
+    "command" : "workbench.action.terminal.new"
+  },
+  {
     "when" : "terminalFocus && terminalHasBeenCreated || terminalFocus && terminalProcessSupported",
     "key" : "meta+v",
     "command" : "workbench.action.terminal.paste"

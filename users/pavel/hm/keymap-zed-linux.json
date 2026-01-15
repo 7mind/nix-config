@@ -229,6 +229,7 @@
     "context" : "Terminal",
     "bindings" : {
       "cmd-c" : "terminal::Copy",
+      "cmd-t" : "workspace::NewTerminal",
       "cmd-v" : "terminal::Paste"
     }
   },

@@ -126,6 +126,10 @@
     <!--cursorBottom-->
     <keyboard-shortcut first-keystroke="ctrl end"/>
   </action>
+  <action id="Terminal.NewTab">
+    <!--workbench.action.terminal.new-->
+    <keyboard-shortcut first-keystroke="meta t"/>
+  </action>
   <action id="EditorTextEndWithSelection">
     <!--cursorBottomSelect-->
     <keyboard-shortcut first-keystroke="ctrl shift end"/>
