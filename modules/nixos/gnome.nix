@@ -288,7 +288,7 @@
         eog
         pix
         file-roller
-        # gnome-remote-desktop
+        gnome-connections
       ]);
 
 

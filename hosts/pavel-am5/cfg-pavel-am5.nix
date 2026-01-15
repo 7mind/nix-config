@@ -20,17 +20,7 @@
     };
   };
 
-  virtualisation.vmware.host = {
-    enable = true;
-    package = pkgs.vmware-workstation.overrideAttrs (old: {
-      postInstall = (old.postInstall or "") + ''
-        # Force X11 backend for Wayland clipboard compatibility
-        for f in $out/share/applications/*.desktop; do
-          sed -i 's|^Exec=|Exec=env GDK_BACKEND=x11 |' "$f"
-        done
-      '';
-    });
-  };
+  virtualisation.vmware.host.enable = true;
 
   # VMware hardcodes paths to /usr/bin for various utilities
   systemd.tmpfiles.rules = [
