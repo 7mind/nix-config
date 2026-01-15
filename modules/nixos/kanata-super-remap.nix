@@ -104,18 +104,34 @@ in
       ];
     })
 
-    (lib.mkIf (cfg.kanata-switcher.enable) {
-      services.kanata-switcher = {
-        enable = true;
-        kanataPort = cfg.kanata.port;
-        gnomeExtension.enable = false; # managed in gnome-extensions.nix
-        settings = cfg.kanata-switcher.settings;
-      };
+    (lib.mkIf (cfg.kanata-switcher.enable) (
+      let
+        # Hash the settings to detect changes
+        settingsHash = builtins.hashString "sha256" (builtins.toJSON cfg.kanata-switcher.settings);
+      in
+      {
+        services.kanata-switcher = {
+          enable = true;
+          kanataPort = cfg.kanata.port;
+          gnomeExtension.enable = false; # managed in gnome-extensions.nix
+          settings = cfg.kanata-switcher.settings;
+        };
 
-      # Restart kanata-switcher when settings change
-      systemd.user.services.kanata-switcher.restartTriggers = [
-        (builtins.toJSON cfg.kanata-switcher.settings)
-      ];
-    })
+        # restartTriggers doesn't work for user services (NixOS limitation)
+        # https://github.com/NixOS/nixpkgs/issues/246611
+        # Use activation script to restart for all logged-in users instead
+        system.activationScripts.restart-kanata-switcher = lib.stringAfter [ "users" ] ''
+          # Settings hash: ${settingsHash}
+          # Restart kanata-switcher for all active user sessions
+          for uid in $(${pkgs.procps}/bin/loginctl list-users --no-legend | ${pkgs.gawk}/bin/awk '{print $1}'); do
+            user=$(${pkgs.procps}/bin/loginctl show-user "$uid" -p Name --value 2>/dev/null || true)
+            if [ -n "$user" ]; then
+              echo "Restarting kanata-switcher for user $user"
+              ${pkgs.systemd}/bin/systemctl --user -M "$user@" restart kanata-switcher.service 2>/dev/null || true
+            fi
+          done
+        '';
+      }
+    ))
   ];
 }
