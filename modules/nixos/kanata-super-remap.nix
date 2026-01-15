@@ -126,15 +126,10 @@ in
         for uid in $(${pkgs.systemd}/bin/loginctl list-users --no-legend 2>/dev/null | ${pkgs.gawk}/bin/awk '{print $1}'); do
           user=$(${pkgs.systemd}/bin/loginctl show-user "$uid" -p Name --value 2>/dev/null || true)
           if [ -n "$user" ] && [ "$user" != "root" ] && [ -d "/run/user/$uid" ]; then
-            echo "  Checking user $user (uid $uid)..."
-            if XDG_RUNTIME_DIR="/run/user/$uid" ${pkgs.sudo}/bin/sudo -u "$user" \
-                ${pkgs.systemd}/bin/systemctl --user is-active kanata-switcher.service >/dev/null 2>&1; then
-              echo "  Restarting kanata-switcher for $user"
-              XDG_RUNTIME_DIR="/run/user/$uid" ${pkgs.sudo}/bin/sudo -u "$user" \
-                ${pkgs.systemd}/bin/systemctl --user restart kanata-switcher.service || true
-            else
-              echo "  kanata-switcher not active for $user, skipping"
-            fi
+            echo "  Restarting kanata-switcher for $user (uid $uid)"
+            # Use DBUS_SESSION_BUS_ADDRESS to connect to user's systemd
+            DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
+              ${pkgs.systemd}/bin/systemctl --user --machine="$user@" restart kanata-switcher.service 2>&1 || true
           fi
         done
       '';
