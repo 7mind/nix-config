@@ -20,7 +20,12 @@
     };
   };
 
-  virtualisation.vmware.host.enable = true;
+  virtualisation.vmware.host = {
+    enable = true;
+    extraConfig = ''
+      installerDefaults.componentDownloadEnabled = "TRUE"
+    '';
+  };
 
   services = {
     samba = {
