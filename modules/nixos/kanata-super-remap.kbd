@@ -1,12 +1,6 @@
 ;; Mac-style keyboard shortcuts via kanata
 ;; Kanata simulator for testing: https://jtroo.github.io/
 
-(defcfg
-  process-unmapped-keys yes
-  delegate-to-first-layer yes
-  concurrent-tap-hold yes
-)
-
 ;; Caps Lock is handled by XKB grp:caps_toggle for layout switching
 ;; No kanata remapping needed
 (defsrc)
@@ -17,7 +11,6 @@
 ;; Super+Tab, Super+Q, etc. are NOT remapped (handled by GNOME/desktop)
 (deflayermap (default)
   ;; Text editing
-  (t! mk-override (or lmet rmet) a (unmod lctl a))   ;; Select all
   (t! mk-override (or lmet rmet) c (unmod lctl c))   ;; Copy
   (t! mk-override (or lmet rmet) v (unmod lctl v))   ;; Paste
   (t! mk-override (or lmet rmet) x (unmod lctl x))   ;; Cut
@@ -38,8 +31,16 @@
   lsft (multi (layer-while-held shift-layer) lsft)
   rsft (multi (layer-while-held shift-layer) rsft)
 
-  ;; (t! mk-override (or lctl rctl) a (unmod home)) ;; ctrl-a => home
-  ;; (t! mk-override (or lctl rctl) e (unmod end))  ;; ctrl-e => end
+  ;; 'a' key: Super+A → Ctrl+A (Select all), Ctrl+A → Home
+  a (switch
+      ((and (or lmet rmet) (not lsft rsft lalt ralt lctl rctl))) (unmod lctl a) break  ;; Super+A → Select all
+      ((and (or lctl rctl) (not lsft rsft lalt ralt lmet rmet))) (unmod home) break    ;; Ctrl+A → Home
+      () a break)
+
+  ;; 'e' key: Ctrl+E → End
+  e (switch
+      ((and (or lctl rctl) (not lsft rsft lalt ralt lmet rmet))) (unmod end) break     ;; Ctrl+E → End
+      () e break)
 )
 
 (deflayermap (shift-layer)
@@ -52,8 +53,21 @@
 )
 
 (deflayermap (terminal)
+  c c
+  v v
+  x x
+  z z
   a a
   e e
+  s s
+  o o
+  p p
+  f f
+  l l
+  r r
+  t t
+  n n
+  w w
 )
 
 ;; Emacs-style: Ctrl+A → Home, Ctrl+E → End

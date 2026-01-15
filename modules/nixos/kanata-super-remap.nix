@@ -4,13 +4,21 @@ let
   cfg = config.smind.keyboard.super-remap;
 
   # Bundle kanata config files together so includes work
-  kanataConfigDir = pkgs.runCommand "kanata-config" { } ''
+  # Prepend defcfg with extraDefCfg settings to the main config
+  mkKanataConfigDir = extraDefCfg: pkgs.runCommand "kanata-config" {
+    inherit extraDefCfg;
+    passAsFile = [ "extraDefCfg" ];
+  } ''
     mkdir -p $out
     cp ${./kanata-lib.kbd} $out/kanata-lib.kbd
-    cp ${./kanata-super-remap.kbd} $out/kanata-super-remap.kbd
-  '';
 
-  defaultConfigFile = "${kanataConfigDir}/kanata-super-remap.kbd";
+    # Prepend defcfg block to the config file
+    echo "(defcfg" > $out/kanata-super-remap.kbd
+    cat "$extraDefCfgPath" >> $out/kanata-super-remap.kbd
+    echo ")" >> $out/kanata-super-remap.kbd
+    echo "" >> $out/kanata-super-remap.kbd
+    cat ${./kanata-super-remap.kbd} >> $out/kanata-super-remap.kbd
+  '';
 in
 {
   options.smind.keyboard.super-remap = {
@@ -41,7 +49,8 @@ in
 
       configFile = lib.mkOption {
         type = lib.types.path;
-        default = defaultConfigFile;
+        default = "${mkKanataConfigDir cfg.kanata.extraDefCfg}/kanata-super-remap.kbd";
+        defaultText = lib.literalExpression ''"''${mkKanataConfigDir cfg.kanata.extraDefCfg}/kanata-super-remap.kbd"'';
         description = "Path to kanata config file (must be in same directory as kanata-lib.kbd for includes to work)";
       };
     };
@@ -78,7 +87,7 @@ in
         keyboards.default = {
           devices = cfg.kanata.devices;
           port = cfg.kanata.port;
-          extraDefCfg = cfg.kanata.extraDefCfg;
+          # extraDefCfg is prepended to configFile by mkKanataConfigDir
           configFile = cfg.kanata.configFile;
         };
       };
