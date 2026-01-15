@@ -84,5 +84,9 @@
 
 (deflayermap (browser))
 
-(deflayermap (ide))
+(deflayermap (ide
+  c c
+  v v
+  x x
+))
 
