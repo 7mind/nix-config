@@ -33,6 +33,7 @@
     "L+ /usr/bin/vmnet-bridge - - - - ${config.virtualisation.vmware.host.package}/bin/vmnet-bridge"
     "L+ /usr/bin/vmnet-netifup - - - - ${config.virtualisation.vmware.host.package}/bin/vmnet-netifup"
     "L+ /usr/bin/vmnet-natd - - - - ${config.virtualisation.vmware.host.package}/bin/vmnet-natd"
+    "L+ /usr/bin/vmnet-dhcpd - - - - ${config.virtualisation.vmware.host.package}/bin/vmnet-dhcpd"
   ];
 
   services = {
