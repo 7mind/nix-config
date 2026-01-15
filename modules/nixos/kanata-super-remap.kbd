@@ -1,6 +1,12 @@
 ;; Mac-style keyboard shortcuts via kanata
 ;; Kanata simulator for testing: https://jtroo.github.io/
 
+(defcfg
+  process-unmapped-keys yes
+  delegate-to-first-layer yes
+  concurrent-tap-hold yes
+)
+
 ;; Caps Lock is handled by XKB grp:caps_toggle for layout switching
 ;; No kanata remapping needed
 (defsrc)
@@ -63,3 +69,4 @@
   ;; Example mk-override (with Shift): Super+Shift+B → Ctrl+Space
   ;; (t! mk-override (and (or lmet rmet) (or lsft rsft)) b (unmod lctl spc))
 )
+
