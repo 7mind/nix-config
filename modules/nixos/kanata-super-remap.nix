@@ -133,6 +133,12 @@ in
         };
       };
 
+      # Restart kanata when config changes
+      systemd.services.kanata-default.restartTriggers = [
+        cfg.kanata.config
+        cfg.kanata.extraDefCfg
+      ];
+
       lib.kanata.mkOverrideMacro = ''
         (deftemplate mods-except (req-list)
           (or
@@ -166,6 +172,11 @@ in
         gnomeExtension.enable = false; # managed in gnome-extensions.nix
         settings = cfg.kanata-switcher.settings;
       };
+
+      # Restart kanata-switcher when settings change
+      systemd.user.services.kanata-switcher.restartTriggers = [
+        (builtins.toJSON cfg.kanata-switcher.settings)
+      ];
     })
   ];
 }
