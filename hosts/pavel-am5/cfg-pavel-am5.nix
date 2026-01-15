@@ -27,6 +27,11 @@
     '';
   };
 
+  # VMware hardcodes /usr/bin/vmware-ping for subnet availability checks
+  systemd.tmpfiles.rules = [
+    "L+ /usr/bin/vmware-ping - - - - ${config.virtualisation.vmware.host.package}/bin/vmware-ping"
+  ];
+
   services = {
     samba = {
       # add user: sudo smbpasswd -a pavel
