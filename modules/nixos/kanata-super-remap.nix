@@ -120,17 +120,20 @@ in
       ];
 
       # Workaround: restart kanata-switcher for all active users during activation
-      system.activationScripts.restart-kanata-switcher = let
-        settingsHash = builtins.hashString "sha256" (builtins.toJSON cfg.kanata-switcher.settings);
-      in ''
-        # Settings hash: ${settingsHash}
-        # Restart kanata-switcher user service for all logged-in users
+      # Always restart on every switch (hash-based detection doesn't work reliably)
+      system.activationScripts.restart-kanata-switcher = ''
+        echo "Restarting kanata-switcher for all logged-in users..."
         for uid in $(${pkgs.systemd}/bin/loginctl list-users --no-legend 2>/dev/null | ${pkgs.gawk}/bin/awk '{print $1}'); do
           user=$(${pkgs.systemd}/bin/loginctl show-user "$uid" -p Name --value 2>/dev/null || true)
-          if [ -n "$user" ] && [ "$user" != "root" ]; then
-            if ${pkgs.systemd}/bin/systemctl --user -M "$user@" is-active kanata-switcher.service >/dev/null 2>&1; then
-              echo "Restarting kanata-switcher for user $user"
-              ${pkgs.systemd}/bin/systemctl --user -M "$user@" restart kanata-switcher.service 2>/dev/null || true
+          if [ -n "$user" ] && [ "$user" != "root" ] && [ -d "/run/user/$uid" ]; then
+            echo "  Checking user $user (uid $uid)..."
+            if XDG_RUNTIME_DIR="/run/user/$uid" ${pkgs.sudo}/bin/sudo -u "$user" \
+                ${pkgs.systemd}/bin/systemctl --user is-active kanata-switcher.service >/dev/null 2>&1; then
+              echo "  Restarting kanata-switcher for $user"
+              XDG_RUNTIME_DIR="/run/user/$uid" ${pkgs.sudo}/bin/sudo -u "$user" \
+                ${pkgs.systemd}/bin/systemctl --user restart kanata-switcher.service || true
+            else
+              echo "  kanata-switcher not active for $user, skipping"
             fi
           fi
         done
