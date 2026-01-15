@@ -27,9 +27,12 @@
     '';
   };
 
-  # VMware hardcodes /usr/bin/vmware-ping for subnet availability checks
+  # VMware hardcodes paths to /usr/bin for various utilities
   systemd.tmpfiles.rules = [
     "L+ /usr/bin/vmware-ping - - - - ${config.virtualisation.vmware.host.package}/bin/vmware-ping"
+    "L+ /usr/bin/vmnet-bridge - - - - ${config.virtualisation.vmware.host.package}/bin/vmnet-bridge"
+    "L+ /usr/bin/vmnet-netifup - - - - ${config.virtualisation.vmware.host.package}/bin/vmnet-netifup"
+    "L+ /usr/bin/vmnet-natd - - - - ${config.virtualisation.vmware.host.package}/bin/vmnet-natd"
   ];
 
   services = {
