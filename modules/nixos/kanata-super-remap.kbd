@@ -56,17 +56,8 @@
   ;; (t! mk-override (and (or lmet rmet) (or lsft rsft)) b (unmod lctl spc))
 )
 
-;; (deflayermap (shift-layer)
-;;   ;; Super+Shift combinations
-;;   (t! mk-override (and (or lmet rmet) (or lsft rsft)) z (unmod lctl lsft z))  ;; Redo
-;;   (t! mk-override (and (or lmet rmet) (or lsft rsft)) f (unmod lctl lsft f))  ;; Find in files
-;;   (t! mk-override (and (or lmet rmet) (or lsft rsft)) t (unmod lctl lsft t))  ;; Reopen closed tab
-;;   (t! mk-override (and (or lmet rmet) (or lsft rsft)) n (unmod lctl lsft n))  ;; New incognito/private window
-;;   (t! mk-override (and (or lmet rmet) (or lsft rsft)) p (unmod lctl lsft p))  ;; Command palette (VS Code)
-;; )
-
 ;; Terminal layer: disable all remaps (terminals handle shortcuts natively)
-(deflayermap (terminal)
+(deflayermap (unmapped)
   c c  ;; Keep Super+C as Super+C (not Ctrl+C) - terminal uses Ctrl+C for SIGINT
   v v  ;; Keep Super+V as Super+V (not Ctrl+V) - terminal uses Ctrl+Shift+V for paste
   x x  ;; Keep Super+X as Super+X (not Ctrl+X) - terminal uses Ctrl+X differently
@@ -88,27 +79,11 @@
   w w  ;; Keep Super+W as Super+W (not Ctrl+W) - terminal uses Ctrl+W for delete word
 )
 
-(deflayermap (browser))
-
-(deflayermap (ide)
-  c c
-  v v
-  x x
-  ;;
-  z z
-  y y
-  ;;
-  a a
-  e e
-  ;;
-  s s
-  o o
-  p p
-  f f
-  l l
-  r r
-  t t
-  n n
-  w w
-)
-
+;; (deflayermap (shift-layer)
+;;   ;; Super+Shift combinations
+;;   (t! mk-override (and (or lmet rmet) (or lsft rsft)) z (unmod lctl lsft z))  ;; Redo
+;;   (t! mk-override (and (or lmet rmet) (or lsft rsft)) f (unmod lctl lsft f))  ;; Find in files
+;;   (t! mk-override (and (or lmet rmet) (or lsft rsft)) t (unmod lctl lsft t))  ;; Reopen closed tab
+;;   (t! mk-override (and (or lmet rmet) (or lsft rsft)) n (unmod lctl lsft n))  ;; New incognito/private window
+;;   (t! mk-override (and (or lmet rmet) (or lsft rsft)) p (unmod lctl lsft p))  ;; Command palette (VS Code)
+;; )

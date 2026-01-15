@@ -66,16 +66,16 @@ in
             "default" = "default";
           }
           {
-            "class" = "firefox|chromium-browser|brave-browser";
-            "layer" = "browser";
-          }
-          {
             "class" = "kitty|alacritty|wezterm|com.mitchellh.ghostty";
-            "layer" = "terminal";
+            "layer" = "unmapped";
           }
           {
-            "class" = "code|jetbrains|codium|VSCodium";
-            "layer" = "ide";
+            "class" = "code|codium|VSCodium";
+            "layer" = "unmapped";
+          }
+          {
+            "class" = "jetbrains";
+            "layer" = "unmapped";
           }
         ];
         description = "Layer switching rules for kanata-switcher";

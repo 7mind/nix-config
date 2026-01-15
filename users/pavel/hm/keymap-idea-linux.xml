@@ -445,6 +445,10 @@
     <!--cursorLeftSelect-->
     <keyboard-shortcut first-keystroke="shift left"/>
   </action>
+  <action id="Terminal.Paste">
+    <!--workbench.action.terminal.paste-->
+    <keyboard-shortcut first-keystroke="meta v"/>
+  </action>
   <action id="QuickImplementations">
     <!--editor.action.peekDefinition-->
     <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="ctrl d"/>
@@ -600,6 +604,10 @@
   <action id="EditorEnter">
     <!--EditorEnter-->
     <keyboard-shortcut first-keystroke="enter"/>
+  </action>
+  <action id="Terminal.CopySelectedText">
+    <!--workbench.action.terminal.copySelection-->
+    <keyboard-shortcut first-keystroke="meta c"/>
   </action>
   <action id="MoveStatementUp">
     <!--editor.action.moveLinesUpAction-->
