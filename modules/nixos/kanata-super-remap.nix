@@ -24,77 +24,72 @@ in
         type = lib.types.str;
         default = ''
           process-unmapped-keys yes
+          delegate-to-first-layer true
+          concurrent-tap-hold true
         '';
         description = "kanata service extraDefCfg";
       };
 
       config = lib.mkOption {
         type = lib.types.str;
+        # Kanata simulator for testing: https://jtroo.github.io/
         default = ''
           ;; Caps Lock is handled by XKB grp:caps_toggle for layout switching
           ;; No kanata remapping needed
           (defsrc)
 
-          (deflayer default)
+          ${config.lib.kanata.mkOverrideMacro}
 
-          (deftemplate mods-except (req-list)
-            (or
-              (if-not-in-list lsft $req-list lsft)
-              (if-not-in-list rsft $req-list rsft)
-              (if-not-in-list lalt $req-list lalt)
-              (if-not-in-list ralt $req-list ralt)
-              (if-not-in-list lctl $req-list lctl)
-              (if-not-in-list rctl $req-list rctl)
-              (if-not-in-list lmet $req-list lmet)
-              (if-not-in-list rmet $req-list rmet)
-            )
+          ;; Mac-style: Super+Key → Ctrl+Key (only for specific keys)
+          ;; Super+Tab, Super+Q, etc. are NOT remapped (handled by GNOME/desktop)
+          (deflayermap (default)
+            ;; Text editing
+            (t! mk-override (or lmet rmet) a (unmod lctl a))   ;; Select all
+            (t! mk-override (or lmet rmet) c (unmod lctl c))   ;; Copy
+            (t! mk-override (or lmet rmet) v (unmod lctl v))   ;; Paste
+            (t! mk-override (or lmet rmet) x (unmod lctl x))   ;; Cut
+            (t! mk-override (or lmet rmet) z (unmod lctl z))   ;; Undo
+            ;; File operations
+            (t! mk-override (or lmet rmet) s (unmod lctl s))   ;; Save
+            (t! mk-override (or lmet rmet) o (unmod lctl o))   ;; Open
+            (t! mk-override (or lmet rmet) p (unmod lctl p))   ;; Print / Command palette
+            ;; Navigation
+            (t! mk-override (or lmet rmet) f (unmod lctl f))   ;; Find
+            (t! mk-override (or lmet rmet) l (unmod lctl l))   ;; Address bar / Go to line
+            (t! mk-override (or lmet rmet) r (unmod lctl r))   ;; Refresh
+            ;; Window/tab management
+            (t! mk-override (or lmet rmet) t (unmod lctl t))   ;; New tab
+            (t! mk-override (or lmet rmet) n (unmod lctl n))   ;; New window
+            (t! mk-override (or lmet rmet) w (unmod lctl w))   ;; Close tab/window
+            ;; Shift layer
+            lsft (multi (layer-while-held shift-layer) lsft)
+            rsft (multi (layer-while-held shift-layer) rsft)
           )
 
-          (deftemplate mk-override (required-mods key result)
-            $key (switch
-                  ((and $required-mods (not (t! mods-except ($required-mods))))) $result break
-                  () $key break)
+          (deflayermap (shift-layer)
+            ;; Super+Shift combinations
+            (t! mk-override (and (or lmet rmet) (or lsft rsft)) z (unmod lctl lsft z))  ;; Redo
+            (t! mk-override (and (or lmet rmet) (or lsft rsft)) f (unmod lctl lsft f))  ;; Find in files
+            (t! mk-override (and (or lmet rmet) (or lsft rsft)) t (unmod lctl lsft t))  ;; Reopen closed tab
+            (t! mk-override (and (or lmet rmet) (or lsft rsft)) n (unmod lctl lsft n))  ;; New incognito/private window
+            (t! mk-override (and (or lmet rmet) (or lsft rsft)) p (unmod lctl lsft p))  ;; Command palette (VS Code)
           )
 
           ;; Emacs-style: Ctrl+A → Home, Ctrl+E → End
-          (deflayermap (firefox)
+          (deflayermap (browser)
             ;; Long version
             a (switch
                 ((and (or lctl rctl) (not lsft rsft lalt ralt lmet rmet))) (unmod home) break
                 () a break)
+
             ;; With mk-override macro
             (t! mk-override (or lctl rctl) e (unmod end))
-            ;; Example mk-override: Super+G → Ctrl+Space
-            ;; (t! mk-override (or lmet rmet) g (unmod lctl spc))
-          )
 
-          ;; Mac-style: Super+Key → Ctrl+Key (only for specific keys)
-          ;; Super+Tab, Super+Q, etc. are NOT remapped (handled by GNOME/desktop)
-          (defoverrides
-            ;; Text editing
-            (lmet a) (lctl a)    ;; Select all
-            (lmet c) (lctl c)    ;; Copy
-            (lmet v) (lctl v)    ;; Paste
-            (lmet x) (lctl x)    ;; Cut
-            (lmet z) (lctl z)    ;; Undo
-            ;; File operations
-            (lmet s) (lctl s)    ;; Save
-            (lmet o) (lctl o)    ;; Open
-            (lmet p) (lctl p)    ;; Print / Command palette
-            ;; Navigation
-            (lmet f) (lctl f)    ;; Find
-            (lmet l) (lctl l)    ;; Address bar / Go to line
-            (lmet r) (lctl r)    ;; Refresh
-            ;; Window/tab management
-            (lmet t) (lctl t)    ;; New tab
-            (lmet n) (lctl n)    ;; New window
-            (lmet w) (lctl w)    ;; Close tab/window
-            ;; Super+Shift combinations
-            (lmet lsft z) (lctl lsft z)  ;; Redo
-            (lmet lsft f) (lctl lsft f)  ;; Find in files
-            (lmet lsft t) (lctl lsft t)  ;; Reopen closed tab
-            (lmet lsft n) (lctl lsft n)  ;; New incognito/private window
-            (lmet lsft p) (lctl lsft p)  ;; Command palette (VS Code)
+            ;; Example mk-override (without Shift): Super+G → Ctrl+Space
+            ;; (t! mk-override (or lmet rmet) g (unmod lctl spc))
+
+            ;; Example mk-override (with Shift): Super+Shift+B → Ctrl+Space
+            ;; (t! mk-override (and (or lmet rmet) (or lsft rsft)) b (unmod lctl spc))
           )
         '';
         description = "kanata service config";
@@ -107,10 +102,12 @@ in
       settings = lib.mkOption {
         type = lib.types.listOf lib.types.attrs;
         default = [
-          { "default" = "default"; }
           {
-            "class" = "firefox";
-            "layer" = "firefox";
+            "default" = "default";
+          }
+          {
+            "class" = "firefox|chromium-browser|brave-browser";
+            "layer" = "browser";
           }
           {
             "class" = "kitty|alacritty|wezterm|com.mitchellh.ghostty|code|jetbrains|codium|VSCodium";
@@ -124,6 +121,8 @@ in
 
   config = lib.mkMerge [
     (lib.mkIf cfg.enable {
+      environment.systemPackages = [ config.services.kanata.package ];
+
       services.kanata = {
         enable = true;
         keyboards.default = {
@@ -133,6 +132,31 @@ in
           config = cfg.kanata.config;
         };
       };
+
+      lib.kanata.mkOverrideMacro = ''
+        (deftemplate mods-except (req-list)
+          (or
+            (if-not-in-list lsft $req-list lsft)
+            (if-not-in-list rsft $req-list rsft)
+            (if-not-in-list lalt $req-list lalt)
+            (if-not-in-list ralt $req-list ralt)
+            (if-not-in-list lctl $req-list lctl)
+            (if-not-in-list rctl $req-list rctl)
+            (if-not-in-list lmet $req-list lmet)
+            (if-not-in-list rmet $req-list rmet)
+          )
+        )
+
+        (deftemplate mk-override-ext (required-mods-expr required-mods-list key result)
+          $key (switch
+                ((and $required-mods-expr (not (t! mods-except ($required-mods-list))))) $result break
+                () $key break)
+        )
+
+        (deftemplate mk-override (required-mods key result)
+          (t! mk-override-ext $required-mods $required-mods $key $result)
+        )
+      '';
     })
 
     (lib.mkIf (cfg.kanata-switcher.enable) {

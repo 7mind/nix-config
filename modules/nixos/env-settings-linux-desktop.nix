@@ -16,6 +16,12 @@
         mesa-demos # ex glxinfo
         clinfo
 
+        # X11 / WL diagnostics
+        xlsclients
+        wev
+        evtest
+        evtest-qt
+
         wl-clipboard
         extract-initrd # not the best place, but we need to do some extra job to expose it into pxe
 
