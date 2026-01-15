@@ -41,37 +41,7 @@
   e (switch
       ((and (or lctl rctl) (not lsft rsft lalt ralt lmet rmet))) (unmod end) break     ;; Ctrl+E → End
       () e break)
-)
 
-(deflayermap (shift-layer)
-  ;; Super+Shift combinations
-  (t! mk-override (and (or lmet rmet) (or lsft rsft)) z (unmod lctl lsft z))  ;; Redo
-  (t! mk-override (and (or lmet rmet) (or lsft rsft)) f (unmod lctl lsft f))  ;; Find in files
-  (t! mk-override (and (or lmet rmet) (or lsft rsft)) t (unmod lctl lsft t))  ;; Reopen closed tab
-  (t! mk-override (and (or lmet rmet) (or lsft rsft)) n (unmod lctl lsft n))  ;; New incognito/private window
-  (t! mk-override (and (or lmet rmet) (or lsft rsft)) p (unmod lctl lsft p))  ;; Command palette (VS Code)
-)
-
-(deflayermap (terminal)
-  c c
-  v v
-  x x
-  z z
-  a a
-  e e
-  s s
-  o o
-  p p
-  f f
-  l l
-  r r
-  t t
-  n n
-  w w
-)
-
-;; Emacs-style: Ctrl+A → Home, Ctrl+E → End
-(deflayermap (browser)
   ;; Long version
   ;; a (switch
   ;;    ((and (or lctl rctl) (not lsft rsft lalt ralt lmet rmet))) (unmod home) break
@@ -83,4 +53,34 @@
   ;; Example mk-override (with Shift): Super+Shift+B → Ctrl+Space
   ;; (t! mk-override (and (or lmet rmet) (or lsft rsft)) b (unmod lctl spc))
 )
+
+(deflayermap (shift-layer)
+  ;; Super+Shift combinations
+  (t! mk-override (and (or lmet rmet) (or lsft rsft)) z (unmod lctl lsft z))  ;; Redo
+  (t! mk-override (and (or lmet rmet) (or lsft rsft)) f (unmod lctl lsft f))  ;; Find in files
+  (t! mk-override (and (or lmet rmet) (or lsft rsft)) t (unmod lctl lsft t))  ;; Reopen closed tab
+  (t! mk-override (and (or lmet rmet) (or lsft rsft)) n (unmod lctl lsft n))  ;; New incognito/private window
+  (t! mk-override (and (or lmet rmet) (or lsft rsft)) p (unmod lctl lsft p))  ;; Command palette (VS Code)
+)
+
+;; Terminal layer: disable all remaps (terminals handle shortcuts natively)
+(deflayermap (terminal)
+  c c  ;; Keep Super+C as Super+C (not Ctrl+C) - terminal uses Ctrl+C for SIGINT
+  v v  ;; Keep Super+V as Super+V (not Ctrl+V) - terminal uses Ctrl+Shift+V for paste
+  x x  ;; Keep Super+X as Super+X (not Ctrl+X) - terminal uses Ctrl+X differently
+  z z  ;; Keep Super+Z as Super+Z (not Ctrl+Z) - terminal uses Ctrl+Z for SIGTSTP
+  a a  ;; Keep Ctrl+A as Ctrl+A (not Home) - terminal uses Ctrl+A for tmux/screen prefix
+  e e  ;; Keep Ctrl+E as Ctrl+E (not End) - terminal uses Ctrl+E for end of line (readline)
+  s s  ;; Keep Super+S as Super+S (not Ctrl+S) - terminal uses Ctrl+S for XOFF
+  o o  ;; Keep Super+O as Super+O (not Ctrl+O)
+  p p  ;; Keep Super+P as Super+P (not Ctrl+P) - terminal uses Ctrl+P for previous command
+  f f  ;; Keep Super+F as Super+F (not Ctrl+F) - terminal uses Ctrl+F for forward char
+  l l  ;; Keep Super+L as Super+L (not Ctrl+L) - terminal uses Ctrl+L for clear
+  r r  ;; Keep Super+R as Super+R (not Ctrl+R) - terminal uses Ctrl+R for reverse search
+  t t  ;; Keep Super+T as Super+T (not Ctrl+T) - terminal uses Ctrl+T for transpose
+  n n  ;; Keep Super+N as Super+N (not Ctrl+N) - terminal uses Ctrl+N for next command
+  w w  ;; Keep Super+W as Super+W (not Ctrl+W) - terminal uses Ctrl+W for delete word
+)
+
+(deflayermap (browser))
 
