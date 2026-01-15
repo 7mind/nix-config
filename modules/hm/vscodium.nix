@@ -242,6 +242,7 @@
 
 
           "direnv.restart.automatic" = true;
+          "vscode-kanata.includesAndWorkspaces" = "workspace";
         };
       };
 

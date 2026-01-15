@@ -1,0 +1,25 @@
+;; Kanata library: helper templates for key overrides
+;; Include this file in your kanata config: (include kanata-lib.kbd)
+
+(deftemplate mods-except (req-list)
+  (or
+    (if-not-in-list lsft $req-list lsft)
+    (if-not-in-list rsft $req-list rsft)
+    (if-not-in-list lalt $req-list lalt)
+    (if-not-in-list ralt $req-list ralt)
+    (if-not-in-list lctl $req-list lctl)
+    (if-not-in-list rctl $req-list rctl)
+    (if-not-in-list lmet $req-list lmet)
+    (if-not-in-list rmet $req-list rmet)
+  )
+)
+
+(deftemplate mk-override-ext (required-mods-expr required-mods-list key result)
+  $key (switch
+        ((and $required-mods-expr (not (t! mods-except ($required-mods-list))))) $result break
+        () $key break)
+)
+
+(deftemplate mk-override (required-mods key result)
+  (t! mk-override-ext $required-mods $required-mods $key $result)
+)
