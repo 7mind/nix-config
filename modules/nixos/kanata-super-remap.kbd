@@ -72,7 +72,7 @@
   a a  ;; Keep Ctrl+A as Ctrl+A (not Home) - terminal uses Ctrl+A for tmux/screen prefix
   e e  ;; Keep Ctrl+E as Ctrl+E (not End) - terminal uses Ctrl+E for end of line (readline)
   s s  ;; Keep Super+S as Super+S (not Ctrl+S) - terminal uses Ctrl+S for XOFF
-  o o  ;; Keep Super+O as Super+O (not Ctrl+O)
+  o o  ;; Keep Super+O as Super+O (not Ctrl+O) - midnight commander uses Ctrl+O
   p p  ;; Keep Super+P as Super+P (not Ctrl+P) - terminal uses Ctrl+P for previous command
   f f  ;; Keep Super+F as Super+F (not Ctrl+F) - terminal uses Ctrl+F for forward char
   l l  ;; Keep Super+L as Super+L (not Ctrl+L) - terminal uses Ctrl+L for clear
