@@ -90,6 +90,7 @@
 
           pkgs.open-vsx.jeanp413.open-remote-ssh
           pkgs.open-vsx.devmikeua.mikrotik-routeros-script
+          pkgs.open-vsx.rszyma.vscode-kanata
 
           # vscjava.vscode-java-pack
           # missing: anycode*,

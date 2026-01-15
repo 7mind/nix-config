@@ -64,6 +64,9 @@ in
             ;; Shift layer
             lsft (multi (layer-while-held shift-layer) lsft)
             rsft (multi (layer-while-held shift-layer) rsft)
+
+            ;; (t! mk-override (or lctl rctl) a (unmod home)) ;; ctrl-a => home
+            ;; (t! mk-override (or lctl rctl) e (unmod end))  ;; ctrl-e => end
           )
 
           (deflayermap (shift-layer)
@@ -75,15 +78,16 @@ in
             (t! mk-override (and (or lmet rmet) (or lsft rsft)) p (unmod lctl lsft p))  ;; Command palette (VS Code)
           )
 
+          (deflayermap (terminal)
+            a a
+            e e
+          )
           ;; Emacs-style: Ctrl+A → Home, Ctrl+E → End
           (deflayermap (browser)
             ;; Long version
-            a (switch
-                ((and (or lctl rctl) (not lsft rsft lalt ralt lmet rmet))) (unmod home) break
-                () a break)
-
-            ;; With mk-override macro
-            (t! mk-override (or lctl rctl) e (unmod end))
+            ;; a (switch
+            ;;    ((and (or lctl rctl) (not lsft rsft lalt ralt lmet rmet))) (unmod home) break
+            ;;    () a break)
 
             ;; Example mk-override (without Shift): Super+G → Ctrl+Space
             ;; (t! mk-override (or lmet rmet) g (unmod lctl spc))
