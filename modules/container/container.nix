@@ -20,12 +20,11 @@
   system.stateVersion = cfg-meta.state-version-system;
 
   services.openssh = {
-    authorizedKeysFiles = [
-      "/etc/ssh/authorized_keys.d/%u"
-      ".ssh/authorized_keys"
-      ".ssh/authorized_keys2"
-    ];
-    settings = { PermitRootLogin = lib.mkDefault "prohibit-password"; };
+    settings = {
+      PermitRootLogin = lib.mkDefault "prohibit-password";
+      AuthorizedKeysFile =
+        "/etc/ssh/authorized_keys.d/%u .ssh/authorized_keys .ssh/authorized_keys2";
+    };
   };
 
   networking = {
