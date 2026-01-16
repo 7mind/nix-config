@@ -195,8 +195,7 @@
   {
     "context" : "Editor || Terminal",
     "bindings" : {
-      "ctrl-k ctrl-a" : "editor::SelectAll",
-      "ctrl-k a" : "editor::SelectAll"
+      "cmd-a" : "editor::SelectAll"
     }
   },
   {

@@ -549,8 +549,7 @@
   </action>
   <action id="$SelectAll">
     <!--select-all-->
-    <keyboard-shortcut first-keystroke="ctrl k" second-keystroke="ctrl a"/>
-    <keyboard-shortcut first-keystroke="ctrl k" second-keystroke="a"/>
+    <keyboard-shortcut first-keystroke="meta a"/>
   </action>
   <action id="EditorBackSpace">
     <!--deleteLeft-->

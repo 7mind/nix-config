@@ -6214,12 +6214,7 @@
   },
   {
     "when" : "listFocus && listSupportsMultiselect && !inputFocus && !treestickyScrollFocused",
-    "key" : "ctrl+k ctrl+a",
-    "command" : "list.selectAll"
-  },
-  {
-    "when" : "listFocus && listSupportsMultiselect && !inputFocus && !treestickyScrollFocused",
-    "key" : "ctrl+k a",
+    "key" : "meta+a",
     "command" : "list.selectAll"
   },
   {
@@ -6379,11 +6374,7 @@
     "command" : "editor.action.previousMatchFindAction"
   },
   {
-    "key" : "ctrl+k ctrl+a",
-    "command" : "editor.action.selectAll"
-  },
-  {
-    "key" : "ctrl+k a",
+    "key" : "meta+a",
     "command" : "editor.action.selectAll"
   },
   {
