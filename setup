@@ -73,6 +73,7 @@ EOF
 
 load_host_meta() {
     echo "Loading host metadata from flake..."
+    add_all
     local json
     json=$(nix eval ".?submodules=1#hostMeta" --json 2>/dev/null)
 

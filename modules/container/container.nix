@@ -20,7 +20,7 @@
   system.stateVersion = cfg-meta.state-version-system;
 
   services.openssh = {
-    settings = { PermitRootLogin = lib.mkForce "yes"; };
+    settings = { PermitRootLogin = lib.mkDefault "prohibit-password"; };
   };
 
   networking = {
