@@ -5,9 +5,9 @@ let
 
   # Bundle kanata config files together so includes work
   # Prepend defcfg with extraDefCfg settings to the main config
-  mkKanataConfigDir = extraDefCfg: pkgs.runCommand "kanata-config"
+  kanataConfigDir = pkgs.runCommand "kanata-config"
     {
-      inherit extraDefCfg;
+      extraDefCfg = cfg.kanata.extraDefCfg;
       passAsFile = [ "extraDefCfg" ];
     } ''
     mkdir -p $out
@@ -18,7 +18,7 @@ let
     cat "$extraDefCfgPath" >> $out/kanata-super-remap.kbd
     echo ")" >> $out/kanata-super-remap.kbd
     echo "" >> $out/kanata-super-remap.kbd
-    cat ${./kanata-super-remap.kbd} >> $out/kanata-super-remap.kbd
+    cat ${cfg.kanata.configFile} >> $out/kanata-super-remap.kbd
   '';
 in
 {
@@ -50,9 +50,8 @@ in
 
       configFile = lib.mkOption {
         type = lib.types.path;
-        default = "${mkKanataConfigDir cfg.kanata.extraDefCfg}/kanata-super-remap.kbd";
-        defaultText = lib.literalExpression ''"''${mkKanataConfigDir cfg.kanata.extraDefCfg}/kanata-super-remap.kbd"'';
-        description = "Path to kanata config file (must be in same directory as kanata-lib.kbd for includes to work)";
+        default = ./kanata-super-remap.kbd;
+        description = "Path to kanata config file (will be bundled with kanata-lib.kbd for includes)";
       };
     };
 
@@ -96,15 +95,14 @@ in
         keyboards.default = {
           devices = cfg.kanata.devices;
           port = cfg.kanata.port;
-          # extraDefCfg is prepended to configFile by mkKanataConfigDir
-          configFile = cfg.kanata.configFile;
+          # extraDefCfg is prepended to configFile in kanataConfigDir
+          configFile = "${kanataConfigDir}/kanata-super-remap.kbd";
         };
       };
 
       # Restart kanata when config changes
       systemd.services.kanata-default.restartTriggers = [
-        cfg.kanata.configFile
-        cfg.kanata.extraDefCfg
+        kanataConfigDir
       ];
     })
 
