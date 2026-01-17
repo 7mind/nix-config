@@ -34,19 +34,21 @@ let
     # https://askubuntu.com/questions/1488341/how-do-i-inhibit-shortcuts-for-virtual-machines
     # https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.impl.portal.PermissionStore.html
     gnome-shortcut-inhibitor
-    gnomeExtensions.appindicator
-    gnomeExtensions.gsconnect
-    gnomeExtensions.native-window-placement
-    gnomeExtensions.caffeine
-    gnomeExtensions.vicinae
-    gnomeExtensions.steal-my-focus-window
-    gnomeExtensions.dim-completed-calendar-events
+  ] ++ (with pkgs.gnomeExtensions; [
+    appindicator
+    gsconnect
+    native-window-placement
+    caffeine
+    vicinae
+    steal-my-focus-window
+    dim-completed-calendar-events
+    rounded-window-corners-reborn
     # gnomeExtensions.tiling-shell
     # gnomeExtensions.open-bar
     # gnomeExtensions.grand-theft-focus
     # gnomeExtensions.highlight-focus
     # tray-icons-reloaded
-  ]
+  ])
   ++ lib.optional hibernateCfg.enable hibernateExtensionPatched
   ++ lib.optional config.smind.desktop.gnome.sticky-keys.enable gnomeExtensions.keyboard-modifiers-status
   ++ lib.optional fanControlCfg.enable gnomeExtensions.framework-fan-control
