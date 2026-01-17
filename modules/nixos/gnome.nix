@@ -181,6 +181,7 @@
               };
               "org/gnome/terminal/legacy" = {
                 menu-accelerator-enabled = false;
+                new-tab-position = "next";
               };
             }
           ] ++ lib.optional (config.smind.desktop.gnome.xkb.layouts != [ ]) {

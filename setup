@@ -75,7 +75,15 @@ load_host_meta() {
     echo "Loading host metadata from flake..."
     add_all
     local json
-    json=$(nix eval ".?submodules=1#hostMeta" --json 2>/dev/null)
+    local errfile
+    errfile="$(mktemp)"
+    if ! json=$(nix eval ".?submodules=1#hostMeta" --json 2>"$errfile"); then
+        echo "Error: nix eval failed for host metadata:" >&2
+        cat "$errfile" >&2
+        rm -f "$errfile"
+        exit 1
+    fi
+    rm -f "$errfile"
 
     # Parse JSON and populate HOST_META
     while IFS="=" read -r key value; do
