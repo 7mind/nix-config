@@ -166,6 +166,22 @@
                 accel-profile = config.smind.desktop.gnome.mouse.accelProfile;
                 natural-scroll = config.smind.desktop.gnome.mouse.naturalScroll;
               };
+              "org/gnome/terminal/legacy/keybindings" = {
+                copy = "<Super>c";
+                paste = "<Super>v";
+                new-tab = "<Super>t";
+                new-window = "<Super>n";
+                close-tab = "<Super>w";
+                next-tab = "<Super>bracketright";
+                prev-tab = "<Super>bracketleft";
+                reset-and-clear = "<Super>k";
+                zoom-in = "<Super>plus";
+                zoom-out = "<Super>minus";
+                zoom-normal = "<Super>0";
+              };
+              "org/gnome/terminal/legacy" = {
+                menu-accelerator-enabled = false;
+              };
             }
           ] ++ lib.optional (config.smind.desktop.gnome.xkb.layouts != [ ]) {
             "org/gnome/desktop/input-sources" =

@@ -15,8 +15,12 @@
       extraConfig = ''
         # Mouse works as expected, incl. scrolling
         set-option -g mouse on
-        set -g default-terminal "screen-256color"
-        set -as terminal-features ",gnome*:RGB"
+
+        # Prefer tmux’s own terminfo (more accurate capabilities than screen-256color)
+        set -g default-terminal "tmux-256color"
+
+        # Truecolor: GNOME Terminal (VTE) typically reports TERM=xterm-256color
+        set -as terminal-features ",xterm*:RGB"
 
         set -g @catppuccin_window_left_separator ""
         set -g @catppuccin_window_right_separator " "

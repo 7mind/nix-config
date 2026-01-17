@@ -101,12 +101,13 @@
 
       services.resolved = {
         enable = true;
-        extraConfig = ''
-          Cache=no-negative
-          DNSStubListener=yes
-          DNSStubListenerExtra=[::1]:53
-
-        '';
+        settings = {
+          Resolve = {
+            Cache = "no-negative";
+            DNSStubListener = "yes";
+            DNSStubListenerExtra = [ "[::1]:53" ];
+          };
+        };
         llmnr = "false";
       };
 

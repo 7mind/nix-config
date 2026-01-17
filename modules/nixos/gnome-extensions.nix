@@ -16,6 +16,7 @@ let
   });
 
   hibernateExtensionPatched = patchGnomeExtension pkgs.gnomeExtensions.hibernate-status-button;
+  roundedWindowCornersRebornPatched = patchGnomeExtension pkgs.gnomeExtensions.rounded-window-corners-reborn;
 
   # Patch battery-health-charging to use NixOS paths instead of /usr/local/bin
   batteryHealthChargingPatched = pkgs.gnomeExtensions.battery-health-charging.overrideAttrs (old: {
@@ -42,7 +43,7 @@ let
     vicinae
     steal-my-focus-window
     dim-completed-calendar-events
-    rounded-window-corners-reborn
+    roundedWindowCornersRebornPatched
     # gnomeExtensions.tiling-shell
     # gnomeExtensions.open-bar
     # gnomeExtensions.grand-theft-focus

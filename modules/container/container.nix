@@ -43,7 +43,11 @@
 
   services.resolved = {
     enable = true;
-    extraConfig = "Cache=no-negative";
+    settings = {
+      Resolve = {
+        Cache = "no-negative";
+      };
+    };
     llmnr = "false";
   };
 }
