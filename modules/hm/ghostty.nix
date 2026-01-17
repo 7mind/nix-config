@@ -159,9 +159,12 @@ in
 
     # Set as default terminal via xdg-terminal-exec (modern GNOME)
     # See: https://gitlab.freedesktop.org/terminal-wg/specifications
-    xdg.configFile."xdg-terminals.list".text = ''
+    xdg.configFile."xdg-terminals.list" = {
+      force = true;
+      text = ''
       com.mitchellh.ghostty.desktop
-    '';
+      '';
+    };
 
     xdg.mimeApps.defaultApplications = lib.mkIf cfg-meta.isLinux {
       "x-scheme-handler/terminal" = "com.mitchellh.ghostty.desktop";
