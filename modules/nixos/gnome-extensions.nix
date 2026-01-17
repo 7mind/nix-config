@@ -43,7 +43,7 @@ let
     vicinae
     steal-my-focus-window
     dim-completed-calendar-events
-    roundedWindowCornersRebornPatched
+    # roundedWindowCornersRebornPatched
     # gnomeExtensions.tiling-shell
     # gnomeExtensions.open-bar
     # gnomeExtensions.grand-theft-focus
