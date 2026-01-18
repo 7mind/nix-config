@@ -263,7 +263,7 @@
               --ro "''${HOME}/.local/share/direnv" \
               --ro "''${HOME}/.direnvrc" \
               "''${ENV_ARGS[@]}" \
-              -- codex --dangerously-bypass-approvals-and-sandbox "''${CMD_ARGS[@]}"
+              -- codex --dangerously-bypass-approvals-and-sandbox --search "''${CMD_ARGS[@]}"
           '')
 
           (writeShellScriptBin "yolo-gemini" ''
