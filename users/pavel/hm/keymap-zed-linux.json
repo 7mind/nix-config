@@ -160,10 +160,12 @@
   {
     "context" : "Editor && (showing_code_actions || showing_completions)",
     "bindings" : {
-      "pageup" : "editor::ContextMenuFirst",
-      "pagedown" : "editor::ContextMenuLast",
       "down" : "editor::ContextMenuNext",
-      "up" : "editor::ContextMenuPrevious"
+      "pagedown" : "editor::ContextMenuLast",
+      "home" : "editor::ContextMenuFirst",
+      "end" : "editor::ContextMenuLast",
+      "up" : "editor::ContextMenuPrevious",
+      "pageup" : "editor::ContextMenuFirst"
     }
   },
   {

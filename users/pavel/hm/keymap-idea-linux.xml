@@ -157,6 +157,10 @@
     <!--editor.action.nextMatchFindAction:find-widget-focused-->
     <keyboard-shortcut first-keystroke="alt m"/>
   </action>
+  <action id="EditorLookupDown">
+    <!--completionMenuLast-->
+    <keyboard-shortcut first-keystroke="page_down"/>
+  </action>
   <action id="EditorLineEnd">
     <!--cursorEnd-->
     <keyboard-shortcut first-keystroke="ctrl e"/>
@@ -293,6 +297,10 @@
     <!--workbench.action.showAllSymbols-->
     <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="ctrl g"/>
     <keyboard-shortcut first-keystroke="ctrl n" second-keystroke="g"/>
+  </action>
+  <action id="EditorLookupUp">
+    <!--completionMenuFirst-->
+    <keyboard-shortcut first-keystroke="page_up"/>
   </action>
   <action id="RevealIn">
     <!--revealFileInOS-->
@@ -698,6 +706,7 @@
   <action id="TogglePopupHints"/>
   <action id="AutoIndentLines"/>
   <action id="GotoTest"/>
+  <action id="Diff.ShowSettingsPopup"/>
   <action id="Git.New.Branch.In.Log"/>
   <action id="ExpandAll"/>
   <action id="UsageFiltering.WriteAccess"/>
@@ -705,8 +714,6 @@
   <action id="ShowExecutionPoint"/>
   <action id="ResizeToolWindowUp"/>
   <action id="ToggleBookmark4"/>
-  <action id="EditorLookupUp"/>
-  <action id="Diff.ShowSettingsPopup"/>
   <action id="CodeFloatingToolbar.GotoPrevMenu"/>
   <action id="SwitcherRecentEditedChangedToggleCheckBox"/>
   <action id="ServiceView.ShowServices"/>
@@ -952,7 +959,6 @@
   <action id="ExpandToLevel4"/>
   <action id="EditorPasteSimple"/>
   <action id="UsageGrouping.UsageType"/>
-  <action id="EditorLookupDown"/>
   <action id="EditorCompleteStatement"/>
   <action id="MethodOverloadSwitchUp"/>
   <action id="NextDiff"/>

@@ -5339,12 +5339,22 @@
     "command" : "closeReferenceSearch"
   },
   {
-    "when" : "suggestWidgetMultipleSuggestions && suggestWidgetVisible && textInputFocus || suggestWidgetVisible && textInputFocus && !suggestWidgetHasFocusedSuggestion",
+    "when" : "suggestWidgetVisible",
+    "key" : "end",
+    "command" : "selectLastSuggestion"
+  },
+  {
+    "when" : "suggestWidgetVisible",
     "key" : "pageup",
     "command" : "selectPrevPageSuggestion"
   },
   {
-    "when" : "suggestWidgetMultipleSuggestions && suggestWidgetVisible && textInputFocus || suggestWidgetVisible && textInputFocus && !suggestWidgetHasFocusedSuggestion",
+    "when" : "suggestWidgetVisible",
+    "key" : "home",
+    "command" : "selectFirstSuggestion"
+  },
+  {
+    "when" : "suggestWidgetVisible",
     "key" : "pagedown",
     "command" : "selectNextPageSuggestion"
   },
