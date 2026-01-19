@@ -231,6 +231,14 @@
 
   smind.gaming.steam.enable = true;
 
+  boot.kernelParams = [
+    "quiet"
+    "splash"
+  ];
+
+  boot.plymouth.enable = true;
+  boot.plymouth.theme = "bgrt";
+
   boot.initrd = {
     kernelModules = [ "atlantic" "igc" ];
 
