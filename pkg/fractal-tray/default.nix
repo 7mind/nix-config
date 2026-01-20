@@ -1,35 +1,40 @@
-{ lib
+{ dbus
+, fetchgit
 , fractal
+, libglycin
 , rustPlatform
-, dbus
 }:
 
 let
-  trayModule = builtins.path { path = ./tray.rs; name = "tray.rs"; };
-  cargoPatch = builtins.path { path = ./cargo.patch; name = "cargo.patch"; };
-  cargoLockPatch = builtins.path { path = ./cargo-lock.patch; name = "cargo-lock.patch"; };
-  sourcePatch = builtins.path { path = ./source.patch; name = "source.patch"; };
-  cargoPatches = [ cargoPatch cargoLockPatch ];
-  allPatches = cargoPatches ++ [ sourcePatch ];
+  src = fetchgit {
+    url = "https://gitlab.gnome.org/pshirshov/fractal.git";
+    rev = "927ffeb436d03ec55aa8399a858ef1c760823a0c";
+    hash = "sha256-CBjbQ0AsLESHejHqlYdb4Fu3dTX1oS2Q5x5AJtY3xzE=";
+  };
 in
 fractal.overrideAttrs (old: {
   pname = "fractal-tray";
 
-  patches = (old.patches or []) ++ allPatches;
+  version = "unstable-2026-01-20";
+  inherit src;
 
-  postPatch = (old.postPatch or "") + ''
-    # Add tray module
-    cp ${trayModule} src/tray.rs
-  '';
+  mesonBuildType = "debugoptimized";
+
+  mesonFlags = (old.mesonFlags or [ ]) ++ [
+    "-Db_lto=false"
+  ];
 
   # Need to update cargo vendor hash since we added ksni dependency
   cargoDeps = rustPlatform.fetchCargoVendor {
-    inherit (old) src;
-    patches = cargoPatches;
-    hash = "sha256-N1pjx3O0fJ67sMstTzk/TIuBAVlzEuaz/dHNha8E1BA=";
+    inherit src;
+    hash = "sha256-uULj/9ixqq9cGg7U1m4QnfTl6Hvpjx0nJPjWvF2rW2M=";
   };
 
-  buildInputs = old.buildInputs ++ [ dbus ];
+  postPatch = (old.postPatch or "") + ''
+    patchShebangs build-aux
+  '';
+
+  buildInputs = old.buildInputs ++ [ dbus libglycin ];
 
   meta = old.meta // {
     description = old.meta.description + " (with system tray support)";
