@@ -1,15 +1,20 @@
-{ config, lib, ... }:
+{ config, lib, outerConfig, ... }:
 
 {
   options = {
     smind.hm.kitty.enable = lib.mkEnableOption "Kitty terminal with custom keybindings";
+    smind.hm.kitty.fontFamily = lib.mkOption {
+      type = lib.types.str;
+      default = outerConfig.smind.fonts.terminal;
+      description = "Kitty font family";
+    };
   };
 
   config = lib.mkIf config.smind.hm.kitty.enable {
     programs.kitty = {
       enable = true;
       font = {
-        name = "Hack Nerd Font Mono";
+        name = config.smind.hm.kitty.fontFamily;
         size = 10;
       };
       settings = {

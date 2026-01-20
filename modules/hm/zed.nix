@@ -1,4 +1,4 @@
-{ config, lib, pkgs, cfg-flakes, cfg-packages, cfg-meta, override_pkg, ... }:
+{ config, lib, pkgs, cfg-flakes, cfg-packages, cfg-meta, outerConfig, override_pkg, ... }:
 
 {
   options = {
@@ -14,6 +14,12 @@
       type = lib.types.int;
       default = 14;
       description = "Zed buffer/editor font size";
+    };
+
+    smind.hm.zed.terminalFontFamily = lib.mkOption {
+      type = lib.types.str;
+      default = outerConfig.smind.fonts.terminal;
+      description = "Zed terminal font family";
     };
   };
 
@@ -89,7 +95,7 @@
         auto_update = false;
         buffer_font_family = "FiraMono Nerd Font";
         terminal = {
-          font_family = "Hack Nerd Font Mono";
+          font_family = config.smind.hm.zed.terminalFontFamily;
         };
         project_panel = {
           entry_spacing = "standard";
@@ -210,4 +216,3 @@
 
   };
 }
-

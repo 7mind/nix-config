@@ -9,6 +9,12 @@ in
   options = {
     smind.hm.ghostty.enable = lib.mkEnableOption "Ghostty terminal emulator";
 
+    smind.hm.ghostty.fontFamily = lib.mkOption {
+      type = lib.types.str;
+      default = outerConfig.smind.fonts.terminal;
+      description = "Ghostty font family";
+    };
+
     smind.hm.ghostty.fontSize = lib.mkOption {
       type = lib.types.int;
       default = defaultFontSize;
@@ -177,7 +183,7 @@ in
 
       settings = {
         theme = config.smind.hm.ghostty.theme;
-        font-family = "JetBrains Mono";
+        font-family = config.smind.hm.ghostty.fontFamily;
         font-size = config.smind.hm.ghostty.fontSize;
 
         window-padding-x = 8;

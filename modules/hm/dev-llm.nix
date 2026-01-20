@@ -111,6 +111,7 @@
         custom-instructions = config.programs.claude-code.memory.text;
         settings = {
           project_doc_fallback_filenames = [ "CLAUDE.md" ];
+          features.steer = true;
         };
       };
 

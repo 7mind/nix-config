@@ -6,6 +6,7 @@ let
   fanControlCfg = config.smind.desktop.gnome.framework-fan-control;
   batteryHealthCfg = config.smind.desktop.gnome.battery-health-charging;
   kanataSwitcherCfg = config.smind.keyboard.super-remap.kanata-switcher;
+  extCfg = config.smind.desktop.gnome.extensions;
 
   # Patch extensions to support current GNOME shell version
   patchGnomeExtension = ext: ext.overrideAttrs (old: {
@@ -35,21 +36,20 @@ let
     # https://askubuntu.com/questions/1488341/how-do-i-inhibit-shortcuts-for-virtual-machines
     # https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.impl.portal.PermissionStore.html
     gnome-shortcut-inhibitor
-  ] ++ (with pkgs.gnomeExtensions; [
-    appindicator
-    gsconnect
-    native-window-placement
-    caffeine
-    vicinae
-    steal-my-focus-window
-    dim-completed-calendar-events
-    # roundedWindowCornersRebornPatched
-    # gnomeExtensions.tiling-shell
-    # gnomeExtensions.open-bar
-    # gnomeExtensions.grand-theft-focus
-    # gnomeExtensions.highlight-focus
-    # tray-icons-reloaded
-  ])
+  ]
+  ++ lib.optional extCfg.appindicator.enable pkgs.gnomeExtensions.appindicator
+  ++ lib.optional extCfg.gsconnect.enable pkgs.gnomeExtensions.gsconnect
+  ++ lib.optional extCfg.native-window-placement.enable pkgs.gnomeExtensions.native-window-placement
+  ++ lib.optional extCfg.caffeine.enable pkgs.gnomeExtensions.caffeine
+  ++ lib.optional extCfg.vicinae.enable pkgs.gnomeExtensions.vicinae
+  ++ lib.optional extCfg.steal-my-focus-window.enable pkgs.gnomeExtensions.steal-my-focus-window
+  ++ lib.optional extCfg.dim-completed-calendar-events.enable pkgs.gnomeExtensions.dim-completed-calendar-events
+  ++ lib.optional extCfg.rounded-window-corners-reborn.enable roundedWindowCornersRebornPatched
+  ++ lib.optional extCfg.tiling-shell.enable pkgs.gnomeExtensions.tiling-shell
+  ++ lib.optional extCfg.open-bar.enable pkgs.gnomeExtensions.open-bar
+  ++ lib.optional extCfg.grand-theft-focus.enable pkgs.gnomeExtensions.grand-theft-focus
+  ++ lib.optional extCfg.highlight-focus.enable pkgs.gnomeExtensions.highlight-focus
+  ++ lib.optional extCfg.tray-icons-reloaded.enable pkgs.gnomeExtensions.tray-icons-reloaded
   ++ lib.optional hibernateCfg.enable hibernateExtensionPatched
   ++ lib.optional config.smind.desktop.gnome.sticky-keys.enable gnomeExtensions.keyboard-modifiers-status
   ++ lib.optional fanControlCfg.enable gnomeExtensions.framework-fan-control
@@ -65,6 +65,22 @@ in
     smind.desktop.gnome.battery-health-charging.enable = lib.mkEnableOption "Battery Health Charging GNOME extension for laptops";
 
     smind.desktop.gnome.allow-local-extensions = lib.mkEnableOption "local installation of GNOME Shell extensions (non-declaratively). When false, extension settings are locked via dconf";
+
+    smind.desktop.gnome.extensions = {
+      appindicator.enable = lib.mkEnableOption "AppIndicator/KStatusNotifierItem support for the GNOME Shell" // { default = true; };
+      gsconnect.enable = lib.mkEnableOption "GSConnect - KDE Connect implementation for GNOME" // { default = true; };
+      native-window-placement.enable = lib.mkEnableOption "Native window placement extension" // { default = true; };
+      caffeine.enable = lib.mkEnableOption "Caffeine - disable screensaver and auto suspend" // { default = true; };
+      vicinae.enable = lib.mkEnableOption "Vicinae extension" // { default = true; };
+      steal-my-focus-window.enable = lib.mkEnableOption "steal focus for windows that request attention" // { default = true; };
+      dim-completed-calendar-events.enable = lib.mkEnableOption "dimming of completed calendar events" // { default = true; };
+      rounded-window-corners-reborn.enable = lib.mkEnableOption "rounded-window-corners extension" // { default = false; };
+      tiling-shell.enable = lib.mkEnableOption "tiling-shell extension" // { default = false; };
+      open-bar.enable = lib.mkEnableOption "open-bar extension" // { default = false; };
+      grand-theft-focus.enable = lib.mkEnableOption "grand-theft-focus extension" // { default = false; };
+      highlight-focus.enable = lib.mkEnableOption "highlight-focus extension" // { default = false; };
+      tray-icons-reloaded.enable = lib.mkEnableOption "tray-icons-reloaded extension" // { default = false; };
+    };
   };
 
   config = lib.mkIf config.smind.desktop.gnome.enable {

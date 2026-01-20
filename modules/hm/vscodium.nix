@@ -1,5 +1,8 @@
-{ config, lib, pkgs, cfg-flakes, cfg-packages, cfg-meta, override_pkg, cfg-args, ... }:
+{ config, lib, pkgs, cfg-flakes, cfg-packages, cfg-meta, outerConfig, override_pkg, cfg-args, ... }:
 
+let
+  defaultTerminalFontFamily = "'${outerConfig.smind.fonts.terminal}'";
+in
 {
   options = {
     smind.hm.vscodium.enable = lib.mkEnableOption "VSCodium with extensions and settings";
@@ -8,6 +11,12 @@
       type = lib.types.int;
       default = 14;
       description = "VSCodium editor and terminal font size";
+    };
+
+    smind.hm.vscodium.terminalFontFamily = lib.mkOption {
+      type = lib.types.str;
+      default = defaultTerminalFontFamily;
+      description = "VSCodium terminal font family";
     };
   };
 
@@ -106,7 +115,7 @@
           "editor.fontFamily" =
             "'FiraMono Nerd Font', 'Fira Code Nerd Font Mono', 'Fira Code', monospace";
           "terminal.integrated.fontFamily" =
-            "'Hack Nerd Font Mono', 'FiraMono Nerd Font', monospace";
+            config.smind.hm.vscodium.terminalFontFamily;
           "editor.fontLigatures" = true;
           "editor.dragAndDrop" = false;
           "editor.wordWrap" = "on";
@@ -248,4 +257,3 @@
 
   };
 }
-

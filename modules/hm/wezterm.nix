@@ -1,4 +1,4 @@
-{ config, lib, cfg-meta, ... }:
+{ config, lib, cfg-meta, outerConfig, ... }:
 
 let
   defaultFontSize = if cfg-meta.isDarwin then 14 else 10;
@@ -6,6 +6,12 @@ in
 {
   options = {
     smind.hm.wezterm.enable = lib.mkEnableOption "WezTerm terminal emulator";
+
+    smind.hm.wezterm.fontFamily = lib.mkOption {
+      type = lib.types.str;
+      default = outerConfig.smind.fonts.terminal;
+      description = "WezTerm font family";
+    };
 
     smind.hm.wezterm.fontSize = lib.mkOption {
       type = lib.types.int;
@@ -17,6 +23,7 @@ in
   config = lib.mkIf config.smind.hm.wezterm.enable {
     programs.wezterm =
       let
+        font_family = config.smind.hm.wezterm.fontFamily;
         font_size = config.smind.hm.wezterm.fontSize;
         initial_rows = if cfg-meta.isDarwin then 40 else 60;
       in
@@ -27,7 +34,7 @@ in
         extraConfig = ''
             return {
               -- front_end = "WebGpu",
-              font = wezterm.font("JetBrains Mono"),
+              font = wezterm.font("${font_family}"),
               font_size = ${toString font_size},
               initial_cols = 160,
               initial_rows = ${toString initial_rows},
