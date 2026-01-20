@@ -102,8 +102,8 @@ in
           ubuntu-mono
           dejavu-sans-mono
         ]);
-
-      fontconfig = lib.mkIf cfg-meta.isLinux {
+    } // lib.optionalAttrs cfg-meta.isLinux {
+      fontconfig = {
         enable = true;
 
         antialias = config.smind.fonts.fontconfig.antialias;
