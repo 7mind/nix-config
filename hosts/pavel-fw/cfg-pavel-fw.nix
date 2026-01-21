@@ -144,51 +144,51 @@ in
   '';
 
   # Workaround: Unload MT7925e WiFi before suspend/hibernate (driver doesn't support PM properly)
-  systemd.services.mt7925e-suspend = {
-    description = "Unload MT7925e WiFi before suspend";
-    before = [ "sleep.target" ];
-    wantedBy = [ "sleep.target" ];
-    unitConfig.StopWhenUnneeded = true;
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      ExecStart = "${pkgs.kmod}/bin/modprobe -r mt7925e";
-      ExecStop = pkgs.writeShellScript "mt7925e-resume" ''
-        set -euo pipefail
+  # systemd.services.mt7925e-suspend = {
+  #   description = "Unload MT7925e WiFi before suspend";
+  #   before = [ "sleep.target" ];
+  #   wantedBy = [ "sleep.target" ];
+  #   unitConfig.StopWhenUnneeded = true;
+  #   serviceConfig = {
+  #     Type = "oneshot";
+  #     RemainAfterExit = true;
+  #     ExecStart = "${pkgs.kmod}/bin/modprobe -r mt7925e";
+  #     ExecStop = pkgs.writeShellScript "mt7925e-resume" ''
+  #       set -euo pipefail
 
-        # Wait for PCIe device to be ready
-        sleep 1
+  #       # Wait for PCIe device to be ready
+  #       sleep 1
 
-        # Load module with retry
-        for i in 1 2 3; do
-          if ${pkgs.kmod}/bin/modprobe mt7925e 2>/dev/null; then
-            echo "mt7925e loaded on attempt $i"
-            break
-          fi
-          echo "modprobe attempt $i failed, retrying..."
-          sleep 1
-        done
+  #       # Load module with retry
+  #       for i in 1 2 3; do
+  #         if ${pkgs.kmod}/bin/modprobe mt7925e 2>/dev/null; then
+  #           echo "mt7925e loaded on attempt $i"
+  #           break
+  #         fi
+  #         echo "modprobe attempt $i failed, retrying..."
+  #         sleep 1
+  #       done
 
-        # Wait for interface to appear
-        for i in $(seq 1 10); do
-          if ${pkgs.iproute2}/bin/ip link show wlan0 &>/dev/null; then
-            echo "wlan0 interface is up"
-            break
-          fi
-          sleep 0.5
-        done
+  #       # Wait for interface to appear
+  #       for i in $(seq 1 10); do
+  #         if ${pkgs.iproute2}/bin/ip link show wlan0 &>/dev/null; then
+  #           echo "wlan0 interface is up"
+  #           break
+  #         fi
+  #         sleep 0.5
+  #       done
 
-        # Give NetworkManager a kick if interface appeared
-        if ${pkgs.iproute2}/bin/ip link show wlan0 &>/dev/null; then
-          sleep 1
-          ${pkgs.networkmanager}/bin/nmcli device set wlan0 managed yes 2>/dev/null || true
-          ${pkgs.networkmanager}/bin/nmcli device reapply wlan0 2>/dev/null || true
-        else
-          echo "WARNING: wlan0 did not appear after resume"
-        fi
-      '';
-    };
-  };
+  #       # Give NetworkManager a kick if interface appeared
+  #       if ${pkgs.iproute2}/bin/ip link show wlan0 &>/dev/null; then
+  #         sleep 1
+  #         ${pkgs.networkmanager}/bin/nmcli device set wlan0 managed yes 2>/dev/null || true
+  #         ${pkgs.networkmanager}/bin/nmcli device reapply wlan0 2>/dev/null || true
+  #       else
+  #         echo "WARNING: wlan0 did not appear after resume"
+  #       fi
+  #     '';
+  #   };
+  # };
 
   smind = {
     nix.determinate.enable = true;
