@@ -100,23 +100,21 @@ in
     '';
   };
 
-  # VPE DPM0 patch disabled for ath12k debugging
-  # TODO: Re-enable after WiFi issue is resolved
-  # boot.kernelPatches = [{
-  #   name = "amdgpu-vpe-strix-point-dpm0-fix";
-  #   patch = pkgs.writeText "vpe-strix-point.patch" ''
-  #     --- a/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
-  #     +++ b/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
-  #     @@ -325,6 +325,8 @@ static bool vpe_need_dpm0_at_power_down(struct amdgpu_device *adev)
-  #      {
-  #      	switch (amdgpu_ip_version(adev, VPE_HWIP, 0)) {
-  #     +	case IP_VERSION(6, 1, 0):
-  #     +		return true; /* Strix Point needs DPM0 check regardless of PMFW version */
-  #      	case IP_VERSION(6, 1, 1):
-  #      		return adev->pm.fw_version < 0x0a640500;
-  #      	default:
-  #   '';
-  # }];
+  boot.kernelPatches = [{
+    name = "amdgpu-vpe-strix-point-dpm0-fix";
+    patch = pkgs.writeText "vpe-strix-point.patch" ''
+      --- a/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
+      +++ b/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
+      @@ -325,6 +325,8 @@ static bool vpe_need_dpm0_at_power_down(struct amdgpu_device *adev)
+       {
+       	switch (amdgpu_ip_version(adev, VPE_HWIP, 0)) {
+      +	case IP_VERSION(6, 1, 0):
+      +		return true; /* Strix Point needs DPM0 check regardless of PMFW version */
+       	case IP_VERSION(6, 1, 1):
+       		return adev->pm.fw_version < 0x0a640500;
+       	default:
+    '';
+  }];
 
   # Framework-specific services
   hardware.sensor.iio.enable = true; # ALS sensor for wluma
