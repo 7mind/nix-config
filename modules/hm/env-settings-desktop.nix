@@ -25,6 +25,7 @@
         font.normal.size = 11;
         favorites = [
           "clipboard:history"
+          "wm:switch-windows"
           "applications:idea"
           "applications:firefox"
           "applications:codium"
