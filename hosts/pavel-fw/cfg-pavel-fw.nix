@@ -34,6 +34,7 @@ in
   boot.kernelParams = [
     "quiet"
     "splash"
+    "usbcore.autosuspend=-1"
     # AMD GPU workarounds for Strix Point
     "amdgpu.abmlevel=0" # Disable adaptive backlight
     # Prevent simpledrm from taking over framebuffer before amdgpu loads (for Plymouth)
