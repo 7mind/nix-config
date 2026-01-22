@@ -1,8 +1,6 @@
 { config, cfg-meta, lib, pkgs, cfg-const, import_if_exists, cfg-flakes, ... }:
 
 let
-  kernel612Packages = pkgs.linuxKernel.packages.linux_6_12;
-  kernel612SpecialisationName = "kernel-6-12";
   luksDevice = "/dev/disk/by-uuid/ebeec38b-52cd-4113-8d91-84e71df293af";
 in
 {
@@ -32,73 +30,6 @@ in
   # Use latest kernel
   # Override the default from kernel-settings module (6.17) - Strix Point needs latest
   boot.kernelPackages = lib.mkForce pkgs.linuxPackages_latest;
-
-  # VPE DPM0 patch disabled for ath12k debugging
-  # TODO: Re-enable after WiFi issue is resolved
-  # boot.kernelPatches = [{
-  #   name = "amdgpu-vpe-strix-point-dpm0-fix";
-  #   patch = pkgs.writeText "vpe-strix-point.patch" ''
-  #     --- a/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
-  #     +++ b/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
-  #     @@ -325,6 +325,8 @@ static bool vpe_need_dpm0_at_power_down(struct amdgpu_device *adev)
-  #      {
-  #      	switch (amdgpu_ip_version(adev, VPE_HWIP, 0)) {
-  #     +	case IP_VERSION(6, 1, 0):
-  #     +		return true; /* Strix Point needs DPM0 check regardless of PMFW version */
-  #      	case IP_VERSION(6, 1, 1):
-  #      		return adev->pm.fw_version < 0x0a640500;
-  #      	default:
-  #   '';
-  # }];
-
-  specialisation.${kernel612SpecialisationName} = {
-    configuration = {
-      boot.kernelPackages = lib.mkOverride 40 kernel612Packages;
-      boot.kernelPatches = lib.mkOverride 40 [ ];
-    };
-  };
-
-  # Debug specialisation: minimal config matching working USB install
-  # Uses linuxPackages_latest, no nvidia, no VPE patch
-  specialisation.ath12k-debug = {
-    configuration = { config, pkgs, ... }: {
-      # Match working USB config: linuxPackages_latest, no custom patches
-      boot.kernelPackages = lib.mkOverride 40 pkgs.linuxPackages_latest;
-      boot.kernelPatches = lib.mkOverride 40 [ ];
-
-      boot.kernelParams = lib.mkForce [
-        "amdgpu.abmlevel=0"
-        "initcall_blacklist=simpledrm_platform_driver_init"
-        # From working USB config
-        "usbcore.autosuspend=-1"
-        "usbcore.quirks=0bda:8156:m"
-        # Verbose output
-        "console=tty0"
-        "loglevel=7"
-        # Keep resume for hibernate
-        "resume=/dev/vg/swap"
-        # Early network for netconsole
-        "ip=192.168.10.88::192.168.10.1:255.255.255.0::enp197s0f0u2u2:none"
-        "netconsole=@192.168.10.88/enp197s0f0u2u2,6666@192.168.10.198/cc:28:aa:a7:cc:aa"
-      ];
-
-      boot.initrd.availableKernelModules = [ "r8152" ];
-      boot.plymouth.enable = lib.mkForce false;
-      boot.consoleLogLevel = lib.mkForce 7;
-
-      # Disable NVIDIA - not present in working config
-      smind.hw.nvidia.enable = lib.mkForce false;
-      smind.vm.virt-manager.gpuPassthrough.enable = lib.mkForce false;
-
-      # Disable power management customizations - not in working config
-      smind.power-management.enable = lib.mkForce false;
-      services.power-profiles-daemon.enable = lib.mkForce false;
-      powerManagement.enable = lib.mkForce false;
-
-      # Disable COSMIC to avoid conflict with GNOME on upower
-      smind.desktop.cosmic.enable = lib.mkForce false;
-    };
-  };
 
   boot.kernelParams = [
     "quiet"
@@ -169,6 +100,24 @@ in
     '';
   };
 
+  # VPE DPM0 patch disabled for ath12k debugging
+  # TODO: Re-enable after WiFi issue is resolved
+  # boot.kernelPatches = [{
+  #   name = "amdgpu-vpe-strix-point-dpm0-fix";
+  #   patch = pkgs.writeText "vpe-strix-point.patch" ''
+  #     --- a/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
+  #     +++ b/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
+  #     @@ -325,6 +325,8 @@ static bool vpe_need_dpm0_at_power_down(struct amdgpu_device *adev)
+  #      {
+  #      	switch (amdgpu_ip_version(adev, VPE_HWIP, 0)) {
+  #     +	case IP_VERSION(6, 1, 0):
+  #     +		return true; /* Strix Point needs DPM0 check regardless of PMFW version */
+  #      	case IP_VERSION(6, 1, 1):
+  #      		return adev->pm.fw_version < 0x0a640500;
+  #      	default:
+  #   '';
+  # }];
+
   # Framework-specific services
   hardware.sensor.iio.enable = true; # ALS sensor for wluma
 
@@ -188,9 +137,14 @@ in
   # Power management via TuneD (replaces power-profiles-daemon)
   # Defaults: latency-performance on AC, powersave on battery
 
-  # Enable illuminance scan element for ALS buffer mode (Framework 16)
-  services.udev.extraRules = ''
+  # Framework 16 udev rules
+  services.udev.extraRules = lib.mkAfter ''
+    # Enable illuminance scan element for ALS buffer mode
     ACTION=="add", SUBSYSTEM=="iio", ATTR{name}=="als", ATTR{scan_elements/in_illuminance_en}="1"
+    # Disable PCI runtime PM for WiFi parent bridge to prevent ath12k firmware crash
+    # The bridge (00:02.3) routes to the Qualcomm WCN785x WiFi (c0:00.0)
+    # Runtime PM on the bridge causes ath12k to crash - targeting device directly doesn't work
+    ACTION=="add|change", SUBSYSTEM=="pci", KERNEL=="0000:00:02.3", ATTR{power/control}="on"
   '';
 
   # Workaround: Unload MT7925e WiFi before suspend/hibernate (driver doesn't support PM properly)
