@@ -34,7 +34,7 @@ in
   boot.kernelParams = [
     "quiet"
     "splash"
-    "usbcore.autosuspend=-1"
+    #"usbcore.autosuspend=-1"
     # AMD GPU workarounds for Strix Point
     "amdgpu.abmlevel=0" # Disable adaptive backlight
     # Prevent simpledrm from taking over framebuffer before amdgpu loads (for Plymouth)
@@ -341,4 +341,20 @@ in
 
   home-manager.users.pavel = import ./home-pavel.nix;
   home-manager.users.root = import ./home-root.nix;
+
+  systemd.services.hiber-memmap-snapshot = {
+    description = "Snapshot BIOS/EFI memory map at boot for hibernate debugging";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "local-fs.target" "systemd-journald.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = pkgs.writeShellScript "hiber-memmap-snapshot" ''
+        set -euo pipefail
+        ${pkgs.coreutils}/bin/mkdir -p /var/log/hiber-memmap
+        ts="$(${pkgs.coreutils}/bin/date -u +"%F-%H%M%S")"
+        ${pkgs.util-linux}/bin/dmesg | ${pkgs.ripgrep}/bin/rg "BIOS-e820|efi: Remove mem|e820:" \
+          > "/var/log/hiber-memmap/''${ts}.log"
+      '';
+    };
+  };
 }
