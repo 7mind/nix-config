@@ -113,7 +113,7 @@ if [[ -n "$parallel" ]]; then
         {
             for host in $nixos_hosts; do echo "nixos $host"; done
             for host in $darwin_hosts; do echo "darwin $host"; done
-        } | parallel --will-cite --colsep ' ' verify_host {1} {2}
+        } | parallel -j 16 --will-cite --colsep ' ' verify_host {1} {2}
     )
 
     succeeded=$(echo "$results" | grep -c "^ok$" || true)

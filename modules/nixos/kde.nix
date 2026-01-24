@@ -3,6 +3,7 @@
 {
   options = {
     smind.desktop.kde.enable = lib.mkEnableOption "KDE Plasma 6 desktop environment with SDDM";
+    smind.desktop.kde.mime.enable = lib.mkEnableOption "Associate KDE Applications with document MIME Types";
   };
 
   config = lib.mkIf config.smind.desktop.kde.enable {
@@ -49,7 +50,6 @@
 
       kdePackages.kcalutils
       kdePackages.networkmanager-qt
-      kdePackages.kdeconnect-kde
       kdePackages.kdegraphics-thumbnailers
 
       kdePackages.akonadi
@@ -86,14 +86,14 @@
 
     environment.plasma6.excludePackages = with pkgs; [
       orca
-      kdePackages.elisa
-      kdePackages.oxygen
-      kdePackages.khelpcenter
-      kdePackages.konsole
-      kdePackages.plasma-browser-integration
+#      kdePackages.elisa
+#      kdePackages.oxygen
+#      kdePackages.khelpcenter
+#      kdePackages.konsole
+#      kdePackages.plasma-browser-integration
     ];
 
-    xdg.mime.defaultApplications = {
+    xdg.mime.defaultApplications = lib.mkIf config.smind.desktop.kde.mime.enable {
       "application/pdf" = "okularApplication_pdf.desktop";
       "inode/directory" = "org.kde.dolphin.desktop";
       "image/jpeg" = "org.kde.gwenview.desktop";

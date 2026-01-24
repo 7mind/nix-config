@@ -40,7 +40,7 @@
         it-tools
         bluetooth
         agenda
-      ];
+      ] ++ lib.optional outerConfig.smind.desktop.kde.enable kde-system-settings;
     };
 
     home.packages = lib.mkIf cfg-meta.isLinux (with pkgs; [

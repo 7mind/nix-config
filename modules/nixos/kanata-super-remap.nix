@@ -114,13 +114,6 @@ in
         settings = cfg.kanata-switcher.settings;
       };
 
-      # restartTriggers adds X-Restart-Triggers to unit file, but NixOS doesn't
-      # process it for user services - only system services are handled.
-      # See: https://github.com/NixOS/nixpkgs/issues/246611
-      systemd.user.services.kanata-switcher.restartTriggers = [
-        (builtins.toJSON cfg.kanata-switcher.settings)
-      ];
-
       # Workaround: restart kanata-switcher for all active users during activation
       # Always restart on every switch (hash-based detection doesn't work reliably)
       system.activationScripts.restart-kanata-switcher = ''

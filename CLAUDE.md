@@ -16,6 +16,14 @@ nix build ".?submodules=1#nixosConfigurations.pavel-am5.config.system.build.topl
 nix build ".?submodules=1#darwinConfigurations.HOSTNAME.system"
 ```
 
+When you've added a new feature or performed a refactoring, run verification build for all hosts:
+
+```bash
+# Build all hosts
+./verify-configs --verbose --no-parallel
+```
+
+
 Use `./setup` script for full build + switch workflow:
 - `./setup` - build current host
 - `./setup -s` - build and switch
