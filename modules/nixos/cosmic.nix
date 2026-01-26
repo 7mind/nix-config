@@ -14,11 +14,7 @@
       orca
     ];
 
-    environment.sessionVariables = {
-      QT_AUTO_SCREEN_SCALE_FACTOR = "1";
-      QT_ENABLE_HIGHDPI_SCALING = "1";
-      QT_QPA_PLATFORM = "wayland";
-    };
+    smind.desktop.wayland.session-variables.enable = true;
 
     # Set SSH_AUTH_SOCK for gcr-ssh-agent in COSMIC sessions
     # Something sets SSH_AUTH_SOCK to keyring/ssh before shells start,
@@ -39,8 +35,8 @@
     # Polkit authentication agent - cosmic-osd should handle this but has NixOS issues
     # Using polkit_gnome as a reliable fallback for apps like virt-manager
     # Only start in COSMIC sessions - GNOME Shell has its own built-in polkit agent
-    systemd.user.services.polkit-gnome-authentication-agent-1 = {
-      description = "polkit-gnome-authentication-agent-1";
+    systemd.user.services.polkit-gnome-authentication-agent-cosmic = {
+      description = "polkit-gnome-authentication-agent-cosmic";
       wantedBy = [ "graphical-session.target" ];
       wants = [ "graphical-session.target" ];
       after = [ "graphical-session.target" ];

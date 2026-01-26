@@ -24,8 +24,10 @@
   ./iperf.nix
   ./gnome-minimal-hotkeys.nix
   ./gnome-extensions.nix
+  ./hyprland.nix
   ./kanata-super-remap.nix
   ./kde.nix
+  ./niri.nix
   ./kdeconnect.nix
   ./kernel-settings.nix
   ./keyring.nix
@@ -52,6 +54,7 @@
   ./smartd.nix
   ./ssh.nix
   ./steam.nix
+  ./sway.nix
   ./sudo.nix
   ./tailscale.nix
   ./trezor.nix

@@ -24,6 +24,8 @@
       displayManagers = [ "login" "sddm" "greetd" "gdm" "gdm-password" "gdm-fingerprint" "gdm-autologin" ];
     };
 
+    smind.desktop.wayland.session-variables.enable = true;
+
     xdg.portal.enable = true;
 
     programs.partition-manager.enable = true;

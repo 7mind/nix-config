@@ -214,6 +214,8 @@
       ];
     };
 
+    smind.desktop.wayland.session-variables.enable = true;
+
     environment.sessionVariables = {
       # GTK_THEME breaks libadwaita apps (Nautilus, Settings) - causes missing paddings
       # Dark theme is handled by color-scheme = "prefer-dark" in dconf instead
@@ -221,13 +223,6 @@
 
       #QT_QPA_PLATFORMTHEME = "gnome"; # this breaks Telegram systray icon
       QT_QPA_PLATFORMTHEME = "qgnomeplatform"; # qt.platformTheme is broken, this fixes it
-
-      QT_AUTO_SCREEN_SCALE_FACTOR = "1";
-      QT_ENABLE_HIGHDPI_SCALING = "1";
-      QT_QPA_PLATFORM = "wayland";
-
-      # Electron apps: use native Wayland instead of XWayland
-      ELECTRON_OZONE_PLATFORM_HINT = "wayland";
 
       GNOME_SHELL_SLOWDOWN_FACTOR = "0.4";
     };

@@ -2,12 +2,15 @@
 
 let
   # Priority-based backend selection
-  # Priority: KDE > GNOME > COSMIC
+  # Priority: KDE > GNOME > COSMIC > Hyprland > Sway > Niri
   selectedBackend =
     if config.smind.display-manager != "auto" then config.smind.display-manager
     else if config.smind.desktop.kde.enable then "sddm"
     else if config.smind.desktop.gnome.enable then "gdm"
     else if config.smind.desktop.cosmic.enable then "cosmic-greeter"
+    else if config.smind.desktop.hyprland.enable then "greetd"
+    else if config.smind.desktop.sway.enable then "greetd"
+    else if config.smind.desktop.niri.enable then "greetd"
     else "none";
 
   # Count enabled desktops
@@ -15,6 +18,9 @@ let
     (if config.smind.desktop.kde.enable then "KDE" else null)
     (if config.smind.desktop.gnome.enable then "GNOME" else null)
     (if config.smind.desktop.cosmic.enable then "COSMIC" else null)
+    (if config.smind.desktop.hyprland.enable then "Hyprland" else null)
+    (if config.smind.desktop.sway.enable then "Sway" else null)
+    (if config.smind.desktop.niri.enable then "Niri" else null)
   ];
   hasMultipleDesktops = builtins.length enabledDesktops > 1;
 
@@ -156,12 +162,22 @@ in
 
     # greetd configuration
     (lib.mkIf (selectedBackend == "greetd") {
-      services.greetd = {
-        enable = true;
-        settings = {
-          default_session.command = "${pkgs.greetd.tuigreet}/bin/tuigreet --time --cmd sway";
+      services.greetd =
+        let
+          # Determine default session command based on enabled compositor
+          defaultSession =
+            if config.smind.desktop.hyprland.enable then "Hyprland"
+            else if config.smind.desktop.sway.enable then "sway"
+            else if config.smind.desktop.niri.enable then "niri-session"
+            else "sway";
+          sessionDirs = "/run/current-system/sw/share/wayland-sessions:/run/current-system/sw/share/xsessions";
+        in
+        {
+          enable = true;
+          settings = {
+            default_session.command = "${pkgs.greetd.tuigreet}/bin/tuigreet --time --sessions ${sessionDirs} --cmd ${defaultSession}";
+          };
         };
-      };
     })
 
     # x11
