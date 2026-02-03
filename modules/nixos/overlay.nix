@@ -90,57 +90,6 @@
         ];
       });
 
-            # Fix for cursor stutter/lag
-
-            # Issue: https://gitlab.gnome.org/GNOME/mutter/-/issues/4518
-
-            # MR !4795: https://gitlab.gnome.org/GNOME/mutter/-/merge_requests/4795
-
-            # MR !4833: https://gitlab.gnome.org/GNOME/mutter/-/merge_requests/4833
-
-            #
-
-            # Includes 49.3 backports:
-
-            # - screencast: Fix cursor stutter/lag by accumulating damage correctly (Closes #4380)
-
-            # - screencast: Fix damage region coordinates for PipeWire consumers (Closes #4269)
-
-            # - screencast: Handle blit failures and fallback to drawing
-
-            # - wayland: Fix subsurface geometry calculation (Closes #4250)
-
-            # - x11: Fix sync counter issues by reverting per-view frame counter (Closes #4216)
-
-            # - xwayland: Fix inconsistent layout due to monitor scale updates
-
-            # - misc: Fix memory leaks in text-accessible and CICP initialization issues (Closes #4534, #4344)
-
-            #
-
-            # DISABLED: MR !4795 (input-settings: Hook up disable-while-typing timeout)
-
-            # Fails to compile with libinput 1.29.0 (missing libinput_device_config_dwt_set_timeout)
-
-            mutter = super.mutter.overrideAttrs (old: {
-
-              patches = (old.patches or [ ]) ++ [
-
-                (pkgs.fetchpatch {
-
-                  url = "https://gitlab.gnome.org/GNOME/mutter/-/merge_requests/4833.patch";
-
-                  name = "mutter-fix-cursor-stutter.patch";
-
-                  hash = "sha256-Rtew+2BsQN4XU8x4Ge0Sjr1BoFFSWYrahVHYN+fq5jk=";
-
-                })
-
-              ];
-
-            });
-
-
       # https://github.com/NixOS/nixpkgs/issues/408853
       winbox-quirk = super.winbox4.overrideAttrs (drv: {
         nativeBuildInputs = (drv.nativeBuildInputs or [ ]) ++ [ super.makeWrapper ];
