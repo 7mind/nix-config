@@ -44,7 +44,7 @@
     };
 
     darwin = {
-      url = "github:nix-darwin/nix-darwin/master";  # master for nixpkgs-unstable
+      url = "github:nix-darwin/nix-darwin/master"; # master for nixpkgs-unstable
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -77,6 +77,11 @@
       url = "github:7mind/kanata-switcher";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    fractal = {
+      url = "git+https://gitlab.gnome.org/pshirshov/fractal.git?ref=wip/full-patchset";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = inputs@{ self, ... }:
@@ -107,12 +112,14 @@
       };
 
       # Per-host agenix-rekey configurations for selective rekeying
-      agenix-rekey-hosts = builtins.mapAttrs (name: _:
-        inputs.agenix-rekey.configure {
-          userFlake = self;
-          nixosConfigurations = { ${name} = (self.nixosConfigurations // self.darwinConfigurations).${name}; };
-        }
-      ) (self.nixosConfigurations // self.darwinConfigurations);
+      agenix-rekey-hosts = builtins.mapAttrs
+        (name: _:
+          inputs.agenix-rekey.configure {
+            userFlake = self;
+            nixosConfigurations = { ${name} = (self.nixosConfigurations // self.darwinConfigurations).${name}; };
+          }
+        )
+        (self.nixosConfigurations // self.darwinConfigurations);
 
       # Host metadata for setup script
       hostMeta =
@@ -122,13 +129,15 @@
             let
               config = cfg.config;
               smindHost = config.smind.host;
-            in {
+            in
+            {
               platform = if builtins.hasAttr name self.darwinConfigurations then "darwin" else "linux";
               group = smindHost.group;
               fqn = smindHost.fqn;
               owner = smindHost.owner;
             };
-        in builtins.mapAttrs extractMeta allConfigs;
+        in
+        builtins.mapAttrs extractMeta allConfigs;
     } // inputs.flake-utils.lib.eachDefaultSystem (system: rec {
       pkgs = import inputs.nixpkgs {
         inherit system;

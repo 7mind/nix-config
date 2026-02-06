@@ -104,7 +104,7 @@
   ]
   ++ lib.optional (!config.smind.hm.electron-wrappers.element.enable) element-desktop
   ++ [
-    fractal-tray
+    fractal
 
     bitwarden-desktop
 
