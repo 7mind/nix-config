@@ -110,6 +110,8 @@
         enable = true;
         custom-instructions = config.programs.claude-code.memory.text;
         settings = {
+          model = "gpt-5.3-codex";
+          model_reasoning_effort = "medium";
           project_doc_fallback_filenames = [ "CLAUDE.md" ];
           features.steer = true;
         };
