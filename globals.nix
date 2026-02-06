@@ -133,7 +133,7 @@ rec {
         pylontech = inputs.pylontech.packages."${arch}";
         nix-apple-fonts = inputs.nix-apple-fonts.packages."${arch}";
         browservice = inputs.browservice;
-        fractal = inputs.fractal.packages."${arch}".fractal-tray;
+        fractal = inputs.fractal.packages."${arch}";
       };
 
       cfg-hm-modules = cfg-platform.hm-modules ++ [

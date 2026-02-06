@@ -19,7 +19,7 @@
 
       music-meta-fix = pkgs.callPackage "${cfg-meta.paths.pkg}/music-meta-fix/default.nix" { };
 
-      fractal = cfg-flakes.fractal;
+      fractal = cfg-flakes.fractal.fractal-tray;
 
       # Pending upstream merge of https://github.com/NixOS/nixpkgs/pull/478140
       keyd = super.keyd.overrideAttrs
