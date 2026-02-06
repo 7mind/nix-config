@@ -64,7 +64,7 @@ in
     # # Create unprotected private key for server
     # openssl rsa -in private.pem -out private_not_protected.pem -outform PEM
     # cd ..
-    # cat ./tmp/public.pem  | age -e -i ~/age-key.txt > ./private/secrets/generic/iperf-public-key.age
+    # cat ./tmp/public.pem | age -e -i ~/age-key.txt > ./private/secrets/generic/iperf-public-key.age
     # cat ./tmp/private_not_protected.pem | age -e -i ~/age-key.txt > ./private/secrets/generic/iperf-private-key.age
 
     age.secrets = lib.mkIf (config.smind.age.active && (config.smind.iperf.protected.server.enable || config.smind.iperf.protected.client.enable)) {
