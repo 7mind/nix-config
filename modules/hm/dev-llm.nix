@@ -113,6 +113,7 @@
           model = "gpt-5.3-codex";
           model_reasoning_effort = "medium";
           project_doc_fallback_filenames = [ "CLAUDE.md" ];
+          features.collab = true;
           features.steer = true;
         };
       };
