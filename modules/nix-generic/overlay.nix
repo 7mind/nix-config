@@ -21,19 +21,19 @@
           url = "https://registry.npmjs.org/@anthropic-ai/claude-code/-/claude-code-${version}.tgz";
           hash = "sha256-J3kltFY5nR3PsRWbW310VqD/6hhfMbVSvynv0eaIi3M=";
         };
+        npmDeps = prev.fetchNpmDeps {
+          name = "claude-code-${version}-npm-deps";
+          inherit src;
+          postPatch = ''
+            cp ${../packages/claude-code/package-lock.json} package-lock.json
+          '';
+          hash = "sha256-n762einDxLUUXWMsfdPVhA/kn0ywlJgFQ2ZGoEk3E68=";
+        };
         postPatch = ''
           cp ${../packages/claude-code/package-lock.json} package-lock.json
           substituteInPlace cli.js \
             --replace-fail '#!/bin/sh' '#!/usr/bin/env sh'
         '';
-        npmDeps = prev.fetchNpmDeps {
-          name = "claude-code-${version}-npm-deps";
-          inherit src;
-          postFetch = ''
-            cp ${../packages/claude-code/package-lock.json} $TMPDIR/source/package-lock.json
-          '';
-          hash = "sha256-n762einDxLUUXWMsfdPVhA/kn0ywlJgFQ2ZGoEk3E68=";
-        };
       });
 
       # Update codex: 0.92.0 -> 0.98.0

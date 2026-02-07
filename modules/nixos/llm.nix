@@ -70,11 +70,12 @@
         "huihui_ai/phi4-abliterated:14b"
         "huihui_ai/qwen3-abliterated:32b"
 
-        "devstral:24b-small-2505-q8_0"
+        "huihui_ai/glm-4.7-flash-abliterated:q8_0"
 
+        # "devstral:24b-small-2505-q8_0"
+        "devstral-small-2:24b-instruct-2512-q8_0"
         "qwen2.5:32b-instruct-q8_0"
-
-        "gpt-oss:20b"
+        "glm-4.7-flash:q8_0"
       ];
 
 
