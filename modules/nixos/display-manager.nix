@@ -128,6 +128,16 @@ in
         }
       ];
 
+      # Kill remaining session processes on graphical logout
+      # Replaces logind's KillUserProcesses (which also kills SSH session processes like mosh-server)
+      environment.etc."gdm/PostSession/Default" = {
+        text = ''
+          #!/bin/sh
+          ${pkgs.systemd}/bin/loginctl kill-session "$XDG_SESSION_ID" 2>/dev/null || true
+        '';
+        mode = "0755";
+      };
+
       # Symlink monitors.xml to GDM for consistent display resolution on login screen
       systemd.tmpfiles.rules = lib.mkIf
         (config.smind.desktop.gnome.enable

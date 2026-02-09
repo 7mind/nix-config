@@ -32,7 +32,8 @@ in
 
       # Kill session processes (GUI apps) on logout
       # This does NOT affect systemd user services or lingering - only session-scoped processes
-      services.logind.settings.Login.KillUserProcesses = true;
+      # Disabled: breaks mosh-server (killed when SSH session ends). TODO: replace with GDM PostSession hook
+      # services.logind.settings.Login.KillUserProcesses = true;
 
       # Disable automatic suspend on idle for non-laptop desktops
       services.logind.settings.Login.IdleAction = lib.mkIf (!config.smind.isLaptop) "ignore";
