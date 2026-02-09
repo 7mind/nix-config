@@ -156,6 +156,9 @@
       home.file.".gemini-work/settings.json".source = config.home.file.".gemini/settings.json".source;
       home.file.".gemini-work/AGENTS.md".source = config.home.file.".gemini/AGENTS.md".source;
 
+      home.file.".claude-work/settings.json".source = config.home.file.".claude/settings.json".source;
+      home.file.".claude-work/CLAUDE.md".source = config.home.file.".claude/CLAUDE.md".source;
+
       programs.opencode = {
         enable = true;
         settings = {
@@ -245,6 +248,30 @@
               --ro "''${HOME}/.local/share/direnv" \
               --ro "''${HOME}/.direnvrc" \
               "''${ENV_ARGS[@]}" \
+              -- claude --permission-mode bypassPermissions "''${CMD_ARGS[@]}"
+          '')
+
+          (writeShellScriptBin "yolo-claude-work" ''
+            ENV_ARGS=()
+            CMD_ARGS=()
+            while [[ $# -gt 0 ]]; do
+              case "$1" in
+                --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
+                *) CMD_ARGS+=("$1"); shift ;;
+              esac
+            done
+            exec ${firejail-wrap}/bin/firejail-wrap \
+              --rw "''${PWD}" \
+              --rw "''${HOME}/.claude-work" \
+              --rw "''${HOME}/.claude.json" \
+              --rw "''${HOME}/.config/claude" \
+              --rw "''${HOME}/.cache" \
+              --ro "''${HOME}/.config/git" \
+              --ro "''${HOME}/.config/direnv" \
+              --ro "''${HOME}/.local/share/direnv" \
+              --ro "''${HOME}/.direnvrc" \
+              "''${ENV_ARGS[@]}" \
+              --bind "''${HOME}/.claude-work,''${HOME}/.claude" \
               -- claude --permission-mode bypassPermissions "''${CMD_ARGS[@]}"
           '')
 
