@@ -14,28 +14,6 @@
         };
       });
 
-      # Update claude-code: 2.1.25 -> 2.1.34
-      claude-code = prev.claude-code.overrideAttrs (old: rec {
-        version = "2.1.34";
-        src = prev.fetchzip {
-          url = "https://registry.npmjs.org/@anthropic-ai/claude-code/-/claude-code-${version}.tgz";
-          hash = "sha256-J3kltFY5nR3PsRWbW310VqD/6hhfMbVSvynv0eaIi3M=";
-        };
-        npmDeps = prev.fetchNpmDeps {
-          name = "claude-code-${version}-npm-deps";
-          inherit src;
-          postPatch = ''
-            cp ${../packages/claude-code/package-lock.json} package-lock.json
-          '';
-          hash = "sha256-n762einDxLUUXWMsfdPVhA/kn0ywlJgFQ2ZGoEk3E68=";
-        };
-        postPatch = ''
-          cp ${../packages/claude-code/package-lock.json} package-lock.json
-          substituteInPlace cli.js \
-            --replace-fail '#!/bin/sh' '#!/usr/bin/env sh'
-        '';
-      });
-
       # Update codex: 0.92.0 -> 0.98.0
       # Uses importCargoLock instead of fetchCargoVendor because a git
       # dependency (rules_rust) contains Cargo.toml files with unstable
