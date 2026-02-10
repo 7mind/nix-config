@@ -33,7 +33,7 @@
     boot.extraModulePackages =
       let
         realnixpkgs = import cfg-meta.inputs.nixpkgs {
-          system = cfg-meta.arch;
+          localSystem = cfg-meta.arch;
 
           config = {
             allowBroken = true;

@@ -125,10 +125,10 @@
 
       ld-libs = [
         libmediainfo
-        xorg.libX11
-        xorg.libX11.dev
-        xorg.libICE
-        xorg.libSM
+        libx11
+        libx11.dev
+        libice
+        libsm
 
         libGL
         icu
@@ -149,10 +149,10 @@
 
       ld-libs = [
         libmediainfo
-        xorg.libX11
-        xorg.libX11.dev
-        xorg.libICE
-        xorg.libSM
+        libx11
+        libx11.dev
+        libice
+        libsm
 
         libGL
         icu
@@ -170,10 +170,10 @@
 
       ld-libs = [
         libmediainfo
-        xorg.libX11
-        xorg.libX11.dev
-        xorg.libICE
-        xorg.libSM
+        libx11
+        libx11.dev
+        libice
+        libsm
 
         libGL
         icu
@@ -192,10 +192,10 @@
 
       ld-libs = [
         libmediainfo
-        xorg.libX11
-        xorg.libX11.dev
-        xorg.libICE
-        xorg.libSM
+        libx11
+        libx11.dev
+        libice
+        libsm
 
         libGL
         icu
@@ -215,10 +215,10 @@
       ];
       ld-libs = [
         libmediainfo
-        xorg.libX11
-        xorg.libX11.dev
-        xorg.libICE
-        xorg.libSM
+        libx11
+        libx11.dev
+        libice
+        libsm
 
         libGL
         icu
@@ -245,10 +245,10 @@
         libxkbcommon
 
         libmediainfo
-        xorg.libX11
-        xorg.libX11.dev
-        xorg.libICE
-        xorg.libSM
+        libx11
+        libx11.dev
+        libice
+        libsm
 
         icu
         fontconfig

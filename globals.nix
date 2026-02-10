@@ -48,7 +48,7 @@ rec {
   make = { self, inputs, arch }: hostname:
     let
       pkgs = import inputs.nixpkgs {
-        system = arch;
+        localSystem = arch;
         config.allowUnfree = true;
       };
 

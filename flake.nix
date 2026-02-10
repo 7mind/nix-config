@@ -140,14 +140,14 @@
         builtins.mapAttrs extractMeta allConfigs;
     } // inputs.flake-utils.lib.eachDefaultSystem (system: rec {
       pkgs = import inputs.nixpkgs {
-        inherit system;
+        localSystem = system;
         overlays = [ inputs.agenix-rekey.overlays.default ];
       };
       devShells.default = pkgs.mkShell {
         packages = with pkgs; [
           agenix-rekey
           age-plugin-tpm
-          nixfmt-classic
+          nixfmt
           # inputs.json2nix.packages."${system}".json2nix
         ];
       };
