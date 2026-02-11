@@ -19,7 +19,12 @@
 
       music-meta-fix = pkgs.callPackage "${cfg-meta.paths.pkg}/music-meta-fix/default.nix" { };
 
-      fractal = cfg-flakes.fractal.fractal-tray;
+      fractal = cfg-flakes.fractal.fractal-tray.overrideAttrs (old: {
+        cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+          inherit (old) src;
+          hash = "sha256-uULj/9ixqq9cGg7U1m4QnfTl6Hvpjx0nJPjWvF2rW2M=";
+        };
+      });
 
       # Pending upstream merge of https://github.com/NixOS/nixpkgs/pull/478140
       keyd = super.keyd.overrideAttrs
