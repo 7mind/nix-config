@@ -69,7 +69,7 @@ in
             "layer" = "unmapped";
           }
           {
-            "class" = "code|codium|VSCodium";
+            "class" = "code|codium|VSCodium|dev.zed.Zed";
             "layer" = "unmapped";
           }
           {
