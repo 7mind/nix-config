@@ -50,6 +50,8 @@
           obs-source-record
           obs-backgroundremoval
           obs-pipewire-audio-capture
+          obs-gstreamer
+          obs-vaapi
         ];
       };
 
