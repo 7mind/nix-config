@@ -66,6 +66,12 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    claude-code-sandbox = {
+      url = "github:neko-kai/claude-code-sandbox";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
+    };
+
     browservice = {
       url = "github:pshirshov/browservice";
       inputs.nixpkgs.follows = "nixpkgs";

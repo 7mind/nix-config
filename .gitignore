@@ -5,4 +5,6 @@ result
 .DS_Store
 repro_patch
 __pycache__
+.tmp
+worktrees
 

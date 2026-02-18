@@ -2,7 +2,24 @@
 
 ## Building and Testing
 
-This repository uses git submodules. Always use `?submodules=1` when building:
+When you've added a new feature or performed a refactoring, run verification build for the current host:
+
+```bash
+# Build all hosts
+./verify-configs --verbose $HOSTNAME
+```
+
+When changing shared modules, check all hosts:
+
+```bash
+# Build all hosts
+./verify-configs --verbose
+```
+
+Prefer using `./verify-configs`/`nix build --dry-run` over `nix build` for verification to avoid slow building of packages.
+When changing Home Manager activations a full nix build may still be required as those require executing activations themselves to verify their correctness.
+
+This repository uses git submodules. Always use `?submodules=1` when building or using `nix eval`:
 
 ```bash
 # Build a specific host configuration
@@ -15,14 +32,6 @@ nix build ".?submodules=1#nixosConfigurations.pavel-am5.config.system.build.topl
 # For Darwin (macOS):
 nix build ".?submodules=1#darwinConfigurations.HOSTNAME.system"
 ```
-
-When you've added a new feature or performed a refactoring, run verification build for all hosts:
-
-```bash
-# Build all hosts
-./verify-configs --verbose --no-parallel
-```
-
 
 Use `./setup` script for full build + switch workflow:
 - `./setup` - build current host

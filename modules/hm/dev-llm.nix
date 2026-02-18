@@ -233,18 +233,21 @@ in
       };
 
       # Linux-only: bubblewrap sandbox and yolo-* wrapper scripts
-      home.packages = lib.optionals cfg-meta.isLinux (with pkgs;
+      home.packages =
+        lib.optionals cfg-meta.isDarwin [
+          inputs.claude-code-sandbox.packages."${pkgs.stdenv.hostPlatform.system}".default
+        ]
+        ++ lib.optionals cfg-meta.isLinux (
         let
-          inherit (pkgs) firejail-wrap;
+          firejail-wrap = pkgs.firejail-wrap;
         in
         [
-          bubblewrap
-
           # aichat
           # aider-chat
           # goose-cli
+          pkgs.bubblewrap
 
-          (writeShellScriptBin "yolo-claude" ''
+          (pkgs.writeShellScriptBin "yolo-claude" ''
             ENV_ARGS=()
             CMD_ARGS=()
             while [[ $# -gt 0 ]]; do
@@ -267,7 +270,7 @@ in
               -- claude --permission-mode bypassPermissions "''${CMD_ARGS[@]}"
           '')
 
-          (writeShellScriptBin "yolo-claude-work" ''
+          (pkgs.writeShellScriptBin "yolo-claude-work" ''
             ENV_ARGS=()
             CMD_ARGS=()
             while [[ $# -gt 0 ]]; do
@@ -278,7 +281,7 @@ in
             done
             exec ${firejail-wrap}/bin/firejail-wrap \
               --rw "''${PWD}" \
-              --rw "''${HOME}/.claude-work" \
+              --bind "''${HOME}/.claude-work,''${HOME}/.claude" \
               --rw "''${HOME}/.claude.json" \
               --rw "''${HOME}/.config/claude" \
               --rw "''${HOME}/.cache" \
@@ -287,11 +290,10 @@ in
               --ro "''${HOME}/.local/share/direnv" \
               --ro "''${HOME}/.direnvrc" \
               "''${ENV_ARGS[@]}" \
-              --bind "''${HOME}/.claude-work,''${HOME}/.claude" \
               -- claude --permission-mode bypassPermissions "''${CMD_ARGS[@]}"
           '')
 
-          (writeShellScriptBin "yolo-codex" ''
+          (pkgs.writeShellScriptBin "yolo-codex" ''
             ENV_ARGS=()
             CMD_ARGS=()
             while [[ $# -gt 0 ]]; do
@@ -313,7 +315,7 @@ in
               -- codex --dangerously-bypass-approvals-and-sandbox --search "''${CMD_ARGS[@]}"
           '')
 
-          (writeShellScriptBin "yolo-gemini" ''
+          (pkgs.writeShellScriptBin "yolo-gemini" ''
             ENV_ARGS=()
             CMD_ARGS=()
             while [[ $# -gt 0 ]]; do
@@ -334,7 +336,7 @@ in
               -- gemini --yolo "''${CMD_ARGS[@]}"
           '')
 
-          (writeShellScriptBin "yolo-gemini-work" ''
+          (pkgs.writeShellScriptBin "yolo-gemini-work" ''
             ENV_ARGS=()
             CMD_ARGS=()
             while [[ $# -gt 0 ]]; do
@@ -345,18 +347,17 @@ in
             done
             exec ${firejail-wrap}/bin/firejail-wrap \
               --rw "''${PWD}" \
-              --rw "''${HOME}/.gemini-work" \
+              --bind "''${HOME}/.gemini-work,''${HOME}/.gemini" \
               --rw "''${HOME}/.cache" \
               --ro "''${HOME}/.config/git" \
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \
               --ro "''${HOME}/.direnvrc" \
               "''${ENV_ARGS[@]}" \
-              --bind "''${HOME}/.gemini-work,''${HOME}/.gemini" \
               -- gemini --yolo "''${CMD_ARGS[@]}"
           '')
 
-          (writeShellScriptBin "yolo-opencode" ''
+          (pkgs.writeShellScriptBin "yolo-opencode" ''
             ENV_ARGS=()
             CMD_ARGS=()
             while [[ $# -gt 0 ]]; do
@@ -377,7 +378,8 @@ in
               "''${ENV_ARGS[@]}" \
               -- opencode "''${CMD_ARGS[@]}"
           '')
-        ]);
+        ]
+      );
     })
   ];
 }
