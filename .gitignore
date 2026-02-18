@@ -2,6 +2,7 @@
 .vscode
 .idea
 result
+nix
 .DS_Store
 repro_patch
 __pycache__

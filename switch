@@ -21,6 +21,6 @@ git commit -am "autosave" || true
 
 rm -f ~/.config/VSCodium/User/*.hmbak
 
-sudo nixos-rebuild switch --flake "${PWD}?submodules=1"
+sudo nixos-rebuild switch --flake "${PWD}?submodules=1" "$@"
 
 popd

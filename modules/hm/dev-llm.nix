@@ -256,6 +256,10 @@ in
                 *) CMD_ARGS+=("$1"); shift ;;
               esac
             done
+            mkdir -p "$HOME/.claude-work"
+            mkdir -p "$HOME/.claude-work-home"
+            mkdir -p "$HOME/.config/claude-work"
+            touch "$HOME/.claude-work-home/.claude.json"
             exec ${firejail-wrap}/bin/firejail-wrap \
               --rw "''${PWD}" \
               --rw "''${HOME}/.claude" \
@@ -279,11 +283,15 @@ in
                 *) CMD_ARGS+=("$1"); shift ;;
               esac
             done
+            mkdir -p "$HOME/.claude-work"
+            mkdir -p "$HOME/.claude-work-home"
+            mkdir -p "$HOME/.config/claude-work"
+            touch "$HOME/.claude-work-home/.claude.json"
             exec ${firejail-wrap}/bin/firejail-wrap \
               --rw "''${PWD}" \
               --bind "''${HOME}/.claude-work,''${HOME}/.claude" \
-              --rw "''${HOME}/.claude.json" \
-              --rw "''${HOME}/.config/claude" \
+              --bind "''${HOME}/.claude-work-home/.claude.json,''${HOME}/.claude.json" \
+              --bind "''${HOME}/.config/claude-work,''${HOME}/.config/claude" \
               --rw "''${HOME}/.cache" \
               --ro "''${HOME}/.config/git" \
               --ro "''${HOME}/.config/direnv" \
