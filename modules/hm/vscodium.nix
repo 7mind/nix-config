@@ -216,7 +216,6 @@ in
               };
             };
           };
-          "[nix]" = { };
 
           # scala
           "metals.enableIndentOnPaste" = true;

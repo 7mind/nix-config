@@ -88,20 +88,21 @@ in
     fonts = {
       fontDir.enable = lib.mkIf config.smind.fonts.nerd.enable true;
 
-      packages = lib.mkIf config.smind.fonts.nerd.enable (with pkgs.nerd-fonts;
-        [
-          droid-sans-mono
-          fira-code
-          hack
-          iosevka
-          fira-mono
-          jetbrains-mono
-          roboto-mono
-          inconsolata
-          meslo-lg
-          ubuntu-mono
-          dejavu-sans-mono
-        ]);
+      packages =
+        lib.optionals config.smind.fonts.nerd.enable (with pkgs.nerd-fonts;
+          [
+            droid-sans-mono
+            fira-code
+            hack
+            iosevka
+            fira-mono
+            jetbrains-mono
+            roboto-mono
+            inconsolata
+            meslo-lg
+            ubuntu-mono
+            dejavu-sans-mono
+          ]);
     } // lib.optionalAttrs cfg-meta.isLinux {
       fontconfig = {
         enable = true;

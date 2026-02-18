@@ -115,11 +115,12 @@ rec {
           generator = inputs.darwin.lib.darwinSystem;
 
           flake-modules = smind-darwin-imports ++ [
+            inputs.mac-app-util.darwinModules.default
             inputs.home-manager.darwinModules.home-manager
             inputs.agenix.darwinModules.default
             inputs.agenix-rekey.nixosModules.default
+            inputs.determinate.darwinModules.default
             { nixpkgs.overlays = [ inputs.nix-vscode-extensions.overlays.default ]; }
-
           ];
 
           hm-modules = [

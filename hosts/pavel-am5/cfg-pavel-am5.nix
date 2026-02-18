@@ -119,9 +119,6 @@
 
   };
 
-  # networkmanager does not manage ethernet on this host, so gnome connectivity check fails
-  environment.sessionVariables.GIO_USE_NETWORK_MONITOR = "base";
-
   programs.winbox = {
     enable = true;
     package = pkgs.winbox-quirk;
@@ -200,6 +197,8 @@
       enable = true;
       formFactors = [ "headset" "headphone" ];
     };
+
+    gaming.steam.enable = true;
   };
 
   # boot.kernelPatches = [
@@ -228,8 +227,6 @@
     allowedTCPPorts = [ 8234 ];
     trustedInterfaces = [ "vmnet*" ];
   };
-
-  smind.gaming.steam.enable = true;
 
   boot.kernelParams = [
     "quiet"

@@ -17,6 +17,7 @@
       ];
 
       brews = [
+        "mas"
         # "radare2"
         # "qt@5"
         # "nasm"
@@ -88,12 +89,12 @@
 
         "home-assistant"
 
-        "vmware-fusion"
+        # "vmware-fusion" # broken cask
         "86box"
 
         "wifiman"
 
-        "ledger-live"
+        "ledger-wallet"
         "trezor-suite"
         "gzdoom"
 

@@ -5,6 +5,8 @@
     smind.desktop.gnome.minimal-hotkeys = lib.mkEnableOption "minimal GNOME hotkeys, disabling most defaults";
     smind.desktop.gnome.disable-super-drag = lib.mkEnableOption "disabling of Super key window drag modifier";
     smind.desktop.gnome.switch-applications = lib.mkEnableOption "switching applications (instead of windows) with Super-Tab";
+    smind.desktop.gnome.app-window-previews = lib.mkEnableOption "switching app windows with previews with Super-Grave";
+    smind.desktop.gnome.close-window-hotkey = lib.mkEnableOption "enable Super-Q close window hotkey" // { default = true; };
     smind.desktop.gnome.hotkey-modifier = lib.mkOption {
       type = lib.types.enum [ "super" "ctrl" "super+ctrl" ];
       default = "super";
@@ -14,6 +16,31 @@
         - "ctrl": Use Ctrl key (traditional Linux/Windows style)
         - "super+ctrl": Require both Super+Ctrl pressed together
       '';
+    };
+    smind.desktop.gnome.custom-keybindings = lib.mkOption {
+      type = lib.types.listOf (lib.types.submodule {
+        options = {
+          name = lib.mkOption {
+            type = lib.types.str;
+            description = "Unique identifier for the keybinding (used in dconf path)";
+          };
+          binding = lib.mkOption {
+            type = lib.types.str;
+            example = "F5";
+            description = "Key combination (e.g. 'F5', '<Super>Return', '<Primary><Alt>t')";
+          };
+          command = lib.mkOption {
+            type = lib.types.str;
+            description = "Command to execute when keybinding is pressed";
+          };
+          label = lib.mkOption {
+            type = lib.types.str;
+            description = "Human-readable label shown in GNOME settings";
+          };
+        };
+      });
+      default = [ ];
+      description = "Additional custom keybindings for GNOME";
     };
   };
 
@@ -25,14 +52,13 @@
 
     programs.dconf = {
       enable = true;
-      profiles.user.databases = [
+      profiles.${config.smind.desktop.gnome.dconf.profile}.databases = [
         {
           lockAll = true; # prevents overriding
           settings =
             let
               empty = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
               hotkeyMod = config.smind.desktop.gnome.hotkey-modifier;
-              # Generate bindings based on modifier choice
               hotkeyBindings = key:
                 if hotkeyMod == "super" then [ "<Super>${key}" ]
                 else if hotkeyMod == "ctrl" then [ "<Primary>${key}" ]
@@ -40,6 +66,27 @@
               toggleOverviewBinding = "<Alt><Super>space";
               vicinaeToggleBindings = hotkeyBindings "space";
               vicinaeTogglePath = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/vicinae-toggle/";
+
+              ghosttyCfg = config.smind.desktop.gnome.ghostty-toggle;
+              ghosttyTogglePath = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/ghostty-toggle/";
+              ghosttyBinding =
+                if ghosttyCfg.use-modifier
+                then hotkeyBindings ghosttyCfg.key
+                else [ ghosttyCfg.key ];
+              ghosttyCommand = "${pkgs.glib}/bin/gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell/Extensions/RunOrRaise --method org.gnome.Shell.Extensions.RunOrRaise.Call ',ghostty,com.mitchellh.ghostty,'";
+
+              customKeybindings = config.smind.desktop.gnome.custom-keybindings;
+              customKeybindingPaths = map (kb: "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/${kb.name}/") customKeybindings;
+              customKeybindingSettings = builtins.listToAttrs (map
+                (kb: {
+                  name = "org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/${kb.name}";
+                  value = {
+                    binding = kb.binding;
+                    command = kb.command;
+                    name = kb.label;
+                  };
+                })
+                customKeybindings);
             in
             {
               "org/gnome/mutter/wayland/keybindings" = {
@@ -95,7 +142,9 @@
                 calculator-static = empty;
                 control-center = empty;
                 control-center-static = empty;
-                custom-keybindings = [ vicinaeTogglePath ];
+                custom-keybindings = [ vicinaeTogglePath ]
+                ++ lib.optional ghosttyCfg.enable ghosttyTogglePath
+                ++ customKeybindingPaths;
                 decrease-text-size = empty;
                 eject = empty;
                 eject-static = empty;
@@ -186,19 +235,25 @@
                 volume-up-static = empty;
                 www = empty;
                 www-static = empty;
-                screensaver = [ "<Shift><Super>l" ];
+                screensaver = [ "<Super><Primary>q" ];
               };
               "org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/vicinae-toggle" = {
                 binding = builtins.head vicinaeToggleBindings;
                 command = "vicinae toggle";
                 name = "Vicinae Toggle";
               };
+            } // lib.optionalAttrs ghosttyCfg.enable {
+              "org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/ghostty-toggle" = {
+                binding = builtins.head ghosttyBinding;
+                command = ghosttyCommand;
+                name = "Toggle Ghostty";
+              };
+            } // {
               "org/gnome/desktop/wm/keybindings" = {
                 activate-window-menu = empty;
                 always-on-top = empty;
                 begin-move = empty;
                 begin-resize = empty;
-                cycle-group-backward = empty;
                 cycle-panels = empty;
                 cycle-panels-backward = empty;
                 cycle-windows = empty;
@@ -207,7 +262,6 @@
                 maximize = empty;
                 maximize-horizontally = empty;
                 maximize-vertically = empty;
-                minimize = [ "<Primary><Alt>m" ];
                 move-to-center = empty;
                 move-to-corner-ne = empty;
                 move-to-corner-nw = empty;
@@ -244,10 +298,6 @@
                 raise-or-lower = empty;
                 set-spew-mark = empty;
                 show-desktop = empty;
-                switch-applications-backward = empty;
-                switch-group = empty;
-                switch-group-backward = empty;
-                switch-input-source-backward = empty;
                 switch-panels = empty;
                 switch-panels-backward = empty;
                 switch-to-workspace-1 = empty;
@@ -267,29 +317,39 @@
                 switch-to-workspace-left = empty;
                 switch-to-workspace-right = empty;
                 switch-to-workspace-up = empty;
-                switch-windows-backward = empty;
                 toggle-above = empty;
                 toggle-fullscreen = empty;
                 toggle-on-all-workspaces = empty;
                 unmaximize = empty;
 
-                switch-applications = if config.smind.desktop.gnome.switch-applications then hotkeyBindings "tab" else empty; # system windows with overview
-                switch-windows = if !config.smind.desktop.gnome.switch-applications then hotkeyBindings "tab" else empty; # app windows with overview
+                switch-windows = if !config.smind.desktop.gnome.switch-applications then hotkeyBindings "tab" else empty; # all windows with overview
+                switch-windows-backward = if !config.smind.desktop.gnome.switch-applications then hotkeyBindings "<Shift>tab" else empty;
 
-                cycle-group = hotkeyBindings "grave"; # app windows without overview
+                switch-applications = if config.smind.desktop.gnome.switch-applications then hotkeyBindings "tab" else empty; # apps with overview
+                switch-applications-backward = if config.smind.desktop.gnome.switch-applications then hotkeyBindings "<Shift>tab" else empty;
 
-                close = [ "<Super>q" ];
+                switch-group = if config.smind.desktop.gnome.app-window-previews then hotkeyBindings "grave" else empty; # app windows with overview
+                switch-group-backward = if config.smind.desktop.gnome.app-window-previews then hotkeyBindings "<Shift>grave" else empty;
+
+                cycle-group = if !config.smind.desktop.gnome.app-window-previews then hotkeyBindings "grave" else empty; # app windows without overview
+                cycle-group-backward = if !config.smind.desktop.gnome.app-window-previews then hotkeyBindings "<Shift>grave" else empty;
+
+                close = if config.smind.desktop.gnome.close-window-hotkey then hotkeyBindings "q" else empty;
+
                 switch-input-source =
                   if config.smind.desktop.gnome.switch-input-source-keybinding != [ ]
                   then config.smind.desktop.gnome.switch-input-source-keybinding
                   else empty;
+                switch-input-source-backward = empty;
+
+                minimize = [ "<Primary><Alt>m" ];
                 toggle-maximized = [ "<Primary><Alt>f" ];
               };
               "org/gnome/desktop/wm/preferences" =
                 if config.smind.desktop.gnome.disable-super-drag then {
                   mouse-button-modifier = "";
                 } else { };
-            };
+            } // customKeybindingSettings;
         }
       ];
     };

@@ -21,6 +21,7 @@
       url = "github:ryantm/agenix";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.home-manager.follows = "home-manager";
+      inputs.darwin.follows = "darwin";
     };
 
     agenix-rekey = {
@@ -36,6 +37,7 @@
     pylontech = {
       url = "github:pshirshov/python-pylontech";
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
     };
 
     nix-apple-fonts = {
@@ -52,6 +54,11 @@
     mac-app-util = {
       url = "github:hraban/mac-app-util";
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
+      # gitlab links are broken on recent Nix https://github.com/NixOS/nix/issues/9161
+      # and mac-app-util depends on a gitlab input for iterate/iterate package
+      # : this fork contains a fixup commit for the gitlab url
+      inputs.cl-nix-lite.url = "github:verymucho/cl-nix-lite/?ref=1b7fe99434067be93399d73cc747c6012b768584";
     };
 
     vicinae-extensions = {

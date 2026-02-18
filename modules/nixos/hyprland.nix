@@ -8,6 +8,16 @@
       description = "Enable Hyprland compositor";
     };
 
+    smind.desktop.hyprland.uwsm.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Enable UWSM (Universal Wayland Session Manager) for Hyprland.
+        UWSM provides better session management but requires dbus-broker,
+        which cannot be switched on a live system (requires reboot).
+      '';
+    };
+
     smind.desktop.hyprland.xkb.layouts = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = config.smind.desktop.xkb.layouts;
@@ -32,7 +42,7 @@
   config = lib.mkIf config.smind.desktop.hyprland.enable {
     programs.hyprland = {
       enable = true;
-      withUWSM = true;
+      withUWSM = config.smind.desktop.hyprland.uwsm.enable;
     };
 
     smind.desktop.wayland.session-variables.enable = true;

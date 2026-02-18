@@ -13,6 +13,11 @@
       default = 100;
       description = "Scroll speed multiplier (100 = default, lower = slower, higher = faster)";
     };
+    smind.hm.firefox.sidebery.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "";
+    };
   };
 
   config = lib.mkIf config.smind.hm.firefox.enable {
@@ -40,7 +45,7 @@
             "installation_mode" = "force_installed";
             "install_url" = "https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi";
           };
-          "{3c078156-979c-498b-8990-85f7987dd929}" = {
+          "{3c078156-979c-498b-8990-85f7987dd929}" = lib.mkIf (config.smind.hm.firefox.sidebery.enable) {
             "installation_mode" = "force_installed";
             "install_url" = "https://addons.mozilla.org/firefox/downloads/latest/sidebery/latest.xpi";
           };
@@ -456,8 +461,7 @@
                     }
                   ];
                 }];
-                icon =
-                  "${pkgs.nixos-icons}/share/icons/hicolor/scalable/apps/nix-snowflake.svg";
+                icon = "${pkgs.nixos-icons}/share/icons/hicolor/scalable/apps/nix-snowflake.svg";
                 definedAliases = [ "@np" ];
               };
               nixopts = {
@@ -491,9 +495,22 @@
                     }
                   ];
                 }];
-                icon =
-                  "${pkgs.nixos-icons}/share/icons/hicolor/scalable/apps/nix-snowflake.svg";
+                icon = "${pkgs.nixos-icons}/share/icons/hicolor/scalable/apps/nix-snowflake.svg";
                 definedAliases = [ "@no" ];
+              };
+              nixdarwinopts = {
+                name = "Nix Options";
+                urls = [{
+                  template = "https://searchix.ovh/options/darwin/search";
+                  params = [
+                    {
+                      name = "query";
+                      value = "{searchTerms}";
+                    }
+                  ];
+                }];
+                icon = "${pkgs.nixos-icons}/share/icons/hicolor/scalable/apps/nix-snowflake.svg";
+                definedAliases = [ "@nd" ];
               };
 
               hm = {

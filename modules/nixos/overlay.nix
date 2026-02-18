@@ -17,6 +17,8 @@
 
       firejail-wrap = pkgs.callPackage "${cfg-meta.paths.pkg}/firejail-wrap/default.nix" { };
 
+      netns-run = pkgs.callPackage "${cfg-meta.paths.pkg}/netns-run/default.nix" { };
+
       music-meta-fix = pkgs.callPackage "${cfg-meta.paths.pkg}/music-meta-fix/default.nix" { };
 
       fractal = cfg-flakes.fractal.fractal-tray.overrideAttrs (old: {

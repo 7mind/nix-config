@@ -10,9 +10,7 @@ let
       flags = lib.concatStringsSep " " extraFlags;
       wrapperScript = if netns != null then ''
 #!/usr/bin/env bash
-# systemd-run creates scope in slice (resource limits), firejail handles netns
-exec systemd-run --user --scope --slice=${slice} \
-  /run/wrappers/bin/firejail --noprofile --netns=${netns} -- \
+exec ${pkgs.netns-run}/bin/netns-run -n ${netns} -s ${slice} -- \
   ${pkg}/bin/${binName} ${flags} "$@"
 '' else ''
 #!/usr/bin/env bash
@@ -104,7 +102,11 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable (
+  config = lib.mkMerge [
+    {
+      lib.electron-wrappers.wrapElectronApp = wrapElectronApp;
+    }
+    (lib.mkIf cfg.enable (
     let
       slackWrapped = wrapElectronApp {
         pkg = pkgs.slack;
@@ -153,5 +155,6 @@ in
         })
       ];
     }
-  );
+  ))
+  ];
 }

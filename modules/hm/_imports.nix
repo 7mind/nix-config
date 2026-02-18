@@ -16,6 +16,7 @@
   ./firefox-notabbar.nix
   ./firefox.nix
   ./ghostty.nix
+  ./gnome.nix
   ./htop.nix
   ./kitty.nix
   ./nushell.nix

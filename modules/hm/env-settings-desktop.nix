@@ -17,7 +17,7 @@
     };
 
     programs.vicinae = lib.mkIf cfg-meta.isLinux {
-      enable = true;
+      enable = cfg-meta.isLinux;
       systemd.enable = true;
       settings = {
         close_on_focus_loss = true;

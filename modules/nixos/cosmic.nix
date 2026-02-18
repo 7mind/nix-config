@@ -3,9 +3,24 @@
 {
   options = {
     smind.desktop.cosmic.enable = lib.mkEnableOption "COSMIC desktop environment";
+    smind.desktop.cosmic.dconf.profile = lib.mkOption {
+      type = lib.types.str;
+      default = "cosmic";
+      description = "Dconf profile name for COSMIC session. (`cosmic` instead of `user` by default to not conflict with GNOME settings)";
+    };
   };
 
   config = lib.mkIf config.smind.desktop.cosmic.enable {
+    programs.dconf = {
+      enable = true;
+      profiles.${config.smind.desktop.cosmic.dconf.profile}.databases = [
+        {
+          lockAll = false;
+          settings = { };
+        }
+      ];
+    };
+
     # Enable kanata for Mac-style keyboard shortcuts (same as GNOME)
     smind.keyboard.super-remap.enable = lib.mkDefault true;
     services.desktopManager.cosmic.enable = true;

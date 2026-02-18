@@ -51,6 +51,39 @@
 
     smind.desktop.gnome.sticky-keys.enable = lib.mkEnableOption "sticky keys with GNOME Shell keyboard-modifiers-status extension";
 
+    smind.desktop.gnome.ghostty-toggle.enable = lib.mkEnableOption "F5 keybinding to show/spawn Ghostty terminal";
+
+    smind.desktop.gnome.ghostty-toggle.key = lib.mkOption {
+      type = lib.types.str;
+      default = "F5";
+      example = "Return";
+      description = "Key to bind for Ghostty toggle (without modifier)";
+    };
+
+    smind.desktop.gnome.ghostty-toggle.use-modifier = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Whether to require the hotkey-modifier (Ctrl/Super) for the Ghostty toggle";
+    };
+
+    smind.desktop.gnome.interface.iconTheme = lib.mkOption {
+      type = lib.types.str;
+      default = "Adwaita";
+      description = "GNOME icon theme name.";
+    };
+
+    smind.desktop.gnome.interface.cursorTheme = lib.mkOption {
+      type = lib.types.str;
+      default = "Adwaita";
+      description = "GNOME cursor theme name.";
+    };
+
+    smind.desktop.gnome.wm.buttonLayout = lib.mkOption {
+      type = lib.types.str;
+      default = "close,minimize,maximize:";
+      description = "GNOME window button layout.";
+    };
+
     smind.desktop.gnome.gdm.monitors-xml = lib.mkOption {
       type = lib.types.nullOr lib.types.path;
       default = null;
@@ -106,6 +139,12 @@
         Defaults to smind.desktop.mouse.naturalScroll.
       '';
     };
+
+    smind.desktop.gnome.dconf.profile = lib.mkOption {
+      type = lib.types.str;
+      default = "user";
+      description = "Dconf profile name for GNOME session.";
+    };
   };
 
   # display settings are being controlled over dbus (org.gnome.Mutter.DisplayConfig), not dconf
@@ -114,14 +153,14 @@
     programs.dconf = {
       enable = true;
 
-      profiles.user.databases = [
+      profiles.${config.smind.desktop.gnome.dconf.profile}.databases = [
         {
           lockAll = true; # prevents overriding
           settings = lib.mkMerge ([
             {
               "org/gnome/desktop/wm/preferences" = {
                 # button-layout = ":minimize,maximize,close";
-                button-layout = "close,minimize,maximize:";
+                button-layout = config.smind.desktop.gnome.wm.buttonLayout;
                 num-workspaces = lib.gvariant.mkInt32 1;
               };
               "org/gnome/mutter/wayland" = {
@@ -132,7 +171,8 @@
                 gtk-theme = "adw-gtk3-dark";
                 document-font-name = "Noto Sans 11";
                 monospace-font-name = "Hack Nerd Font Mono 12";
-                cursor-theme = "Adwaita";
+                icon-theme = config.smind.desktop.gnome.interface.iconTheme;
+                cursor-theme = config.smind.desktop.gnome.interface.cursorTheme;
                 cursor-size = lib.gvariant.mkInt32 36;
                 font-antialiasing = "rgba";
                 clock-show-weekday = true;

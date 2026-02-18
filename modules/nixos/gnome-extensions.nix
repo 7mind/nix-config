@@ -29,6 +29,8 @@ let
     '';
   });
 
+  ghosttyCfg = config.smind.desktop.gnome.ghostty-toggle;
+
   extensions = with pkgs; [
     # This is a dirty fix for annoying "allow inhibit shortcuts?" popups
     # https://discourse.gnome.org/t/virtual-machine-manager-wants-to-inhibit-shortcuts/26017/8
@@ -37,6 +39,7 @@ let
     # https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.impl.portal.PermissionStore.html
     gnome-shortcut-inhibitor
   ]
+  ++ lib.optional extCfg.run-or-raise.enable pkgs.gnomeExtensions.run-or-raise
   ++ lib.optional extCfg.appindicator.enable pkgs.gnomeExtensions.appindicator
   ++ lib.optional extCfg.gsconnect.enable pkgs.gnomeExtensions.gsconnect
   ++ lib.optional extCfg.native-window-placement.enable pkgs.gnomeExtensions.native-window-placement
@@ -50,6 +53,9 @@ let
   ++ lib.optional extCfg.grand-theft-focus.enable pkgs.gnomeExtensions.grand-theft-focus
   ++ lib.optional extCfg.highlight-focus.enable pkgs.gnomeExtensions.highlight-focus
   ++ lib.optional extCfg.tray-icons-reloaded.enable pkgs.gnomeExtensions.tray-icons-reloaded
+  ++ lib.optional extCfg.dash-to-dock.enable pkgs.gnomeExtensions.dash-to-dock
+  ++ lib.optional extCfg.dash2dock-lite.enable pkgs.gnomeExtensions.dash2dock-lite
+  ++ lib.optional extCfg.no-overview.enable pkgs.gnomeExtensions.no-overview
   ++ lib.optional hibernateCfg.enable hibernateExtensionPatched
   ++ lib.optional config.smind.desktop.gnome.sticky-keys.enable gnomeExtensions.keyboard-modifiers-status
   ++ lib.optional fanControlCfg.enable gnomeExtensions.framework-fan-control
@@ -82,6 +88,10 @@ in
       grand-theft-focus.enable = lib.mkEnableOption "grand-theft-focus extension" // { default = false; };
       highlight-focus.enable = lib.mkEnableOption "highlight-focus extension" // { default = false; };
       tray-icons-reloaded.enable = lib.mkEnableOption "tray-icons-reloaded extension" // { default = false; };
+      dash-to-dock.enable = lib.mkEnableOption "dash-to-dock extension" // { default = false; };
+      dash2dock-lite.enable = lib.mkEnableOption "dash2dock-lite extension" // { default = false; };
+      no-overview.enable = lib.mkEnableOption "no-overview extension - skip overview on login" // { default = false; };
+      run-or-raise.enable = lib.mkEnableOption "run-or-raise extension (D-Bus always enabled)" // { default = ghosttyCfg.enable; };
     };
   };
 
@@ -143,7 +153,7 @@ in
 
     programs.dconf = {
       enable = true;
-      profiles.user.databases = [
+      profiles.${config.smind.desktop.gnome.dconf.profile}.databases = [
         {
           lockAll = !config.smind.desktop.gnome.allow-local-extensions;
 
@@ -154,7 +164,11 @@ in
                 enabled-extensions = map (e: e.extensionUuid) extensions;
               };
             }
-          ] ++ lib.optional batteryHealthCfg.enable {
+          ] ++ lib.optional extCfg.run-or-raise.enable {
+            "org/gnome/shell/extensions/run-or-raise" = {
+              dbus = true;
+            };
+          } ++ lib.optional batteryHealthCfg.enable {
             # Tell Battery Health Charging extension that polkit is installed
             "org/gnome/shell/extensions/Battery-Health-Charging" = {
               polkit-status = "installed";

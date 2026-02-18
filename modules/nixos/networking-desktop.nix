@@ -32,6 +32,10 @@
         wireless.enable = false;
       };
 
+      # NetworkManager does not manage ethernet, so GIO's default networkmanager
+      # monitor reports no connectivity. Use the base monitor instead.
+      environment.sessionVariables.GIO_USE_NETWORK_MONITOR = "base";
+
       systemd.services.NetworkManager-wait-online.enable = false;
     })
 

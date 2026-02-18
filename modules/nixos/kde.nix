@@ -4,9 +4,25 @@
   options = {
     smind.desktop.kde.enable = lib.mkEnableOption "KDE Plasma 6 desktop environment with SDDM";
     smind.desktop.kde.mime.enable = lib.mkEnableOption "Associate KDE Applications with document MIME Types";
+    smind.desktop.kde.kde-gtk-config.enable = lib.mkEnableOption "Allow overwriting GTK settings with kde-gtk-config";
+    smind.desktop.kde.dconf.profile = lib.mkOption {
+      type = lib.types.str;
+      default = "kde";
+      description = "Dconf profile name for KDE session. (`kde` instead of `user` by default to not conflict with GNOME settings)";
+    };
   };
 
   config = lib.mkIf config.smind.desktop.kde.enable {
+    programs.dconf = {
+      enable = true;
+      profiles.${config.smind.desktop.kde.dconf.profile}.databases = [
+        {
+          lockAll = false;
+          settings = { };
+        }
+      ];
+    };
+
     services.desktopManager.plasma6 = {
       enable = true;
       enableQt5Integration = true;
@@ -78,7 +94,7 @@
       kdePackages.kdepim-addons
       kdePackages.krdc
 
-      kdePackages.kde-gtk-config
+      (lib.mkIf config.smind.desktop.kde.kde-gtk-config.enable kdePackages.kde-gtk-config)
 
       kdePackages.kio
       kdePackages.kio-extras

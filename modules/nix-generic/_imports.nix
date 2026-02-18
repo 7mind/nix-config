@@ -4,6 +4,7 @@
   ./env-settings.nix
   ./fonts.nix
   ./fonts-apple.nix
+  ./fonts-ms.nix
   ./home-manager.nix
   ./host-metadata.nix
   ./nix.nix

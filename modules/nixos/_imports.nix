@@ -10,7 +10,7 @@
   ./bootloader-systemd.nix
   ./cosmic.nix
   ./cpu.nix
-  ./determinate.nix
+  ./dconf.nix
   ./display-manager.nix
   ./dev-adb.nix
   ./dev-wireshark.nix
