@@ -106,9 +106,9 @@
             Cache = "no-negative";
             DNSStubListener = "yes";
             DNSStubListenerExtra = [ "[::1]:53" ];
+            LLMNR = "false";
           };
         };
-        llmnr = "false";
       };
 
       services.avahi = {

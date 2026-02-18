@@ -46,8 +46,8 @@
     settings = {
       Resolve = {
         Cache = "no-negative";
+        LLMNR = "false";
       };
     };
-    llmnr = "false";
   };
 }
