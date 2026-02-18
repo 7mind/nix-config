@@ -40,6 +40,19 @@
         # vkmark
       ];
 
+      programs.obs-studio = {
+        enable = true;
+        enableVirtualCamera = true;
+        plugins = with pkgs.obs-studio-plugins; [
+          wlrobs
+          input-overlay
+          obs-mute-filter
+          obs-source-record
+          obs-backgroundremoval
+          obs-pipewire-audio-capture
+        ];
+      };
+
       environment.shellAliases = {
         pbcopy =
           "${pkgs.wl-clipboard}/bin/wl-copy";
