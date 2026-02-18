@@ -2,7 +2,7 @@
 
 {
   options = {
-    smind.desktop.kde.enable = lib.mkEnableOption "KDE Plasma 6 desktop environment with SDDM";
+    smind.desktop.kde.enable = lib.mkEnableOption "KDE Plasma 6 desktop environment";
     smind.desktop.kde.mime.enable = lib.mkEnableOption "Associate KDE Applications with document MIME Types";
     smind.desktop.kde.kde-gtk-config.enable = lib.mkEnableOption "Allow overwriting GTK settings with kde-gtk-config";
     smind.desktop.kde.dconf.profile = lib.mkOption {
@@ -31,13 +31,13 @@
     # Disable orca to avoid conflict with GNOME module when both desktops enabled
     services.orca.enable = lib.mkForce false;
 
-    # Display manager (SDDM) configuration handled by display-manager.nix module
+    # Display manager (plasma-login-manager) configuration handled by display-manager.nix module
 
     smind.security.keyring = {
       enable = true;
       backend = "kwallet";
       sshAgent = "none";
-      displayManagers = [ "login" "sddm" "greetd" "gdm" "gdm-password" "gdm-fingerprint" "gdm-autologin" ];
+      displayManagers = [ "login" "plasma-login-manager" "greetd" "gdm" "gdm-password" "gdm-fingerprint" "gdm-autologin" ];
     };
 
     smind.desktop.wayland.session-variables.enable = true;

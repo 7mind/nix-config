@@ -5,7 +5,7 @@ let
   # Priority: KDE > GNOME > COSMIC > Hyprland > Sway > Niri
   selectedBackend =
     if config.smind.display-manager != "auto" then config.smind.display-manager
-    else if config.smind.desktop.kde.enable then "sddm"
+    else if config.smind.desktop.kde.enable then "plasma-login-manager"
     else if config.smind.desktop.gnome.enable then "gdm"
     else if config.smind.desktop.cosmic.enable then "cosmic-greeter"
     else if config.smind.desktop.hyprland.enable then "greetd"
@@ -28,14 +28,14 @@ in
 {
   options.smind = {
     display-manager = lib.mkOption {
-      type = lib.types.enum [ "auto" "gdm" "sddm" "cosmic-greeter" "greetd" "none" ];
+      type = lib.types.enum [ "auto" "gdm" "plasma-login-manager" "cosmic-greeter" "greetd" "none" ];
       default = "auto";
       description = ''
         Display manager to use.
 
       - auto: Automatically select based on priority: KDE > GNOME > COSMIC
       - gdm: GNOME Display Manager
-      - sddm: Simple Desktop Display Manager (KDE default)
+      - plasma-login-manager: Plasma Login Manager (KDE default)
       - cosmic-greeter: COSMIC greeter
       - greetd: Generic greeter
       - none: No display manager (manual startx/login)
@@ -66,7 +66,7 @@ in
           Auto-selected display manager: ${selectedBackend} (priority: KDE > GNOME > COSMIC)
 
           All desktops will be available as sessions at login.
-          To override, set: smind.display-manager = "gdm" | "sddm" | "cosmic-greeter"
+          To override, set: smind.display-manager = "gdm" | "plasma-login-manager" | "cosmic-greeter"
         ''
       ];
 
@@ -146,23 +146,9 @@ in
       ];
     })
 
-    # SDDM configuration
-    (lib.mkIf (selectedBackend == "sddm") {
-      services.displayManager.sddm = {
-        enable = true;
-        wayland.enable = true;
-        enableHidpi = true;
-
-        # KDE-specific SDDM settings (from kde.nix)
-        wayland.compositor = lib.mkIf config.smind.desktop.kde.enable ("kwin");
-        settings = lib.mkIf config.smind.desktop.kde.enable {
-          Theme.CursorTheme = "breeze_cursors";
-          Users = {
-            RememberLastUser = true;
-            RememberLastSession = true;
-          };
-        };
-      };
+    # Plasma Login Manager configuration
+    (lib.mkIf (selectedBackend == "plasma-login-manager") {
+      services.displayManager.plasma-login-manager.enable = true;
     })
 
     # COSMIC greeter configuration
