@@ -27,9 +27,9 @@ in
 
   # --- Framework 16 AMD (Strix Point) specific configuration ---
 
-  # Use latest kernel
-  # Override the default from kernel-settings module (6.17) - Strix Point needs latest
-  boot.kernelPackages = lib.mkForce pkgs.linuxPackages_latest;
+  # Use Linux 6.18 until NVIDIA open 590 gains Linux 6.19 API compatibility
+  # Override the default from kernel-settings module.
+  boot.kernelPackages = lib.mkForce pkgs.linuxKernel.packages.linux_6_18;
 
   boot.kernelParams = [
     "quiet"
