@@ -418,10 +418,15 @@ do_switch() {
             # null fqn means local deployment
             [[ "$fqn" == "null" || -z "$fqn" ]] && fqn=""
 
+            if [[ "$THISHOST" != "$host" && -z "$fqn" ]]; then
+                echo "Error: Host '$host' has no FQDN (smind.host.fqn/networking.domain), refusing local fallback switch" >&2
+                exit 1
+            fi
+
             echo "    Switching $host..."
             case "$platform" in
                 darwin)
-                    if [[ "$THISHOST" == "$host" || -z "$fqn" ]]; then
+                    if [[ "$THISHOST" == "$host" ]]; then
                         "${closure}/sw/bin/darwin-rebuild" switch --flake .
                     else
                         nix copy --to "ssh://${fqn}" "${ROOTS}/${host}"
@@ -430,7 +435,7 @@ do_switch() {
                     fi
                     ;;
                 linux)
-                    if [[ "$THISHOST" == "$host" || -z "$fqn" ]]; then
+                    if [[ "$THISHOST" == "$host" ]]; then
                         sudo nix-env -p /nix/var/nix/profiles/system --set "$closure"
                         sudo /nix/var/nix/profiles/system/bin/switch-to-configuration switch
                     else
