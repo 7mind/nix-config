@@ -3,20 +3,6 @@
 {
   nixpkgs.overlays = [
     (final: prev: {
-      # nix-prefetch-scripts currently installs nix-prefetch-git as
-      # nix-prefetch-git-${version}, while fetch-cargo-vendor-util
-      # executes `nix-prefetch-git` directly.
-      nix-prefetch-git = prev.nix-prefetch-git.overrideAttrs (old: {
-        installPhase = old.installPhase + ''
-          bin_path="$out/bin/$name"
-          if [ ! -x "$bin_path" ]; then
-            echo "Expected executable at $bin_path" >&2
-            exit 1
-          fi
-          ln -sf "$bin_path" "$out/bin/nix-prefetch-git"
-        '';
-      });
-
       # Downgrade wireplumber to 0.5.12 to fix GNOME crash when switching
       # Bluetooth audio to handsfree/HSP/HFP profile.
       # See: https://github.com/NixOS/nixpkgs/issues/475202
