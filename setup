@@ -30,6 +30,7 @@ DO_SWITCH=false
 DO_REKEY=false
 DO_GIT=true
 DO_LIST=false
+DO_ALLOW_SHORT_HOST=false
 MESSAGE=""
 VERBOSE=false
 
@@ -51,6 +52,8 @@ Options:
   -n, --no-git      Skip git commit and push
   -m, --message=MSG Custom git commit message (default: "autosave (<host> / <os>)")
   -l, --list        List known hosts and exit
+  --allow-short-host
+                    Allow using short host name for remote switch when FQDN is missing
   -v, --verbose     Enable verbose output (set -x)
   -h, --help        Show this help message
 
@@ -66,6 +69,8 @@ Examples:
   $(basename "$0") +infra           # Build all hosts in 'infra' group
   $(basename "$0") -k +infra        # Rekey and build all infra hosts
   $(basename "$0") -r -s            # Update flake, build, and switch
+  $(basename "$0") pavel-fw -s --allow-short-host
+                              # Remote switch via short host name when no FQDN is defined
   $(basename "$0") -n               # Build without git operations
 EOF
     exit 0
@@ -217,6 +222,10 @@ parse_args() {
                 ;;
             -l|--list)
                 DO_LIST=true
+                shift
+                ;;
+            --allow-short-host)
+                DO_ALLOW_SHORT_HOST=true
                 shift
                 ;;
             -v|--verbose)
@@ -410,7 +419,7 @@ do_switch() {
         add_all
 
         for host in "${HOSTS[@]}"; do
-            local platform fqn closure
+            local platform fqn closure remote_target
             platform=$(get_host_attr "$host" "platform")
             fqn=$(get_host_attr "$host" "fqn")
             closure=$(readlink -f "${ROOTS}/${host}")
@@ -418,8 +427,17 @@ do_switch() {
             # null fqn means local deployment
             [[ "$fqn" == "null" || -z "$fqn" ]] && fqn=""
 
-            if [[ "$THISHOST" != "$host" && -z "$fqn" ]]; then
+            remote_target="$fqn"
+            if [[ "$THISHOST" != "$host" && -z "$remote_target" ]]; then
+                if [[ "$DO_ALLOW_SHORT_HOST" == "true" ]]; then
+                    remote_target="$host"
+                    echo "    Warning: '$host' has no FQDN; using short host name for remote switch"
+                fi
+            fi
+
+            if [[ "$THISHOST" != "$host" && -z "$remote_target" ]]; then
                 echo "Error: Host '$host' has no FQDN (smind.host.fqn/networking.domain), refusing local fallback switch" >&2
+                echo "Use --allow-short-host to opt in to short-name remote switching for this run." >&2
                 exit 1
             fi
 
@@ -429,9 +447,9 @@ do_switch() {
                     if [[ "$THISHOST" == "$host" ]]; then
                         "${closure}/sw/bin/darwin-rebuild" switch --flake .
                     else
-                        nix copy --to "ssh://${fqn}" "${ROOTS}/${host}"
-                        ssh -t "${fqn}" sudo -H --preserve-env=PATH env nix-env -p /nix/var/nix/profiles/system --set "$closure"
-                        ssh -t "${fqn}" "sudo ${closure}/sw/bin/darwin-rebuild" activate
+                        nix copy --to "ssh://${remote_target}" "${ROOTS}/${host}"
+                        ssh -t "${remote_target}" sudo -H --preserve-env=PATH env nix-env -p /nix/var/nix/profiles/system --set "$closure"
+                        ssh -t "${remote_target}" "sudo ${closure}/sw/bin/darwin-rebuild" activate
                     fi
                     ;;
                 linux)
@@ -439,9 +457,9 @@ do_switch() {
                         sudo nix-env -p /nix/var/nix/profiles/system --set "$closure"
                         sudo /nix/var/nix/profiles/system/bin/switch-to-configuration switch
                     else
-                        nix copy --to "ssh://root@${fqn}" "${ROOTS}/${host}"
-                        ssh "root@$fqn" nix-env -p /nix/var/nix/profiles/system --set "$closure"
-                        ssh "root@$fqn" /nix/var/nix/profiles/system/bin/switch-to-configuration switch
+                        nix copy --to "ssh://root@${remote_target}" "${ROOTS}/${host}"
+                        ssh "root@${remote_target}" nix-env -p /nix/var/nix/profiles/system --set "$closure"
+                        ssh "root@${remote_target}" /nix/var/nix/profiles/system/bin/switch-to-configuration switch
                     fi
                     ;;
             esac
