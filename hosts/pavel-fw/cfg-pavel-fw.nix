@@ -310,6 +310,7 @@ in
 
   users = {
     users.root.initialPassword = "nixos";
+    users.root.openssh.authorizedKeys.keys = cfg-const.ssh-keys-pavel;
 
     users.pavel = {
       isNormalUser = true;
