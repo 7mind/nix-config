@@ -164,6 +164,7 @@ in
         hardware.nvidia-container-toolkit.suppressNvidiaDriverAssertion = true;
 
         hardware.graphics.enable = true;
+        hardware.graphics.extraPackages = [ pkgs.nvidia-vaapi-driver ];
 
         hardware.nvidia = {
           open = cfg.open;
