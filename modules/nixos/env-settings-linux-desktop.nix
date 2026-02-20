@@ -1,5 +1,8 @@
 { config, lib, pkgs, ... }:
 
+let
+  hasNvidiaDriver = config.smind.hw.nvidia.enable;
+in
 {
   options = {
     smind.environment.linux.sane-defaults.desktop.enable = lib.mkOption {
@@ -43,6 +46,9 @@
       programs.obs-studio = {
         enable = true;
         enableVirtualCamera = true;
+        package = pkgs.obs-studio.override {
+          cudaSupport = hasNvidiaDriver;
+        };
         plugins = with pkgs.obs-studio-plugins; [
           wlrobs
           input-overlay

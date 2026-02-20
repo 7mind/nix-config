@@ -7,4 +7,5 @@ repro_patch
 __pycache__
 .tmp
 worktrees
+nix/
 
