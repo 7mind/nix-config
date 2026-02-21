@@ -87,6 +87,8 @@ in
       echo ""
       echo "Done! TPM auto-unlock will work on next boot."
     '')
+
+    pkgs.shotcut
   ];
 
   # Resume device for hibernation
