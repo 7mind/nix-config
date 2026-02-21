@@ -89,6 +89,7 @@ in
     '')
 
     pkgs.shotcut
+    pkgs.vidcutter
   ];
 
   # Resume device for hibernation
