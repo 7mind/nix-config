@@ -136,6 +136,50 @@ let
         ];
       };
     };
+
+  wrapAppWithNetnsSlice = { pkg, name, binName ? null, extraFlags ? [ ], slice ? "app-heavy.slice", netns ? null }:
+    let
+      actualBinName = if binName != null then binName else (pkg.meta.mainProgram or name);
+      flags = lib.concatStringsSep " " extraFlags;
+      netnsArg = lib.optionalString (netns != null) "-n ${netns}";
+      sliceArg = lib.optionalString (slice != null) "-s ${slice}";
+      wrapperScript = ''
+#!/usr/bin/env bash
+exec ${pkgs.netns-run}/bin/netns-run ${netnsArg} ${sliceArg} -- \
+  ${pkg}/bin/${actualBinName} ${flags} "$@"
+'';
+    in
+    pkgs.runCommand "${name}-wrapped" {
+      nativeBuildInputs = [ pkgs.makeWrapper ];
+      meta.mainProgram = actualBinName;
+      passAsFile = [ "wrapperScript" ];
+      inherit wrapperScript;
+    } ''
+      mkdir -p "$out/bin" "$out/share"
+
+      cp "$wrapperScriptPath" "$out/bin/${actualBinName}"
+      chmod +x "$out/bin/${actualBinName}"
+
+      if [ -d "${pkg}/share/applications" ]; then
+        mkdir -p "$out/share/applications"
+        for desktopFile in "${pkg}"/share/applications/*.desktop; do
+          [ -f "$desktopFile" ] || continue
+          fileName="$(basename "$desktopFile")"
+          sed \
+            -e "s|Exec=${pkg}/bin/${actualBinName}|Exec=$out/bin/${actualBinName}|g" \
+            -e "s|Exec=${actualBinName}|Exec=$out/bin/${actualBinName}|g" \
+            "$desktopFile" > "$out/share/applications/$fileName"
+        done
+      fi
+
+      for sharedDir in "${pkg}"/share/*; do
+        [ -e "$sharedDir" ] || continue
+        dirName="$(basename "$sharedDir")"
+        if [ "$dirName" != "applications" ] && [ ! -e "$out/share/$dirName" ]; then
+          ln -s "$sharedDir" "$out/share/$dirName"
+        fi
+      done
+    '';
 in
 {
   _module.args.extend_pkg = extend_pkg;
@@ -149,6 +193,8 @@ in
   _module.args.override_pkg = override_pkg;
 
   _module.args.mk_container = mk_container;
+
+  _module.args.wrapAppWithNetnsSlice = wrapAppWithNetnsSlice;
 
   _module.args.xdg_associate = input: {
     mimeApps = {

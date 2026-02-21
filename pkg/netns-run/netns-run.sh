@@ -3,12 +3,12 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: netns-run -n NETNS [OPTIONS] [--] COMMAND [ARGS...]
+Usage: netns-run [OPTIONS] [--] COMMAND [ARGS...]
 
-Run a command inside a network namespace via firejail.
+Run a command in a network namespace and/or systemd user slice.
 
 Options:
-  -n, --netns NAME     Network namespace name (required)
+  -n, --netns NAME     Network namespace name
   -s, --slice NAME     Run inside a systemd user scope under this slice
   -h, --help           Show this help
 EOF
@@ -46,13 +46,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -n "$netns" ]] || { echo "error: --netns is required" >&2; usage 1; }
+[[ -n "$netns" || -n "$slice" ]] || { echo "error: at least one of --netns or --slice is required" >&2; usage 1; }
 [[ ${#cmd[@]} -gt 0 ]] || { echo "error: no command specified" >&2; usage 1; }
 
-firejail_cmd=(/run/wrappers/bin/firejail --noprofile "--netns=$netns" -- "${cmd[@]}")
+if [[ -n "$netns" ]]; then
+  run_cmd=(/run/wrappers/bin/firejail --noprofile "--netns=$netns" -- "${cmd[@]}")
+else
+  run_cmd=("${cmd[@]}")
+fi
 
 if [[ -n "$slice" ]]; then
-  exec systemd-run --user --scope "--slice=$slice" "${firejail_cmd[@]}"
+  exec systemd-run --user --scope "--slice=$slice" "${run_cmd[@]}"
 else
-  exec "${firejail_cmd[@]}"
+  exec "${run_cmd[@]}"
 fi

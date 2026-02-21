@@ -1,49 +1,7 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, wrapAppWithNetnsSlice, ... }:
 
 let
   cfg = config.smind.hm.electron-wrappers;
-
-  # Wrap an Electron app to run in a resource-limited slice and optionally in a network namespace
-  wrapElectronApp = { pkg, name, extraFlags ? [], slice ? "app-heavy.slice", netns ? null }:
-    let
-      binName = pkg.meta.mainProgram or name;
-      flags = lib.concatStringsSep " " extraFlags;
-      wrapperScript = if netns != null then ''
-#!/usr/bin/env bash
-exec ${pkgs.netns-run}/bin/netns-run -n ${netns} -s ${slice} -- \
-  ${pkg}/bin/${binName} ${flags} "$@"
-'' else ''
-#!/usr/bin/env bash
-exec systemd-run --user --scope --slice=${slice} ${pkg}/bin/${binName} ${flags} "$@"
-'';
-    in pkgs.runCommand "${name}-wrapped" {
-      nativeBuildInputs = [ pkgs.makeWrapper ];
-      meta.mainProgram = binName;
-      passAsFile = [ "wrapperScript" ];
-      inherit wrapperScript;
-    } ''
-      mkdir -p $out/bin $out/share
-
-      cp $wrapperScriptPath $out/bin/${binName}
-      chmod +x $out/bin/${binName}
-
-      # Copy and patch desktop files
-      if [ -d "${pkg}/share/applications" ]; then
-        mkdir -p $out/share/applications
-        for f in ${pkg}/share/applications/*.desktop; do
-          name=$(basename "$f")
-          sed "s|Exec=${pkg}/bin/${binName}|Exec=$out/bin/${binName}|g; s|Exec=${binName}|Exec=$out/bin/${binName}|g" "$f" > $out/share/applications/$name
-        done
-      fi
-
-      # Symlink icons and other share resources
-      for dir in ${pkg}/share/*; do
-        dirname=$(basename "$dir")
-        if [ "$dirname" != "applications" ] && [ ! -e "$out/share/$dirname" ]; then
-          ln -s "$dir" "$out/share/$dirname"
-        fi
-      done
-    '';
 in
 {
   options.smind.hm.electron-wrappers = {
@@ -112,23 +70,23 @@ in
 
   config = lib.mkMerge [
     {
-      lib.electron-wrappers.wrapElectronApp = wrapElectronApp;
+      lib.electron-wrappers.wrapAppWithNetnsSlice = wrapAppWithNetnsSlice;
     }
     (lib.mkIf cfg.enable (
     let
-      slackWrapped = wrapElectronApp {
+      slackWrapped = wrapAppWithNetnsSlice {
         pkg = pkgs.slack;
         name = "slack";
         extraFlags = if cfg.slack.autostart then [ "-u" ] else [ ];
         netns = cfg.slack.netns;
       };
-      elementWrapped = wrapElectronApp {
+      elementWrapped = wrapAppWithNetnsSlice {
         pkg = pkgs.element-desktop;
         name = "element-desktop";
         extraFlags = [ "--hidden" ];
         netns = cfg.element.netns;
       };
-      zoomWrapped = wrapElectronApp {
+      zoomWrapped = wrapAppWithNetnsSlice {
         pkg = pkgs.zoom-us;
         name = "zoom-us";
         extraFlags = [ ];
