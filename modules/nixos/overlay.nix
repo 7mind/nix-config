@@ -105,6 +105,21 @@
         '';
       });
 
+      # Shotcut uses GTK file chooser via Qt portal integration and crashes
+      # when GTK schemas are not discoverable in XDG_DATA_DIRS.
+      shotcut = super.shotcut.overrideAttrs (old: {
+        nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ super.makeWrapper ];
+        postFixup =
+          let
+            gtk3Schemas = "${super.gtk3}/share/gsettings-schemas/${super.gtk3.name}";
+          in
+          (old.postFixup or "")
+          + ''
+            wrapProgram $out/bin/shotcut \
+              --prefix XDG_DATA_DIRS : "${gtk3Schemas}"
+          '';
+      });
+
       nix-apple-fonts = (cfg-flakes.nix-apple-fonts.default.overrideAttrs (drv: {
         # override install script to put fonts into /share/fonts, not /usr/share/fonts - where they don't work.
         # FIXME: notify upstream / submit PR?
