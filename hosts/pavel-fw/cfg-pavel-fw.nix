@@ -88,8 +88,7 @@ in
       echo "Done! TPM auto-unlock will work on next boot."
     '')
 
-    pkgs.shotcut
-    pkgs.vidcutter
+    pkgs.video-trimmer
   ];
 
   # Resume device for hibernation
