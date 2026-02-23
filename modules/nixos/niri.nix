@@ -48,9 +48,9 @@
     # Polkit authentication agent
     systemd.user.services.polkit-gnome-authentication-agent-niri = {
       description = "polkit-gnome-authentication-agent-niri";
-      wantedBy = [ "graphical-session.target" ];
-      wants = [ "graphical-session.target" ];
-      after = [ "graphical-session.target" ];
+      wantedBy = [ "niri-session.target" ];
+      wants = [ "niri-session.target" ];
+      after = [ "niri-session.target" ];
       serviceConfig = {
         Type = "simple";
         ExecCondition = ''/bin/sh -c '[ "$XDG_CURRENT_DESKTOP" = "niri" ]' '';
@@ -58,6 +58,17 @@
         Restart = "on-failure";
         RestartSec = 1;
         TimeoutStopSec = 10;
+      };
+    };
+
+    # Notification daemon for Niri sessions only.
+    systemd.user.services.mako-niri = {
+      description = "mako-niri";
+      wantedBy = [ "niri-session.target" ];
+      serviceConfig = {
+        ExecStart = "${pkgs.mako}/bin/mako";
+        Restart = "on-failure";
+        RestartSec = 1;
       };
     };
 
@@ -77,7 +88,6 @@
       swaybg
       waybar
       fuzzel
-      mako
       grim
       slurp
       wl-clipboard

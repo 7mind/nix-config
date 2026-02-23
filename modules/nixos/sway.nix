@@ -49,9 +49,9 @@
     # Polkit authentication agent
     systemd.user.services.polkit-gnome-authentication-agent-sway = {
       description = "polkit-gnome-authentication-agent-sway";
-      wantedBy = [ "graphical-session.target" ];
-      wants = [ "graphical-session.target" ];
-      after = [ "graphical-session.target" ];
+      wantedBy = [ "sway-session.target" ];
+      wants = [ "sway-session.target" ];
+      after = [ "sway-session.target" ];
       serviceConfig = {
         Type = "simple";
         ExecCondition = ''/bin/sh -c '[ "$XDG_CURRENT_DESKTOP" = "sway" ]' '';
@@ -59,6 +59,17 @@
         Restart = "on-failure";
         RestartSec = 1;
         TimeoutStopSec = 10;
+      };
+    };
+
+    # Notification daemon for Sway sessions only.
+    systemd.user.services.mako-sway = {
+      description = "mako-sway";
+      wantedBy = [ "sway-session.target" ];
+      serviceConfig = {
+        ExecStart = "${pkgs.mako}/bin/mako";
+        Restart = "on-failure";
+        RestartSec = 1;
       };
     };
 
@@ -76,7 +87,6 @@
       swaybg
       waybar
       wofi
-      mako
       grim
       slurp
       wl-clipboard
