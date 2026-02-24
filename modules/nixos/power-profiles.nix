@@ -45,7 +45,8 @@ in
     # Set correct profile at boot
     systemd.services.power-profile-boot = {
       description = "Set power profile based on AC status at boot";
-      wantedBy = [ "multi-user.target" ];
+      wantedBy = [ "power-profiles-daemon.service" ];
+      partOf = [ "power-profiles-daemon.service" ];
       after = [ "power-profiles-daemon.service" ];
       wants = [ "power-profiles-daemon.service" ];
       serviceConfig = {
