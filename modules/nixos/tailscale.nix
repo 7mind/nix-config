@@ -26,7 +26,9 @@
       serviceConfig = {
         Type = "oneshot";
         # TODO: other prefixes
+        ExecStartPre = "-${pkgs.iproute2}/bin/ip rule del to 192.168.0.0/16 pref 5000 lookup main";
         ExecStart = "${pkgs.iproute2}/bin/ip rule add to 192.168.0.0/16 pref 5000 lookup main";
+        ExecStop = "-${pkgs.iproute2}/bin/ip rule del to 192.168.0.0/16 pref 5000 lookup main";
         RemainAfterExit = true;
       };
     };
