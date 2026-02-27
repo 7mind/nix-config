@@ -39,6 +39,7 @@ in
 
         libnotify # notify-send command
 
+        pulsemeeter
         # neohtop # broken
         # vkmark
       ];
