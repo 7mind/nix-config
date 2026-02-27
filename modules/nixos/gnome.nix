@@ -140,6 +140,12 @@
       '';
     };
 
+    smind.desktop.gnome.touchpad.disableWhileTyping = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Disable touchpad input while typing in GNOME.";
+    };
+
     smind.desktop.gnome.dconf.profile = lib.mkOption {
       type = lib.types.str;
       default = "user";
@@ -205,6 +211,9 @@
                 speed = lib.gvariant.mkDouble config.smind.desktop.gnome.mouse.acceleration;
                 accel-profile = config.smind.desktop.gnome.mouse.accelProfile;
                 natural-scroll = config.smind.desktop.gnome.mouse.naturalScroll;
+              };
+              "org/gnome/desktop/peripherals/touchpad" = {
+                disable-while-typing = config.smind.desktop.gnome.touchpad.disableWhileTyping;
               };
               "org/gnome/terminal/legacy/keybindings" = {
                 copy = "<Super>c";

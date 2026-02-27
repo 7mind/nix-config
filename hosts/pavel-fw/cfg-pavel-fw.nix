@@ -221,6 +221,7 @@ in
     desktop.gnome.ambient-light-sensor.enable = false;
     desktop.gnome.framework-fan-control.enable = false;
     desktop.gnome.gdm.monitors-xml = ./monitors.xml;
+    desktop.gnome.touchpad.disableWhileTyping = false;
 
     desktop.cosmic.enable = true;
 
