@@ -6,6 +6,7 @@
   ./kde.nix
   ./mc.nix
   ./dev-generic.nix
+  ./dev-jetbrains.nix
   ./dev-git.nix
   ./dev-llm.nix
   ./dev-cs.nix

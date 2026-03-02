@@ -1,4 +1,4 @@
-{ lib, pkgs, xdg_associate, extended_pkg, cfg-meta, config, import_if_exists, import_if_exists_or, ... }:
+{ lib, pkgs, xdg_associate, cfg-meta, config, import_if_exists, import_if_exists_or, ... }:
 
 {
   programs.vscode.profiles.default.keybindings =
@@ -78,6 +78,7 @@
 
   smind.hm = {
     roles.desktop = true;
+    dev.jetbrains.enable = true;
     desktop.cosmic.minimal-keybindings = true;
 
     autostart.programs = [
@@ -106,151 +107,6 @@
     winbox-quirk
 
     mqttx
-
-    (extended_pkg {
-      pkg = jetbrains.idea;
-      path = "bin/idea";
-      paths = [
-        nodejs_24
-      ];
-
-      ld-libs = [
-        libmediainfo
-        libx11
-        libx11.dev
-        libice
-        libsm
-
-        libGL
-        icu
-        fontconfig
-        gccStdenv.cc.cc.lib
-        zstd
-      ];
-      #defs = { TEST = "1"; };
-    })
-
-
-    (extended_pkg {
-      pkg = jetbrains.webstorm;
-      path = "bin/webstorm";
-      paths = [
-        nodejs_24
-      ];
-
-      ld-libs = [
-        libmediainfo
-        libx11
-        libx11.dev
-        libice
-        libsm
-
-        libGL
-        icu
-        fontconfig
-        gccStdenv.cc.cc.lib
-      ];
-    })
-
-    (extended_pkg {
-      pkg = jetbrains.pycharm;
-      path = "bin/pycharm";
-      paths = [
-        nodejs_24
-      ];
-
-      ld-libs = [
-        libmediainfo
-        libx11
-        libx11.dev
-        libice
-        libsm
-
-        libGL
-        icu
-        fontconfig
-        gccStdenv.cc.cc.lib
-        zstd
-      ];
-    })
-
-    (extended_pkg {
-      pkg = jetbrains.datagrip;
-      path = "bin/datagrip";
-      paths = [
-        nodejs_24
-      ];
-
-      ld-libs = [
-        libmediainfo
-        libx11
-        libx11.dev
-        libice
-        libsm
-
-        libGL
-        icu
-        fontconfig
-        gccStdenv.cc.cc.lib
-        zstd
-      ];
-    })
-
-
-    (extended_pkg {
-      pkg = jetbrains.rider;
-      path = "bin/rider";
-      paths = [
-        dotnet-sdk_9
-        nodejs_24
-      ];
-      ld-libs = [
-        libmediainfo
-        libx11
-        libx11.dev
-        libice
-        libsm
-
-        libGL
-        icu
-        fontconfig
-        zstd
-      ];
-    })
-
-    (extended_pkg rec {
-      pkg = jetbrains.clion;
-      path = "bin/clion";
-      paths = [
-        nodejs_24
-      ];
-
-      ld-libs = [
-        libGL
-        libglvnd
-        libGLU
-        # qt6.full
-        vulkan-headers
-        boost
-
-        libxkbcommon
-
-        libmediainfo
-        libx11
-        libx11.dev
-        libice
-        libsm
-
-        icu
-        fontconfig
-        zstd
-      ];
-      defs = {
-        CMAKE_LIBRARY_PATH = lib.makeLibraryPath ld-libs;
-        CMAKE_INCLUDE_PATH = lib.makeIncludePath ld-libs;
-        # CMAKE_PREFIX_PATH = "${qt6.full}";
-      };
-    })
   ];
 
 }
