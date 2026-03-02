@@ -10,7 +10,9 @@
     home-manager.useGlobalPkgs = true;
     home-manager.useUserPackages = true;
     home-manager.extraSpecialArgs = specialArgsSelfRef;
-    home-manager.sharedModules = specialArgsSelfRef.cfg-hm-modules;
+    home-manager.sharedModules = specialArgsSelfRef.cfg-hm-modules
+      ++ lib.optionals config.smind.desktop.niri.enable [ specialArgsSelfRef.inputs.niri.homeModules.config ]
+      ++ lib.optionals config.smind.desktop.noctalia.enable [ specialArgsSelfRef.inputs.noctalia.homeModules.default ];
     home-manager.backupFileExtension = "hmbak";
   };
 }

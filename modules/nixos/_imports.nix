@@ -41,6 +41,7 @@
   ./mouse.nix
   ./networking-desktop.nix
   ./networking.nix
+  ./noctalia.nix
   ./nvidia-hybrid.nix
   ./nix-ld.nix
   ./nushell.nix

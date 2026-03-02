@@ -20,6 +20,7 @@
   ./htop.nix
   ./kitty.nix
   ./megasync.nix
+  ./niri.nix
   ./nushell.nix
   ./ssh.nix
   ./tailscale.nix

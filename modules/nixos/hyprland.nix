@@ -59,9 +59,9 @@
     # Polkit authentication agent
     systemd.user.services.polkit-gnome-authentication-agent-hyprland = {
       description = "polkit-gnome-authentication-agent-hyprland";
-      wantedBy = [ "hyprland-session.target" ];
-      wants = [ "hyprland-session.target" ];
-      after = [ "hyprland-session.target" ];
+      wantedBy = [ "graphical-session.target" ];
+      wants = [ "graphical-session.target" ];
+      after = [ "graphical-session.target" ];
       serviceConfig = {
         Type = "simple";
         ExecCondition = ''/bin/sh -c '[ "$XDG_CURRENT_DESKTOP" = "Hyprland" ]' '';
@@ -75,8 +75,11 @@
     # Notification daemon for Hyprland sessions only.
     systemd.user.services.mako-hyprland = {
       description = "mako-hyprland";
-      wantedBy = [ "hyprland-session.target" ];
+      wantedBy = [ "graphical-session.target" ];
+      wants = [ "graphical-session.target" ];
+      after = [ "graphical-session.target" ];
       serviceConfig = {
+        ExecCondition = ''/bin/sh -c '[ "$XDG_CURRENT_DESKTOP" = "Hyprland" ]' '';
         ExecStart = "${pkgs.mako}/bin/mako";
         Restart = "on-failure";
         RestartSec = 1;

@@ -104,6 +104,7 @@ rec {
             inputs.agenix-rekey.nixosModules.default
             inputs.determinate.nixosModules.default
             inputs.kanata-switcher.nixosModules.default
+            inputs.noctalia.nixosModules.default
 
             { nixpkgs.overlays = [ inputs.nix-vscode-extensions.overlays.default ]; }
           ];
