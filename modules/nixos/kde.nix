@@ -5,6 +5,11 @@
     smind.desktop.kde.enable = lib.mkEnableOption "KDE Plasma 6 desktop environment";
     smind.desktop.kde.mime.enable = lib.mkEnableOption "Associate KDE Applications with document MIME Types";
     smind.desktop.kde.kde-gtk-config.enable = lib.mkEnableOption "Allow overwriting GTK settings with kde-gtk-config";
+    smind.desktop.kde.gtk-compat.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Install GTK/GSettings compatibility packages for KDE sessions.";
+    };
     smind.desktop.kde.dconf.profile = lib.mkOption {
       type = lib.types.str;
       default = "kde";
@@ -42,8 +47,6 @@
 
     smind.desktop.wayland.session-variables.enable = true;
 
-    xdg.portal.enable = true;
-
     programs.partition-manager.enable = true;
 
     programs.firefox.nativeMessagingHosts.packages = [
@@ -51,64 +54,94 @@
     ];
 
     environment.systemPackages = with pkgs; [
-      kdePackages.kate
-      kdePackages.kwalletmanager
-      kdePackages.okular
-      kdePackages.gwenview
+      # packages out of kdePackages
       krusader
-      kdePackages.ark
-      kdePackages.spectacle
-      kdePackages.filelight
-      kdePackages.kaddressbook
-      krita
+#      krita
       krename
       kdiff3
-
       gsettings-qt
-
-      kdePackages.kcalutils
-      kdePackages.networkmanager-qt
-      kdePackages.kdegraphics-thumbnailers
-
-      kdePackages.akonadi
-      kdePackages.akonadi-calendar
-      kdePackages.akonadi-contacts
-      kdePackages.akonadi-import-wizard
-      kdePackages.akonadi-mime
-      kdePackages.akonadi-search
-      kdePackages.akonadiconsole
-
-      kdePackages.kaccounts-integration
-      kdePackages.incidenceeditor
-      kdePackages.plasma-wayland-protocols
-      kdePackages.dolphin-plugins
-      kdePackages.kio-extras
-      kdePackages.kdenetwork-filesharing
-      kdePackages.calendarsupport
-      kdePackages.print-manager
-      kdePackages.kontact
-      kdePackages.korganizer
-      kdePackages.eventviews
-      kdePackages.ffmpegthumbs
-      kdePackages.kdepim-runtime
-      kdePackages.kdepim-addons
-      kdePackages.krdc
-
-      (lib.mkIf config.smind.desktop.kde.kde-gtk-config.enable kdePackages.kde-gtk-config)
-
-      kdePackages.kio
-      kdePackages.kio-extras
-      kdePackages.kio-fuse
-      kdePackages.kio-admin
-    ];
+    ] ++ lib.optionals config.smind.desktop.kde.gtk-compat.enable [
+      glib # gsettings binary
+      gsettings-desktop-schemas # org.gnome.desktop.* schemas for gsettings consumers on KDE
+      gtk3 # provides additional GTK GSettings schemas used by some apps
+      gtk4 # provides GTK4 GSettings schemas used by some apps
+    ] ++ [
+      # packages in kdePackages
+      #      kdePackages.kate
+      #      kdePackages.kwalletmanager
+      #      kdePackages.okular
+      #      kdePackages.gwenview
+      #      kdePackages.ark
+      #      kdePackages.spectacle
+      #      kdePackages.filelight
+      #      kdePackages.kaddressbook
+      #
+      #      kdePackages.kcalutils
+      #      kdePackages.networkmanager-qt
+      #      kdePackages.kdegraphics-thumbnailers
+      #
+      #      kdePackages.akonadi
+      #      kdePackages.akonadi-calendar
+      #      kdePackages.akonadi-contacts
+      #      kdePackages.akonadi-import-wizard
+      #      kdePackages.akonadi-mime
+      #      kdePackages.akonadi-search
+      #      kdePackages.akonadiconsole
+      #
+      #      kdePackages.kaccounts-integration
+      #      kdePackages.incidenceeditor
+      #      kdePackages.plasma-wayland-protocols
+      #      kdePackages.dolphin-plugins
+      #      kdePackages.kdenetwork-filesharing
+      #      kdePackages.calendarsupport
+      #      kdePackages.print-manager
+      #      kdePackages.kontact
+      #      kdePackages.korganizer
+      #      kdePackages.eventviews
+      #      kdePackages.ffmpegthumbs
+      #      kdePackages.kdepim-runtime
+      #      kdePackages.kdepim-addons
+      #      kdePackages.krdc
+      #
+      #      (lib.mkIf config.smind.desktop.kde.kde-gtk-config.enable kdePackages.kde-gtk-config)
+      #
+      #      kdePackages.kio
+      #      kdePackages.kio-extras
+      #      kdePackages.kio-fuse
+      #      kdePackages.kio-admin
+    ] ++
+    # all packages from kdePackages
+    (
+      let
+        exclusions = (if config.smind.desktop.kde.kde-gtk-config.enable then [ ] else [ "kde-gtk-config" ]) ++ [
+          # libolm dependency
+          "neochat"
+          "itinerary"
+          # broken
+          "audiocd-kio"
+        ];
+      in
+      lib.pipe kdePackages.sources [
+        builtins.attrNames
+        (builtins.filter (n: !(builtins.elem n exclusions)))
+        (builtins.filter (n: (builtins.tryEval kdePackages.${n}.drvPath).success))
+        (builtins.filter (n:
+          let
+            brokenState = builtins.tryEval kdePackages.${n}.meta.broken;
+          in
+          brokenState.success && !brokenState.value
+        ))
+        (builtins.map (n: kdePackages.${n}))
+      ]
+    );
 
     environment.plasma6.excludePackages = with pkgs; [
       orca
-#      kdePackages.elisa
-#      kdePackages.oxygen
-#      kdePackages.khelpcenter
-#      kdePackages.konsole
-#      kdePackages.plasma-browser-integration
+      #      kdePackages.elisa
+      #      kdePackages.oxygen
+      #      kdePackages.khelpcenter
+      #      kdePackages.konsole
+      #      kdePackages.plasma-browser-integration
     ];
 
     xdg.mime.defaultApplications = lib.mkIf config.smind.desktop.kde.mime.enable {

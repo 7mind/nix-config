@@ -224,8 +224,8 @@ lib.optionalAttrs cfg-meta.isLinux {
   # Only define plasma options on Linux where plasma-manager exists
   # Use optionalAttrs for platform check (evaluated at load time)
   # Use mkIf for config-dependent conditions (evaluated at merge time)
-  config = lib.optionalAttrs cfg-meta.isLinux (lib.mkMerge [
-    (lib.mkIf kdeEnabled {
+  config = lib.mkIf kdeEnabled (lib.mkMerge [
+    {
       assertions = [
         {
           assertion = config.smind.hm.desktop.kde.theme.gtkTheme != "";
@@ -304,14 +304,14 @@ lib.optionalAttrs cfg-meta.isLinux {
           message = "smind.hm.desktop.kde.fonts.windowTitle.pointSize must be > 0";
         }
       ];
-    })
+    }
 
-    (lib.mkIf (kdeEnabled && !config.smind.hm.desktop.kde.auto-suspend.enable) {
+    (lib.mkIf (!config.smind.hm.desktop.kde.auto-suspend.enable) {
       programs.plasma.powerdevil.AC.autoSuspend.action = "nothing";
     })
 
     # XKB keyboard layout configuration
-    (lib.mkIf (kdeEnabled && config.smind.hm.desktop.kde.xkb.layouts != [ ]) {
+    (lib.mkIf (config.smind.hm.desktop.kde.xkb.layouts != [ ]) {
       programs.plasma.input.keyboard =
         let
           xkbLib = outerConfig.lib.xkb;
@@ -326,16 +326,14 @@ lib.optionalAttrs cfg-meta.isLinux {
         };
     })
 
-    # Mouse configuration (no idiomatic option without vendor/product IDs)
-    (lib.mkIf kdeEnabled {
+    {
+      # Mouse configuration (no idiomatic option without vendor/product IDs)
       programs.plasma.configFile.kcminputrc.Mouse = {
         XLbInptPointerAcceleration = config.smind.hm.desktop.kde.mouse.acceleration;
         X11LibInputXAccelProfileFlat = config.smind.hm.desktop.kde.mouse.accelProfile == "flat";
         XLbInptNaturalScroll = config.smind.hm.desktop.kde.mouse.naturalScroll;
       };
-    })
 
-    (lib.mkIf kdeEnabled {
       programs.plasma.workspace = {
         colorScheme = config.smind.hm.desktop.kde.theme.colorScheme;
         iconTheme = config.smind.hm.desktop.kde.theme.iconTheme;
@@ -349,9 +347,7 @@ lib.optionalAttrs cfg-meta.isLinux {
       };
 
       programs.plasma.configFile.kded5rc."Module-gtkconfig".autoload = outerConfig.smind.desktop.kde.kde-gtk-config.enable;
-    })
 
-    (lib.mkIf kdeEnabled {
       programs.plasma.fonts = {
         general = config.smind.hm.desktop.kde.fonts.general;
         fixedWidth = config.smind.hm.desktop.kde.fonts.fixedWidth;
@@ -360,9 +356,9 @@ lib.optionalAttrs cfg-meta.isLinux {
         menu = config.smind.hm.desktop.kde.fonts.menu;
         windowTitle = config.smind.hm.desktop.kde.fonts.windowTitle;
       };
-    })
+    }
 
-    (lib.mkIf (kdeEnabled && config.smind.hm.desktop.kde.gtk-restore.enable) {
+    (lib.mkIf config.smind.hm.desktop.kde.gtk-restore.enable {
       xdg.configFile."smind/hm-home-files-marker".text = "";
 
       # On KDE logout, restore specific GTK files/dirs to the exact HM-managed
@@ -471,7 +467,7 @@ lib.optionalAttrs cfg-meta.isLinux {
         };
     })
 
-    (lib.mkIf (kdeEnabled && config.smind.hm.desktop.kde.minimal-keybindings) {
+    (lib.mkIf config.smind.hm.desktop.kde.minimal-keybindings {
       programs.plasma.shortcuts =
         let
           hotkeyMod = config.smind.hm.desktop.kde.hotkey-modifier;

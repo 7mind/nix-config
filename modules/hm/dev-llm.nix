@@ -123,7 +123,7 @@ in
             allow = [ "Edit(/tmp/**)" ];
           };
           includeCoAuthoredBy = config.smind.hm.dev.llm.coAuthored.enable;
-          #model = "claude-3-5-sonnet-20241022";
+          model = "opus";
           statusLine = {
             "type" = "command";
             "command" = "printf '\\033[2m\\033[37m%s \\033[0m\\033[2m@ %s \\033[0m\\033[2m\\033[36min \\033[1m\\033[36m%s\\033[0m' \"$(whoami)\" \"$(hostname -s)\" \"$(pwd | sed \"s|^$HOME|~|\")\"";
@@ -272,10 +272,6 @@ in
                   *) CMD_ARGS+=("$1"); shift ;;
                 esac
               done
-              mkdir -p "$HOME/.claude-work"
-              mkdir -p "$HOME/.claude-work-home"
-              mkdir -p "$HOME/.config/claude-work"
-              touch "$HOME/.claude-work-home/.claude.json"
               exec ${firejail-wrap}/bin/firejail-wrap \
                 --rw "''${PWD}" \
                 --rw "''${HOME}/.claude" \

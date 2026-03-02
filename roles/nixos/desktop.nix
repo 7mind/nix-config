@@ -2,7 +2,9 @@
 
 let
   isDesktopRole = config.smind.roles.desktop.generic-gnome
-    || config.smind.roles.desktop.generic-cosmic;
+    || config.smind.roles.desktop.generic-kde
+    || config.smind.roles.desktop.generic-cosmic
+    || config.smind.roles.desktop.generic;
 in
 {
   options = {
@@ -19,8 +21,9 @@ in
     };
 
     smind.roles.desktop.generic-gnome = lib.mkEnableOption "GNOME-based desktop role with full defaults";
-
+    smind.roles.desktop.generic-kde = lib.mkEnableOption "KDE-based desktop role with full defaults";
     smind.roles.desktop.generic-cosmic = lib.mkEnableOption "COSMIC-based desktop role with full defaults";
+    smind.roles.desktop.generic = lib.mkEnableOption "Desktop role without defaults";
   };
 
   config = lib.mkMerge [
@@ -97,6 +100,13 @@ in
         keyboard.super-remap.enable = lib.mkDefault true;
         keyboard.super-remap.kanata-switcher.enable = lib.mkDefault true;
       };
+    })
+
+    # KDE-specific settings
+    (lib.mkIf config.smind.roles.desktop.generic-kde {
+      smind.desktop.kde.enable = lib.mkDefault true;
+      smind.desktop.kde.mime.enable = true;
+      smind.desktop.kde.kde-gtk-config.enable = true;
     })
 
     # COSMIC-specific settings
