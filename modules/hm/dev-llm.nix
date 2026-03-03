@@ -1,5 +1,7 @@
 { config, lib, pkgs, cfg-meta, osConfig, inputs, ... }:
 let
+  tomlFormat = pkgs.formats.toml { };
+
   baseClaudeMemorySection = ''
     ## Project Guidelines
 
@@ -175,6 +177,16 @@ in
       home.file.".claude-work/settings.json".source = config.home.file.".claude/settings.json".source;
       home.file.".claude-work/CLAUDE.md".source = config.home.file.".claude/CLAUDE.md".source;
 
+      home.file.".config/vibe/config.toml".source = tomlFormat.generate "vibe-config.toml" {
+        agent = {
+          model = "codestral-latest";
+          system_prompt_id = "default_with_custom_instructions";
+        };
+        custom_system_prompts = {
+          default_with_custom_instructions = claudeMemoryText;
+        };
+      };
+
       programs.opencode = {
         enable = true;
         settings = {
@@ -234,160 +246,185 @@ in
 
       # Linux-only: bubblewrap sandbox and yolo-* wrapper scripts
       home.packages =
-        lib.optionals cfg-meta.isDarwin [
+        [ pkgs.mistral-vibe ]
+        ++ lib.optionals cfg-meta.isDarwin [
           inputs.claude-code-sandbox.packages."${pkgs.stdenv.hostPlatform.system}".default
         ]
         ++ lib.optionals cfg-meta.isLinux (
-        let
-          firejail-wrap = pkgs.firejail-wrap;
-        in
-        [
-          # aichat
-          # aider-chat
-          # goose-cli
-          pkgs.bubblewrap
+          let
+            firejail-wrap = pkgs.firejail-wrap;
+          in
+          [
+            # aichat
+            # aider-chat
+            # goose-cli
+            pkgs.bubblewrap
 
-          (pkgs.writeShellScriptBin "yolo-claude" ''
-            ENV_ARGS=()
-            CMD_ARGS=()
-            while [[ $# -gt 0 ]]; do
-              case "$1" in
-                --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
-                *) CMD_ARGS+=("$1"); shift ;;
-              esac
-            done
-            mkdir -p "$HOME/.claude-work"
-            mkdir -p "$HOME/.claude-work-home"
-            mkdir -p "$HOME/.config/claude-work"
-            touch "$HOME/.claude-work-home/.claude.json"
-            exec ${firejail-wrap}/bin/firejail-wrap \
-              --rw "''${PWD}" \
-              --rw "''${HOME}/.claude" \
-              --rw "''${HOME}/.claude.json" \
-              --rw "''${HOME}/.config/claude" \
-              --rw "''${HOME}/.cache" \
-              --ro "''${HOME}/.config/git" \
-              --ro "''${HOME}/.config/direnv" \
-              --ro "''${HOME}/.local/share/direnv" \
-              --ro "''${HOME}/.direnvrc" \
-              "''${ENV_ARGS[@]}" \
-              -- claude --permission-mode bypassPermissions "''${CMD_ARGS[@]}"
-          '')
+            (pkgs.writeShellScriptBin "yolo-claude" ''
+              ENV_ARGS=()
+              CMD_ARGS=()
+              while [[ $# -gt 0 ]]; do
+                case "$1" in
+                  --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
+                  *) CMD_ARGS+=("$1"); shift ;;
+                esac
+              done
+              mkdir -p "$HOME/.claude-work"
+              mkdir -p "$HOME/.claude-work-home"
+              mkdir -p "$HOME/.config/claude-work"
+              touch "$HOME/.claude-work-home/.claude.json"
+              exec ${firejail-wrap}/bin/firejail-wrap \
+                --rw "''${PWD}" \
+                --rw "''${HOME}/.claude" \
+                --rw "''${HOME}/.claude.json" \
+                --rw "''${HOME}/.config/claude" \
+                --rw "''${HOME}/.cache" \
+                --ro "''${HOME}/.config/git" \
+                --ro "''${HOME}/.config/direnv" \
+                --ro "''${HOME}/.local/share/direnv" \
+                --ro "''${HOME}/.direnvrc" \
+                "''${ENV_ARGS[@]}" \
+                -- claude --permission-mode bypassPermissions "''${CMD_ARGS[@]}"
+            '')
 
-          (pkgs.writeShellScriptBin "yolo-claude-work" ''
-            ENV_ARGS=()
-            CMD_ARGS=()
-            while [[ $# -gt 0 ]]; do
-              case "$1" in
-                --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
-                *) CMD_ARGS+=("$1"); shift ;;
-              esac
-            done
-            mkdir -p "$HOME/.claude-work"
-            mkdir -p "$HOME/.claude-work-home"
-            mkdir -p "$HOME/.config/claude-work"
-            touch "$HOME/.claude-work-home/.claude.json"
-            exec ${firejail-wrap}/bin/firejail-wrap \
-              --rw "''${PWD}" \
-              --bind "''${HOME}/.claude-work,''${HOME}/.claude" \
-              --bind "''${HOME}/.claude-work-home/.claude.json,''${HOME}/.claude.json" \
-              --bind "''${HOME}/.config/claude-work,''${HOME}/.config/claude" \
-              --rw "''${HOME}/.cache" \
-              --ro "''${HOME}/.config/git" \
-              --ro "''${HOME}/.config/direnv" \
-              --ro "''${HOME}/.local/share/direnv" \
-              --ro "''${HOME}/.direnvrc" \
-              "''${ENV_ARGS[@]}" \
-              -- claude --permission-mode bypassPermissions "''${CMD_ARGS[@]}"
-          '')
+            (pkgs.writeShellScriptBin "yolo-claude-work" ''
+              ENV_ARGS=()
+              CMD_ARGS=()
+              while [[ $# -gt 0 ]]; do
+                case "$1" in
+                  --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
+                  *) CMD_ARGS+=("$1"); shift ;;
+                esac
+              done
+              mkdir -p "$HOME/.claude-work"
+              mkdir -p "$HOME/.claude-work-home"
+              mkdir -p "$HOME/.config/claude-work"
+              touch "$HOME/.claude-work-home/.claude.json"
+              exec ${firejail-wrap}/bin/firejail-wrap \
+                --rw "''${PWD}" \
+                --bind "''${HOME}/.claude-work,''${HOME}/.claude" \
+                --bind "''${HOME}/.claude-work-home/.claude.json,''${HOME}/.claude.json" \
+                --bind "''${HOME}/.config/claude-work,''${HOME}/.config/claude" \
+                --rw "''${HOME}/.cache" \
+                --ro "''${HOME}/.config/git" \
+                --ro "''${HOME}/.config/direnv" \
+                --ro "''${HOME}/.local/share/direnv" \
+                --ro "''${HOME}/.direnvrc" \
+                "''${ENV_ARGS[@]}" \
+                -- claude --permission-mode bypassPermissions "''${CMD_ARGS[@]}"
+            '')
 
-          (pkgs.writeShellScriptBin "yolo-codex" ''
-            ENV_ARGS=()
-            CMD_ARGS=()
-            while [[ $# -gt 0 ]]; do
-              case "$1" in
-                --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
-                *) CMD_ARGS+=("$1"); shift ;;
-              esac
-            done
-            exec ${firejail-wrap}/bin/firejail-wrap \
-              --rw "''${PWD}" \
-              --rw "''${HOME}/.codex" \
-              --rw "''${HOME}/.config/codex" \
-              --rw "''${HOME}/.cache" \
-              --ro "''${HOME}/.config/git" \
-              --ro "''${HOME}/.config/direnv" \
-              --ro "''${HOME}/.local/share/direnv" \
-              --ro "''${HOME}/.direnvrc" \
-              "''${ENV_ARGS[@]}" \
-              -- codex --dangerously-bypass-approvals-and-sandbox --search "''${CMD_ARGS[@]}"
-          '')
+            (pkgs.writeShellScriptBin "yolo-codex" ''
+              ENV_ARGS=()
+              CMD_ARGS=()
+              while [[ $# -gt 0 ]]; do
+                case "$1" in
+                  --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
+                  *) CMD_ARGS+=("$1"); shift ;;
+                esac
+              done
+              exec ${firejail-wrap}/bin/firejail-wrap \
+                --rw "''${PWD}" \
+                --rw "''${HOME}/.codex" \
+                --rw "''${HOME}/.config/codex" \
+                --rw "''${HOME}/.cache" \
+                --ro "''${HOME}/.config/git" \
+                --ro "''${HOME}/.config/direnv" \
+                --ro "''${HOME}/.local/share/direnv" \
+                --ro "''${HOME}/.direnvrc" \
+                "''${ENV_ARGS[@]}" \
+                -- codex --dangerously-bypass-approvals-and-sandbox --search "''${CMD_ARGS[@]}"
+            '')
 
-          (pkgs.writeShellScriptBin "yolo-gemini" ''
-            ENV_ARGS=()
-            CMD_ARGS=()
-            while [[ $# -gt 0 ]]; do
-              case "$1" in
-                --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
-                *) CMD_ARGS+=("$1"); shift ;;
-              esac
-            done
-            exec ${firejail-wrap}/bin/firejail-wrap \
-              --rw "''${PWD}" \
-              --rw "''${HOME}/.gemini" \
-              --rw "''${HOME}/.cache" \
-              --ro "''${HOME}/.config/git" \
-              --ro "''${HOME}/.config/direnv" \
-              --ro "''${HOME}/.local/share/direnv" \
-              --ro "''${HOME}/.direnvrc" \
-              "''${ENV_ARGS[@]}" \
-              -- gemini --yolo "''${CMD_ARGS[@]}"
-          '')
+            (pkgs.writeShellScriptBin "yolo-gemini" ''
+              ENV_ARGS=()
+              CMD_ARGS=()
+              while [[ $# -gt 0 ]]; do
+                case "$1" in
+                  --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
+                  *) CMD_ARGS+=("$1"); shift ;;
+                esac
+              done
+              exec ${firejail-wrap}/bin/firejail-wrap \
+                --rw "''${PWD}" \
+                --rw "''${HOME}/.gemini" \
+                --rw "''${HOME}/.cache" \
+                --ro "''${HOME}/.config/git" \
+                --ro "''${HOME}/.config/direnv" \
+                --ro "''${HOME}/.local/share/direnv" \
+                --ro "''${HOME}/.direnvrc" \
+                "''${ENV_ARGS[@]}" \
+                -- gemini --yolo "''${CMD_ARGS[@]}"
+            '')
 
-          (pkgs.writeShellScriptBin "yolo-gemini-work" ''
-            ENV_ARGS=()
-            CMD_ARGS=()
-            while [[ $# -gt 0 ]]; do
-              case "$1" in
-                --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
-                *) CMD_ARGS+=("$1"); shift ;;
-              esac
-            done
-            exec ${firejail-wrap}/bin/firejail-wrap \
-              --rw "''${PWD}" \
-              --bind "''${HOME}/.gemini-work,''${HOME}/.gemini" \
-              --rw "''${HOME}/.cache" \
-              --ro "''${HOME}/.config/git" \
-              --ro "''${HOME}/.config/direnv" \
-              --ro "''${HOME}/.local/share/direnv" \
-              --ro "''${HOME}/.direnvrc" \
-              "''${ENV_ARGS[@]}" \
-              -- gemini --yolo "''${CMD_ARGS[@]}"
-          '')
+            (pkgs.writeShellScriptBin "yolo-gemini-work" ''
+              ENV_ARGS=()
+              CMD_ARGS=()
+              while [[ $# -gt 0 ]]; do
+                case "$1" in
+                  --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
+                  *) CMD_ARGS+=("$1"); shift ;;
+                esac
+              done
+              exec ${firejail-wrap}/bin/firejail-wrap \
+                --rw "''${PWD}" \
+                --bind "''${HOME}/.gemini-work,''${HOME}/.gemini" \
+                --rw "''${HOME}/.cache" \
+                --ro "''${HOME}/.config/git" \
+                --ro "''${HOME}/.config/direnv" \
+                --ro "''${HOME}/.local/share/direnv" \
+                --ro "''${HOME}/.direnvrc" \
+                "''${ENV_ARGS[@]}" \
+                -- gemini --yolo "''${CMD_ARGS[@]}"
+            '')
 
-          (pkgs.writeShellScriptBin "yolo-opencode" ''
-            ENV_ARGS=()
-            CMD_ARGS=()
-            while [[ $# -gt 0 ]]; do
-              case "$1" in
-                --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
-                *) CMD_ARGS+=("$1"); shift ;;
-              esac
-            done
-            exec ${firejail-wrap}/bin/firejail-wrap \
-              --rw "''${PWD}" \
-              --rw "''${HOME}/.config/opencode" \
-              --rw "''${HOME}/.local/share/opencode" \
-              --rw "''${HOME}/.cache" \
-              --ro "''${HOME}/.config/git" \
-              --ro "''${HOME}/.config/direnv" \
-              --ro "''${HOME}/.local/share/direnv" \
-              --ro "''${HOME}/.direnvrc" \
-              "''${ENV_ARGS[@]}" \
-              -- opencode "''${CMD_ARGS[@]}"
-          '')
-        ]
-      );
+            (pkgs.writeShellScriptBin "yolo-mistral-vibe" ''
+              ENV_ARGS=()
+              CMD_ARGS=()
+              while [[ $# -gt 0 ]]; do
+                case "$1" in
+                  --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
+                  *) CMD_ARGS+=("$1"); shift ;;
+                esac
+              done
+              mkdir -p "$HOME/.config/vibe"
+              mkdir -p "$HOME/.local/share/vibe"
+              exec ${firejail-wrap}/bin/firejail-wrap \
+                --rw "''${PWD}" \
+                --rw "''${HOME}/.config/vibe" \
+                --rw "''${HOME}/.local/share/vibe" \
+                --rw "''${HOME}/.cache" \
+                --ro "''${HOME}/.config/git" \
+                --ro "''${HOME}/.config/direnv" \
+                --ro "''${HOME}/.local/share/direnv" \
+                --ro "''${HOME}/.direnvrc" \
+                "''${ENV_ARGS[@]}" \
+                -- vibe --auto-approve "''${CMD_ARGS[@]}"
+            '')
+
+            (pkgs.writeShellScriptBin "yolo-opencode" ''
+              ENV_ARGS=()
+              CMD_ARGS=()
+              while [[ $# -gt 0 ]]; do
+                case "$1" in
+                  --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
+                  *) CMD_ARGS+=("$1"); shift ;;
+                esac
+              done
+              exec ${firejail-wrap}/bin/firejail-wrap \
+                --rw "''${PWD}" \
+                --rw "''${HOME}/.config/opencode" \
+                --rw "''${HOME}/.local/share/opencode" \
+                --rw "''${HOME}/.cache" \
+                --ro "''${HOME}/.config/git" \
+                --ro "''${HOME}/.config/direnv" \
+                --ro "''${HOME}/.local/share/direnv" \
+                --ro "''${HOME}/.direnvrc" \
+                "''${ENV_ARGS[@]}" \
+                -- opencode "''${CMD_ARGS[@]}"
+            '')
+          ]
+        );
     })
   ];
 }

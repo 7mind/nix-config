@@ -40,6 +40,13 @@
         };
       });
 
+      mistral-vibe = prev.mistral-vibe.overrideAttrs (old: {
+        nativeBuildInputs =
+          (old.nativeBuildInputs or [ ])
+          ++ [ prev.python3Packages.pythonRelaxDepsHook ];
+        pythonRelaxDeps = (old.pythonRelaxDeps or [ ]) ++ [ "cryptography" ];
+      });
+
       # Work around Python package regressions after nixpkgs update.
       pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
         (python-final: python-prev: {
