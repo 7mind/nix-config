@@ -36,6 +36,12 @@
     # Disable orca to avoid conflict with GNOME module when both desktops enabled
     services.orca.enable = lib.mkForce false;
 
+    # Override upstream limit via drop-in, do not replace the original unit definition.
+    systemd.user.services.kde-baloo = {
+      overrideStrategy = "asDropin";
+      serviceConfig.MemoryHigh = lib.mkForce "2G";
+    };
+
     # Display manager (plasma-login-manager) configuration handled by display-manager.nix module
 
     smind.security.keyring = {
