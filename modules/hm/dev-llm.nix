@@ -177,15 +177,15 @@ in
       home.file.".claude-work/settings.json".source = config.home.file.".claude/settings.json".source;
       home.file.".claude-work/CLAUDE.md".source = config.home.file.".claude/CLAUDE.md".source;
 
-      home.file.".config/vibe/config.toml".source = tomlFormat.generate "vibe-config.toml" {
-        agent = {
-          model = "codestral-latest";
-          system_prompt_id = "default_with_custom_instructions";
-        };
-        custom_system_prompts = {
-          default_with_custom_instructions = claudeMemoryText;
-        };
-      };
+      # home.file.".config/vibe/config.toml".source = tomlFormat.generate "vibe-config.toml" {
+      #   agent = {
+      #     model = "codestral-latest";
+      #     system_prompt_id = "default_with_custom_instructions";
+      #   };
+      #   custom_system_prompts = {
+      #     default_with_custom_instructions = claudeMemoryText;
+      #   };
+      # };
 
       programs.opencode = {
         enable = true;
@@ -400,7 +400,7 @@ in
                 --ro "''${HOME}/.direnvrc" \
                 "''${ENV_ARGS[@]}" \
               -- vibe --agent auto-approve "''${CMD_ARGS[@]}"
-          '')
+            '')
 
             (pkgs.writeShellScriptBin "yolo-opencode" ''
               ENV_ARGS=()
