@@ -126,6 +126,7 @@
           rm "$out/bin/arduino-ide"
           cat > "$out/bin/arduino-ide" <<EOF
 #!${super.runtimeShell}
+export LD_LIBRARY_PATH="${super.libxkbfile}/lib:''${LD_LIBRARY_PATH:+:''${LD_LIBRARY_PATH}}"
 exec "''${arduino_ide_target}" --no-sandbox --ozone-platform=x11 --disable-gpu --disable-gpu-sandbox "\$@"
 EOF
           chmod 0755 "$out/bin/arduino-ide"
