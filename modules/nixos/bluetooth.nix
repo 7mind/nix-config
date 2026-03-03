@@ -1,11 +1,16 @@
-{ config, pkgs, lib, ... }: {
+{ config, pkgs, lib, ... }:
+let
+  cfg = config.smind.hw.bluetooth;
+in
+{
   options = {
-    smind.hw.bluetooth.enable = lib.mkEnableOption "Bluetooth support with blueman";
+    smind.hw.bluetooth.enable = lib.mkEnableOption "Bluetooth support";
+    smind.hw.bluetooth.blueman.enable = lib.mkEnableOption "blueman" // { default = true; };
   };
 
-  config = lib.mkIf config.smind.hw.bluetooth.enable {
+  config = lib.mkIf cfg.enable {
 
-    services.blueman.enable = true;
+    services.blueman.enable = cfg.blueman.enable;
 
     hardware.bluetooth = {
       enable = true;
