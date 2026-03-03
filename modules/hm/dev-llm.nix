@@ -399,8 +399,8 @@ in
                 --ro "''${HOME}/.local/share/direnv" \
                 --ro "''${HOME}/.direnvrc" \
                 "''${ENV_ARGS[@]}" \
-                -- vibe --auto-approve "''${CMD_ARGS[@]}"
-            '')
+              -- vibe --agent auto-approve "''${CMD_ARGS[@]}"
+          '')
 
             (pkgs.writeShellScriptBin "yolo-opencode" ''
               ENV_ARGS=()
