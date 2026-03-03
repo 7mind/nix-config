@@ -66,16 +66,13 @@
         "nomic-embed-text"
         "mxbai-embed-large"
 
-        "mistral-small3.2:24b"
-        "huihui_ai/phi4-abliterated:14b"
-        "huihui_ai/qwen3-abliterated:32b"
-
         "huihui_ai/glm-4.7-flash-abliterated:q8_0"
+        "huihui_ai/qwen3.5-abliterated:35b"
 
-        # "devstral:24b-small-2505-q8_0"
+        "lfm2:24b-q8_0"
+
+        "mistral-small3.2:24b"
         "devstral-small-2:24b-instruct-2512-q8_0"
-        "qwen2.5:32b-instruct-q8_0"
-        "glm-4.7-flash:q8_0"
       ];
 
 

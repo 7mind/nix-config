@@ -40,14 +40,7 @@
         };
       });
 
-      mistral-vibe = prev.mistral-vibe.overrideAttrs (old: rec {
-        version = "2.3.0";
-        src = prev.fetchFromGitHub {
-          owner = "mistralai";
-          repo = "mistral-vibe";
-          tag = "v${version}";
-          hash = "sha256-aXRceZAW4XUAXfD8HzGnS6qkFAj6VoTwVepZJmvf48Q=";
-        };
+      mistral-vibe = prev.mistral-vibe.overrideAttrs (old: {
         nativeBuildInputs =
           (old.nativeBuildInputs or [ ])
           ++ [ prev.python3Packages.pythonRelaxDepsHook ];

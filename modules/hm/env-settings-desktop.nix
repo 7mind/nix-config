@@ -38,7 +38,7 @@
         fuzzy-files
         nix
         it-tools
-        bluetooth
+        # bluetooth # broken
         agenda
       ] ++ lib.optional outerConfig.smind.desktop.kde.enable kde-system-settings;
     };
