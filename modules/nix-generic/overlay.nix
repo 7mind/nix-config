@@ -40,11 +40,25 @@
         };
       });
 
-      mistral-vibe = prev.mistral-vibe.overrideAttrs (old: {
+      mistral-vibe = prev.mistral-vibe.overrideAttrs (old: rec {
+        version = "2.3.0";
+        src = prev.fetchFromGitHub {
+          owner = "mistralai";
+          repo = "mistral-vibe";
+          tag = "v${version}";
+          hash = "sha256-aXRceZAW4XUAXfD8HzGnS6qkFAj6VoTwVepZJmvf48Q=";
+        };
         nativeBuildInputs =
           (old.nativeBuildInputs or [ ])
           ++ [ prev.python3Packages.pythonRelaxDepsHook ];
         pythonRelaxDeps = (old.pythonRelaxDeps or [ ]) ++ [ "cryptography" ];
+        propagatedBuildInputs =
+          (old.propagatedBuildInputs or [ ])
+          ++ (with prev.python3Packages; [
+            cachetools
+            markdownify
+          ]);
+        disabledTestPaths = (old.disabledTestPaths or [ ]) ++ [ "tests/e2e/" ];
       });
 
       # Work around Python package regressions after nixpkgs update.
