@@ -178,14 +178,10 @@ in
       home.file.".claude-work/CLAUDE.md".source = config.home.file.".claude/CLAUDE.md".source;
 
       home.file.".vibe/config.toml".source = tomlFormat.generate "vibe-config.toml" {
-        agent = {
-          model = "mistral-medium-latest";
-          system_prompt_id = "default_with_custom_instructions";
-        };
-        custom_system_prompts = {
-          default_with_custom_instructions = claudeMemoryText;
-        };
+        system_prompt_id = "default_with_custom_instructions";
       };
+
+      home.file.".vibe/prompts/default_with_custom_instructions.md".text = claudeMemoryText;
 
       programs.opencode = {
         enable = true;
