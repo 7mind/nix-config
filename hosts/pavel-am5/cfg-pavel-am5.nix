@@ -130,6 +130,10 @@
     desktop.gnome.switch-input-source-keybinding = [ "<Ctrl><Alt><Super>space" ];
 
     dev.wireshark.users = [ "pavel" "test" ];
+    dev.arduino = {
+      ide.enable = true;
+      users = [ "pavel" ];
+    };
 
     locale.ie.enable = true;
 

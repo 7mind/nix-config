@@ -13,6 +13,7 @@
   ./dconf.nix
   ./display-manager.nix
   ./dev-adb.nix
+  ./dev-arduino.nix
   ./dev-wireshark.nix
   ./email.nix
   ./fingerprint.nix
