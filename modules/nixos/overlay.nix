@@ -120,6 +120,18 @@
           '';
       });
 
+      arduino-ide = super.arduino-ide.overrideAttrs (old: {
+        buildCommand = (old.buildCommand or "") + ''
+          arduino_ide_target="$(readlink "$out/bin/arduino-ide")"
+          rm "$out/bin/arduino-ide"
+          cat > "$out/bin/arduino-ide" <<EOF
+#!${super.runtimeShell}
+exec "''${arduino_ide_target}" --no-sandbox --ozone-platform=x11 --disable-gpu --disable-gpu-sandbox "\$@"
+EOF
+          chmod 0755 "$out/bin/arduino-ide"
+        '';
+      });
+
       nix-apple-fonts = (cfg-flakes.nix-apple-fonts.default.overrideAttrs (drv: {
         # override install script to put fonts into /share/fonts, not /usr/share/fonts - where they don't work.
         # FIXME: notify upstream / submit PR?
