@@ -1,0 +1,142 @@
+diff --git a/drivers/net/wireless/ath/ath12k/core.h b/drivers/net/wireless/ath/ath12k/core.h
+index 3faf343..efaf9e0 100644
+--- a/drivers/net/wireless/ath/ath12k/core.h
++++ b/drivers/net/wireless/ath/ath12k/core.h
+@@ -296,6 +296,10 @@ struct ath12k_vif {
+ 	struct ath12k_vif_cache *cache;
+ 	struct ath12k_rekey_data rekey_data;
+ 
++	bool group_key_valid;
++	struct wmi_vdev_install_key_arg group_key;
++	bool pairwise_key_done;
++
+ 	/* Must be last - ends in a flexible-array member.
+ 	 *
+ 	 * FIXME: Driver should not copy struct ieee80211_chanctx_conf,
+diff --git a/drivers/net/wireless/ath/ath12k/mac.c b/drivers/net/wireless/ath/ath12k/mac.c
+index 8e8defd..3db23ca 100644
+--- a/drivers/net/wireless/ath/ath12k/mac.c
++++ b/drivers/net/wireless/ath/ath12k/mac.c
+@@ -3844,13 +3844,12 @@ static int ath12k_install_key(struct ath12k_vif *arvif,
+ 		.key_len = key->keylen,
+ 		.key_data = key->key,
+ 		.key_flags = flags,
++		.ieee80211_key_cipher = key->cipher,
+ 		.macaddr = macaddr,
+ 	};
+ 
+ 	lockdep_assert_held(&arvif->ar->conf_mutex);
+ 
+-	reinit_completion(&ar->install_key_done);
+-
+ 	if (test_bit(ATH12K_FLAG_HW_CRYPTO_DISABLED, &ar->ab->dev_flags))
+ 		return 0;
+ 
+@@ -3859,7 +3858,7 @@ static int ath12k_install_key(struct ath12k_vif *arvif,
+ 		/* arg.key_cipher = WMI_CIPHER_NONE; */
+ 		arg.key_len = 0;
+ 		arg.key_data = NULL;
+-		goto install;
++		goto check_order;
+ 	}
+ 
+ 	switch (key->cipher) {
+@@ -3887,19 +3886,82 @@ static int ath12k_install_key(struct ath12k_vif *arvif,
+ 		key->flags |= IEEE80211_KEY_FLAG_GENERATE_IV |
+ 			      IEEE80211_KEY_FLAG_RESERVE_TAILROOM;
+ 
++check_order:
++	if (arvif->vdev_type == WMI_VDEV_TYPE_STA &&
++	    arg.key_flags == WMI_KEY_GROUP) {
++		if (cmd == SET_KEY) {
++			if (arvif->pairwise_key_done) {
++				ath12k_dbg(ar->ab, ATH12K_DBG_MAC,
++					   "vdev %u pairwise key done, go install group key\n",
++					   arg.vdev_id);
++				goto install;
++			} else {
++				/* WCN7850 firmware requires pairwise key to be installed
++				 * before group key. In case group key comes first, cache
++				 * it and return. Will revisit it once pairwise key gets
++				 * installed.
++				 */
++				arvif->group_key = arg;
++				arvif->group_key_valid = true;
++				ath12k_dbg(ar->ab, ATH12K_DBG_MAC,
++					   "vdev %u group key before pairwise key, cache and skip\n",
++					   arg.vdev_id);
++
++				ret = 0;
++				goto out;
++			}
++		} else {
++			arvif->group_key_valid = false;
++		}
++	}
++
+ install:
+-	ret = ath12k_wmi_vdev_install_key(arvif->ar, &arg);
++	reinit_completion(&ar->install_key_done);
+ 
++	ret = ath12k_wmi_vdev_install_key(arvif->ar, &arg);
+ 	if (ret)
+ 		return ret;
+ 
+ 	if (!wait_for_completion_timeout(&ar->install_key_done, 1 * HZ))
+ 		return -ETIMEDOUT;
+ 
+-	if (ether_addr_equal(macaddr, arvif->vif->addr))
+-		arvif->key_cipher = key->cipher;
++	if (ether_addr_equal(arg.macaddr, arvif->vif->addr))
++		arvif->key_cipher = arg.ieee80211_key_cipher;
+ 
+-	return ar->install_key_status ? -EINVAL : 0;
++	if (ar->install_key_status) {
++		ret = -EINVAL;
++		goto out;
++	}
++
++	if (arvif->vdev_type == WMI_VDEV_TYPE_STA &&
++	    arg.key_flags == WMI_KEY_PAIRWISE) {
++		if (cmd == SET_KEY) {
++			arvif->pairwise_key_done = true;
++			if (arvif->group_key_valid) {
++				/* Install cached GTK */
++				arvif->group_key_valid = false;
++				arg = arvif->group_key;
++				ath12k_dbg(ar->ab, ATH12K_DBG_MAC,
++					   "vdev %u pairwise key done, group key ready, go install\n",
++					   arg.vdev_id);
++				goto install;
++			}
++		} else {
++			arvif->pairwise_key_done = false;
++		}
++	}
++
++out:
++	if (ret) {
++		/* In case of failure userspace may not do DISABLE_KEY
++		 * but triggers re-connection directly, so manually reset
++		 * status here.
++		 */
++		arvif->group_key_valid = false;
++		arvif->pairwise_key_done = false;
++	}
++
++	return ret;
+ }
+ 
+ static int ath12k_clear_peer_keys(struct ath12k_vif *arvif,
+diff --git a/drivers/net/wireless/ath/ath12k/wmi.h b/drivers/net/wireless/ath/ath12k/wmi.h
+index b495cde..815ad25 100644
+--- a/drivers/net/wireless/ath/ath12k/wmi.h
++++ b/drivers/net/wireless/ath/ath12k/wmi.h
+@@ -3604,6 +3604,7 @@ struct wmi_vdev_install_key_arg {
+ 	u32 key_idx;
+ 	u32 key_flags;
+ 	u32 key_cipher;
++	u32 ieee80211_key_cipher;
+ 	u32 key_len;
+ 	u32 key_txmic_len;
+ 	u32 key_rxmic_len;

@@ -17,6 +17,7 @@
   ./dev-wireshark.nix
   ./email.nix
   ./fingerprint.nix
+  ./framework-laptop.nix
   ./cups.nix
   ./docker.nix
   ./env-settings-linux-desktop.nix
@@ -44,10 +45,12 @@
   ./nushell.nix
   ./oracle-cloud.nix
   ./overlay.nix
+  ./plymouth.nix
   ./power-generic.nix
   ./power-profiles.nix
   ./power-refresh-rate.nix
   ./power-suspend-quirks.nix
+  ./power-quirks-framework.nix
   ./qmk-keyboard.nix
   ./realtek-kernel-hack.nix
   ./rocm.nix

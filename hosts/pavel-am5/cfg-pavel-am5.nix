@@ -203,6 +203,8 @@
     };
 
     gaming.steam.enable = true;
+
+    desktop.plymouth.enable = true;
   };
 
   # boot.kernelPatches = [
@@ -232,13 +234,6 @@
     trustedInterfaces = [ "vmnet*" ];
   };
 
-  boot.kernelParams = [
-    "quiet"
-    "splash"
-  ];
-
-  boot.plymouth.enable = true;
-  boot.plymouth.theme = "bgrt";
 
   boot.initrd = {
     kernelModules = [ "atlantic" "igc" ];

@@ -33,36 +33,12 @@ in
   boot.kernelPackages = lib.mkForce pkgs.linuxKernel.packages.linux_6_12;
 
   boot.kernelParams = [
-    "quiet"
-    "splash"
     #"usbcore.autosuspend=-1"
-    # AMD GPU workarounds for Strix Point
-    "amdgpu.abmlevel=0" # Disable adaptive backlight
-    # Prevent simpledrm from taking over framebuffer before amdgpu loads (for Plymouth)
-    "initcall_blacklist=simpledrm_platform_driver_init"
-    # s2idle crash workarounds for Strix Point on kernel 6.18.x
-    # https://community.frame.work/t/attn-critical-bugs-in-amdgpu-driver-included-with-kernel-6-18-x-6-19-x/79221
-    # Not needed on kernel 6.12 LTS — re-enable when upgrading to 6.18+
-    #"amdgpu.cwsr_enable=0" # Disable broken CWSR that causes MES ring saturation and hard freezes
-    #"amdgpu.dcdebugmask=0x610" # Disable PSR + PSR-SU + PSR2 (0x10|0x200|0x400) — all cause s2idle failures on Strix Point
-    #"amd_iommu=fullflush" # Prevent IOMMU-related suspend failures with NVMe
-    # Ignore NVIDIA dGPU GPIO interrupt that prevents s2idle entry on AMD+NVIDIA hybrid laptops
-    # https://forums.developer.nvidia.com/t/590-6-18-suspend-immediately-interrupted-by-dgpu-on-amd-nvidia-laptops/357805
-    #"gpiolib_acpi.ignore_interrupt=AMDI0030:00@16"
+    # s2idle quirks for kernel 6.18+ are in smind.power-management.framework-quirks
   ];
 
   # Use systemd in initrd for proper LUKS + LVM + hibernate resume sequencing
   boot.initrd.systemd.enable = true;
-
-  # Load AMD GPU early for Plymouth (NVIDIA driver isn't signed for SecureBoot)
-  boot.initrd.kernelModules = [ "amdgpu" ];
-  hardware.amdgpu.initrd.enable = true;
-
-  # Graphical boot splash
-  boot.plymouth.enable = true;
-  boot.plymouth.theme = "bgrt"; # Framework logo with spinner
-  boot.consoleLogLevel = 3;
-  boot.initrd.verbose = false;
 
   # LUKS encryption with TPM2 auto-unlock
   # Re-enroll after UEFI/TPM changes: tpm-enroll-luks
@@ -73,9 +49,6 @@ in
   };
 
   environment.systemPackages = [
-    pkgs.fw-ectool # Framework EC tool for fan control, battery charge limit, etc.
-    pkgs.framework-tool # Swiss army knife CLI for Framework laptops
-    pkgs.framework-tool-tui # TUI for controlling Framework hardware
     pkgs.powertop # Power consumption analysis
 
     (pkgs.writeShellScriptBin "tpm-enroll-luks" ''
@@ -113,159 +86,12 @@ in
     '';
   };
 
-  boot.kernelPatches = [
-    {
-      name = "amdgpu-vpe-strix-point-dpm0-fix";
-      patch = pkgs.writeText "vpe-strix-point.patch" ''
-        --- a/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
-        +++ b/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
-        @@ -325,6 +325,8 @@ static bool vpe_need_dpm0_at_power_down(struct amdgpu_device *adev)
-         {
-         	switch (amdgpu_ip_version(adev, VPE_HWIP, 0)) {
-        +	case IP_VERSION(6, 1, 0):
-        +		return true; /* Strix Point needs DPM0 check regardless of PMFW version */
-         	case IP_VERSION(6, 1, 1):
-         		return adev->pm.fw_version < 0x0a640500;
-         	default:
-      '';
-    }
-    {
-      # Backport of upstream commit 66e865f9dc78 ("wifi: ath12k: install pairwise key first")
-      # WCN7850 firmware requires PTK before GTK; without this fix the EAPOL handshake
-      # fails in a loop (PREV_AUTH_NOT_VALID deauth). Not backported to 6.12 LTS upstream.
-      # https://bugzilla.kernel.org/show_bug.cgi?id=218733
-      name = "ath12k-wcn7850-install-pairwise-key-first";
-      patch = ./patches/ath12k-pairwise-key-6.12.patch;
-    }
-  ];
-
-  # Framework-specific services
-  hardware.sensor.iio.enable = true; # ALS sensor for wluma
-
-  # Framework laptop kernel module for battery charge limit and LED control
-  boot.extraModulePackages = [ config.boot.kernelPackages.framework-laptop-kmod ];
-  boot.kernelModules = [ "framework_laptop" ];
-
-  # Allow wluma to claim sensors from iio-sensor-proxy
-  security.polkit.extraConfig = ''
-    polkit.addRule(function(action, subject) {
-      if (action.id == "net.hadess.SensorProxy.claim-sensor") {
-        return polkit.Result.YES;
-      }
-    });
-  '';
-
-  # Power management via TuneD (replaces power-profiles-daemon)
-  # Defaults: latency-performance on AC, powersave on battery
-
-  # Framework 16 udev rules
+  # Disable PCI runtime PM for WiFi parent bridge to prevent ath12k firmware crash
+  # The bridge (00:02.3) routes to the Qualcomm WCN785x WiFi (c0:00.0)
+  # Runtime PM on the bridge causes ath12k to crash - targeting device directly doesn't work
   services.udev.extraRules = lib.mkAfter ''
-    # Enable illuminance scan element for ALS buffer mode
-    ACTION=="add", SUBSYSTEM=="iio", ATTR{name}=="als", ATTR{scan_elements/in_illuminance_en}="1"
-    # Disable PCI runtime PM for WiFi parent bridge to prevent ath12k firmware crash
-    # The bridge (00:02.3) routes to the Qualcomm WCN785x WiFi (c0:00.0)
-    # Runtime PM on the bridge causes ath12k to crash - targeting device directly doesn't work
     ACTION=="add|change", SUBSYSTEM=="pci", KERNEL=="0000:00:02.3", ATTR{power/control}="on"
   '';
-
-  # Workaround: Unload MT7925e WiFi before suspend/hibernate (driver doesn't support PM properly)
-  # systemd.services.mt7925e-suspend = {
-  #   description = "Unload MT7925e WiFi before suspend";
-  #   before = [ "sleep.target" ];
-  #   wantedBy = [ "sleep.target" ];
-  #   unitConfig.StopWhenUnneeded = true;
-  #   serviceConfig = {
-  #     Type = "oneshot";
-  #     RemainAfterExit = true;
-  #     ExecStart = "${pkgs.kmod}/bin/modprobe -r mt7925e";
-  #     ExecStop = pkgs.writeShellScript "mt7925e-resume" ''
-  #       set -euo pipefail
-
-  #       # Wait for PCIe device to be ready
-  #       sleep 1
-
-  #       # Load module with retry
-  #       for i in 1 2 3; do
-  #         if ${pkgs.kmod}/bin/modprobe mt7925e 2>/dev/null; then
-  #           echo "mt7925e loaded on attempt $i"
-  #           break
-  #         fi
-  #         echo "modprobe attempt $i failed, retrying..."
-  #         sleep 1
-  #       done
-
-  #       # Wait for interface to appear
-  #       for i in $(seq 1 10); do
-  #         if ${pkgs.iproute2}/bin/ip link show wlan0 &>/dev/null; then
-  #           echo "wlan0 interface is up"
-  #           break
-  #         fi
-  #         sleep 0.5
-  #       done
-
-  #       # Give NetworkManager a kick if interface appeared
-  #       if ${pkgs.iproute2}/bin/ip link show wlan0 &>/dev/null; then
-  #         sleep 1
-  #         ${pkgs.networkmanager}/bin/nmcli device set wlan0 managed yes 2>/dev/null || true
-  #         ${pkgs.networkmanager}/bin/nmcli device reapply wlan0 2>/dev/null || true
-  #       else
-  #         echo "WARNING: wlan0 did not appear after resume"
-  #       fi
-  #     '';
-  #   };
-  # };
-
-  # Unload ath12k before suspend — WCN7850 firmware fails to enter power save cleanly,
-  # causing s2idle entry failures (constant "failed to pull fw stats: -71" EPROTO errors)
-  # Not needed on kernel 6.12 LTS — re-enable when upgrading to 6.18+
-  # systemd.services.ath12k-suspend = {
-  #   description = "Unload ath12k WiFi before suspend";
-  #   before = [ "sleep.target" ];
-  #   wantedBy = [ "sleep.target" ];
-  #   unitConfig.StopWhenUnneeded = true;
-  #   serviceConfig = {
-  #     Type = "oneshot";
-  #     RemainAfterExit = true;
-  #     ExecStart = pkgs.writeShellScript "ath12k-unload" ''
-  #       set -euo pipefail
-  #       if ${pkgs.kmod}/bin/lsmod | ${pkgs.gnugrep}/bin/grep -wq ath12k; then
-  #         ${pkgs.util-linux}/bin/logger -p user.info "Unloading ath12k before suspend"
-  #         ${pkgs.kmod}/bin/modprobe -r ath12k_pci ath12k 2>/dev/null || true
-  #       fi
-  #     '';
-  #     ExecStop = pkgs.writeShellScript "ath12k-reload" ''
-  #       set -euo pipefail
-  #       if ! ${pkgs.kmod}/bin/lsmod | ${pkgs.gnugrep}/bin/grep -wq ath12k; then
-  #         ${pkgs.util-linux}/bin/logger -p user.info "Reloading ath12k after resume"
-  #         sleep 1
-  #         ${pkgs.kmod}/bin/modprobe ath12k_pci 2>/dev/null || true
-  #         sleep 3
-  #         ${pkgs.networkmanager}/bin/nmcli device set wlan0 managed yes 2>/dev/null || true
-  #       fi
-  #     '';
-  #   };
-  # };
-
-  # Disable Thunderbolt NHI wakeup sources — they generate spurious interrupts
-  # that prevent s0ix entry on AMD platforms
-  # Not needed on kernel 6.12 LTS — re-enable when upgrading to 6.18+
-  # systemd.services.disable-thunderbolt-wakeup = {
-  #   description = "Disable Thunderbolt NHI wakeup for s2idle";
-  #   wantedBy = [ "multi-user.target" ];
-  #   serviceConfig = {
-  #     Type = "oneshot";
-  #     RemainAfterExit = true;
-  #     ExecStart = pkgs.writeShellScript "disable-nhi-wakeup" ''
-  #       set -euo pipefail
-  #       for dev in NHI0 NHI1; do
-  #         if ${pkgs.gnugrep}/bin/grep -q "$dev.*enabled" /proc/acpi/wakeup; then
-  #           echo "$dev" > /proc/acpi/wakeup
-  #           ${pkgs.util-linux}/bin/logger -p user.info "Disabled ACPI wakeup for $dev"
-  #         fi
-  #       done
-  #     '';
-  #   };
-  # };
 
   smind = {
     nix.nix-impl = "determinate";
@@ -275,6 +101,8 @@ in
     dev.wireshark.users = [ "pavel" ];
 
     power-management.enable = true;
+    # s2idle quirks — enable individual ones when upgrading to kernel 6.18+
+    power-management.framework-quirks.enable = true;
     power-management.auto-refresh-rate = {
       enable = true;
       displays."eDP-1" = {
@@ -310,6 +138,8 @@ in
     net.enable = false; # Disable systemd-networkd based networking
     net.tailscale.enable = true;
 
+    desktop.plymouth.enable = true;
+    hw.framework-laptop.enable = true;
     hw.bluetooth.enable = true;
     hw.fingerprint.enable = true;
     hw.nvidia = {
