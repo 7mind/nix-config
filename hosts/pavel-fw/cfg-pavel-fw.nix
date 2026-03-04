@@ -42,12 +42,13 @@ in
     "initcall_blacklist=simpledrm_platform_driver_init"
     # s2idle crash workarounds for Strix Point on kernel 6.18.x
     # https://community.frame.work/t/attn-critical-bugs-in-amdgpu-driver-included-with-kernel-6-18-x-6-19-x/79221
-    "amdgpu.cwsr_enable=0" # Disable broken CWSR that causes MES ring saturation and hard freezes
-    "amdgpu.dcdebugmask=0x610" # Disable PSR + PSR-SU + PSR2 (0x10|0x200|0x400) — all cause s2idle failures on Strix Point
-    "amd_iommu=fullflush" # Prevent IOMMU-related suspend failures with NVMe
+    # Not needed on kernel 6.12 LTS — re-enable when upgrading to 6.18+
+    #"amdgpu.cwsr_enable=0" # Disable broken CWSR that causes MES ring saturation and hard freezes
+    #"amdgpu.dcdebugmask=0x610" # Disable PSR + PSR-SU + PSR2 (0x10|0x200|0x400) — all cause s2idle failures on Strix Point
+    #"amd_iommu=fullflush" # Prevent IOMMU-related suspend failures with NVMe
     # Ignore NVIDIA dGPU GPIO interrupt that prevents s2idle entry on AMD+NVIDIA hybrid laptops
     # https://forums.developer.nvidia.com/t/590-6-18-suspend-immediately-interrupted-by-dgpu-on-amd-nvidia-laptops/357805
-    "gpiolib_acpi.ignore_interrupt=AMDI0030:00@16"
+    #"gpiolib_acpi.ignore_interrupt=AMDI0030:00@16"
   ];
 
   # Use systemd in initrd for proper LUKS + LVM + hibernate resume sequencing
@@ -216,53 +217,55 @@ in
 
   # Unload ath12k before suspend — WCN7850 firmware fails to enter power save cleanly,
   # causing s2idle entry failures (constant "failed to pull fw stats: -71" EPROTO errors)
-  systemd.services.ath12k-suspend = {
-    description = "Unload ath12k WiFi before suspend";
-    before = [ "sleep.target" ];
-    wantedBy = [ "sleep.target" ];
-    unitConfig.StopWhenUnneeded = true;
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      ExecStart = pkgs.writeShellScript "ath12k-unload" ''
-        set -euo pipefail
-        if ${pkgs.kmod}/bin/lsmod | ${pkgs.gnugrep}/bin/grep -wq ath12k; then
-          ${pkgs.util-linux}/bin/logger -p user.info "Unloading ath12k before suspend"
-          ${pkgs.kmod}/bin/modprobe -r ath12k_pci ath12k 2>/dev/null || true
-        fi
-      '';
-      ExecStop = pkgs.writeShellScript "ath12k-reload" ''
-        set -euo pipefail
-        if ! ${pkgs.kmod}/bin/lsmod | ${pkgs.gnugrep}/bin/grep -wq ath12k; then
-          ${pkgs.util-linux}/bin/logger -p user.info "Reloading ath12k after resume"
-          sleep 1
-          ${pkgs.kmod}/bin/modprobe ath12k_pci 2>/dev/null || true
-          sleep 3
-          ${pkgs.networkmanager}/bin/nmcli device set wlan0 managed yes 2>/dev/null || true
-        fi
-      '';
-    };
-  };
+  # Not needed on kernel 6.12 LTS — re-enable when upgrading to 6.18+
+  # systemd.services.ath12k-suspend = {
+  #   description = "Unload ath12k WiFi before suspend";
+  #   before = [ "sleep.target" ];
+  #   wantedBy = [ "sleep.target" ];
+  #   unitConfig.StopWhenUnneeded = true;
+  #   serviceConfig = {
+  #     Type = "oneshot";
+  #     RemainAfterExit = true;
+  #     ExecStart = pkgs.writeShellScript "ath12k-unload" ''
+  #       set -euo pipefail
+  #       if ${pkgs.kmod}/bin/lsmod | ${pkgs.gnugrep}/bin/grep -wq ath12k; then
+  #         ${pkgs.util-linux}/bin/logger -p user.info "Unloading ath12k before suspend"
+  #         ${pkgs.kmod}/bin/modprobe -r ath12k_pci ath12k 2>/dev/null || true
+  #       fi
+  #     '';
+  #     ExecStop = pkgs.writeShellScript "ath12k-reload" ''
+  #       set -euo pipefail
+  #       if ! ${pkgs.kmod}/bin/lsmod | ${pkgs.gnugrep}/bin/grep -wq ath12k; then
+  #         ${pkgs.util-linux}/bin/logger -p user.info "Reloading ath12k after resume"
+  #         sleep 1
+  #         ${pkgs.kmod}/bin/modprobe ath12k_pci 2>/dev/null || true
+  #         sleep 3
+  #         ${pkgs.networkmanager}/bin/nmcli device set wlan0 managed yes 2>/dev/null || true
+  #       fi
+  #     '';
+  #   };
+  # };
 
   # Disable Thunderbolt NHI wakeup sources — they generate spurious interrupts
   # that prevent s0ix entry on AMD platforms
-  systemd.services.disable-thunderbolt-wakeup = {
-    description = "Disable Thunderbolt NHI wakeup for s2idle";
-    wantedBy = [ "multi-user.target" ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      ExecStart = pkgs.writeShellScript "disable-nhi-wakeup" ''
-        set -euo pipefail
-        for dev in NHI0 NHI1; do
-          if ${pkgs.gnugrep}/bin/grep -q "$dev.*enabled" /proc/acpi/wakeup; then
-            echo "$dev" > /proc/acpi/wakeup
-            ${pkgs.util-linux}/bin/logger -p user.info "Disabled ACPI wakeup for $dev"
-          fi
-        done
-      '';
-    };
-  };
+  # Not needed on kernel 6.12 LTS — re-enable when upgrading to 6.18+
+  # systemd.services.disable-thunderbolt-wakeup = {
+  #   description = "Disable Thunderbolt NHI wakeup for s2idle";
+  #   wantedBy = [ "multi-user.target" ];
+  #   serviceConfig = {
+  #     Type = "oneshot";
+  #     RemainAfterExit = true;
+  #     ExecStart = pkgs.writeShellScript "disable-nhi-wakeup" ''
+  #       set -euo pipefail
+  #       for dev in NHI0 NHI1; do
+  #         if ${pkgs.gnugrep}/bin/grep -q "$dev.*enabled" /proc/acpi/wakeup; then
+  #           echo "$dev" > /proc/acpi/wakeup
+  #           ${pkgs.util-linux}/bin/logger -p user.info "Disabled ACPI wakeup for $dev"
+  #         fi
+  #       done
+  #     '';
+  #   };
+  # };
 
   smind = {
     nix.nix-impl = "determinate";
