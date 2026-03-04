@@ -269,6 +269,9 @@ in
         hardware.nvidia.powerManagement.enable = lib.mkForce false;
         hardware.nvidia.powerManagement.finegrained = lib.mkForce false;
         hardware.nvidia.modesetting.enable = lib.mkForce false;
+        # Blacklist nouveau to prevent it from claiming the dGPU — nouveau lacks
+        # proper suspend support for newer GPUs and can cause s2idle crashes
+        boot.blacklistedKernelModules = [ "nouveau" ];
       };
 
     in

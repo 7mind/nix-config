@@ -39,6 +39,11 @@ in
     "amdgpu.abmlevel=0" # Disable adaptive backlight
     # Prevent simpledrm from taking over framebuffer before amdgpu loads (for Plymouth)
     "initcall_blacklist=simpledrm_platform_driver_init"
+    # s2idle crash workarounds for Strix Point on kernel 6.18.x
+    # https://community.frame.work/t/attn-critical-bugs-in-amdgpu-driver-included-with-kernel-6-18-x-6-19-x/79221
+    "amdgpu.cwsr_enable=0" # Disable broken CWSR that causes MES ring saturation and hard freezes
+    "amdgpu.dcdebugmask=0x600" # Disable PSR/PSR2-SU which cause s2idle failures on Strix Point
+    "amd_iommu=fullflush" # Prevent IOMMU-related suspend failures with NVMe
   ];
 
   # Use systemd in initrd for proper LUKS + LVM + hibernate resume sequencing
