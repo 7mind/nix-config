@@ -112,21 +112,31 @@ in
     '';
   };
 
-  boot.kernelPatches = [{
-    name = "amdgpu-vpe-strix-point-dpm0-fix";
-    patch = pkgs.writeText "vpe-strix-point.patch" ''
-      --- a/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
-      +++ b/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
-      @@ -325,6 +325,8 @@ static bool vpe_need_dpm0_at_power_down(struct amdgpu_device *adev)
-       {
-       	switch (amdgpu_ip_version(adev, VPE_HWIP, 0)) {
-      +	case IP_VERSION(6, 1, 0):
-      +		return true; /* Strix Point needs DPM0 check regardless of PMFW version */
-       	case IP_VERSION(6, 1, 1):
-       		return adev->pm.fw_version < 0x0a640500;
-       	default:
-    '';
-  }];
+  boot.kernelPatches = [
+    {
+      name = "amdgpu-vpe-strix-point-dpm0-fix";
+      patch = pkgs.writeText "vpe-strix-point.patch" ''
+        --- a/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
+        +++ b/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
+        @@ -325,6 +325,8 @@ static bool vpe_need_dpm0_at_power_down(struct amdgpu_device *adev)
+         {
+         	switch (amdgpu_ip_version(adev, VPE_HWIP, 0)) {
+        +	case IP_VERSION(6, 1, 0):
+        +		return true; /* Strix Point needs DPM0 check regardless of PMFW version */
+         	case IP_VERSION(6, 1, 1):
+         		return adev->pm.fw_version < 0x0a640500;
+         	default:
+      '';
+    }
+    {
+      # Backport of upstream commit 66e865f9dc78 ("wifi: ath12k: install pairwise key first")
+      # WCN7850 firmware requires PTK before GTK; without this fix the EAPOL handshake
+      # fails in a loop (PREV_AUTH_NOT_VALID deauth). Not backported to 6.12 LTS upstream.
+      # https://bugzilla.kernel.org/show_bug.cgi?id=218733
+      name = "ath12k-wcn7850-install-pairwise-key-first";
+      patch = ./patches/ath12k-pairwise-key-6.12.patch;
+    }
+  ];
 
   # Framework-specific services
   hardware.sensor.iio.enable = true; # ALS sensor for wluma
