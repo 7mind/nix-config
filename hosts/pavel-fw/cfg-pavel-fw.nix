@@ -27,9 +27,10 @@ in
 
   # --- Framework 16 AMD (Strix Point) specific configuration ---
 
-  # Use Linux 6.18 until NVIDIA open 590 gains Linux 6.19 API compatibility
-  # Override the default from kernel-settings module.
-  boot.kernelPackages = lib.mkForce pkgs.linuxKernel.packages.linux_6_18;
+  # Test: kernel 6.12 LTS to rule out amdgpu suspend_noirq regression in 6.17+
+  # https://community.frame.work/t/attn-critical-bugs-in-amdgpu-driver-included-with-kernel-6-18-x-6-19-x/79221
+  # Previous: linux_6_18 (needed for NVIDIA open 590 compat, but causes s2idle crash)
+  boot.kernelPackages = lib.mkForce pkgs.linuxKernel.packages.linux_6_12;
 
   boot.kernelParams = [
     "quiet"

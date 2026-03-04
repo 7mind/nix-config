@@ -75,7 +75,7 @@ in
     smind.desktop.gnome.extensions = {
       appindicator.enable = lib.mkEnableOption "AppIndicator/KStatusNotifierItem support for the GNOME Shell" // { default = true; };
       gsconnect.enable = lib.mkEnableOption "GSConnect - KDE Connect implementation for GNOME" // {
-        default = config.smind.kdeconnect.backend == "gsconnect";
+        default = config.smind.kdeconnect.selectedBackend == "gsconnect";
       };
       native-window-placement.enable = lib.mkEnableOption "Native window placement extension" // { default = true; };
       caffeine.enable = lib.mkEnableOption "Caffeine - disable screensaver and auto suspend" // { default = true; };
