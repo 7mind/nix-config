@@ -272,6 +272,35 @@ in
         # Blacklist nouveau to prevent it from claiming the dGPU — nouveau lacks
         # proper suspend support for newer GPUs and can cause s2idle crashes
         boot.blacklistedKernelModules = [ "nouveau" ];
+
+        # Disable nvidia suspend/resume/hibernate services inherited from parent config.
+        # Without the nvidia driver these services have no ExecStart, causing systemd
+        # to refuse them and abort suspend entirely.
+        systemd.services.nvidia-suspend.enable = lib.mkForce false;
+        systemd.services.nvidia-resume.enable = lib.mkForce false;
+        systemd.services.nvidia-hibernate.enable = lib.mkForce false;
+
+        # Remove nvidia service dependencies from sleep targets
+        systemd.services."systemd-suspend" = {
+          requires = lib.mkForce [ ];
+          after = lib.mkForce [ ];
+        };
+        systemd.services."systemd-hibernate" = {
+          requires = lib.mkForce [ ];
+          after = lib.mkForce [ ];
+        };
+        systemd.services."systemd-hybrid-sleep" = {
+          requires = lib.mkForce [ ];
+          after = lib.mkForce [ ];
+        };
+        systemd.services."systemd-suspend-then-hibernate" = {
+          requires = lib.mkForce [ ];
+          after = lib.mkForce [ ];
+        };
+        systemd.services.nvidia-resume = {
+          wantedBy = lib.mkForce [ ];
+          after = lib.mkForce [ ];
+        };
       };
 
     in
