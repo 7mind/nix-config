@@ -226,15 +226,15 @@ in
       RemainAfterExit = true;
       ExecStart = pkgs.writeShellScript "ath12k-unload" ''
         set -euo pipefail
-        if lsmod | grep -wq ath12k; then
-          logger -p user.info "Unloading ath12k before suspend"
+        if ${pkgs.kmod}/bin/lsmod | ${pkgs.gnugrep}/bin/grep -wq ath12k; then
+          ${pkgs.util-linux}/bin/logger -p user.info "Unloading ath12k before suspend"
           ${pkgs.kmod}/bin/modprobe -r ath12k_pci ath12k 2>/dev/null || true
         fi
       '';
       ExecStop = pkgs.writeShellScript "ath12k-reload" ''
         set -euo pipefail
-        if ! lsmod | grep -wq ath12k; then
-          logger -p user.info "Reloading ath12k after resume"
+        if ! ${pkgs.kmod}/bin/lsmod | ${pkgs.gnugrep}/bin/grep -wq ath12k; then
+          ${pkgs.util-linux}/bin/logger -p user.info "Reloading ath12k after resume"
           sleep 1
           ${pkgs.kmod}/bin/modprobe ath12k_pci 2>/dev/null || true
           sleep 3
@@ -255,9 +255,9 @@ in
       ExecStart = pkgs.writeShellScript "disable-nhi-wakeup" ''
         set -euo pipefail
         for dev in NHI0 NHI1; do
-          if grep -q "$dev.*enabled" /proc/acpi/wakeup; then
+          if ${pkgs.gnugrep}/bin/grep -q "$dev.*enabled" /proc/acpi/wakeup; then
             echo "$dev" > /proc/acpi/wakeup
-            logger -p user.info "Disabled ACPI wakeup for $dev"
+            ${pkgs.util-linux}/bin/logger -p user.info "Disabled ACPI wakeup for $dev"
           fi
         done
       '';
