@@ -15,7 +15,7 @@
         memtest86.enable = pkgs.lib.hasPrefix "x86_64" cfg-meta.arch;
         edk2-uefi-shell.enable = true;
         consoleMode = "max";
-        configurationLimit = 3;
+        configurationLimit = 6;
       };
     };
   };
