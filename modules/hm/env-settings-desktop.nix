@@ -58,6 +58,9 @@
       vlc
       mpv
 
+      # audio
+      helvum
+
       brave
 
       pdftk
