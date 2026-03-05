@@ -102,7 +102,7 @@ in
 
     power-management.enable = true;
     power-management.framework-quirks.enable = true;
-    power-management.framework-quirks.cwsr.enable = true;
+    power-management.framework-quirks.psr.enable = true;
     power-management.auto-refresh-rate = {
       enable = true;
       displays."eDP-1" = {
