@@ -13,7 +13,7 @@
     smind.llm.ollama.customContextLength = lib.mkOption {
       type = lib.types.int;
       # default = 131072;
-      default = 65536;
+      default = 131072;
       description = "Context length for custom Ollama models (default 128k)";
     };
 
