@@ -101,8 +101,8 @@ in
     dev.wireshark.users = [ "pavel" ];
 
     power-management.enable = true;
-    # s2idle quirks — enable individual ones when upgrading to kernel 6.18+
     power-management.framework-quirks.enable = true;
+    power-management.framework-quirks.ath12k-suspend.enable = true;
     power-management.auto-refresh-rate = {
       enable = true;
       displays."eDP-1" = {
