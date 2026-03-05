@@ -199,6 +199,8 @@ in
   # Use NetworkManager for laptop (instead of systemd-networkd)
   networking.networkmanager.enable = true;
 
+  systemd.services.ollama.serviceConfig.MemoryDenyWriteExecute = lib.mkForce false;
+
   networking.hostId = "a1b2c3d4";
   networking.hostName = cfg-meta.hostname;
   networking.useDHCP = false;

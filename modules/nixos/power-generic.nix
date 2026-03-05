@@ -91,9 +91,7 @@ in
       systemd.targets.suspend-then-hibernate.enable = true;
 
       # Configure delay for suspend-then-hibernate
-      systemd.sleep.extraConfig = ''
-        HibernateDelaySec=${cfg.hibernateDelaySec}
-      '';
+      systemd.sleep.settings.Sleep.HibernateDelaySec = cfg.hibernateDelaySec;
     })
 
     # Power button behavior
