@@ -6,7 +6,7 @@
     smind.llm.ollama.package = lib.mkOption {
       type = lib.types.package;
       # default = pkgs.ollama-rocm;
-      default = pkgs.ollama-vulkan;
+      default = pkgs.ollama-rocm;
       description = "Ollama package to use (ollama-rocm, ollama-vulkan, ollama-cuda, ollama-cpu)";
     };
 
