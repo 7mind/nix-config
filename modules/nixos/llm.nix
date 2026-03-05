@@ -19,13 +19,13 @@
 
     smind.llm.ollama.customModelBaseName = lib.mkOption {
       type = lib.types.str;
-      default = "huihui_ai/qwen3.5-abliterated:35b";
+      default = "qwen3.5:35b"; #"huihui_ai/qwen3.5-abliterated:35b";
       description = "Base model name used to create the custom Ollama model";
     };
 
     smind.llm.ollama.customModelName = lib.mkOption {
       type = lib.types.str;
-      default = "huihui_ai/qwen3.5-abliterated:35b-custom";
+      default = "${config.smind.llm.ollama.customModelBaseName}-custom";
       description = "Custom Ollama model name created from customModelBaseName";
     };
   };
