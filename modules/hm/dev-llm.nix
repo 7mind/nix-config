@@ -79,8 +79,14 @@ in
 
     smind.hm.dev.llm.opencodeDefaultModel = lib.mkOption {
       type = lib.types.str;
-      default = "huihui_ai/qwen3.5-abliterated:35b";
+      default = osConfig.smind.llm.ollama.customModelName or "huihui_ai/qwen3.5-abliterated:35b-custom";
       description = "Default model for opencode";
+    };
+
+    smind.hm.dev.llm.opencodeOllamaModelName = lib.mkOption {
+      type = lib.types.str;
+      default = osConfig.smind.llm.ollama.customModelName or "huihui_ai/qwen3.5-abliterated:35b-custom";
+      description = "Ollama model name configured for opencode provider";
     };
 
     smind.hm.dev.llm.memorySections = lib.mkOption {
@@ -99,6 +105,7 @@ in
   config = lib.mkMerge [
     {
       smind.hm.dev.llm.devstralContextSize = lib.mkDefault (osConfig.smind.llm.ollama.customContextLength or 131072);
+      smind.hm.dev.llm.opencodeDefaultModel = lib.mkDefault config.smind.hm.dev.llm.opencodeOllamaModelName;
       smind.hm.dev.llm.memorySections = lib.mkBefore [ baseClaudeMemorySection ];
     }
     (lib.mkIf config.smind.hm.dev.llm.enable {
@@ -209,7 +216,7 @@ in
                 baseURL = "http://127.0.0.1:11434/v1";
               };
               models = {
-                "devstral:24b-small-2505-custom" = {
+                "${config.smind.hm.dev.llm.opencodeOllamaModelName}" = {
                   limit = {
                     context = config.smind.hm.dev.llm.devstralContextSize;
                     output = config.smind.hm.dev.llm.devstralContextSize;

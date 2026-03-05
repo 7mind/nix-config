@@ -15,6 +15,18 @@
       default = 131072;
       description = "Context length for custom Ollama models (default 128k)";
     };
+
+    smind.llm.ollama.customModelBaseName = lib.mkOption {
+      type = lib.types.str;
+      default = "huihui_ai/qwen3.5-abliterated:35b";
+      description = "Base model name used to create the custom Ollama model";
+    };
+
+    smind.llm.ollama.customModelName = lib.mkOption {
+      type = lib.types.str;
+      default = "huihui_ai/qwen3.5-abliterated:35b-custom";
+      description = "Custom Ollama model name created from customModelBaseName";
+    };
   };
 
   config = lib.mkIf config.smind.llm.enable {
@@ -67,7 +79,7 @@
         "mxbai-embed-large"
 
         "huihui_ai/glm-4.7-flash-abliterated:q8_0"
-        "huihui_ai/qwen3.5-abliterated:35b"
+        config.smind.llm.ollama.customModelBaseName
 
         "lfm2:24b-q8_0"
 
@@ -101,14 +113,14 @@
                 MODELFILE=$(mktemp)
                 trap "rm -f $MODELFILE" EXIT
 
-                # Create devstral:24b-small-2505-custom with configurable context
-                if ! ollama list | grep -q "devstral:24b-small-2505-custom"; then
-                  echo "Creating devstral:24b-small-2505-custom with context ${toString config.smind.llm.ollama.customContextLength}..."
+                # Create the configured custom model with configurable context
+                if ! ollama list | grep -Fq "${config.smind.llm.ollama.customModelName}"; then
+                  echo "Creating ${config.smind.llm.ollama.customModelName} from ${config.smind.llm.ollama.customModelBaseName} with context ${toString config.smind.llm.ollama.customContextLength}..."
                   cat > "$MODELFILE" << EOF
-        FROM devstral:24b-small-2505-q8_0
+        FROM ${config.smind.llm.ollama.customModelBaseName}
         PARAMETER num_ctx ${toString config.smind.llm.ollama.customContextLength}
         EOF
-                  ollama create devstral:24b-small-2505-custom -f "$MODELFILE"
+                  ollama create ${config.smind.llm.ollama.customModelName} -f "$MODELFILE"
                 fi
       '';
     };
