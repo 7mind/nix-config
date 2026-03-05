@@ -79,7 +79,7 @@ in
 
     smind.hm.dev.llm.opencodeDefaultModel = lib.mkOption {
       type = lib.types.str;
-      default = "ollama/devstral:24b-small-2505-custom";
+      default = "huihui_ai/qwen3.5-abliterated:35b";
       description = "Default model for opencode";
     };
 
