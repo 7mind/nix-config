@@ -199,14 +199,6 @@ in
   # Use NetworkManager for laptop (instead of systemd-networkd)
   networking.networkmanager.enable = true;
 
-  environment.etc."libinput/local-overrides.quirks".text = ''
-    [Framework Laptop 16 Touchpad Palm Tuning]
-    MatchName=PIXA3854:00 093A:0274 Touchpad
-    MatchUdevType=touchpad
-    MatchDMIModalias=dmi:*svnFramework:pnLaptop16*
-    AttrPalmPressureThreshold=220
-  '';
-
   systemd.services.ollama.serviceConfig.MemoryDenyWriteExecute = lib.mkForce false;
 
   networking.hostId = "a1b2c3d4";
