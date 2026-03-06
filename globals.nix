@@ -111,6 +111,8 @@ rec {
 
           hm-modules = [
             inputs.plasma-manager.homeModules.plasma-manager
+            inputs.niri.homeModules.config
+            inputs.noctalia.homeModules.default
           ];
         } else {
           generator = inputs.darwin.lib.darwinSystem;

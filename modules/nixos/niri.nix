@@ -2,11 +2,7 @@
 
 {
   options = {
-    smind.desktop.niri.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable Niri compositor";
-    };
+    smind.desktop.niri.enable = lib.mkEnableOption "Enable Niri compositor";
 
     smind.desktop.niri.xkb.layouts = lib.mkOption {
       type = lib.types.listOf lib.types.str;
