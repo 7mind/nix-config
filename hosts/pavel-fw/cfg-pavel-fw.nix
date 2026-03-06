@@ -121,7 +121,7 @@ in
     desktop.gnome.ambient-light-sensor.enable = false;
     desktop.gnome.framework-fan-control.enable = false;
     desktop.gnome.gdm.monitors-xml = ./monitors.xml;
-    desktop.gnome.touchpad.disableWhileTyping = false;
+    desktop.gnome.touchpad.disableWhileTyping = true;
 
     desktop.cosmic.enable = true;
 
@@ -198,6 +198,14 @@ in
 
   # Use NetworkManager for laptop (instead of systemd-networkd)
   networking.networkmanager.enable = true;
+
+  environment.etc."libinput/local-overrides.quirks".text = ''
+    [Framework Laptop 16 Touchpad Palm Tuning]
+    MatchName=PIXA3854:00 093A:0274 Touchpad
+    MatchUdevType=touchpad
+    MatchDMIModalias=dmi:*svnFramework:pnLaptop16*
+    AttrPalmPressureThreshold=220
+  '';
 
   systemd.services.ollama.serviceConfig.MemoryDenyWriteExecute = lib.mkForce false;
 
