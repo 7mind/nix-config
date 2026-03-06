@@ -350,6 +350,7 @@
         pix
         file-roller
         gnome-connections
+        gnome-randr
       ]);
 
 
