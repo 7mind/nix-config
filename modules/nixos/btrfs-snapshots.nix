@@ -1,4 +1,4 @@
-{ config, lib, ... }:
+{ config, lib, pkgs, ... }:
 
 let
   cfg = config.smind.btrfs.snapshots;
@@ -51,7 +51,21 @@ in
         assertion = homeFs.fsType == "btrfs";
         message = "smind.btrfs.snapshots requires fileSystems.\"/home\" to be btrfs.";
       }
+      {
+        assertion = cfg.subvolumePath == ".";
+        message = "smind.btrfs.snapshots currently requires subvolumePath = \".\" so the snapshot directory can be managed at activation time.";
+      }
     ];
+
+    system.activationScripts.smind-btrfs-home-snapshot-dir.text = ''
+      snapshot_dir_path="${cfg.volumePath}/${cfg.snapshotDir}"
+
+      if [ ! -e "$snapshot_dir_path" ]; then
+        ${pkgs.btrfs-progs}/bin/btrfs subvolume create "$snapshot_dir_path"
+      fi
+
+      ${pkgs.btrfs-progs}/bin/btrfs subvolume show "$snapshot_dir_path" >/dev/null
+    '';
 
     services.btrbk.instances.home = {
       onCalendar = cfg.onCalendar;
