@@ -27,8 +27,16 @@ in
 
     powerButton = lib.mkOption {
       type = lib.types.nullOr (lib.types.enum [
-        "ignore" "poweroff" "reboot" "halt" "kexec"
-        "suspend" "hibernate" "hybrid-sleep" "suspend-then-hibernate" "lock"
+        "ignore"
+        "poweroff"
+        "reboot"
+        "halt"
+        "kexec"
+        "suspend"
+        "hibernate"
+        "hybrid-sleep"
+        "suspend-then-hibernate"
+        "lock"
       ]);
       default =
         if config.smind.isLaptop then "suspend"
@@ -75,7 +83,7 @@ in
         "amd_pstate=active"
       ];
 
-      environment.systemPackages = [ pkgs.cpupower-gui ];
+      # environment.systemPackages = [ pkgs.cpupower-gui ];
     })
 
     # Suspend/hibernate systemd targets
