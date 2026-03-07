@@ -71,9 +71,9 @@ in
 
     # AMD-specific power management
     (lib.mkIf cfg.amd.enable {
-      powerManagement.cpuFreqGovernor = "powersave"; # amd-pstate uses powersave governor
-
-      services.cpupower-gui.enable = true;
+      boot.kernelParams = [
+        "amd_pstate=active"
+      ];
 
       environment.systemPackages = [ pkgs.cpupower-gui ];
     })
