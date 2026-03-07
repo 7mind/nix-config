@@ -89,9 +89,9 @@ in
   # Disable PCI runtime PM for WiFi parent bridge to prevent ath12k firmware crash
   # The bridge (00:02.3) routes to the Qualcomm WCN785x WiFi (c0:00.0)
   # Runtime PM on the bridge causes ath12k to crash - targeting device directly doesn't work
-  services.udev.extraRules = lib.mkAfter ''
-    ACTION=="add|change", SUBSYSTEM=="pci", KERNEL=="0000:00:02.3", ATTR{power/control}="on"
-  '';
+  # services.udev.extraRules = lib.mkAfter ''
+  #   ACTION=="add|change", SUBSYSTEM=="pci", KERNEL=="0000:00:02.3", ATTR{power/control}="on"
+  # '';
 
   smind = {
     nix.nix-impl = "determinate";
