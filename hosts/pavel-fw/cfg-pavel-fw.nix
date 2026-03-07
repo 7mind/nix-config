@@ -195,6 +195,12 @@ in
 
     # Disable ZFS (using btrfs on LVM)
     zfs.enable = false;
+
+    btrfs.snapshots = {
+      enable = true;
+      volumePath = "/";
+      subvolumePath = "@home";
+    };
   };
 
   # Use NetworkManager for laptop (instead of systemd-networkd)

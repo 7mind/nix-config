@@ -3,6 +3,7 @@
   ./audio.nix
   ./audio-autoswitch.nix
   ./audio-quirks.nix
+  ./btrfs-snapshots.nix
   ./bluetooth.nix
   ./bootloader-grub.nix
   ./bootloader-ipxe.nix
