@@ -200,6 +200,8 @@ in
   # Use NetworkManager for laptop (instead of systemd-networkd)
   networking.networkmanager.enable = true;
 
+  services.ollama.environmentVariables.OLLAMA_SCHED_SPREAD = lib.mkForce "1";
+
   systemd.services.ollama.serviceConfig.MemoryDenyWriteExecute = lib.mkForce false;
 
   networking.hostId = "a1b2c3d4";
