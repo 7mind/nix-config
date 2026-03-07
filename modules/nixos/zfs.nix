@@ -20,8 +20,7 @@
     ];
 
     boot = {
-      # ZFS 2.4.0 supports up to kernel 6.12 LTS, linux_latest (6.18) is not yet supported
-      kernelPackages = pkgs.linuxKernel.packages.linux_6_12;
+      kernelPackages = cfg-packages.linux-kernel;
       supportedFilesystems = [ "zfs" ];
       initrd = { supportedFilesystems = [ "zfs" ]; };
       zfs.removeLinuxDRM = true;
