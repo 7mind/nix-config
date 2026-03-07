@@ -175,7 +175,8 @@ in
     # Alternative: ollama-rocm with rocmOverrideGfx = "11.5.0" (gfx1150)
     llm.enable = true;
     llm.ollama.package = pkgs.ollama-vulkan;
-    llm.ollama.customContextLength = 32768;
+    llm.ollama.customModelBaseName = "huihui_ai/qwen3.5-abliterated:9b";
+    llm.ollama.customContextLength = 131072;
 
     gaming.steam.enable = true;
 
