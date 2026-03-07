@@ -136,10 +136,10 @@ in
         enable = true;
         custom-instructions = claudeMemoryText;
         settings = {
-          model = "gpt-5.3-codex";
+          model = "gpt-5.4";
           model_reasoning_effort = "medium";
           project_doc_fallback_filenames = [ "CLAUDE.md" ];
-          features.collab = true;
+          features.multi_agent = true;
           features.steer = true;
         };
       };
