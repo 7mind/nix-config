@@ -40,7 +40,7 @@
       inputs.flake-utils.follows = "flake-utils";
     };
     qendercore-adapter = {
-      url = "github:pshirshov/qendercore-adapter?ref=wip/mqtt";
+      url = "github:pshirshov/qendercore-adapter";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
     };

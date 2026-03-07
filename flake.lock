@@ -947,16 +947,15 @@
         ]
       },
       "locked": {
-        "lastModified": 1772913360,
+        "lastModified": 1772913788,
         "narHash": "sha256-RRxeyOTuAvMrljbkpYZOdSIkPn3nGMAYOjrnx1fC1Pw=",
         "owner": "pshirshov",
         "repo": "qendercore-adapter",
-        "rev": "d5fa3e2ab8269afbdfa1c3d4ab1d5dcf805d2f3f",
+        "rev": "dc0bfa24a7c9423bf1dda945e458756b078ba34f",
         "type": "github"
       },
       "original": {
         "owner": "pshirshov",
-        "ref": "wip/mqtt",
         "repo": "qendercore-adapter",
         "type": "github"
       }
