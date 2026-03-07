@@ -874,11 +874,11 @@
         "uv2nix": "uv2nix"
       },
       "locked": {
-        "lastModified": 1772924770,
-        "narHash": "sha256-whFGQL9olmWIpCb0+EdVXOdzd0mpzLM8K62dJs5hUU8=",
+        "lastModified": 1772925824,
+        "narHash": "sha256-mW7Yl8gXDc+qdoAaXwtza0OzkIoIpYS465Xp2M3hbwQ=",
         "owner": "pshirshov",
         "repo": "python-pylontech",
-        "rev": "38e709b83d50ef648e19d8378a2078b4fa2d8394",
+        "rev": "e22093855721d61e2d1e0de32eb341b7562ece3e",
         "type": "github"
       },
       "original": {
