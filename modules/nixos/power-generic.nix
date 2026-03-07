@@ -74,6 +74,7 @@ in
 
       environment.systemPackages = [
         config.boot.kernelPackages.cpupower
+        pkgs.cpufrequtils
       ];
     })
 
