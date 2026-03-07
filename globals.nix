@@ -132,6 +132,7 @@ rec {
         pkgs7mind = inputs.smind.legacyPackages."${arch}";
 
         pylontech = inputs.pylontech.packages."${arch}";
+        qendercore-adapter = inputs.qendercore-adapter;
         nix-apple-fonts = inputs.nix-apple-fonts.packages."${arch}";
         browservice = inputs.browservice;
         fractal = inputs.fractal.packages."${arch}";

@@ -937,6 +937,30 @@
         "type": "github"
       }
     },
+    "qendercore-adapter": {
+      "inputs": {
+        "flake-utils": [
+          "flake-utils"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1772911453,
+        "narHash": "sha256-FDqLkDrgZU9OXnA0hJLnPDrxHdbUXLW6sgOQvoqNllE=",
+        "owner": "pshirshov",
+        "repo": "qendercore-adapter",
+        "rev": "1bd59422a529a86b12574c28d192c77202f8f71d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pshirshov",
+        "ref": "wip/mqtt",
+        "repo": "qendercore-adapter",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "agenix": "agenix",
@@ -956,6 +980,7 @@
         "nixpkgs": "nixpkgs_4",
         "plasma-manager": "plasma-manager",
         "pylontech": "pylontech",
+        "qendercore-adapter": "qendercore-adapter",
         "smind": "smind",
         "vicinae-extensions": "vicinae-extensions"
       }
