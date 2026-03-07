@@ -38,7 +38,7 @@ in
       Needed on kernel 6.18+
     '';
 
-    thunderbolt-wakeup.enable = lib.mkEnableOption ''
+    disable-thunderbolt-wakeup.enable = lib.mkEnableOption ''
       Thunderbolt NHI wakeup source disable.
       NHI0/NHI1 generate spurious interrupts that prevent s0ix entry on AMD platforms.
       Needed on kernel 6.18+
@@ -101,7 +101,7 @@ in
       };
     })
 
-    (lib.mkIf cfg.thunderbolt-wakeup.enable {
+    (lib.mkIf cfg.disable-thunderbolt-wakeup.enable {
       systemd.services.disable-thunderbolt-wakeup = {
         description = "Disable Thunderbolt NHI wakeup for s2idle";
         wantedBy = [ "multi-user.target" ];

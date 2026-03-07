@@ -4,6 +4,7 @@ let
   cfg = config.smind.hw.framework-laptop;
   kernelVersion = config.boot.kernelPackages.kernel.version;
   isKernel612 = lib.versionAtLeast kernelVersion "6.12" && lib.versionOlder kernelVersion "6.13";
+  frameworkToolExecutable = lib.getExe' pkgs.framework-tool "framework_tool";
 in
 {
   options.smind.hw.framework-laptop = {
@@ -16,6 +17,11 @@ in
       amdgpu adaptive backlight disable (amdgpu.abmlevel=0).
       Prevents ABM from adjusting panel brightness based on content, which can cause flickering
     '' // { default = cfg.enable; };
+
+    mac-like-modifiers-remap = lib.mkEnableOption ''
+      Framework Laptop 13 initrd key remap for mac-like modifiers.
+      Applies an EC-level swap so Command/Option/Control behave like macOS-style modifiers before userspace starts
+    '';
 
     kernelPatches = {
       vpe-dpm0.enable = lib.mkEnableOption ''
@@ -66,6 +72,41 @@ in
 
     (lib.mkIf cfg.adaptive-backlight-disable {
       boot.kernelParams = [ "amdgpu.abmlevel=0" ];
+    })
+
+    (lib.mkIf cfg.mac-like-modifiers-remap {
+      assertions = [
+        {
+          assertion = config.boot.initrd.systemd.enable;
+          message = "smind.hw.framework-laptop.mac-like-modifiers-remap requires boot.initrd.systemd.enable";
+        }
+      ];
+
+      boot.initrd.systemd = {
+        initrdBin = [ pkgs.framework-tool ];
+
+        services.framework-laptop13-mac-like-modifiers-remap = {
+          description = "Apply Framework Laptop 13 mac-like modifier remap";
+          wantedBy = [ "initrd.target" ];
+          after = [ "systemd-modules-load.service" ];
+          before = [ "initrd.target" ];
+          serviceConfig.Type = "oneshot";
+          script = ''
+            # Framework Laptop 13 keyboard table and scan code table:
+            # https://github.com/rs-gh-asdf/framework-system/blob/af23ae7bf5cfbcb20bf2d3799a281ccf01ca40c6/EXAMPLES.md
+            # physical fn -> lmeta, assuming swap ctrl-fn is enabled in BIOS, so that physical lctl is remapped to fn
+            ${frameworkToolExecutable} --remap-key 2 2 0xe01f
+            # lmeta -> lalt
+            ${frameworkToolExecutable} --remap-key 3 1 0x0011
+            # lalt -> lctl
+            ${frameworkToolExecutable} --remap-key 1 3 0x0014
+            # ralt -> rctl
+            ${frameworkToolExecutable} --remap-key 0 3 0xe014
+            # rctl -> ralt
+            ${frameworkToolExecutable} --remap-key 0 12 0xe011
+          '';
+        };
+      };
     })
 
     # --- Kernel patches ---
