@@ -200,7 +200,8 @@ in
   # Use NetworkManager for laptop (instead of systemd-networkd)
   networking.networkmanager.enable = true;
 
-  services.ollama.environmentVariables.OLLAMA_SCHED_SPREAD = lib.mkForce "1";
+  # Prefer RTX 5060 first while still allowing fallback to Radeon 890M.
+  services.ollama.environmentVariables.GGML_VK_VISIBLE_DEVICES = lib.mkForce "1,0";
 
   systemd.services.ollama.serviceConfig.MemoryDenyWriteExecute = lib.mkForce false;
 
