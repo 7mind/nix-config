@@ -10,11 +10,13 @@ in
 
     volumePath = lib.mkOption {
       type = lib.types.str;
+      default = "/home";
       description = "Mounted Btrfs volume path that contains the home subvolume (for example `/`).";
     };
 
     subvolumePath = lib.mkOption {
       type = lib.types.str;
+      default = ".";
       description = "Home subvolume path relative to `volumePath` (for example `@home`).";
     };
 

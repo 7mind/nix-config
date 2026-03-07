@@ -198,8 +198,8 @@ in
 
     btrfs.snapshots = {
       enable = true;
-      volumePath = "/";
-      subvolumePath = "@home";
+      volumePath = "/home";
+      subvolumePath = ".";
     };
   };
 
