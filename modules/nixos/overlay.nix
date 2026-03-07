@@ -117,6 +117,19 @@
         ];
       });
 
+      # Ensure GNOME Settings can load org.gnome.login-screen schema from gdm.
+      # Without this, fingerprint settings row is hidden even when fprintd works.
+      gnome-control-center = super.gnome-control-center.overrideAttrs (old: {
+        preFixup =
+          let
+            gdmSchemas = "${super.gdm}/share/gsettings-schemas/${super.gdm.name}";
+          in
+          (old.preFixup or "")
+          + ''
+            gappsWrapperArgs+=(--prefix XDG_DATA_DIRS : "${gdmSchemas}")
+          '';
+      });
+
       # https://github.com/NixOS/nixpkgs/issues/408853
       winbox-quirk = super.winbox4.overrideAttrs (drv: {
         nativeBuildInputs = (drv.nativeBuildInputs or [ ]) ++ [ super.makeWrapper ];
