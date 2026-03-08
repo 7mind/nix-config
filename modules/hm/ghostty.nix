@@ -35,7 +35,20 @@ in
       description = "Spawn a smaller window by default";
     };
 
+    smind.hm.ghostty.ctrl-tab-navigation = lib.mkEnableOption "Ctrl+Left/Right for tab navigation";
+
     smind.hm.ghostty.copy-on-select = lib.mkEnableOption "Automatically copy selected text to clipboard";
+
+    smind.hm.ghostty.super-navigation = lib.mkOption {
+      type = lib.types.enum [ "splits" "text-editing" ];
+      default = "splits";
+      description = ''
+        Controls Super+Arrow/Delete/Backspace behavior:
+        - "splits": Super+Left/Right navigate splits (default)
+        - "text-editing": Super+Left/Right/Delete/Backspace send escape sequences
+          for line navigation/deletion in terminal (requires matching zsh bindings)
+      '';
+    };
   };
 
   config = lib.mkIf config.smind.hm.ghostty.enable {
@@ -230,8 +243,6 @@ in
           # Navigate panes
           "super+up=goto_split:top"
           "super+down=goto_split:bottom"
-          "super+left=goto_split:left"
-          "super+right=goto_split:right"
 
           # Resize panes
           "super+shift+up=resize_split:up,10"
@@ -256,6 +267,9 @@ in
           "super+plus=increase_font_size:1"
           "super+minus=decrease_font_size:1"
           "super+zero=reset_font_size"
+        ] ++ lib.optionals config.smind.hm.ghostty.ctrl-tab-navigation [
+          "ctrl+left=previous_tab"
+          "ctrl+right=next_tab"
         ] ++ lib.optionals config.smind.hm.ghostty.ctrl-keybindings [
           # Additional Ctrl keybindings (in addition to Super)
           "performable:ctrl+c=copy_to_clipboard"
@@ -267,6 +281,15 @@ in
           "ctrl+plus=increase_font_size:1"
           "ctrl+minus=decrease_font_size:1"
           "ctrl+zero=reset_font_size"
+        ] ++ lib.optionals (config.smind.hm.ghostty.super-navigation == "splits") [
+          "super+left=goto_split:left"
+          "super+right=goto_split:right"
+        ] ++ lib.optionals (config.smind.hm.ghostty.super-navigation == "text-editing") [
+          # Send standard control codes for zsh emacs-mode line editing
+          "super+left=text:\\x01"       # Ctrl+A → beginning-of-line
+          "super+right=text:\\x05"      # Ctrl+E → end-of-line
+          "super+delete=text:\\x0b"     # Ctrl+K → kill-line
+          "super+backspace=text:\\x15"  # Ctrl+U → kill-whole-line
         ];
       } // lib.optionalAttrs cfg-meta.isLinux {
         window-decoration = lib.mkIf (outerConfig.smind.desktop.kde.enable or false) "client"; # workaround for https://github.com/ghostty-org/ghostty/discussions/7439 on KDE
