@@ -100,6 +100,14 @@ in
       default = null;
       description = "Network namespace to run Element in (e.g., 'vpn')";
     };
+
+    zoom.enable = lib.mkEnableOption "wrapped Zoom";
+
+    zoom.netns = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Network namespace to run Zoom in (e.g., 'vpn')";
+    };
   };
 
   config = lib.mkMerge [
@@ -111,7 +119,7 @@ in
       slackWrapped = wrapElectronApp {
         pkg = pkgs.slack;
         name = "slack";
-        extraFlags = [ "-u" ];
+        extraFlags = if cfg.slack.autostart then [ "-u" ] else [ ];
         netns = cfg.slack.netns;
       };
       elementWrapped = wrapElectronApp {
@@ -119,6 +127,12 @@ in
         name = "element-desktop";
         extraFlags = [ "--hidden" ];
         netns = cfg.element.netns;
+      };
+      zoomWrapped = wrapElectronApp {
+        pkg = pkgs.zoom-us;
+        name = "zoom-us";
+        extraFlags = [ ];
+        netns = cfg.zoom.netns;
       };
 
       # Wrapper that waits for StatusNotifierWatcher D-Bus service before launching
@@ -146,6 +160,7 @@ in
       home.packages = lib.flatten [
         (lib.optional cfg.slack.enable slackWrapped)
         (lib.optional cfg.element.enable elementWrapped)
+        (lib.optional cfg.zoom.enable zoomWrapped)
       ];
 
       smind.hm.autostart.programs = lib.flatten [
