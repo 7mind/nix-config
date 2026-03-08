@@ -15,6 +15,9 @@ let
     if loadOwnerSecrets && builtins.pathExists secretsFile
     then import secretsFile { inherit cfg-meta owner group; }
     else {};
+  hostPubkey = config.age.rekey.hostPubkey;
+  hostPubkeySet = hostPubkey != null && hostPubkey != "";
+  hostPubkeyPattern = "^ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI[0-9A-Za-z+/]+={0,3}$";
 in
 {
   options.smind.age.load-owner-secrets = lib.mkEnableOption "loading of owner-specific secrets based on smind.host.owner. Typically enabled on desktops, disabled on servers";
@@ -34,6 +37,14 @@ in
   };
 
   config = lib.mkMerge [
+    {
+      assertions = [
+        {
+          assertion = !hostPubkeySet || builtins.match hostPubkeyPattern hostPubkey != null;
+          message = "age.rekey.hostPubkey must be exactly 'ssh-ed25519 <ed25519 base64 key blob>' with no prefix or suffix";
+        }
+      ];
+    }
     # When masterIdentity is configured, enable age and set up rekey
     (lib.mkIf hasMasterIdentity {
       smind.age.enable = lib.mkDefault true;
