@@ -22,7 +22,7 @@ while [[ $# -gt 0 ]]; do
             echo "  -p, --parallel     Evaluate all hosts in parallel (default)"
             echo "  -np, --no-parallel Evaluate hosts sequentially"
             echo "  -v, --verbose      Print nix commands being executed"
-            echo "  --no-submodules   Do not include submodules in flake evaluation"
+            echo "  --no-submodules    Do not include submodules in flake evaluation"
             echo ""
             echo "If no hosts are specified, all hosts are verified."
             exit 0

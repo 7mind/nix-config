@@ -34,6 +34,11 @@ This script will:
   4. Store the TPM-encrypted key at ~/.age/master-key.age
 
 The original password-protected key is kept as backup for other machines.
+
+Create a password-protected master key if you don't have one:
+    age-keygen -o ~/age-key.txt
+    age -p -o ~/age-key.age ~/age-key.txt
+    rm -f ~/age-key.txt
 EOF
     exit 0
 }
@@ -91,6 +96,11 @@ if [[ ! -f "$MASTER_KEY_PASSWORD" ]]; then
     echo "Error: Password-protected master key not found: $MASTER_KEY_PASSWORD"
     echo ""
     echo "Create one with:"
+    echo "    age-keygen -o ~/age-key.txt"
+    echo "    age -p -o ~/age-key.age ~/age-key.txt"
+    echo "    rm -f ~/age-key.txt"
+    echo ""
+    echo "Or if you already have a plain key:"
     echo "    age -p -o ~/age-key.age ~/age-key.txt && rm ~/age-key.txt"
     exit 1
 fi

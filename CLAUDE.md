@@ -16,6 +16,13 @@ When changing shared modules, check all hosts:
 ./verify-configs --verbose
 ```
 
+When new features touch both private and public modules, check whether hosts build without private modules:
+
+```bash
+# Build all public hosts without private modules
+./verify-configs --verbose --no-submodules
+```
+
 Prefer using `./verify-configs`/`nix build --dry-run` over `nix build` for verification to avoid slow building of packages.
 When changing Home Manager activations a full nix build may still be required as those require executing activations themselves to verify their correctness.
 
