@@ -103,6 +103,7 @@ in
     power-management.framework-quirks.psr.enable = true;
     power-management.framework-quirks.thunderbolt-wakeup.enable = true;
     power-management.framework-quirks.nvidia-gpio-wakeup.enable = true;
+    power-management.framework-quirks.mt7925e-suspend.enable = true;
     power-management.auto-refresh-rate = {
       enable = true;
       displays."eDP-1" = {
