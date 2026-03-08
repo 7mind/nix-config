@@ -19,6 +19,7 @@
   ./gnome.nix
   ./htop.nix
   ./kitty.nix
+  ./megasync.nix
   ./nushell.nix
   ./ssh.nix
   ./tailscale.nix

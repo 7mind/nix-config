@@ -33,18 +33,9 @@
   # nix eval --impure --expr "builtins.fromJSON (builtins.readFile ./vscode-keymap-linux-editorFocus.json)"  > vscode-keymap-linux-editorFocus.nix
   # nix run nixpkgs#nixfmt-classic ./vscode-keymap-linux-editorFocus.nix
 
-  services.megasync = {
+  smind.hm.megasync = {
     enable = true;
-    forceWayland = true;
-    package = (pkgs.megasync.overrideAttrs (drv:
-      {
-        buildInputs = drv.buildInputs ++ [ pkgs.makeWrapper ];
-        preFixup = ''
-          ${drv.preFixup}
-           qtWrapperArgs+=(--set "QT_STYLE_OVERRIDE" "adwaita")
-           qtWrapperArgs+=(--set "DO_NOT_UNSET_XDG_SESSION_TYPE" "1")
-        '';
-      }));
+    gnomeTheme.enable = true;
   };
 
   home.pointerCursor = {
