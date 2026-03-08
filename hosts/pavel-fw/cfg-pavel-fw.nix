@@ -27,8 +27,8 @@ in
 
   # --- Framework 16 AMD (Strix Point) specific configuration ---
 
-  # Keep Framework host on 6.18 kernel line.
-  # boot.kernelPackages = lib.mkForce pkgs.linuxKernel.packages.linux_6_18;
+  # Keep Framework host on 6.12 kernel line.
+  boot.kernelPackages = lib.mkForce pkgs.linuxKernel.packages.linux_6_12;
 
   boot.kernelParams = [
     #"usbcore.autosuspend=-1"
@@ -101,9 +101,6 @@ in
     power-management.enable = true;
     power-management.framework-quirks.enable = true;
     power-management.framework-quirks.psr.enable = true;
-    power-management.framework-quirks.thunderbolt-wakeup.enable = true;
-    power-management.framework-quirks.nvidia-gpio-wakeup.enable = true;
-    power-management.framework-quirks.mt7925e-suspend.enable = true;
     power-management.auto-refresh-rate = {
       enable = true;
       displays."eDP-1" = {
