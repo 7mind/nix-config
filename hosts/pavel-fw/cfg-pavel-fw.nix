@@ -28,7 +28,7 @@ in
   # --- Framework 16 AMD (Strix Point) specific configuration ---
 
   # Keep Framework host on 6.18 kernel line.
-  boot.kernelPackages = lib.mkForce pkgs.linuxKernel.packages.linux_6_18;
+  # boot.kernelPackages = lib.mkForce pkgs.linuxKernel.packages.linux_6_18;
 
   boot.kernelParams = [
     #"usbcore.autosuspend=-1"
