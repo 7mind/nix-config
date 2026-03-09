@@ -21,11 +21,12 @@
 )
 
 (deftemplate define-terminal-super-swap-layer (left-ctrl-key left-ctrl-action right-ctrl-key right-ctrl-action left-meta-key left-meta-action right-meta-key right-meta-action left-alt-key)
-  $left-ctrl-key (t! hold-terminal-ctrl-swapped $left-ctrl-action)
-  $right-ctrl-key (t! hold-terminal-ctrl-swapped $right-ctrl-action)
-  $left-meta-key (t! hold-terminal-meta-swapped $left-meta-action)
-  $right-meta-key (t! hold-terminal-meta-swapped $right-meta-action)
-  $left-alt-key lalt
+  (deflayermap (terminal)
+    $left-ctrl-key (t! hold-terminal-ctrl-swapped $left-ctrl-action)
+    $right-ctrl-key (t! hold-terminal-ctrl-swapped $right-ctrl-action)
+    $left-meta-key (t! hold-terminal-meta-swapped $left-meta-action)
+    $right-meta-key (t! hold-terminal-meta-swapped $right-meta-action)
+    $left-alt-key lalt)
 )
 
 (defalias
