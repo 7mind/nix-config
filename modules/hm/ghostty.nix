@@ -39,7 +39,9 @@ in
 
     smind.hm.ghostty.copy-on-select = lib.mkEnableOption "Automatically copy selected text to clipboard";
 
-    smind.hm.ghostty.super-navigation = lib.mkOption {
+    smind.hm.ghostty.compact-tabs = lib.mkEnableOption "Compact tabs style" // { default = true; };
+
+    smind.hm.ghostty.super-arrows = lib.mkOption {
       type = lib.types.enum [ "splits" "text-editing" ];
       default = "splits";
       description = ''
@@ -181,7 +183,7 @@ in
     xdg.configFile."xdg-terminals.list" = {
       force = true;
       text = ''
-      com.mitchellh.ghostty.desktop
+        com.mitchellh.ghostty.desktop
       '';
     };
 
@@ -225,6 +227,10 @@ in
         # Always use block cursor, ignore app requests to change it
         cursor-style = "block";
         cursor-style-blink = false;
+
+        gtk-titlebar-style = lib.mkIf config.smind.hm.ghostty.compact-tabs "tabs";
+        gtk-wide-tabs = lib.mkIf config.smind.hm.ghostty.compact-tabs false;
+        macos-titlebar-style = lib.mkIf config.smind.hm.ghostty.compact-tabs "tabs";
 
         keybind = [
           "clear"
@@ -281,17 +287,26 @@ in
           "ctrl+plus=increase_font_size:1"
           "ctrl+minus=decrease_font_size:1"
           "ctrl+zero=reset_font_size"
-        ] ++ lib.optionals (config.smind.hm.ghostty.super-navigation == "splits") [
-          "super+left=goto_split:left"
-          "super+right=goto_split:right"
-        ] ++ lib.optionals (config.smind.hm.ghostty.super-navigation == "text-editing") [
-          # Send standard control codes for zsh emacs-mode line editing
-          "super+left=text:\\x01"       # Ctrl+A → beginning-of-line
-          "super+right=text:\\x05"      # Ctrl+E → end-of-line
-          "super+delete=text:\\x0b"     # Ctrl+K → kill-line
-          "super+backspace=text:\\x15"  # Ctrl+U → kill-whole-line
-        ];
-      } // lib.optionalAttrs cfg-meta.isLinux {
+        ] ++ (
+          let
+            super-arrows-variants = {
+              "splits" = [
+                "super+left=goto_split:left"
+                "super+right=goto_split:right"
+              ];
+              "text-editing" = [
+                # Send standard control codes for zsh emacs-mode line editing
+                "super+left=text:\\x01" # Ctrl+A → beginning-of-line
+                "super+right=text:\\x05" # Ctrl+E → end-of-line
+                "super+delete=text:\\x0b" # Ctrl+K → kill-line
+                "super+backspace=text:\\x15" # Ctrl+U → kill-whole-line
+              ];
+            };
+          in
+          super-arrows-variants.${config.smind.hm.ghostty.super-arrows}
+        );
+      }
+      // lib.optionalAttrs cfg-meta.isLinux {
         window-decoration = lib.mkIf (outerConfig.smind.desktop.kde.enable or false) "client"; # workaround for https://github.com/ghostty-org/ghostty/discussions/7439 on KDE
       };
     };
