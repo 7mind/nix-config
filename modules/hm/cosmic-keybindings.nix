@@ -98,6 +98,10 @@ in
         Defaults to smind.desktop.mouse.naturalScroll.
       '';
     };
+
+    smind.hm.desktop.cosmic.close-window-hotkey = lib.mkEnableOption "enable Super-Q close window hotkey" // { default = true; };
+
+    smind.hm.desktop.cosmic.file-manager-hotkey = lib.mkEnableOption "enable Super-F file manager hotkey" // { default = true; };
   };
 
   config = lib.mkMerge [
@@ -234,27 +238,30 @@ in
               ${disableMod ["Super"]},
 
               // Window management - matching GNOME minimal hotkeys
-              ${kb ["Super"] "q" "Close"},
+              ${if config.smind.hm.desktop.cosmic.close-window-hotkey then kb ["Super"] "q" "Close" else ""},
               ${disable ["Alt"] "F4"},
               ${hotkeyBindings},
-              ${kb ["Alt"] "Tab" "System(WindowSwitcher)"},
+              ${disable ["Alt"] "Tab"},
               // Disable reversed window switching
-              ${disable (["Shift" "Alt"]) "Tab"},
-              ${kb (["Ctrl" "Alt"]) "f" "Maximize"},
-              ${kb (["Ctrl" "Alt"]) "m" "Minimize"},
+              ${disable ["Shift" "Alt"] "Tab"},
+              ${kb ["Ctrl" "Alt"] "f" "Maximize"},
+              ${kb ["Ctrl" "Alt"] "m" "Minimize"},
 
               // System actions
-              ${kb (["Shift" "Super"]) "l" "System(LockScreen)"},
-              ${kb ["Super"] "Escape" "System(LockScreen)"},
+              ${kb ["Ctrl" "Super"] "q" "System(LockScreen)"},
+              ${disable ["Super"] "Escape"},
 
               // Screenshots - matching GNOME
-              ${kb (["Shift" "Super"]) "3" "System(Screenshot)"},
-              ${kb (["Shift" "Super"]) "4" "System(ScreenshotUi)"},
+              ${kb ["Shift" "Super"] "3" "System(Screenshot)"},
+              ${kb ["Shift" "Super"] "4" "System(ScreenshotUi)"},
               ${kb [] "Print" "System(Screenshot)"},
 
               // COSMIC launcher as fallback on Alt+Super+Space
-              ${kb (["Alt" "Super"]) "space" "System(Launcher)"},
+              ${kb ["Alt" "Super"] "space" "System(Launcher)"},
               ${disable ["Super"] "a"},
+
+              // Keep file manager
+              ${if config.smind.hm.desktop.cosmic.file-manager-hotkey then kb ["Super"] "f" "System(FileBrowser)" else ""},
 
               // Disable accessibility shortcuts
               ${disable ["Super"] "equal"},
@@ -282,16 +289,16 @@ in
               ${disable ["Super"] "9"},
 
               // Disable move-to-workspace shortcuts
-              ${disable (["Shift" "Super"]) "0"},
-              ${disable (["Shift" "Super"]) "1"},
-              ${disable (["Shift" "Super"]) "2"},
-              ${disable (["Shift" "Super"]) "3"},
-              ${disable (["Shift" "Super"]) "4"},
-              ${disable (["Shift" "Super"]) "5"},
-              ${disable (["Shift" "Super"]) "6"},
-              ${disable (["Shift" "Super"]) "7"},
-              ${disable (["Shift" "Super"]) "8"},
-              ${disable (["Shift" "Super"]) "9"},
+              ${disable ["Shift" "Super"] "0"},
+              ${disable ["Shift" "Super"] "1"},
+              ${disable ["Shift" "Super"] "2"},
+              ${disable ["Shift" "Super"] "3"},
+              ${disable ["Shift" "Super"] "4"},
+              ${disable ["Shift" "Super"] "5"},
+              ${disable ["Shift" "Super"] "6"},
+              ${disable ["Shift" "Super"] "7"},
+              ${disable ["Shift" "Super"] "8"},
+              ${disable ["Shift" "Super"] "9"},
 
               // Disable window focus shortcuts (using switcher instead)
               ${disable ["Super"] "Left"},
@@ -306,18 +313,18 @@ in
               ${disable ["Super"] "i"},
 
               // Disable move shortcuts
-              ${disable (["Shift" "Super"]) "Left"},
-              ${disable (["Shift" "Super"]) "Right"},
-              ${disable (["Shift" "Super"]) "Up"},
-              ${disable (["Shift" "Super"]) "Down"},
-              ${disable (["Shift" "Super"]) "h"},
-              ${disable (["Shift" "Super"]) "j"},
-              ${disable (["Shift" "Super"]) "k"},
-              ${disable (["Shift" "Super"]) "l"},
+              ${disable ["Shift" "Super"] "Left"},
+              ${disable ["Shift" "Super"] "Right"},
+              ${disable ["Shift" "Super"] "Up"},
+              ${disable ["Shift" "Super"] "Down"},
+              ${disable ["Shift" "Super"] "h"},
+              ${disable ["Shift" "Super"] "j"},
+              ${disable ["Shift" "Super"] "k"},
+              ${disable ["Shift" "Super"] "l"},
 
               // Disable resize shortcuts
               ${disable ["Super"] "r"},
-              ${disable (["Shift" "Super"]) "r"},
+              ${disable ["Shift" "Super"] "r"},
 
               // Disable tiling controls (keep simple floating)
               ${disable ["Super"] "o"},
@@ -328,51 +335,48 @@ in
               ${disable ["Super"] "m"},
 
               // Disable workspace navigation
-              ${disable (["Ctrl" "Super"]) "Left"},
-              ${disable (["Ctrl" "Super"]) "Right"},
-              ${disable (["Ctrl" "Super"]) "Up"},
-              ${disable (["Ctrl" "Super"]) "Down"},
-              ${disable (["Ctrl" "Super"]) "h"},
-              ${disable (["Ctrl" "Super"]) "j"},
-              ${disable (["Ctrl" "Super"]) "k"},
-              ${disable (["Ctrl" "Super"]) "l"},
+              ${disable ["Ctrl" "Super"] "Left"},
+              ${disable ["Ctrl" "Super"] "Right"},
+              ${disable ["Ctrl" "Super"] "Up"},
+              ${disable ["Ctrl" "Super"] "Down"},
+              ${disable ["Ctrl" "Super"] "h"},
+              ${disable ["Ctrl" "Super"] "j"},
+              ${disable ["Ctrl" "Super"] "k"},
+              ${disable ["Ctrl" "Super"] "l"},
 
               // Disable move-to-workspace-direction
-              ${disable (["Ctrl" "Shift" "Super"]) "Left"},
-              ${disable (["Ctrl" "Shift" "Super"]) "Right"},
-              ${disable (["Ctrl" "Shift" "Super"]) "Up"},
-              ${disable (["Ctrl" "Shift" "Super"]) "Down"},
-              ${disable (["Ctrl" "Shift" "Super"]) "h"},
-              ${disable (["Ctrl" "Shift" "Super"]) "j"},
-              ${disable (["Ctrl" "Shift" "Super"]) "k"},
-              ${disable (["Ctrl" "Shift" "Super"]) "l"},
+              ${disable ["Ctrl" "Shift" "Super"] "Left"},
+              ${disable ["Ctrl" "Shift" "Super"] "Right"},
+              ${disable ["Ctrl" "Shift" "Super"] "Up"},
+              ${disable ["Ctrl" "Shift" "Super"] "Down"},
+              ${disable ["Ctrl" "Shift" "Super"] "h"},
+              ${disable ["Ctrl" "Shift" "Super"] "j"},
+              ${disable ["Ctrl" "Shift" "Super"] "k"},
+              ${disable ["Ctrl" "Shift" "Super"] "l"},
 
               // Disable output/monitor switching
-              ${disable (["Alt" "Super"]) "Left"},
-              ${disable (["Alt" "Super"]) "Right"},
-              ${disable (["Alt" "Super"]) "Up"},
-              ${disable (["Alt" "Super"]) "Down"},
-              ${disable (["Alt" "Super"]) "h"},
-              ${disable (["Alt" "Super"]) "j"},
-              ${disable (["Alt" "Super"]) "k"},
-              ${disable (["Alt" "Super"]) "l"},
+              ${disable ["Alt" "Super"] "Left"},
+              ${disable ["Alt" "Super"] "Right"},
+              ${disable ["Alt" "Super"] "Up"},
+              ${disable ["Alt" "Super"] "Down"},
+              ${disable ["Alt" "Super"] "h"},
+              ${disable ["Alt" "Super"] "j"},
+              ${disable ["Alt" "Super"] "k"},
+              ${disable ["Alt" "Super"] "l"},
 
-              // Disable move-to-output
-              ${disable (["Alt" "Shift" "Super"]) "Left"},
-              ${disable (["Alt" "Shift" "Super"]) "Right"},
-              ${disable (["Alt" "Shift" "Super"]) "Up"},
-              ${disable (["Alt" "Shift" "Super"]) "Down"},
-              ${disable (["Alt" "Shift" "Super"]) "h"},
-              ${disable (["Alt" "Shift" "Super"]) "j"},
-              ${disable (["Alt" "Shift" "Super"]) "k"},
-              ${disable (["Alt" "Shift" "Super"]) "l"},
+              // Disable[ve-to-output
+              ${disable ["Alt" "Shift" "Super"] "Left"},
+              ${disable ["Alt" "Shift" "Super"] "Right"},
+              ${disable ["Alt" "Shift" "Super"] "Up"},
+              ${disable ["Alt" "Shift" "Super"] "Down"},
+              ${disable ["Alt" "Shift" "Super"] "h"},
+              ${disable ["Alt" "Shift" "Super"] "j"},
+              ${disable ["Alt" "Shift" "Super"] "k"},
+              ${disable ["Alt" "Shift" "Super"] "l"},
 
               // Disable terminal and browser launchers
               ${disable ["Super"] "t"},
               ${disable ["Super"] "b"},
-
-              // Keep file manager
-              ${kb ["Super"] "f" "System(FileBrowser)"},
           }
         '';
     })
