@@ -132,6 +132,12 @@ in
           description = "Path to store the encrypted keyring credential";
         };
       };
+
+      tpm.enable = lib.mkOption {
+        type = lib.types.bool;
+        default = config.smind.security.keyring.tpmUnlock.enable;
+        description = "TPM2 stack required for keyring-related TPM operations";
+      };
     };
   };
 
@@ -180,19 +186,22 @@ in
       });
     })
 
-    # TPM-based keyring unlock (for fingerprint login)
-    (lib.mkIf cfg.tpmUnlock.enable {
-      assertions = [{
-        assertion = cfg.backend == "gnome-keyring";
-        message = "TPM keyring unlock requires gnome-keyring backend";
-      }];
-
+    # TPM stack for keyring-related operations
+    (lib.mkIf cfg.tpm.enable {
       # Enable TPM2 support with user access
       security.tpm2 = {
         enable = true;
         pkcs11.enable = true;
         tctiEnvironment.enable = true;
       };
+    })
+
+    # TPM-based keyring unlock (for fingerprint login)
+    (lib.mkIf cfg.tpmUnlock.enable {
+      assertions = [{
+        assertion = cfg.backend == "gnome-keyring";
+        message = "TPM keyring unlock requires gnome-keyring backend";
+      }];
 
       # Allow tss group to decrypt credentials without authentication
       security.polkit.extraConfig = ''
