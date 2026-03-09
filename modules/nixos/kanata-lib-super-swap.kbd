@@ -1,0 +1,80 @@
+;; Shared Kanata helpers for keyboard layouts.
+
+(deftemplate hold-tap (tap-time hold-time tap-action hold-action)
+  (tap-hold-press $tap-time $hold-time $tap-action $hold-action)
+)
+
+(deftemplate held-mod-tap (tap-time hold-time tap-action hold-action)
+  (multi $hold-action (tap-hold-press $tap-time $hold-time $tap-action $hold-action))
+)
+
+(deftemplate hold-terminal-ctrl-swapped (hold-action)
+  (multi (layer-while-held terminal-ctrl-swapped)
+         (on-release release-vkey v-terminal-ctl)
+         $hold-action)
+)
+
+(deftemplate hold-terminal-meta-swapped (hold-action)
+  (multi (layer-while-held terminal-meta-swapped)
+         (on-release release-vkey v-terminal-met)
+         $hold-action)
+)
+
+(defalias
+  space-cadet-left-shift (t! held-mod-tap 150 150 S-9 lsft)
+  space-cadet-right-shift (t! held-mod-tap 150 150 S-0 rsft)
+  common-remap-escape C-A-M-tab
+)
+
+(defvirtualkeys
+  v-terminal-ctl lctl
+  v-terminal-met lmet
+)
+
+(deftemplate define-terminal-ctrl-swapped (tab-key grave-key space-key)
+  (deflayermap (terminal-ctrl-swapped)
+  $tab-key (fork (multi lctl
+            (on-press press-vkey v-terminal-ctl)
+            ;; release held down lmet/rmet mods that were used to enter terminal-ctrl-swapped from terminal layer
+            (release-key lmet)
+            (release-key rmet)
+            tab)
+           tab
+           (lctl rctl))
+
+  $grave-key (fork (multi lctl
+            (on-press press-vkey v-terminal-ctl)
+            (release-key lmet)
+            (release-key rmet)
+            grv)
+           grv
+           (lctl rctl))
+
+  ;; unmod lmet/rmet mods that were used to enter terminal-ctrl-swapped from terminal layer
+  $space-key (unmod (lmet rmet) lctl spc)
+  )
+)
+
+(deftemplate define-terminal-meta-swapped (tab-key grave-key space-key)
+  (deflayermap (terminal-meta-swapped)
+  $tab-key (fork (multi lmet
+            (on-press press-vkey v-terminal-met)
+            ;; release held down lctl/rctl mods that were used to enter terminal-meta-swapped from terminal layer
+            (release-key lctl)
+            (release-key rctl)
+            tab)
+           tab
+           (lmet rmet))
+
+  $grave-key (fork (multi lmet
+            (on-press press-vkey v-terminal-met)
+            (release-key lctl)
+            (release-key rctl)
+            grv)
+           grv
+           (lmet rmet))
+
+  ;; unmod lctl/rctl mods that were used to enter terminal-meta-swapped from terminal layer
+  $space-key (unmod (lctl rctl) lmet spc)
+  )
+)

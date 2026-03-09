@@ -2,56 +2,70 @@
 
 let
   cfg = config.smind.keyboard.super-remap;
+  buildKanataConfig = keyboardName: keyboardCfg:
+    pkgs.runCommand "kanata-config-${keyboardName}"
+      {
+        extraDefCfg = keyboardCfg.extraDefCfg;
+        passAsFile = [ "extraDefCfg" ];
+      } ''
+      mkdir -p $out
+      cp ${./kanata-lib.kbd} $out/kanata-lib.kbd
+      cp ${./kanata-lib-super-swap.kbd} $out/kanata-lib-super-swap.kbd
 
-  # Bundle kanata config files together so includes work
-  # Prepend defcfg with extraDefCfg settings to the main config
-  kanataConfigDir = pkgs.runCommand "kanata-config"
-    {
-      extraDefCfg = cfg.kanata.extraDefCfg;
-      passAsFile = [ "extraDefCfg" ];
-    } ''
-    mkdir -p $out
-    cp ${./kanata-lib.kbd} $out/kanata-lib.kbd
+      echo "(defcfg" > $out/kanata.kbd
+      cat "$extraDefCfgPath" >> $out/kanata.kbd
+      echo ")" >> $out/kanata.kbd
+      echo "" >> $out/kanata.kbd
+      cat ${keyboardCfg.configFile} >> $out/kanata.kbd
+    '';
 
-    # Prepend defcfg block to the config file
-    echo "(defcfg" > $out/kanata-super-remap.kbd
-    cat "$extraDefCfgPath" >> $out/kanata-super-remap.kbd
-    echo ")" >> $out/kanata-super-remap.kbd
-    echo "" >> $out/kanata-super-remap.kbd
-    cat ${cfg.kanata.configFile} >> $out/kanata-super-remap.kbd
-  '';
+  kanataConfigDirs = lib.mapAttrs buildKanataConfig cfg.kanata.keyboards;
+  switcherKeyboards = lib.filterAttrs (_: keyboardCfg: keyboardCfg.port != null) cfg.kanata.keyboards;
+  switcherKeyboardNames = lib.attrNames switcherKeyboards;
 in
 {
   options.smind.keyboard.super-remap = {
     enable = lib.mkEnableOption "Mac-style keyboard shortcuts via kanata";
 
     kanata = {
-      port = lib.mkOption {
-        type = lib.types.port;
-        default = 22334;
-        description = "Port for kanata TCP server";
-      };
+      keyboards = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.submodule {
+          options = {
+            port = lib.mkOption {
+              type = lib.types.nullOr lib.types.port;
+              default = null;
+              description = "Port for the kanata TCP server";
+            };
 
-      devices = lib.mkOption {
-        type = lib.types.listOf lib.types.str;
-        default = [ ];
-        description = "kanata service devices";
-      };
+            devices = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              description = "kanata service devices";
+            };
 
-      extraDefCfg = lib.mkOption {
-        type = lib.types.str;
-        default = ''
-          process-unmapped-keys yes
-          delegate-to-first-layer true
-          concurrent-tap-hold true
-        '';
-        description = "kanata service extraDefCfg";
-      };
+            extraDefCfg = lib.mkOption {
+              type = lib.types.lines;
+              default = ''
+                process-unmapped-keys yes
+                delegate-to-first-layer true
+                concurrent-tap-hold true
+              '';
+              description = "Extra kanata defcfg entries prepended to this keyboard config";
+            };
 
-      configFile = lib.mkOption {
-        type = lib.types.path;
-        default = ./kanata-super-remap.kbd;
-        description = "Path to kanata config file (will be bundled with kanata-lib.kbd for includes)";
+            configFile = lib.mkOption {
+              type = lib.types.path;
+              description = "Path to the kanata config file for this keyboard";
+            };
+          };
+        });
+        default = {
+          default = {
+            configFile = ./kanata-super-remap.kbd;
+            port = 22334;
+          };
+        };
+        description = "Per-keyboard kanata service configuration";
       };
     };
 
@@ -88,28 +102,45 @@ in
 
   config = lib.mkMerge [
     (lib.mkIf cfg.enable {
+      assertions = [
+        {
+          assertion = cfg.kanata.keyboards != { };
+          message = "smind.keyboard.super-remap.kanata.keyboards must define at least one keyboard";
+        }
+        {
+          assertion = (!cfg.kanata-switcher.enable) || lib.length switcherKeyboardNames == 1;
+          message = "smind.keyboard.super-remap.kanata-switcher requires exactly one keyboard with a non-null port";
+        }
+      ];
+
       environment.systemPackages = [ config.services.kanata.package ];
 
       services.kanata = {
         enable = true;
-        keyboards.default = {
-          devices = cfg.kanata.devices;
-          port = cfg.kanata.port;
-          # extraDefCfg is prepended to configFile in kanataConfigDir
-          configFile = "${kanataConfigDir}/kanata-super-remap.kbd";
-        };
+        keyboards = lib.mapAttrs
+          (keyboardName: keyboardCfg:
+            {
+              devices = keyboardCfg.devices;
+              config = "";
+              configFile = "${kanataConfigDirs.${keyboardName}}/kanata.kbd";
+            }
+            // lib.optionalAttrs (keyboardCfg.port != null) {
+              port = keyboardCfg.port;
+            })
+          cfg.kanata.keyboards;
       };
 
-      # Restart kanata when config changes
-      systemd.services.kanata-default.restartTriggers = [
-        kanataConfigDir
-      ];
+      systemd.services = lib.mapAttrs'
+        (keyboardName: kanataConfigDir: lib.nameValuePair "kanata-${keyboardName}" {
+          restartTriggers = [ kanataConfigDir ];
+        })
+        kanataConfigDirs;
     })
 
     (lib.mkIf (cfg.kanata-switcher.enable) {
       services.kanata-switcher = {
         enable = true;
-        kanataPort = cfg.kanata.port;
+        kanataPort = switcherKeyboards.${lib.head switcherKeyboardNames}.port;
         gnomeExtension.enable = false; # managed in gnome-extensions.nix
         settings = cfg.kanata-switcher.settings;
       };

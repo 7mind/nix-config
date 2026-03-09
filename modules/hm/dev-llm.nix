@@ -10,7 +10,7 @@ let
     - **Don't give up**: Provide comprehensive solutions
     - **Fail fast**: Use assertions, throw errors early - no graceful fallbacks
     - **Explicit over implicit**: No default parameters or optional chaining for required values
-    - **Minimal comments**: Only write comments to explain something non-obvious, but don't delete existing comments unless they're totally useless
+    - **Minimal new comments**: Only write **new** comments to explain something non-obvious. Don't delete existing comments unless they're totally useless, wrong or out-of-date
     - **No workarounds**: Deliver sound, generic, universal solutions. When you discover a bug or problem, don't hide it - attempt to fix underlying issues, ask for assistance when you can't
     - **Ask questions**: When instructions or requirements are unclear, incomplete, or contradictory - always ask for clarifications before proceeding
 
