@@ -66,6 +66,14 @@ in
       default = null;
       description = "Network namespace to run Zoom in (e.g., 'vpn')";
     };
+
+    discord.enable = lib.mkEnableOption "wrapped Discord";
+
+    discord.netns = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Network namespace to run Discord in (e.g., 'vpn')";
+    };
   };
 
   config = lib.mkMerge [
@@ -91,6 +99,12 @@ in
         name = "zoom-us";
         extraFlags = [ ];
         netns = cfg.zoom.netns;
+      };
+      discordWrapped = wrapAppWithNetnsSlice {
+        pkg = pkgs.discord;
+        name = "discord";
+        extraFlags = [ ];
+        netns = cfg.discord.netns;
       };
 
       # Wrapper that waits for StatusNotifierWatcher D-Bus service before launching
@@ -119,6 +133,7 @@ in
         (lib.optional cfg.slack.enable slackWrapped)
         (lib.optional cfg.element.enable elementWrapped)
         (lib.optional cfg.zoom.enable zoomWrapped)
+        (lib.optional cfg.discord.enable discordWrapped)
       ];
 
       smind.hm.autostart.programs = lib.flatten [
