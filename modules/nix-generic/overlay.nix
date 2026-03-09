@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, cfg-meta, ... }:
 
 {
   nixpkgs.overlays = [
@@ -21,7 +21,7 @@
       codex = prev.codex.overrideAttrs (old: rec {
         version = "0.111.0";
         nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ prev.pkg-config ];
-        buildInputs = (old.buildInputs or [ ]) ++ [ prev.libcap ];
+        buildInputs = (old.buildInputs or [ ]) ++ (if cfg-meta.isLinux then [ prev.libcap ] else [ ]);
         src = prev.fetchFromGitHub {
           owner = "openai";
           repo = "codex";
