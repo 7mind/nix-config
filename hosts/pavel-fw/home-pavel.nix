@@ -7,7 +7,7 @@
   ];
 
   services.wluma = {
-    enable = true;
+    enable = false;
     settings = {
       als.iio = {
         path = "/sys/bus/iio/devices";
