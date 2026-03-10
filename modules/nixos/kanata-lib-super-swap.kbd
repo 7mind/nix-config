@@ -1,11 +1,11 @@
 ;; Shared Kanata helpers for keyboard layouts.
 
-(deftemplate hold-tap (tap-time hold-time tap-action hold-action)
-  (tap-hold-press $tap-time $hold-time $tap-action $hold-action)
+(deftemplate tap-hold (tap-action hold-action)
+  (tap-hold-press 150 150 $tap-action $hold-action)
 )
 
-(deftemplate held-mod-tap (tap-time hold-time tap-action hold-action)
-  (multi $hold-action (tap-hold-press $tap-time $hold-time $tap-action $hold-action))
+(deftemplate tap-hold-eager (tap-action hold-action)
+  (multi $hold-action (tap-hold-press 150 150 $tap-action $hold-action))
 )
 
 (deftemplate hold-terminal-ctrl-swapped (hold-action)
@@ -30,8 +30,8 @@
 )
 
 (defalias
-  space-cadet-left-shift (t! held-mod-tap 150 150 S-9 lsft)
-  space-cadet-right-shift (t! held-mod-tap 150 150 S-0 rsft)
+  space-cadet-left-shift (t! tap-hold-eager S-9 lsft)
+  space-cadet-right-shift (t! tap-hold-eager S-0 rsft)
   common-remap-escape C-A-M-tab
 )
 

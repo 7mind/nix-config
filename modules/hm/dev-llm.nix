@@ -136,8 +136,8 @@ in
         enable = true;
         custom-instructions = claudeMemoryText;
         settings = {
-          model = "gpt-5.4";
-          model_reasoning_effort = "medium";
+#          model = "gpt-5.4";
+#          model_reasoning_effort = "medium";
           project_doc_fallback_filenames = [ "CLAUDE.md" ];
           features.multi_agent = true;
           features.steer = true;

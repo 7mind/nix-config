@@ -1,11 +1,9 @@
 ;; Mac-style keyboard shortcuts via kanata
 ;; Kanata simulator for testing: https://jtroo.github.io/
 
-;; Caps Lock is handled by XKB grp:caps_toggle for layout switching
-;; No kanata remapping needed
-(defsrc)
-
 (include kanata-lib.kbd)
+
+(defsrc)
 
 ;; Mac-style: Super+Key → Ctrl+Key (only for specific keys)
 ;; Super+Tab, Super+Q, etc. are NOT remapped (handled by GNOME/desktop)
