@@ -14,7 +14,7 @@
       networking = {
         networkmanager = {
           enable = true;
-          wifi.backend = "iwd";
+          wifi.backend = "wpa_supplicant";
           unmanaged = [
             "type:ethernet"
             "type:tun"
@@ -28,8 +28,8 @@
           ];
         };
 
-        wireless.iwd.enable = true;
-        wireless.enable = false;
+        wireless.iwd.enable = false;
+        wireless.enable = true;
       };
 
       # NetworkManager does not manage ethernet, so GIO's default networkmanager
