@@ -17,6 +17,18 @@
       extraUpFlags = [ "--accept-dns=false" ];
     };
 
+    systemd.services.tailscale-operator = lib.mkIf (config.smind.host.owner != null) {
+      description = "Set tailscale operator to ${config.smind.host.owner}";
+      after = [ "tailscaled.service" ];
+      wants = [ "tailscaled.service" ];
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${pkgs.tailscale}/bin/tailscale set --operator=${config.smind.host.owner}";
+        RemainAfterExit = true;
+      };
+    };
+
     systemd.network.wait-online.ignoredInterfaces = [ "tailscale0" ];
 
     systemd.services.ip-rules = {
