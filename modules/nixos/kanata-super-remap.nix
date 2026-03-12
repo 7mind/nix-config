@@ -71,7 +71,7 @@ in
 
     kanata-switcher = {
       enable = lib.mkEnableOption "kanata-switcher for automatic layer switching";
-
+      verbose = lib.mkEnableOption "disable --quiet-focus";
       settings = lib.mkOption {
         type = lib.types.listOf lib.types.attrs;
         default = [
@@ -143,6 +143,7 @@ in
         kanataPort = switcherKeyboards.${lib.head switcherKeyboardNames}.port;
         gnomeExtension.enable = false; # managed in gnome-extensions.nix
         settings = cfg.kanata-switcher.settings;
+        logging = if cfg.kanata-switcher.verbose then "none" else "quiet-focus";
       };
 
       # Workaround: restart kanata-switcher for all active users during activation
