@@ -31,7 +31,9 @@
 
     systemd.network.wait-online.ignoredInterfaces = [ "tailscale0" ];
 
-    systemd.services.ip-rules = {
+    # On laptops, we rely on Tailscale subnet routing to reach LAN hosts remotely,
+    # so we must not override Tailscale's routing table with the main table.
+    systemd.services.ip-rules = lib.mkIf (!config.smind.isLaptop) {
       description = "Always prefer LAN routes over tailscale";
       after = [ "network.target" ];
       wantedBy = [ "multi-user.target" ];
