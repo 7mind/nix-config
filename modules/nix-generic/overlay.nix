@@ -14,19 +14,19 @@
       #   };
       # });
 
-      # Update codex: 0.92.0 -> 0.111.0
+      # Update codex: 0.92.0 -> 0.114.0
       # Uses importCargoLock instead of fetchCargoVendor because a git
       # dependency (rules_rust) contains Cargo.toml files with unstable
       # features that break fetchCargoVendor's cargo metadata invocation.
       codex = prev.codex.overrideAttrs (old: rec {
-        version = "0.111.0";
+        version = "0.114.0";
         nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ prev.pkg-config ];
         buildInputs = (old.buildInputs or [ ]) ++ (if cfg-meta.isLinux then [ prev.libcap ] else [ ]);
         src = prev.fetchFromGitHub {
           owner = "openai";
           repo = "codex";
           tag = "rust-v${version}";
-          hash = "sha256-hdR70BhiMg9G/ibLCeHnRSY3PcGZDv0vnqBCbzSRD6I=";
+          hash = "sha256-7t+mVwP4+YrG1ciI+OLqsK7TUM9SrDbPsJNrt26iy9c=";
         };
         sourceRoot = "${src.name}/codex-rs";
         cargoDeps = prev.rustPlatform.importCargoLock {
