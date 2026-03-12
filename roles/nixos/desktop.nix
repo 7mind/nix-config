@@ -1,7 +1,8 @@
 { config, lib, ... }:
 
 let
-  isDesktopRole = config.smind.roles.desktop.generic-gnome
+  isDesktopRole =
+    config.smind.roles.desktop.generic-gnome
     || config.smind.roles.desktop.generic-kde
     || config.smind.roles.desktop.generic-cosmic
     || config.smind.roles.desktop.generic;
@@ -99,7 +100,6 @@ in
         desktop.gnome.enable = lib.mkDefault true;
         desktop.gnome.minimal-hotkeys = lib.mkDefault true;
         keyboard.super-remap.enable = lib.mkDefault true;
-        keyboard.super-remap.kanata-switcher.enable = lib.mkDefault true;
       };
     })
 

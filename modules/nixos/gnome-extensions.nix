@@ -2,7 +2,10 @@
 
 let
   hibernateCfg = config.smind.power-management.hibernate;
-  kanataSwitcherCfg = config.smind.keyboard.super-remap.kanata-switcher;
+  superRemapCfg = config.smind.keyboard.super-remap;
+  hasKanataSwitcher = lib.any (keyboardCfg: keyboardCfg."kanata-switcher".enable) (
+    lib.attrValues superRemapCfg.kanata.keyboards
+  );
   extCfg = config.smind.desktop.gnome.extensions;
 
   # Patch extensions to support current GNOME shell version
@@ -46,7 +49,7 @@ let
   ++ lib.optional extCfg.touchpad-gesture-customization.enable pkgs.gnomeExtensions.touchpad-gesture-customization
   ++ lib.optional hibernateCfg.enable hibernateExtensionPatched
   ++ lib.optional config.smind.desktop.gnome.sticky-keys.enable gnomeExtensions.keyboard-modifiers-status
-  ++ lib.optional kanataSwitcherCfg.enable config.services.kanata-switcher.gnomeExtension.package;
+  ++ lib.optional hasKanataSwitcher config.services.kanata-switcher.gnomeExtension.package;
 in
 {
   options = {

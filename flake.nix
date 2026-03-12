@@ -39,6 +39,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
     };
+
     qendercore-adapter = {
       url = "github:pshirshov/qendercore-adapter";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -93,7 +94,7 @@
     };
 
     kanata-switcher = {
-      url = "github:7mind/kanata-switcher";
+      url = "github:7mind/kanata-switcher/persistent-daemon";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
