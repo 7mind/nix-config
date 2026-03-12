@@ -31,19 +31,7 @@
 
     smind.desktop.wayland.session-variables.enable = true;
 
-    # Set SSH_AUTH_SOCK for gcr-ssh-agent in COSMIC sessions
-    # Something sets SSH_AUTH_SOCK to keyring/ssh before shells start,
-    # so we override it in interactive shells (only for COSMIC)
-    programs.zsh.interactiveShellInit = lib.mkIf config.services.gnome.gcr-ssh-agent.enable ''
-      if [[ "$XDG_CURRENT_DESKTOP" == "COSMIC" ]]; then
-        export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/gcr/ssh"
-      fi
-    '';
-    programs.bash.interactiveShellInit = lib.mkIf config.services.gnome.gcr-ssh-agent.enable ''
-      if [[ "$XDG_CURRENT_DESKTOP" == "COSMIC" ]]; then
-        export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/gcr/ssh"
-      fi
-    '';
+    # SSH_AUTH_SOCK override for GCR agent handled by smind.security.keyring module
 
     security.polkit.enable = true;
 

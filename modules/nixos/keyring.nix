@@ -166,6 +166,21 @@ in
       }];
 
       services.gnome.gcr-ssh-agent.enable = true;
+
+      # Ensure SSH_AUTH_SOCK points to GCR agent in all interactive shells.
+      # Graphical sessions may set this via session manager, but non-graphical
+      # sessions (mosh, ssh) need it set explicitly. Also fixes COSMIC sessions
+      # where gnome-keyring overrides SSH_AUTH_SOCK to keyring/ssh.
+      programs.zsh.interactiveShellInit = ''
+        if [ -z "$SSH_AUTH_SOCK" ] || [ "$SSH_AUTH_SOCK" = "$XDG_RUNTIME_DIR/keyring/ssh" ]; then
+          export SSH_AUTH_SOCK="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/gcr/ssh"
+        fi
+      '';
+      programs.bash.interactiveShellInit = ''
+        if [ -z "$SSH_AUTH_SOCK" ] || [ "$SSH_AUTH_SOCK" = "$XDG_RUNTIME_DIR/keyring/ssh" ]; then
+          export SSH_AUTH_SOCK="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/gcr/ssh"
+        fi
+      '';
     })
 
     # KWallet
