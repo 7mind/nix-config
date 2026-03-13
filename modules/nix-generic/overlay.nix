@@ -63,12 +63,12 @@
             patches = [ ];
           });
 
-          construct-classes = python-prev.construct-classes.overridePythonAttrs (old: {
-            postPatch = (old.postPatch or "") + ''
-              substituteInPlace pyproject.toml \
-                --replace-fail "uv_build>=0.8.13,<0.10.0" "uv_build>=0.8.13,<0.11.0"
-            '';
-          });
+          # construct-classes = python-prev.construct-classes.overridePythonAttrs (old: {
+          #   postPatch = (old.postPatch or "") + ''
+          #     substituteInPlace pyproject.toml \
+          #       --replace-fail "uv_build>=0.8.13,<0.9.0" "uv_build>=0.8.13,<0.11.0"
+          #   '';
+          # });
         })
       ];
     })

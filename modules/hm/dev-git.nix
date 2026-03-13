@@ -9,6 +9,7 @@
     home.packages = with pkgs; [ git-review tig lazygit ];
 
     programs.mergiraf.enable = true;
+    programs.mergiraf.enableGitIntegration = true;
 
     programs.git = {
       enable = true;

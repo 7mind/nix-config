@@ -59,7 +59,7 @@
       mpv
 
       # audio
-      helvum
+      crosspipe
 
       brave
 

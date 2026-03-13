@@ -124,6 +124,10 @@ in
           };
           includeCoAuthoredBy = config.smind.hm.dev.llm.coAuthored.enable;
           model = "opus";
+          spinnerVerbs = {
+            mode = "replace";
+            verbs = [ "Working" ];
+          };
           statusLine = {
             "type" = "command";
             "command" = "printf '\\033[2m\\033[37m%s \\033[0m\\033[2m@ %s \\033[0m\\033[2m\\033[36min \\033[1m\\033[36m%s\\033[0m' \"$(whoami)\" \"$(hostname -s)\" \"$(pwd | sed \"s|^$HOME|~|\")\"";
