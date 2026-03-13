@@ -84,16 +84,6 @@
       description = "GNOME window button layout.";
     };
 
-    smind.desktop.gnome.gvfs.disableMtp = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = ''
-        Disable gvfs MTP volume monitor. Prevents gvfsd-mtp from spawning,
-        which can cause nautilus and portal file dialogs to hang when a phone
-        is connected via USB but not in MTP mode.
-      '';
-    };
-
     smind.desktop.gnome.gdm.monitors-xml = lib.mkOption {
       type = lib.types.nullOr lib.types.path;
       default = null;
@@ -344,14 +334,6 @@
     };
 
     services.gvfs.enable = true;
-    services.gvfs.package = lib.mkIf config.smind.desktop.gnome.gvfs.disableMtp
-      (pkgs.gvfs.overrideAttrs (old: {
-        postInstall = (old.postInstall or "") + ''
-          rm -f $out/share/gvfs/remote-volume-monitors/mtp.monitor
-          rm -f $out/share/dbus-1/services/org.gtk.vfs.MTPVolumeMonitor.service
-          rm -f $out/libexec/gvfs-mtp-volume-monitor
-        '';
-      }));
 
     services.udev.packages = [ pkgs.gnome-settings-daemon ];
 
