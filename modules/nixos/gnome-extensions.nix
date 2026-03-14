@@ -88,7 +88,13 @@ in
       grand-theft-focus.enable = lib.mkEnableOption "grand-theft-focus extension" // { default = false; };
       highlight-focus.enable = lib.mkEnableOption "highlight-focus extension" // { default = false; };
       tray-icons-reloaded.enable = lib.mkEnableOption "tray-icons-reloaded extension" // { default = false; };
-      dash-to-dock.enable = lib.mkEnableOption "dash-to-dock extension" // { default = false; };
+      dash-to-dock = {
+        enable = lib.mkEnableOption "dash-to-dock extension" // { default = false; };
+        unity-like-config = {
+          enable = lib.mkEnableOption "unity-like options for dash-to-dock" // { default = true; };
+          super-num-hotkeys = lib.mkEnableOption "enable dash-to-dock super-<N> hotkeys";
+        };
+      };
       dash2dock-lite.enable = lib.mkEnableOption "dash2dock-lite extension" // { default = false; };
       no-overview.enable = lib.mkEnableOption "no-overview extension - skip overview on login" // { default = false; };
       run-or-raise.enable = lib.mkEnableOption "run-or-raise extension (D-Bus always enabled)" // { default = ghosttyCfg.enable; };
@@ -173,7 +179,27 @@ in
             "org/gnome/shell/extensions/Battery-Health-Charging" = {
               polkit-status = "installed";
             };
-          });
+          } ++ lib.optional (extCfg.dash-to-dock.enable && extCfg.dash-to-dock.unity-like-config.enable) {
+            "org/gnome/shell/extensions/dash-to-dock" = {
+              dock-position = "LEFT";
+              dock-fixed = false; # due to upstream bug, only panel mode works for autohide
+              custom-theme-shrink = true;
+#              autohide = true;
+#              intellihide = false;
+#              intellihide-mode = "ALL_WINDOWS";
+              hot-keys = extCfg.dash-to-dock.unity-like-config.super-num-hotkeys;
+              click-action = "focus-or-appspread";
+              scroll-action = "cycle-windows";
+              animation-time = 0.05;
+              custom-background-color = true;
+              background-color = "rgb(36,31,49)";
+              background-opacity = 0.9;
+              transparency-mode = "FIXED";
+              running-indicator-style = "DOTS";
+              show-apps-always-in-the-edge = true;
+            };
+          }
+          );
         }
       ];
     };

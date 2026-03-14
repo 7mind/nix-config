@@ -161,17 +161,17 @@ in
       services.greetd =
         let
           # Determine default session command based on enabled compositor
-          defaultSession =
+          defaultGreetdSession =
             if config.smind.desktop.hyprland.enable then "Hyprland"
-            else if config.smind.desktop.sway.enable then "sway"
             else if config.smind.desktop.niri.enable then "niri-session"
+            else if config.smind.desktop.sway.enable then "sway"
             else "sway";
           sessionDirs = "/run/current-system/sw/share/wayland-sessions:/run/current-system/sw/share/xsessions";
         in
         {
           enable = true;
           settings = {
-            default_session.command = "${pkgs.greetd.tuigreet}/bin/tuigreet --time --sessions ${sessionDirs} --cmd ${defaultSession}";
+            default_session.command = "${pkgs.greetd.tuigreet}/bin/tuigreet --time --sessions ${sessionDirs} --cmd ${defaultGreetdSession}";
           };
         };
     })
