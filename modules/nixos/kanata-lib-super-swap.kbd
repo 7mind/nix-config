@@ -40,50 +40,71 @@
   v-terminal-met lmet
 )
 
-(deftemplate define-terminal-ctrl-swapped (tab-key grave-key space-key)
-  (deflayermap (terminal-ctrl-swapped)
-  $tab-key (fork (multi lctl
-            (on-press press-vkey v-terminal-ctl)
+(deftemplate define-terminal-mods-swapped-layer
+  (
+    layer-name v-terminal-tgt
+    lsrc rsrc
+    ltgt rtgt
+    tab-key tab-action
+    grave-key grave-action
+    space-key space-action
+    space-tap-hold-action
+  )
+  (deflayermap ($layer-name)
+  $tab-key (fork (multi $ltgt
+            (on-press press-vkey $v-terminal-tgt)
             ;; release held down lmet/rmet mods that were used to enter terminal-ctrl-swapped from terminal layer
-            (release-key lmet)
-            (release-key rmet)
-            tab)
-           tab
-           (lctl rctl))
+            (release-key $lsrc)
+            (release-key $rsrc)
+            $tab-action)
+           $tab-action
+           ($ltgt $rtgt))
 
-  $grave-key (fork (multi lctl
-            (on-press press-vkey v-terminal-ctl)
-            (release-key lmet)
-            (release-key rmet)
-            grv)
-           grv
-           (lctl rctl))
+  $grave-key (fork (multi $ltgt
+            (on-press press-vkey $v-terminal-tgt)
+            (release-key $lsrc)
+            (release-key $rsrc)
+            $grave-action)
+           $grave-action
+           ($ltgt $rtgt))
 
-  ;; unmod lmet/rmet mods that were used to enter terminal-ctrl-swapped from terminal layer
-  $space-key (unmod (lmet rmet) lctl spc)
+  $space-key (if-equal $space-tap-hold-action none (fork (multi $ltgt
+               (on-press press-vkey $v-terminal-tgt)
+               (release-key $lsrc)
+               (release-key $rsrc)
+               $space-action)
+              $space-action
+              ($ltgt $rtgt)))
+             (if-not-equal $space-tap-hold-action none
+               (t! tap-hold
+                (fork (multi $ltgt
+                 (on-press press-vkey $v-terminal-tgt)
+                 (release-key $lsrc)
+                 (release-key $rsrc)
+                 $space-action)
+                $space-action
+                ($ltgt $rtgt))
+                $space-tap-hold-action))
   )
 )
+
+(deftemplate define-terminal-ctrl-swapped-aux (tab-key tab-action grave-key grave-action space-key space-action space-tap-hold-action)
+  (t! define-terminal-mods-swapped-layer
+    terminal-ctrl-swapped v-terminal-ctl
+    lmet rmet
+    lctl rctl
+    $tab-key $tab-action $grave-key $grave-action $space-key $space-action $space-tap-hold-action))
+
+
+(deftemplate define-terminal-meta-swapped-aux (tab-key tab-action grave-key grave-action space-key space-action space-tap-hold-action)
+  (t! define-terminal-mods-swapped-layer
+    terminal-meta-swapped v-terminal-met
+    lctl rctl
+    lmet rmet
+    $tab-key $tab-action $grave-key $grave-action $space-key $space-action $space-tap-hold-action))
+
+(deftemplate define-terminal-ctrl-swapped (tab-key grave-key space-key)
+  (t! define-terminal-ctrl-swapped-aux $tab-key $tab-key $grave-key $grave-key $space-key $space-key none))
 
 (deftemplate define-terminal-meta-swapped (tab-key grave-key space-key)
-  (deflayermap (terminal-meta-swapped)
-  $tab-key (fork (multi lmet
-            (on-press press-vkey v-terminal-met)
-            ;; release held down lctl/rctl mods that were used to enter terminal-meta-swapped from terminal layer
-            (release-key lctl)
-            (release-key rctl)
-            tab)
-           tab
-           (lmet rmet))
-
-  $grave-key (fork (multi lmet
-            (on-press press-vkey v-terminal-met)
-            (release-key lctl)
-            (release-key rctl)
-            grv)
-           grv
-           (lmet rmet))
-
-  ;; unmod lctl/rctl mods that were used to enter terminal-meta-swapped from terminal layer
-  $space-key (unmod (lctl rctl) lmet spc)
-  )
-)
+  (t! define-terminal-meta-swapped-aux $tab-key $tab-key $grave-key $grave-key $space-key $space-key none))
