@@ -84,6 +84,16 @@
       description = "GNOME window button layout.";
     };
 
+    smind.desktop.gnome.localsearch.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Enable LocalSearch (Tracker) file indexer. Provides file content search
+        in Nautilus. Disable if localsearch causes hangs (e.g. due to
+        interactions with gvfsd-mtp or network volume monitors).
+      '';
+    };
+
     smind.desktop.gnome.gdm.monitors-xml = lib.mkOption {
       type = lib.types.nullOr lib.types.path;
       default = null;
@@ -334,6 +344,8 @@
     };
 
     services.gvfs.enable = true;
+
+    services.gnome.localsearch.enable = config.smind.desktop.gnome.localsearch.enable;
 
     services.udev.packages = [ pkgs.gnome-settings-daemon ];
 
