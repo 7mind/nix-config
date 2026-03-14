@@ -120,8 +120,6 @@ in
     desktop.gnome.framework-fan-control.enable = false;
     desktop.gnome.gdm.monitors-xml = ./monitors.xml;
     desktop.gnome.touchpad.disableWhileTyping = true;
-    desktop.gnome.localsearch.enable = false;
-    desktop.gnome.gvfs.disableMtp = true;
 
     desktop.cosmic.enable = true;
 

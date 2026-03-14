@@ -86,7 +86,7 @@
 
     smind.desktop.gnome.gvfs.disableMtp = lib.mkOption {
       type = lib.types.bool;
-      default = false;
+      default = true;
       description = ''
         Disable gvfs MTP volume monitor. Prevents gvfsd-mtp from spawning,
         which can cause localsearch hangs and nautilus freezes when a phone
@@ -96,7 +96,7 @@
 
     smind.desktop.gnome.localsearch.enable = lib.mkOption {
       type = lib.types.bool;
-      default = true;
+      default = false;
       description = ''
         Enable LocalSearch (Tracker) file indexer. Provides file content search
         in Nautilus. Disable if localsearch causes hangs (e.g. due to
