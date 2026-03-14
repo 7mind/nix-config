@@ -3,7 +3,7 @@
 let
   cfg = config.smind.hm.dev.jetbrains;
 
-  nodePaths = [ pkgs.nodejs_24 ];
+  commonPaths = [ pkgs.nodejs_24 pkgs.gcc ];
 
   commonLdLibs = with pkgs; [
     libmediainfo
@@ -30,7 +30,7 @@ let
     in
     extended_pkg {
       inherit pkg path;
-      paths = nodePaths ++ extraPaths;
+      paths = commonPaths ++ extraPaths;
       ld-libs = ldLibs;
       defs = {
         XDG_DATA_DIRS = lib.concatStringsSep ":" gsettingsSchemaDirs;
