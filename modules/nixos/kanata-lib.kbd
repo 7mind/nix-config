@@ -1,25 +1,42 @@
-;; Kanata library: helper templates for key overrides
+;; A civilized alternative to 'defoverrides' that works per-layer
 ;; Include this file in your kanata config: (include kanata-lib.kbd)
 
 (deftemplate mods-except (req-list)
-  (or
-    (if-not-in-list lsft $req-list lsft)
-    (if-not-in-list rsft $req-list rsft)
-    (if-not-in-list lalt $req-list lalt)
-    (if-not-in-list ralt $req-list ralt)
-    (if-not-in-list lctl $req-list lctl)
-    (if-not-in-list rctl $req-list rctl)
-    (if-not-in-list lmet $req-list lmet)
-    (if-not-in-list rmet $req-list rmet)
-  )
+  (if-not-in-list lsft ($req-list) lsft)
+  (if-not-in-list rsft ($req-list) rsft)
+  (if-not-in-list lalt ($req-list) lalt)
+  (if-not-in-list ralt ($req-list) ralt)
+  (if-not-in-list lctl ($req-list) lctl)
+  (if-not-in-list rctl ($req-list) rctl)
+  (if-not-in-list lmet ($req-list) lmet)
+  (if-not-in-list rmet ($req-list) rmet)
+)
+
+(deftemplate mk-override-ext-body (required-mods-expr required-mods-list key result)
+  (switch
+      ((and $required-mods-expr (not (t! mods-except $required-mods-list)))) $result break
+      () $key break)
 )
 
 (deftemplate mk-override-ext (required-mods-expr required-mods-list key result)
-  $key (switch
-        ((and $required-mods-expr (not (t! mods-except ($required-mods-list))))) $result break
-        () $key break)
+  $key (t! mk-override-ext-body $required-mods-expr $required-mods-list $key $result)
+)
+
+(deftemplate mk-override-body (required-mods key result)
+  (t! mk-override-ext-body $required-mods $required-mods $key $result)
 )
 
 (deftemplate mk-override (required-mods key result)
   (t! mk-override-ext $required-mods $required-mods $key $result)
+)
+
+;; alt-arrows, alt-shift-arrows, alt-backspace and alt-delete overrides (ONLY in base layer, NOT in terminal layer)
+
+(deftemplate define-alt-arrow-aliases (target-layer)
+  (defalias
+    alt-lft (t! mk-override-ext-body (and (base-layer $target-layer) (or lalt ralt)) (lalt ralt lsft rsft) left (unmod (lmet rmet lalt ralt) lctl left))
+    alt-rgt (t! mk-override-ext-body (and (base-layer $target-layer) (or lalt ralt)) (lalt ralt lsft rsft) right (unmod (lmet rmet lalt ralt) lctl right))
+    alt-bspc (t! mk-override-body (and (base-layer $target-layer) (or lalt ralt)) bspc (unmod lctl bspc))
+    alt-del (t! mk-override-body (and (base-layer $target-layer) (or lalt ralt)) del (unmod lctl del))
+  )
 )
