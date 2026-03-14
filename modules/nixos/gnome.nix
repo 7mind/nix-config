@@ -84,6 +84,16 @@
       description = "GNOME window button layout.";
     };
 
+    smind.desktop.gnome.gvfs.disableMtp = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Disable gvfs MTP volume monitor. Prevents gvfsd-mtp from spawning,
+        which can cause localsearch hangs and nautilus freezes when a phone
+        is connected via USB in charging/locked mode.
+      '';
+    };
+
     smind.desktop.gnome.localsearch.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -344,6 +354,15 @@
     };
 
     services.gvfs.enable = true;
+    # Remove MTP volume monitor files so gvfsd-mtp can't be D-Bus activated
+    services.gvfs.package = lib.mkIf config.smind.desktop.gnome.gvfs.disableMtp
+      (pkgs.gvfs.overrideAttrs (old: {
+        postInstall = (old.postInstall or "") + ''
+          rm -f $out/share/gvfs/remote-volume-monitors/mtp.monitor
+          rm -f $out/share/dbus-1/services/org.gtk.vfs.MTPVolumeMonitor.service
+          rm -f $out/lib/systemd/user/gvfs-mtp-volume-monitor.service
+        '';
+      }));
 
     services.gnome.localsearch.enable = config.smind.desktop.gnome.localsearch.enable;
 
