@@ -9,6 +9,24 @@
 let
   jsonFormat = pkgs.formats.json { };
   tomlFormat = pkgs.formats.toml { };
+  rootlessPodmanEnabled =
+    cfg-meta.isLinux && (outerConfig.smind.containers.docker.rootless.enable or false);
+  rootlessPodmanSocketPathValue = outerConfig.smind.containers.docker.rootless.llmSocketPath or null;
+  rootlessPodmanSocketUriValue = outerConfig.smind.containers.docker.rootless.llmSocketUri or null;
+  rootlessPodmanSocketPath =
+    if !rootlessPodmanEnabled then
+      null
+    else if rootlessPodmanSocketPathValue == null then
+      throw "smind.containers.docker.rootless.llmSocketPath must be set when rootless Podman is enabled"
+    else
+      rootlessPodmanSocketPathValue;
+  rootlessPodmanSocketUri =
+    if !rootlessPodmanEnabled then
+      null
+    else if rootlessPodmanSocketUriValue == null then
+      throw "smind.containers.docker.rootless.llmSocketUri must be set when rootless Podman is enabled"
+    else
+      rootlessPodmanSocketUriValue;
 
   defaultCustomModelName = "huihui_ai/qwen3.5-abliterated:35b-custom";
 
@@ -95,6 +113,22 @@ let
     theme = "dark";
     trusted_folders = [ ];
   };
+
+  containerSocketForwardingSnippet = ''
+    SOCKET_ARGS=()
+    ${lib.optionalString rootlessPodmanEnabled ''
+      ROOTLESS_PODMAN_SOCKET_PATH=${lib.escapeShellArg rootlessPodmanSocketPath}
+      ROOTLESS_PODMAN_SOCKET_URI=${lib.escapeShellArg rootlessPodmanSocketUri}
+
+      if [[ -S "$ROOTLESS_PODMAN_SOCKET_PATH" ]]; then
+        SOCKET_ARGS+=(--rw "$ROOTLESS_PODMAN_SOCKET_PATH")
+        SOCKET_ARGS+=(--env "DOCKER_HOST=$ROOTLESS_PODMAN_SOCKET_URI")
+        SOCKET_ARGS+=(--env "CONTAINER_HOST=$ROOTLESS_PODMAN_SOCKET_URI")
+      else
+        echo "warning: podsvc-llm Podman socket not available, skipping bind: $ROOTLESS_PODMAN_SOCKET_PATH" >&2
+      fi
+    ''}
+  '';
 in
 {
   options = {
@@ -357,12 +391,15 @@ in
                 *) CMD_ARGS+=("$1"); shift ;;
               esac
             done
+            ${containerSocketForwardingSnippet}
             exec ${firejail-wrap}/bin/firejail-wrap \
               --rw "''${PWD}" \
               --rw "''${HOME}/.claude" \
               --rw "''${HOME}/.claude.json" \
               --rw "''${HOME}/.config/claude" \
               --rw "''${HOME}/.cache" \
+              --rw "''${HOME}/.ivy2" \
+              "''${SOCKET_ARGS[@]}" \
               --ro "''${HOME}/.config/git" \
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \
@@ -385,12 +422,15 @@ in
             mkdir -p "$HOME/.claude-work-home"
             mkdir -p "$HOME/.config/claude-work"
             touch "$HOME/.claude-work-home/.claude.json"
+            ${containerSocketForwardingSnippet}
             exec ${firejail-wrap}/bin/firejail-wrap \
               --rw "''${PWD}" \
               --bind "''${HOME}/.claude-work,''${HOME}/.claude" \
               --bind "''${HOME}/.claude-work-home/.claude.json,''${HOME}/.claude.json" \
               --bind "''${HOME}/.config/claude-work,''${HOME}/.config/claude" \
               --rw "''${HOME}/.cache" \
+              --rw "''${HOME}/.ivy2" \
+              "''${SOCKET_ARGS[@]}" \
               --ro "''${HOME}/.config/git" \
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \
@@ -465,10 +505,13 @@ in
                 ;;
             esac
 
+            ${containerSocketForwardingSnippet}
             exec ${firejail-wrap}/bin/firejail-wrap \
                 --rw "''${PWD}" \
                 --rw "''${HOME}/.copilot" \
                 --rw "''${HOME}/.cache" \
+                --rw "''${HOME}/.ivy2" \
+                "''${SOCKET_ARGS[@]}" \
                 --ro "''${HOME}/.config/git" \
               --ro "''${HOME}/.config/gh" \
               --ro "''${HOME}/.config/direnv" \
@@ -544,10 +587,13 @@ in
                 ;;
             esac
 
+            ${containerSocketForwardingSnippet}
             exec ${firejail-wrap}/bin/firejail-wrap \
                 --rw "''${PWD}" \
                 --rw "''${HOME}/.copilot-work" \
                 --rw "''${HOME}/.cache" \
+                --rw "''${HOME}/.ivy2" \
+                "''${SOCKET_ARGS[@]}" \
                 --ro "''${HOME}/.config/git" \
               --ro "''${HOME}/.config/gh" \
               --ro "''${HOME}/.config/direnv" \
@@ -567,11 +613,14 @@ in
                 *) CMD_ARGS+=("$1"); shift ;;
               esac
             done
+            ${containerSocketForwardingSnippet}
             exec ${firejail-wrap}/bin/firejail-wrap \
               --rw "''${PWD}" \
               --rw "''${HOME}/.codex" \
               --rw "''${HOME}/.config/codex" \
               --rw "''${HOME}/.cache" \
+              --rw "''${HOME}/.ivy2" \
+              "''${SOCKET_ARGS[@]}" \
               --ro "''${HOME}/.config/git" \
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \
@@ -590,10 +639,13 @@ in
                 *) CMD_ARGS+=("$1"); shift ;;
               esac
             done
+            ${containerSocketForwardingSnippet}
             exec ${firejail-wrap}/bin/firejail-wrap \
               --rw "''${PWD}" \
               --rw "''${HOME}/.gemini" \
               --rw "''${HOME}/.cache" \
+              --rw "''${HOME}/.ivy2" \
+              "''${SOCKET_ARGS[@]}" \
               --ro "''${HOME}/.config/git" \
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \
@@ -612,10 +664,13 @@ in
                 *) CMD_ARGS+=("$1"); shift ;;
               esac
             done
+            ${containerSocketForwardingSnippet}
             exec ${firejail-wrap}/bin/firejail-wrap \
               --rw "''${PWD}" \
               --bind "''${HOME}/.gemini-work,''${HOME}/.gemini" \
               --rw "''${HOME}/.cache" \
+              --rw "''${HOME}/.ivy2" \
+              "''${SOCKET_ARGS[@]}" \
               --ro "''${HOME}/.config/git" \
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \
@@ -636,11 +691,14 @@ in
             done
             mkdir -p "$HOME/.vibe"
             mkdir -p "$HOME/.local/share/vibe"
+            ${containerSocketForwardingSnippet}
             exec ${firejail-wrap}/bin/firejail-wrap \
               --rw "''${PWD}" \
               --rw "''${HOME}/.vibe" \
               --rw "''${HOME}/.local/share/vibe" \
               --rw "''${HOME}/.cache" \
+              --rw "''${HOME}/.ivy2" \
+              "''${SOCKET_ARGS[@]}" \
               --ro "''${HOME}/.config/git" \
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \
@@ -659,11 +717,14 @@ in
                 *) CMD_ARGS+=("$1"); shift ;;
               esac
             done
+            ${containerSocketForwardingSnippet}
             exec ${firejail-wrap}/bin/firejail-wrap \
               --rw "''${PWD}" \
               --rw "''${HOME}/.config/opencode" \
               --rw "''${HOME}/.local/share/opencode" \
               --rw "''${HOME}/.cache" \
+              --rw "''${HOME}/.ivy2" \
+              "''${SOCKET_ARGS[@]}" \
               --ro "''${HOME}/.config/git" \
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \

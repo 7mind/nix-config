@@ -3,6 +3,7 @@
   ./autostart.nix
   ./cleanups.nix
   ./cosmic-keybindings.nix
+  ./docker.nix
   ./kde.nix
   ./mc.nix
   ./dev-generic.nix
