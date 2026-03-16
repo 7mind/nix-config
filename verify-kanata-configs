@@ -1,0 +1,251 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")"
+
+export show_trace=""
+export parallel="1"
+export verbose=""
+export flake_ref=".?submodules=1"
+selected_hosts=()
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -t|--trace) show_trace="--show-trace"; shift ;;
+        -p|--parallel) parallel=1; shift ;;
+        -np|--no-parallel) parallel=""; shift ;;
+        -v|--verbose) verbose=1; shift ;;
+        --no-submodules) flake_ref="."; shift ;;
+        -h|--help)
+            echo "Usage: $0 [-t|--trace] [-np|--no-parallel] [-v|--verbose] [--no-submodules] [host...]"
+            echo "  -t, --trace        Show full stack trace on errors"
+            echo "  -p, --parallel     Verify hosts in parallel (default)"
+            echo "  -np, --no-parallel Verify hosts sequentially"
+            echo "  -v, --verbose      Print commands being executed"
+            echo "  --no-submodules    Do not include submodules in flake evaluation"
+            echo ""
+            echo "If no hosts are specified, all hosts are checked."
+            exit 0
+            ;;
+        -*) echo "Unknown option: $1"; exit 1 ;;
+        *) selected_hosts+=("$1"); shift ;;
+    esac
+done
+
+if [[ -n "$parallel" ]] && ! command -v parallel &>/dev/null; then
+    echo "Warning: 'parallel' not found, falling back to sequential execution" >&2
+    parallel=""
+fi
+
+run_cmd() {
+    if [[ -n "$verbose" ]]; then
+        echo "+ $*" >&2
+    fi
+    "$@"
+}
+
+resolve_kanata() {
+    if command -v kanata &>/dev/null; then
+        command -v kanata
+        return 0
+    fi
+
+    if [[ -x /run/current-system/sw/bin/kanata ]]; then
+        echo /run/current-system/sw/bin/kanata
+        return 0
+    fi
+
+    echo "Error: kanata binary not found in PATH or /run/current-system/sw/bin/kanata" >&2
+    exit 1
+}
+
+export kanata_bin="$(resolve_kanata)"
+export flake_uri="git+file://$(pwd)"
+if [[ "$flake_ref" == *"?submodules=1" ]]; then
+    export flake_uri="${flake_uri}?submodules=1"
+fi
+
+git add .
+git submodule foreach git add .
+
+echo "=== Discovering configurations ==="
+
+nixos_hosts=$(run_cmd nix eval "${flake_ref}#nixosConfigurations" --apply 'x: builtins.attrNames x' --json 2>/dev/null | jq -r '.[]')
+darwin_hosts=$(run_cmd nix eval "${flake_ref}#darwinConfigurations" --apply 'x: builtins.attrNames x' --json 2>/dev/null | jq -r '.[]')
+
+if [[ ${#selected_hosts[@]} -gt 0 ]]; then
+    filtered_nixos=""
+    filtered_darwin=""
+    for host in "${selected_hosts[@]}"; do
+        if echo "$nixos_hosts" | grep -qx "$host"; then
+            filtered_nixos+="$host"$'\n'
+        elif echo "$darwin_hosts" | grep -qx "$host"; then
+            filtered_darwin+="$host"$'\n'
+        else
+            echo "Error: Unknown host '$host'" >&2
+            echo "Available NixOS hosts: $(echo $nixos_hosts | tr '\n' ' ')" >&2
+            echo "Available Darwin hosts: $(echo $darwin_hosts | tr '\n' ' ')" >&2
+            exit 1
+        fi
+    done
+    nixos_hosts=$(echo -n "$filtered_nixos" | sed '/^$/d')
+    darwin_hosts=$(echo -n "$filtered_darwin" | sed '/^$/d')
+fi
+
+echo "NixOS hosts: $(echo $nixos_hosts | tr '\n' ' ')"
+echo "Darwin hosts: $(echo $darwin_hosts | tr '\n' ' ')"
+echo
+
+total_hosts=$(( $(wc -w <<< "$nixos_hosts") + $(wc -w <<< "$darwin_hosts") ))
+if [[ $total_hosts -le 1 ]] && [[ -n "$parallel" ]]; then
+    parallel=""
+fi
+
+verify_host() {
+    local type=$1
+    local host=$2
+
+    if [[ "$type" != "nixos" ]]; then
+        echo "SKIP: $host (darwin host)" >&2
+        echo "skip"
+        return 0
+    fi
+
+    echo "=== Verifying kanata configs for $type: $host ===" >&2
+
+    local eval_cmd=(
+        nix eval
+        "${flake_ref}#nixosConfigurations.$host.config"
+        --apply
+        'cfg: if cfg.smind.keyboard.super-remap.enable then builtins.mapAttrs (_: v: v.configFile) cfg.services.kanata.keyboards else {}'
+        --json
+    )
+    if [[ -n "$show_trace" ]]; then
+        eval_cmd+=("$show_trace")
+    fi
+
+    local keyboard_json
+    if [[ -n "$verbose" ]]; then
+        echo "+ ${eval_cmd[*]}" >&2
+    fi
+    if ! keyboard_json="$("${eval_cmd[@]}")"; then
+        echo "FAILED: $host" >&2
+        "${eval_cmd[@]}" >&2 || true
+        echo "fail"
+        return 0
+    fi
+
+    local keyboard_count
+    keyboard_count=$(jq 'length' <<< "$keyboard_json")
+    if [[ "$keyboard_count" -eq 0 ]]; then
+        echo "SKIP: $host (no kanata-super-remap keyboards)" >&2
+        echo "skip"
+        return 0
+    fi
+
+    local host_failed=0
+    while IFS=$'\t' read -r keyboard_name config_file; do
+        [[ -n "$keyboard_name" ]] || continue
+
+        echo "--- Checking $host:$keyboard_name" >&2
+
+        local build_expr
+        printf -v build_expr '%s\n' \
+            'let' \
+            "  flake = builtins.getFlake \"${flake_uri}\";" \
+            "  host = \"${host}\";" \
+            "  keyboard = \"${keyboard_name}\";" \
+            '  cfg = builtins.getAttr host flake.nixosConfigurations;' \
+            '  keyboardCfg = builtins.getAttr keyboard cfg.config.services.kanata.keyboards;' \
+            'in' \
+            'builtins.dirOf keyboardCfg.configFile'
+
+        local build_cmd=(nix build --impure --no-link --print-out-paths --expr "$build_expr")
+        if [[ -n "$show_trace" ]]; then
+            build_cmd+=("$show_trace")
+        fi
+        if [[ -n "$verbose" ]]; then
+            echo "+ ${build_cmd[*]}" >&2
+        fi
+        local config_dir
+        if ! config_dir="$("${build_cmd[@]}")"; then
+            echo "FAILED: $host:$keyboard_name (could not build generated config)" >&2
+            "${build_cmd[@]}" >&2 || true
+            host_failed=1
+            continue
+        fi
+
+        local check_cmd=("$kanata_bin" --cfg "$config_file" --check)
+        if [[ -n "$verbose" ]]; then
+            echo "+ ${check_cmd[*]}" >&2
+        fi
+        if ! "${check_cmd[@]}" >/dev/null; then
+            echo "FAILED: $host:$keyboard_name" >&2
+            "${check_cmd[@]}" >&2 || true
+            host_failed=1
+            continue
+        fi
+
+        echo "OK: $host:$keyboard_name" >&2
+    done < <(jq -r 'to_entries | sort_by(.key)[] | [.key, .value] | @tsv' <<< "$keyboard_json")
+
+    if [[ "$host_failed" -eq 0 ]]; then
+        echo "OK: $host" >&2
+        echo "ok"
+    else
+        echo "FAILED: $host" >&2
+        echo "fail"
+    fi
+}
+
+if [[ -n "$parallel" ]]; then
+    export -f verify_host
+    export kanata_bin flake_ref show_trace verbose
+
+    parallel_jobs="$(nproc)"
+    results=$(
+        {
+            for host in $nixos_hosts; do echo "nixos $host"; done
+            for host in $darwin_hosts; do echo "darwin $host"; done
+        } | parallel -j "$parallel_jobs" --will-cite --colsep ' ' verify_host {1} {2}
+    )
+
+    succeeded=$(echo "$results" | grep -c "^ok$" || true)
+    failed=$(echo "$results" | grep -c "^fail$" || true)
+    skipped=$(echo "$results" | grep -c "^skip$" || true)
+else
+    failed=0
+    succeeded=0
+    skipped=0
+
+    for host in $nixos_hosts; do
+        result=$(verify_host nixos "$host")
+        if [[ "$result" == "ok" ]]; then
+            succeeded=$((succeeded + 1))
+        elif [[ "$result" == "skip" ]]; then
+            skipped=$((skipped + 1))
+        else
+            failed=$((failed + 1))
+        fi
+        echo
+    done
+
+    for host in $darwin_hosts; do
+        result=$(verify_host darwin "$host")
+        if [[ "$result" == "ok" ]]; then
+            succeeded=$((succeeded + 1))
+        elif [[ "$result" == "skip" ]]; then
+            skipped=$((skipped + 1))
+        else
+            failed=$((failed + 1))
+        fi
+        echo
+    done
+fi
+
+echo "=== Summary ==="
+echo "Succeeded: $succeeded"
+echo "Failed: $failed"
+echo "Skipped: $skipped"
+
+exit $failed
