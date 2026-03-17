@@ -198,47 +198,9 @@ in
           options nvidia NVreg_TemporaryFilePath=/var/tmp
         '';
 
-        # NVIDIA suspend/resume/hibernate services - required for proper power management
-        systemd.services.nvidia-suspend.enable = true;
-        systemd.services.nvidia-resume.enable = true;
-        systemd.services.nvidia-hibernate.enable = true;
-
-        # All sleep targets need appropriate NVIDIA services before sleep and nvidia-resume after wake
-        # suspend needs nvidia-suspend
-        systemd.services."systemd-suspend" = {
-          requires = [ "nvidia-suspend.service" ];
-          after = [ "nvidia-suspend.service" ];
-        };
-        # hibernate needs nvidia-hibernate
-        systemd.services."systemd-hibernate" = {
-          requires = [ "nvidia-hibernate.service" ];
-          after = [ "nvidia-hibernate.service" ];
-        };
-        # hybrid-sleep needs nvidia-hibernate (writes to disk then suspends)
-        systemd.services."systemd-hybrid-sleep" = {
-          requires = [ "nvidia-hibernate.service" ];
-          after = [ "nvidia-hibernate.service" ];
-        };
-        # suspend-then-hibernate needs both (creates hibernate image, then suspends)
-        systemd.services."systemd-suspend-then-hibernate" = {
-          requires = [ "nvidia-hibernate.service" "nvidia-suspend.service" ];
-          after = [ "nvidia-hibernate.service" "nvidia-suspend.service" ];
-        };
-        # nvidia-resume should run after all sleep services wake
-        systemd.services.nvidia-resume = {
-          wantedBy = [
-            "systemd-suspend.service"
-            "systemd-hibernate.service"
-            "systemd-hybrid-sleep.service"
-            "systemd-suspend-then-hibernate.service"
-          ];
-          after = [
-            "systemd-suspend.service"
-            "systemd-hibernate.service"
-            "systemd-hybrid-sleep.service"
-            "systemd-suspend-then-hibernate.service"
-          ];
-        };
+        # NVIDIA suspend/resume/hibernate is handled by nixpkgs' hardware.nvidia module:
+        # - With kernelSuspendNotifier (driver 595+, open modules): kernel handles it directly
+        # - Without: nixpkgs creates systemd services with nvidia-sleep.sh ExecStart
 
         environment.systemPackages = [
           gpuBindVfio
@@ -273,34 +235,13 @@ in
         # proper suspend support for newer GPUs and can cause s2idle crashes
         boot.blacklistedKernelModules = [ "nouveau" ];
 
-        # Disable nvidia suspend/resume/hibernate services inherited from parent config.
-        # Without the nvidia driver these services have no ExecStart, causing systemd
-        # to refuse them and abort suspend entirely.
+        # Disable nvidia suspend/resume/hibernate — nixpkgs creates these via
+        # hardware.nvidia.powerManagement; force-disabling them here prevents
+        # empty-ExecStart services from blocking suspend in the no-nvidia specialisation.
+        hardware.nvidia.powerManagement.kernelSuspendNotifier = lib.mkForce false;
         systemd.services.nvidia-suspend.enable = lib.mkForce false;
         systemd.services.nvidia-resume.enable = lib.mkForce false;
         systemd.services.nvidia-hibernate.enable = lib.mkForce false;
-
-        # Remove nvidia service dependencies from sleep targets
-        systemd.services."systemd-suspend" = {
-          requires = lib.mkForce [ ];
-          after = lib.mkForce [ ];
-        };
-        systemd.services."systemd-hibernate" = {
-          requires = lib.mkForce [ ];
-          after = lib.mkForce [ ];
-        };
-        systemd.services."systemd-hybrid-sleep" = {
-          requires = lib.mkForce [ ];
-          after = lib.mkForce [ ];
-        };
-        systemd.services."systemd-suspend-then-hibernate" = {
-          requires = lib.mkForce [ ];
-          after = lib.mkForce [ ];
-        };
-        systemd.services.nvidia-resume = {
-          wantedBy = lib.mkForce [ ];
-          after = lib.mkForce [ ];
-        };
       };
 
     in

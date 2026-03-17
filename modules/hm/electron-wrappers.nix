@@ -9,13 +9,13 @@ in
 
     cpuQuota = lib.mkOption {
       type = lib.types.str;
-      default = "100%";
+      default = "200%";
       description = "CPU quota for heavy apps slice (100% = 1 core)";
     };
 
     cpuWeight = lib.mkOption {
       type = lib.types.int;
-      default = 50;
+      default = 90;
       description = "CPU weight for heavy apps slice (default system weight is 100)";
     };
 

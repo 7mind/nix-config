@@ -40,9 +40,6 @@
     # Resource-limited Electron apps
     electron-wrappers = {
       enable = true;
-      cpuQuota = "200%";
-      cpuWeight = 70;
-      memoryMax = "4G";
       slack.enable = true;
       slack.netns = "vpn";
       element.enable = true;
