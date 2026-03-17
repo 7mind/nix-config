@@ -37,5 +37,10 @@ in
       lib.mkIf (pmCfg.hibernate.enable && cfg.disableFreezeUserSessions) "false";
     systemd.services.systemd-suspend-then-hibernate.environment.SYSTEMD_SLEEP_FREEZE_USER_SESSIONS =
       lib.mkIf (pmCfg.hibernate.enable && cfg.disableFreezeUserSessions) "false";
+
+    # Workaround: nixpkgs power-management.nix creates pre-sleep and pre-shutdown
+    # services with script = powerDownCommands. When powerDownCommands is empty (default),
+    # no ExecStart is generated. systemd 259+ rejects services without ExecStart.
+    powerManagement.powerDownCommands = lib.mkDefault "true";
   };
 }

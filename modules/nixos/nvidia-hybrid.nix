@@ -201,14 +201,43 @@ in
         # NVIDIA suspend/resume/hibernate is handled by nixpkgs' hardware.nvidia module:
         # - With kernelSuspendNotifier (driver 595+, open modules): kernel handles it directly
         # - Without: nixpkgs creates systemd services with nvidia-sleep.sh ExecStart
+        #
+        # When kernelSuspendNotifier is true, nixpkgs correctly skips creating
+        # nvidia-suspend/resume/hibernate services. However, stale systemd state
+        # from previous generations (that had these services) can persist in memory
+        # across nixos-rebuild switch. systemd 259 creates empty stubs for referenced
+        # but missing units and then rejects them (no ExecStart), blocking suspend.
+        # Provide explicit no-op services as a safety net.
+        systemd.services = lib.mkMerge [
+          # When kernelSuspendNotifier is true, nixpkgs correctly skips creating
+          # nvidia-suspend/resume/hibernate services. However, stale systemd state
+          # from previous generations (that had these services) can persist in memory
+          # across nixos-rebuild switch. systemd 259 creates empty stubs for referenced
+          # but missing units and then rejects them (no ExecStart), blocking suspend.
+          # Provide explicit no-op services as a safety net.
+          (lib.mkIf config.hardware.nvidia.powerManagement.kernelSuspendNotifier (
+            let
+              noop = desc: {
+                description = desc;
+                serviceConfig = {
+                  Type = "oneshot";
+                  ExecStart = "${pkgs.coreutils}/bin/true";
+                };
+              };
+            in {
+              nvidia-suspend = noop "NVIDIA suspend (no-op, kernel handles via suspend notifier)";
+              nvidia-hibernate = noop "NVIDIA hibernate (no-op, kernel handles via suspend notifier)";
+              nvidia-resume = noop "NVIDIA resume (no-op, kernel handles via suspend notifier)";
+            }
+          ))
+          { nvidia-persistenced.enable = false; }
+        ];
 
         environment.systemPackages = [
           gpuBindVfio
           gpuBindNvidia
           pkgs.libva-utils
         ];
-
-        systemd.services.nvidia-persistenced.enable = false;
 
         # Force session to use AMD iGPU by default
         # This allows NVIDIA GPU to power down via RTD3 when not in use
