@@ -11,10 +11,13 @@
   };
 
   config = lib.mkIf config.smind.net.tailscale.enable {
+    # Recommended `tailscale up` flags:
+    #   clients (desktops/laptops): --accept-dns --accept-routes --ssh
+    #   servers:                    --ssh --exit-node-allow-lan-access
     services.tailscale = {
       enable = true;
       interfaceName = "tailscale0";
-      extraUpFlags = [ "--accept-dns=false" ];
+      useRoutingFeatures = if (config.smind.isDesktop || config.smind.isLaptop) then "client" else "server";
     };
 
     systemd.services.tailscale-operator = lib.mkIf (config.smind.host.owner != null) {
