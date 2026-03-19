@@ -9,4 +9,3 @@ builders: {
     (builders.make-darwin-aarch64 "pavel-mba-m3")
   ];
 }
-
