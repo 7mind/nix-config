@@ -9,7 +9,10 @@ let
   # Load owner's secrets directly
   owner = config.smind.host.owner;
   group = if cfg-meta.isLinux then "users" else "staff";
-  secretsFile = "${cfg-meta.paths.secrets}/${owner}/age-secrets.nix";
+  secretsFile =
+    if cfg.secretsFile != null
+    then cfg.secretsFile
+    else "${cfg-meta.paths.secrets}/${owner}/age-secrets.nix";
   loadOwnerSecrets = owner != null && cfg.enable && cfg.load-owner-secrets;
   ownerSecrets =
     if loadOwnerSecrets && builtins.pathExists secretsFile
@@ -21,6 +24,11 @@ let
 in
 {
   options.smind.age.load-owner-secrets = lib.mkEnableOption "loading of owner-specific secrets based on smind.host.owner. Typically enabled on desktops, disabled on servers";
+  options.smind.age.secretsFile = lib.mkOption {
+    type = lib.types.nullOr (lib.types.either lib.types.path lib.types.str);
+    default = null;
+    description = "Override the owner secret definition file loaded when smind.age.load-owner-secrets is enabled.";
+  };
 
   options.smind.age.masterIdentity = {
     identity = lib.mkOption {
