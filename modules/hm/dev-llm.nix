@@ -125,7 +125,8 @@ in
             allow = [ "Edit(/tmp/**)" ];
           };
           includeCoAuthoredBy = config.smind.hm.dev.llm.coAuthored.enable;
-          model = "opus";
+          effortLevel = "high";
+          model = "claude-opus-4-6";
           spinnerVerbs = {
             mode = "replace";
             verbs = [ "Working" ];
