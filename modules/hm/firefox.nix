@@ -1,5 +1,79 @@
 { config, lib, pkgs, xdg_associate, cfg-meta, ... }:
 
+let
+  mkFirefoxAutoConfig = cfg: ''
+    try {
+      Services.obs.addObserver(function (subject) {
+        subject.addEventListener(
+          "DOMContentLoaded",
+          function () {
+            const doc = this.document;
+            const win = this;
+
+            win.setTimeout(() => {
+              const keyset = doc.getElementById("mainKeyset");
+              const cmdset = doc.getElementById("mainCommandSet");
+              if (!keyset || !cmdset) return;
+
+              ${lib.optionalString cfg.macPrivateWindowKey.enable ''
+              // Remove both old keys
+              const undoKey = doc.getElementById("key_undoCloseWindow");
+              if (undoKey) undoKey.remove();
+              const oldPrivateKey = doc.getElementById("key_privatebrowsing");
+              // Grab the command before removing
+              const privateCommand = oldPrivateKey?.getAttribute("command");
+              if (oldPrivateKey) oldPrivateKey.remove();
+
+              // Create replacement with new binding
+              const newPrivateKey = doc.createXULElement("key");
+              newPrivateKey.id = "key_privatebrowsing";
+              newPrivateKey.setAttribute("key", "N");
+              newPrivateKey.setAttribute("modifiers", "accel,shift");
+              newPrivateKey.setAttribute("command", privateCommand || "Tools:PrivateBrowsing");
+              keyset.appendChild(newPrivateKey);
+              ''}
+
+              ${lib.optionalString cfg.customTabSwitch.enable ''
+              const prevCmd = doc.createXULElement("command");
+              prevCmd.id = "cmd_prevTab";
+              prevCmd.addEventListener("command", () =>
+                win.gBrowser.tabContainer.advanceSelectedTab(-1, true));
+              cmdset.appendChild(prevCmd);
+
+              const nextCmd = doc.createXULElement("command");
+              nextCmd.id = "cmd_nextTab";
+              nextCmd.addEventListener("command", () =>
+                win.gBrowser.tabContainer.advanceSelectedTab(1, true));
+              cmdset.appendChild(nextCmd);
+
+              const mlKey = doc.createXULElement("key");
+              mlKey.id = "key_customPrevTab";
+              mlKey.setAttribute("keycode", "${cfg.customTabSwitch.prevTabKey}");
+              mlKey.setAttribute("modifiers", "${cfg.customTabSwitch.modifier}");
+              mlKey.setAttribute("command", "cmd_prevTab");
+              keyset.appendChild(mlKey);
+
+              const mrKey = doc.createXULElement("key");
+              mrKey.id = "key_customNextTab";
+              mrKey.setAttribute("keycode", "${cfg.customTabSwitch.nextTabKey}");
+              mrKey.setAttribute("modifiers", "${cfg.customTabSwitch.modifier}");
+              mrKey.setAttribute("command", "cmd_nextTab");
+              keyset.appendChild(mrKey);
+              ''}
+
+              const parent = keyset.parentNode;
+              parent.removeChild(keyset);
+              parent.appendChild(keyset);
+            }, 1000);
+          },
+          { once: true }
+        );
+      }, "chrome-document-global-created");
+    } catch (e) {
+      Cu.reportError(e);
+    }
+  '';
+in
 {
   options = {
     smind.hm.firefox.enable = lib.mkEnableOption "Firefox with custom configuration and extensions";
@@ -13,6 +87,31 @@
       default = 100;
       description = "Scroll speed multiplier (100 = default, lower = slower, higher = faster)";
     };
+    smind.hm.firefox.macPrivateWindowKey.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Remap Ctrl-Shift-N to New Private Window (match Firefox on macOS)";
+    };
+    smind.hm.firefox.customTabSwitch.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Enable custom tab switching keybindings";
+    };
+    smind.hm.firefox.customTabSwitch.modifier = lib.mkOption {
+      type = lib.types.str;
+      default = "meta";
+      description = "Modifier key for tab switching, use comma for multiple mods: e.g. `accel,shift`";
+    };
+    smind.hm.firefox.customTabSwitch.prevTabKey = lib.mkOption {
+      type = lib.types.str;
+      default = "VK_LEFT";
+      description = "Key code for switching to previous tab";
+    };
+    smind.hm.firefox.customTabSwitch.nextTabKey = lib.mkOption {
+      type = lib.types.str;
+      default = "VK_RIGHT";
+      description = "Key code for switching to next tab";
+    };
     smind.hm.firefox.sidebery.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -22,7 +121,18 @@
 
   config = lib.mkIf config.smind.hm.firefox.enable {
     programs.firefox = {
-      package = lib.mkIf cfg-meta.isDarwin null;
+      package = if cfg-meta.isDarwin then null else
+      pkgs.wrapFirefox pkgs.firefox-unwrapped {
+        extraPrefsFiles = [
+          # Disables the autoconfig sandbox so scripts can access privileged APIs
+          # (Services.obs, Cu, XPCOM/XUL DOM) needed for keybinding customization.
+          # Safe here: content is Nix-controlled and injected at build time.
+          (pkgs.writeText "99-autoconfig-sandbox.js" ''
+            pref("general.config.sandbox_enabled", false);
+          '')
+        ];
+        extraPrefs = mkFirefoxAutoConfig config.smind.hm.firefox;
+      };
       enable = true;
       # https://github.com/mozilla/policy-templates/blob/master/linux/policies.json
       policies = {

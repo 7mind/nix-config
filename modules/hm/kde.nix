@@ -327,6 +327,10 @@ lib.optionalAttrs cfg-meta.isLinux {
     })
 
     {
+      programs.firefox.nativeMessagingHosts = [
+        pkgs.kdePackages.plasma-browser-integration
+      ];
+
       # Mouse configuration (no idiomatic option without vendor/product IDs)
       programs.plasma.configFile.kcminputrc.Mouse = {
         XLbInptPointerAcceleration = config.smind.hm.desktop.kde.mouse.acceleration;
