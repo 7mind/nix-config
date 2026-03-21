@@ -41,6 +41,8 @@ let
     - **Verbose debug scripts**: Use `set -x` so the user can see commands together with output
     - **Nix environment**: Use flake.nix and direnv for dependencies
     - **Commands**: Use `direnv exec DIR COMMAND [...ARGS]` and `nix run`
+      - **Commands exception**: IFF your shell has a defined `DIRENV_DIR` env var, then you are already in a direnv environment, and
+    you **DO NOT NEED TO** execute commands via `direnv exec DIR COMMAND [...ARGS]` syntax.
 
     ### Code Style
 
