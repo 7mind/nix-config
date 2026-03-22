@@ -171,6 +171,12 @@
       default = "user";
       description = "Dconf profile name for GNOME session.";
     };
+
+    smind.desktop.gnome.minimal.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Exclude unnecessary GNOMOE apps.";
+    };
   };
 
   # display settings are being controlled over dbus (org.gnome.Mutter.DisplayConfig), not dconf
@@ -364,8 +370,6 @@
         '';
       }));
 
-    services.gnome.localsearch.enable = config.smind.desktop.gnome.localsearch.enable;
-
     services.udev.packages = [ pkgs.gnome-settings-daemon ];
 
     # Display manager (GDM) configuration handled by smind.display-manager module
@@ -398,6 +402,7 @@
       core-shell.enable = true;
       core-developer-tools.enable = true;
       sushi.enable = true;
+      localsearch.enable = config.smind.desktop.gnome.localsearch.enable;
       gnome-remote-desktop.enable = true;
       # gnome-keyring and gcr-ssh-agent handled by smind.security.keyring module
     };
@@ -406,25 +411,26 @@
     programs.gnome-disks.enable = true;
     # programs.file-roller.enable = true;
 
-    environment.gnome.excludePackages = with pkgs; [
-      orca # text to speech
-      epiphany
-      gnome-text-editor
-      gnome-calculator
-      gnome-characters
-      gnome-clocks
-      gnome-console
-      # gnome-font-viewer
-      gnome-logs
-      gnome-maps
-      gnome-music
-      totem
-      yelp
-      gnome-tour
-      gnome-user-docs
-      simple-scan
-      geary
-      gnome-terminal
-    ];
+    environment.gnome.excludePackages =
+      [ pkgs.orca ] ++
+      (lib.optionals config.smind.desktop.gnome.minimal.enable (with pkgs; [
+        epiphany # text to speech
+        gnome-text-editor
+        gnome-calculator
+        gnome-characters
+        gnome-clocks
+        gnome-console
+        # gnome-font-viewer
+        gnome-logs
+        gnome-maps
+        gnome-music
+        totem
+        yelp
+        gnome-tour
+        gnome-user-docs
+        simple-scan
+        geary
+        gnome-terminal
+      ]));
   };
 }
