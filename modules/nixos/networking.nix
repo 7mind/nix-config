@@ -1,10 +1,28 @@
-{ lib, config, cfg-meta, pkgs, ... }: {
+{ lib, config, cfg-meta, pkgs, ... }:
+let
+  resolvedWithCache = {
+    enable = true;
+    settings = {
+      Resolve = {
+        Cache = "no-negative";
+        DNSStubListener = "yes";
+        DNSStubListenerExtra = [ "[::1]:53" ];
+        LLMNR = "false";
+      };
+    };
+  };
+in
+{
   options = {
-    smind.net.enable = lib.mkEnableOption "systemd-networkd based networking";
+    smind.net.mode = lib.mkOption {
+      type = lib.types.enum [ "systemd-networkd" "networkmanager" "none" ];
+      default = "none";
+      description = "Networking mode";
+    };
 
     smind.net.upnp.enable = lib.mkOption {
       type = lib.types.bool;
-      default = config.smind.net.enable && config.smind.isDesktop;
+      default = config.smind.net.mode == "systemd-networkd" && config.smind.isDesktop;
       description = "Enable miniupnpd for UPnP port forwarding";
     };
 
@@ -33,8 +51,8 @@
 
   };
 
-  config =
-    (lib.mkIf config.smind.net.enable {
+  config = lib.mkMerge [
+    (lib.mkIf (config.smind.net.mode == "systemd-networkd") {
       assertions =
         [
           ({
@@ -99,17 +117,7 @@
         # networking.bridges doesn't support MAC address setting
       };
 
-      services.resolved = {
-        enable = true;
-        settings = {
-          Resolve = {
-            Cache = "no-negative";
-            DNSStubListener = "yes";
-            DNSStubListenerExtra = [ "[::1]:53" ];
-            LLMNR = "false";
-          };
-        };
-      };
+      services.resolved = resolvedWithCache;
 
       services.avahi = {
         enable = true;
@@ -198,5 +206,11 @@
         extraArgs =
           [ "--interface=br-infra" ];
       };
-    });
+    })
+
+    (lib.mkIf (config.smind.net.mode == "networkmanager") {
+      networking.networkmanager.enable = true;
+      services.resolved = resolvedWithCache;
+    })
+  ];
 }

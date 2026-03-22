@@ -133,7 +133,7 @@ in
     security.keyring.tpmUnlock.enable = true;
 
     # Networking - use NetworkManager for laptop mobility
-    net.enable = false; # Disable systemd-networkd based networking
+    net.mode = "networkmanager";
     net.tailscale.enable = true;
 
     desktop.plymouth.enable = true;
@@ -200,9 +200,6 @@ in
       subvolumePath = ".";
     };
   };
-
-  # Use NetworkManager for laptop (instead of systemd-networkd)
-  networking.networkmanager.enable = true;
 
   # Prefer RTX 5060 first while still allowing fallback to Radeon 890M.
   services.ollama.environmentVariables.GGML_VK_VISIBLE_DEVICES = lib.mkForce "1,0";

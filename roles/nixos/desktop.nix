@@ -73,7 +73,7 @@ in
         zfs.enable = lib.mkDefault true;
 
         net.router.enable = lib.mkDefault true;
-        net.enable = lib.mkDefault true;
+        net.mode = lib.mkDefault "systemd-networkd";
         net.desktop.enable = lib.mkDefault true;
 
         kernel.sane-defaults.enable = lib.mkDefault true;

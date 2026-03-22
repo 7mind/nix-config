@@ -16,8 +16,8 @@
 
     smind.zfs.initrd-unlock.bridge-slave = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
-      default = if config.smind.net.enable then config.smind.net.main-interface else null;
-      description = "Physical interface to enslave to the bridge (auto-detected from smind.net.main-interface when smind.net.enable is true)";
+      default = if config.smind.net.mode == "systemd-networkd" then config.smind.net.main-interface else null;
+      description = "Physical interface to enslave to the bridge (auto-detected from smind.net.main-interface when smind.net.mode is systemd-networkd)";
     };
 
     smind.zfs.initrd-unlock.hostname = lib.mkOption {

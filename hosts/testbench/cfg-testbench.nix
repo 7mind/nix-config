@@ -39,7 +39,7 @@
 
     net.main-interface = "eth-main";
 
-    net.enable = true;
+    net.mode = "systemd-networkd";
     net.main-macaddr = "A8:A1:59:BC:73:CD";
     net.main-bridge-macaddr = "A8:A1:59:BC:73:CC";
 

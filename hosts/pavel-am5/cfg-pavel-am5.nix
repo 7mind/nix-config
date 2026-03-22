@@ -150,7 +150,7 @@
 
     zfs.initrd-unlock.enable = true;
     zfs.initrd-unlock.macaddr = "d0:94:66:55:aa:ab";
-    # bridge-slave auto-detected from net.main-interface when net.enable is true
+    # bridge-slave auto-detected from net.main-interface when net.mode is systemd-networkd
 
     net.main-interface = "eth-main";
 

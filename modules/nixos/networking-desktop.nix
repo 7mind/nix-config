@@ -2,7 +2,7 @@
   options = {
     smind.net.desktop.enable = lib.mkOption {
       type = lib.types.bool;
-      default = config.smind.net.enable && config.smind.isDesktop;
+      default = config.smind.net.mode == "systemd-networkd" && config.smind.isDesktop;
       description = "Enable NetworkManager with iwd for desktop systems";
     };
 
