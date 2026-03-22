@@ -22,7 +22,7 @@ source "$REPO_ROOT/private/setup-env"
 AGE_PUBKEY="${group_pubkeys[infra]}"
 
 # AWG parameters (must match awg.nix)
-AWG_ENDPOINT="45.11.171.78:51820"
+AWG_ENDPOINT="g.7mind.io:51820"
 
 usage() {
   echo "Usage: $0 <client-name> [--ip <ip>]" >&2
