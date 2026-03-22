@@ -31,9 +31,9 @@
         set -g @catppuccin_window_right_separator " "
         set -g @catppuccin_window_middle_separator " █"
 
-        # Compact: show window index when narrow, name when wide
-        set -g @catppuccin_window_text "#{?#{e|<|:#{client_width},80},#I,#W}"
-        set -g @catppuccin_window_current_text "#{?#{e|<|:#{client_width},80},#I,#W}"
+        # Compact: show marker when narrow, name when wide
+        set -g @catppuccin_window_text "#{?#{e|<|:#{client_width},80},=,#W}"
+        set -g @catppuccin_window_current_text "#{?#{e|<|:#{client_width},80},*,#W}"
 
         set -g @catppuccin_status_left_separator " "
         set -g @catppuccin_status_right_separator ""
