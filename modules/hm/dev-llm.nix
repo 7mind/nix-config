@@ -126,7 +126,7 @@ in
           };
           includeCoAuthoredBy = config.smind.hm.dev.llm.coAuthored.enable;
           effortLevel = "high";
-          model = "claude-opus-4-6";
+          model = "claude-opus-4-6[1m]";
           spinnerVerbs = {
             mode = "replace";
             verbs = [ "Working" ];
