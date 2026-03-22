@@ -20,7 +20,7 @@
          $hold-action)
 )
 
-(deftemplate define-terminal-super-swap-layer (left-ctrl-key left-ctrl-action right-ctrl-key right-ctrl-action left-meta-key left-meta-action right-meta-key right-meta-action left-alt-key)
+(deftemplate define-terminal-layer-with-ctrl-meta-swap (left-ctrl-key left-ctrl-action right-ctrl-key right-ctrl-action left-meta-key left-meta-action right-meta-key right-meta-action left-alt-key)
   (deflayermap (terminal)
     $left-ctrl-key (t! hold-terminal-ctrl-swapped $left-ctrl-action)
     $right-ctrl-key (t! hold-terminal-ctrl-swapped $right-ctrl-action)
