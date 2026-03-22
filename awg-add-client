@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
+PEERS_FILE="$REPO_ROOT/private/hosts/vm/containers/awg-peers.json"
+SECRETS_DIR="$REPO_ROOT/private/secrets/generic"
+
+# Ensure required tools are available
+missing=()
+for cmd in wg age jq; do
+  command -v "$cmd" &>/dev/null || missing+=("$cmd")
+done
+if [[ ${#missing[@]} -gt 0 ]]; then
+  echo "Missing tools: ${missing[*]}" >&2
+  echo "Run with: nix shell nixpkgs#wireguard-tools nixpkgs#age nixpkgs#jq --command $0 \"\$@\"" >&2
+  exit 1
+fi
+
+# Read age pubkey from setup-env
+declare -A group_pubkeys
+source "$REPO_ROOT/private/setup-env"
+AGE_PUBKEY="${group_pubkeys[infra]}"
+
+# AWG parameters (must match awg.nix)
+AWG_ENDPOINT="45.11.171.78:51820"
+
+usage() {
+  echo "Usage: $0 <client-name> [--ip <ip>]" >&2
+  echo "" >&2
+  echo "Adds a new AmneziaWG client:" >&2
+  echo "  1. Generates WireGuard keypair + PSK" >&2
+  echo "  2. Encrypts private key and PSK with age" >&2
+  echo "  3. Adds peer to awg-peers.json" >&2
+  echo "  4. Displays client config (+ QR code if server pubkey is known)" >&2
+  echo "" >&2
+  echo "Options:" >&2
+  echo "  --ip <ip>  Override auto-allocated IP (default: next available in 10.100.0.0/24)" >&2
+  exit 1
+}
+
+CLIENT_NAME=""
+CLIENT_IP=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --ip) CLIENT_IP="$2"; shift 2 ;;
+    --help|-h) usage ;;
+    -*) echo "Unknown option: $1" >&2; usage ;;
+    *)
+      if [[ -z "$CLIENT_NAME" ]]; then
+        CLIENT_NAME="$1"
+      else
+        echo "Unexpected argument: $1" >&2
+        usage
+      fi
+      shift
+      ;;
+  esac
+done
+
+[[ -n "$CLIENT_NAME" ]] || usage
+
+# Validate client name
+if ! [[ "$CLIENT_NAME" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+  echo "ERROR: Client name must match [a-z0-9][a-z0-9-]*" >&2
+  exit 1
+fi
+
+# Check for duplicate name
+if jq -e --arg name "$CLIENT_NAME" '.peers[] | select(.name == $name)' "$PEERS_FILE" >/dev/null 2>&1; then
+  echo "ERROR: Client '$CLIENT_NAME' already exists" >&2
+  exit 1
+fi
+
+# Auto-allocate IP if not specified
+if [[ -z "$CLIENT_IP" ]]; then
+  USED_IPS=$(jq -r '.peers[].ip' "$PEERS_FILE")
+  for i in $(seq 2 254); do
+    CANDIDATE="10.100.0.$i"
+    if ! echo "$USED_IPS" | grep -qxF "$CANDIDATE"; then
+      CLIENT_IP="$CANDIDATE"
+      break
+    fi
+  done
+  if [[ -z "$CLIENT_IP" ]]; then
+    echo "ERROR: No available IPs in 10.100.0.0/24" >&2
+    exit 1
+  fi
+fi
+
+echo "Adding client: $CLIENT_NAME ($CLIENT_IP/32)"
+echo ""
+
+# Generate keys
+PRIVKEY="$(wg genkey)"
+PUBKEY="$(echo "$PRIVKEY" | wg pubkey)"
+PSK="$(wg genpsk)"
+
+# Encrypt and save
+echo "$PRIVKEY" | age -e -r "$AGE_PUBKEY" -o "$SECRETS_DIR/awg-key-${CLIENT_NAME}.age"
+echo "$PSK" | age -e -r "$AGE_PUBKEY" -o "$SECRETS_DIR/awg-psk-${CLIENT_NAME}.age"
+echo "Saved: $SECRETS_DIR/awg-key-${CLIENT_NAME}.age"
+echo "Saved: $SECRETS_DIR/awg-psk-${CLIENT_NAME}.age"
+
+# Add peer to JSON
+jq --arg name "$CLIENT_NAME" \
+   --arg pubkey "$PUBKEY" \
+   --arg ip "$CLIENT_IP" \
+   '.peers += [{"name": $name, "publicKey": $pubkey, "ip": $ip}]' \
+   "$PEERS_FILE" > "${PEERS_FILE}.tmp"
+mv "${PEERS_FILE}.tmp" "$PEERS_FILE"
+echo "Updated: $PEERS_FILE"
+
+# Try to display full client config with QR code
+SERVER_PUBKEY="$(jq -r '.serverPublicKey // empty' "$PEERS_FILE")"
+if [[ -n "$SERVER_PUBKEY" ]]; then
+  CONFIG="[Interface]
+PrivateKey = $PRIVKEY
+Address = $CLIENT_IP/32
+DNS = 10.100.0.1
+Jc = 4
+Jmin = 40
+Jmax = 70
+S1 = 97
+S2 = 113
+H1 = 681912196
+H2 = 363307734
+H3 = 1642669459
+H4 = 282213286
+
+[Peer]
+PublicKey = $SERVER_PUBKEY
+PresharedKey = $PSK
+Endpoint = $AWG_ENDPOINT
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 25"
+
+  echo ""
+  echo "==========================================="
+  echo "  Client config: $CLIENT_NAME ($CLIENT_IP/32)"
+  echo "==========================================="
+  echo "$CONFIG"
+  echo ""
+  if command -v qrencode &>/dev/null; then
+    echo "$CONFIG" | qrencode -t UTF8
+  else
+    echo "(install qrencode for QR code output)"
+  fi
+else
+  echo ""
+  echo "Server public key not yet known (run awg-extract-keys first)."
+  echo "After deployment, get the full config from the AWG container:"
+  echo "  nixos-container run awg -- awg-show-clients"
+fi
+
+echo ""
+echo "Next steps:"
+echo "  1. Commit the changes"
+echo "  2. Run: ./setup -k vm   (rekey secrets for VM host)"
+echo "  3. Deploy to VM host"
