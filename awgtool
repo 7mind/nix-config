@@ -217,16 +217,18 @@ cmd_print_client() {
     exit 1
   fi
 
-  local identity="/dev/shm/age-master-key"
-  if [[ ! -f "$identity" ]]; then
-    echo "ERROR: Age master key not found at $identity" >&2
-    echo "Unlock with: ./setup -k vm" >&2
+  # Decrypt via TPM: tpm-identity decrypts master-key.age, which decrypts the secret
+  local tpm_identity="$HOME/.age/tpm-identity.txt"
+  local master_key_enc="$HOME/.age/master-key.age"
+  if [[ ! -f "$tpm_identity" || ! -f "$master_key_enc" ]]; then
+    echo "ERROR: TPM age identity not found ($tpm_identity or $master_key_enc)" >&2
+    echo "See: private/age-README.md" >&2
     exit 1
   fi
 
   local privkey psk config client_ip
-  privkey="$(age -d -i "$identity" "$key_file")"
-  psk="$(age -d -i "$identity" "$psk_file")"
+  privkey="$(age -d -i <(age -d -i "$tpm_identity" "$master_key_enc") "$key_file")"
+  psk="$(age -d -i <(age -d -i "$tpm_identity" "$master_key_enc") "$psk_file")"
 
   config="$(build_client_config "$PEERS_FILE" "$client_name" "$privkey" "$psk" "$SUBNET")" || exit 1
   client_ip="$(jq -r --arg name "$client_name" '.peers[] | select(.name == $name) | .ip' "$PEERS_FILE")"
