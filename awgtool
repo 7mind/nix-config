@@ -1,0 +1,294 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
+SECRETS_DIR="$REPO_ROOT/private/secrets/generic"
+CONTAINERS_DIR="$REPO_ROOT/private/hosts/vm/containers"
+
+# Profile definitions
+declare -A PROFILE_PEERS_FILE
+declare -A PROFILE_SECRETS_PREFIX
+declare -A PROFILE_SUBNET
+
+PROFILE_PEERS_FILE[pg]="$CONTAINERS_DIR/pg-awg-peers.json"
+PROFILE_PEERS_FILE[7mind]="$CONTAINERS_DIR/7mind-awg-peers.json"
+
+PROFILE_SECRETS_PREFIX[pg]="awg"
+PROFILE_SECRETS_PREFIX[7mind]="7mind-awg"
+
+PROFILE_SUBNET[pg]="10.100.0"
+PROFILE_SUBNET[7mind]="10.101.0"
+
+KNOWN_PROFILES="${!PROFILE_PEERS_FILE[*]}"
+
+# Ensure required tools are available
+missing=()
+for cmd in wg age jq qrencode; do
+  command -v "$cmd" &>/dev/null || missing+=("$cmd")
+done
+if [[ ${#missing[@]} -gt 0 ]]; then
+  echo "Missing tools: ${missing[*]}" >&2
+  echo "Run: direnv reload  (or nix develop)" >&2
+  exit 1
+fi
+
+# Read age pubkey from setup-env
+declare -A group_pubkeys
+source "$REPO_ROOT/private/setup-env"
+AGE_PUBKEY="${group_pubkeys[infra]}"
+
+usage() {
+  cat >&2 <<EOF
+Usage: $0 <profile> <command> [options]
+
+Profiles: $KNOWN_PROFILES
+
+Commands:
+  --init                    Generate server key for a new profile
+  --add-client <name>       Add a new client
+  --list-clients            List all clients
+  --print-client <name>     Print client config and QR code
+
+Options (for --add-client):
+  --ip <ip>                 Override auto-allocated IP
+EOF
+  exit 1
+}
+
+# --- Helpers ---
+
+build_client_config() {
+  local peers_file="$1" client_name="$2" privkey="$3" psk="$4" subnet="$5"
+
+  local server_pubkey endpoint dns_ip awg_params client_ip
+  server_pubkey="$(jq -r '.serverPublicKey // empty' "$peers_file")"
+  if [[ -z "$server_pubkey" || "$server_pubkey" == "null" ]]; then
+    echo "ERROR: Server public key not set. Run: $0 $PROFILE --init" >&2
+    return 1
+  fi
+
+  endpoint="$(jq -r '.awgEndpoint' "$peers_file")"
+  dns_ip="${subnet}.1"
+  awg_params="$(jq -r '.awgParams | to_entries | map("\(.key) = \(.value)") | join("\n")' "$peers_file")"
+  client_ip="$(jq -r --arg name "$client_name" '.peers[] | select(.name == $name) | .ip' "$peers_file")"
+
+  cat <<EOF
+[Interface]
+PrivateKey = $privkey
+Address = $client_ip/32
+DNS = $dns_ip
+$awg_params
+
+[Peer]
+PublicKey = $server_pubkey
+PresharedKey = $psk
+Endpoint = $endpoint
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 25
+EOF
+}
+
+print_config_with_qr() {
+  local config="$1" label="$2"
+  echo "==========================================="
+  echo "  $label"
+  echo "==========================================="
+  echo "$config"
+  echo ""
+  echo "$config" | qrencode -t UTF8
+}
+
+# --- Commands ---
+
+cmd_init() {
+  local server_key_file="$SECRETS_DIR/${SECRETS_PREFIX}-server-key.age"
+  if [[ -f "$server_key_file" ]]; then
+    echo "ERROR: Server key already exists: $server_key_file" >&2
+    exit 1
+  fi
+
+  local server_privkey server_pubkey
+  server_privkey="$(wg genkey)"
+  server_pubkey="$(echo "$server_privkey" | wg pubkey)"
+  echo "$server_privkey" | age -e -r "$AGE_PUBKEY" -o "$server_key_file"
+  echo "Saved: $server_key_file"
+
+  jq --arg pk "$server_pubkey" '.serverPublicKey = $pk | .ageEnabled = true' "$PEERS_FILE" > "${PEERS_FILE}.tmp"
+  mv "${PEERS_FILE}.tmp" "$PEERS_FILE"
+  echo "Server public key: $server_pubkey"
+  echo "Updated: $PEERS_FILE"
+
+  echo ""
+  echo "Next steps:"
+  echo "  1. Commit the changes"
+  echo "  2. Run: ./setup -k vm"
+  echo "  3. Deploy to VM host"
+}
+
+cmd_add_client() {
+  local client_name="$1" client_ip="$2"
+
+  if ! [[ "$client_name" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+    echo "ERROR: Client name must match [a-z0-9][a-z0-9-]*" >&2
+    exit 1
+  fi
+
+  if jq -e --arg name "$client_name" '.peers[] | select(.name == $name)' "$PEERS_FILE" >/dev/null 2>&1; then
+    echo "ERROR: Client '$client_name' already exists in profile '$PROFILE'" >&2
+    exit 1
+  fi
+
+  # Auto-allocate IP if not specified
+  if [[ -z "$client_ip" ]]; then
+    local used_ips candidate
+    used_ips=$(jq -r '.peers[].ip' "$PEERS_FILE")
+    for i in $(seq 2 254); do
+      candidate="${SUBNET}.$i"
+      if ! echo "$used_ips" | grep -qxF "$candidate"; then
+        client_ip="$candidate"
+        break
+      fi
+    done
+    if [[ -z "$client_ip" ]]; then
+      echo "ERROR: No available IPs in ${SUBNET}.0/24" >&2
+      exit 1
+    fi
+  fi
+
+  echo "[$PROFILE] Adding client: $client_name ($client_ip/32)"
+  echo ""
+
+  local privkey pubkey psk
+  privkey="$(wg genkey)"
+  pubkey="$(echo "$privkey" | wg pubkey)"
+  psk="$(wg genpsk)"
+
+  echo "$privkey" | age -e -r "$AGE_PUBKEY" -o "$SECRETS_DIR/${SECRETS_PREFIX}-key-${client_name}.age"
+  echo "$psk" | age -e -r "$AGE_PUBKEY" -o "$SECRETS_DIR/${SECRETS_PREFIX}-psk-${client_name}.age"
+  echo "Saved: ${SECRETS_PREFIX}-key-${client_name}.age"
+  echo "Saved: ${SECRETS_PREFIX}-psk-${client_name}.age"
+
+  jq --arg name "$client_name" \
+     --arg pubkey "$pubkey" \
+     --arg ip "$client_ip" \
+     '.peers += [{"name": $name, "publicKey": $pubkey, "ip": $ip}]' \
+     "$PEERS_FILE" > "${PEERS_FILE}.tmp"
+  mv "${PEERS_FILE}.tmp" "$PEERS_FILE"
+  echo "Updated: $PEERS_FILE"
+
+  local config
+  config="$(build_client_config "$PEERS_FILE" "$client_name" "$privkey" "$psk" "$SUBNET")" || exit 1
+  echo ""
+  print_config_with_qr "$config" "$client_name ($client_ip/32)"
+
+  echo ""
+  echo "Next steps:"
+  echo "  1. Commit the changes"
+  echo "  2. Run: ./setup -k vm   (rekey secrets for VM host)"
+  echo "  3. Deploy to VM host"
+}
+
+cmd_list_clients() {
+  echo "[$PROFILE] Clients:"
+  jq -r '.peers[] | "  \(.name)\t\(.ip)/32"' "$PEERS_FILE"
+  local count
+  count="$(jq '.peers | length' "$PEERS_FILE")"
+  echo ""
+  echo "Total: $count"
+}
+
+cmd_print_client() {
+  local client_name="$1"
+
+  if ! jq -e --arg name "$client_name" '.peers[] | select(.name == $name)' "$PEERS_FILE" >/dev/null 2>&1; then
+    echo "ERROR: Client '$client_name' not found in profile '$PROFILE'" >&2
+    exit 1
+  fi
+
+  local key_file="$SECRETS_DIR/${SECRETS_PREFIX}-key-${client_name}.age"
+  local psk_file="$SECRETS_DIR/${SECRETS_PREFIX}-psk-${client_name}.age"
+
+  if [[ ! -f "$key_file" ]]; then
+    echo "ERROR: Key file not found: $key_file" >&2
+    exit 1
+  fi
+  if [[ ! -f "$psk_file" ]]; then
+    echo "ERROR: PSK file not found: $psk_file" >&2
+    exit 1
+  fi
+
+  local identity="/dev/shm/age-master-key"
+  if [[ ! -f "$identity" ]]; then
+    echo "ERROR: Age master key not found at $identity" >&2
+    echo "Unlock with: ./setup -k vm" >&2
+    exit 1
+  fi
+
+  local privkey psk config client_ip
+  privkey="$(age -d -i "$identity" "$key_file")"
+  psk="$(age -d -i "$identity" "$psk_file")"
+
+  config="$(build_client_config "$PEERS_FILE" "$client_name" "$privkey" "$psk" "$SUBNET")" || exit 1
+  client_ip="$(jq -r --arg name "$client_name" '.peers[] | select(.name == $name) | .ip' "$PEERS_FILE")"
+  print_config_with_qr "$config" "$client_name ($client_ip/32)"
+}
+
+# --- Parse arguments ---
+
+PROFILE=""
+COMMAND=""
+CLIENT_NAME=""
+CLIENT_IP=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --init)
+      COMMAND="init"; shift ;;
+    --add-client)
+      COMMAND="add-client"; CLIENT_NAME="${2:-}"; shift; [[ $# -gt 0 ]] && shift ;;
+    --list-clients)
+      COMMAND="list-clients"; shift ;;
+    --print-client)
+      COMMAND="print-client"; CLIENT_NAME="${2:-}"; shift; [[ $# -gt 0 ]] && shift ;;
+    --ip)
+      CLIENT_IP="$2"; shift 2 ;;
+    --help|-h)
+      usage ;;
+    -*)
+      echo "Unknown option: $1" >&2; usage ;;
+    *)
+      if [[ -z "$PROFILE" ]]; then
+        PROFILE="$1"
+      else
+        echo "Unexpected argument: $1" >&2
+        usage
+      fi
+      shift
+      ;;
+  esac
+done
+
+[[ -n "$PROFILE" ]] || usage
+[[ -n "$COMMAND" ]] || usage
+
+if [[ -z "${PROFILE_PEERS_FILE[$PROFILE]+x}" ]]; then
+  echo "ERROR: Unknown profile '$PROFILE'. Must be one of: $KNOWN_PROFILES" >&2
+  exit 1
+fi
+
+PEERS_FILE="${PROFILE_PEERS_FILE[$PROFILE]}"
+SECRETS_PREFIX="${PROFILE_SECRETS_PREFIX[$PROFILE]}"
+SUBNET="${PROFILE_SUBNET[$PROFILE]}"
+
+case "$COMMAND" in
+  init)
+    cmd_init ;;
+  add-client)
+    [[ -n "$CLIENT_NAME" ]] || { echo "ERROR: --add-client requires a name" >&2; usage; }
+    cmd_add_client "$CLIENT_NAME" "$CLIENT_IP" ;;
+  list-clients)
+    cmd_list_clients ;;
+  print-client)
+    [[ -n "$CLIENT_NAME" ]] || { echo "ERROR: --print-client requires a name" >&2; usage; }
+    cmd_print_client "$CLIENT_NAME" ;;
+esac

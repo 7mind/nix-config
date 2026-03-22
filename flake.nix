@@ -177,6 +177,8 @@
           agenix-rekey
           age-plugin-tpm
           nixfmt
+          qrencode
+          wireguard-tools
           # inputs.json2nix.packages."${system}".json2nix
         ];
       };
