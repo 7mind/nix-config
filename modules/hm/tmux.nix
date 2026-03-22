@@ -33,7 +33,7 @@
         set -g @catppuccin_window_current_fill "number"
         set -g @catppuccin_window_current_text "#{?#{e|<|:#{client_width},40},#I,#W}"
 
-        set -g @catppuccin_status_modules_right "#{?#{e|<|:#{client_width},40},,directory user host session}"
+        set -g @catppuccin_status_modules_right "#{?#{e|<|:#{client_width},40},,#{?#{e|<|:#{client_width},80},session,directory user host session}}"
         set -g @catppuccin_status_left_separator  " "
         set -g @catppuccin_status_right_separator ""
         set -g @catppuccin_status_right_separator_inverse "no"
