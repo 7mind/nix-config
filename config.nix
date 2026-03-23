@@ -1,7 +1,7 @@
 {
   const = {
     state-version-nixpkgs = "25.05";
-    state-version-hm = "25.05";
+    state-version-hm = "26.05";
     state-version-darwin = 6;
 
     ssh-keys-pavel = [
