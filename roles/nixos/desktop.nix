@@ -75,6 +75,7 @@ in
         net.router.enable = lib.mkDefault true;
         net.mode = lib.mkDefault "systemd-networkd";
         net.desktop.enable = lib.mkDefault true;
+        net.amnezia-vpn.enable = lib.mkDefault true;
 
         kernel.sane-defaults.enable = lib.mkDefault true;
         power-management.enable = lib.mkDefault true;

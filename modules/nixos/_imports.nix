@@ -1,5 +1,6 @@
 [
   ./alien-filesystems.nix
+  ./amnezia-vpn.nix
   ./audio.nix
   ./audio-autoswitch.nix
   ./audio-quirks.nix
