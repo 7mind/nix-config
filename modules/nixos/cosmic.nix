@@ -23,7 +23,9 @@
 
     # Enable kanata for Mac-style keyboard shortcuts (same as GNOME)
     smind.keyboard.super-remap.enable = lib.mkDefault true;
-    services.desktopManager.cosmic.enable = true;
+    # FIXME: temporarily disabled — cosmic-settings-daemon 1.0.8 fails to build
+    # (duplicate dbus-settings-bindings source in Cargo.lock)
+    # services.desktopManager.cosmic.enable = true;
 
     environment.cosmic.excludePackages = with pkgs; [
       orca
