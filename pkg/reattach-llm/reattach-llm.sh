@@ -192,7 +192,7 @@ collect_candidates() {
 
 attach_pid() {
   local selected_pid="$1"
-  local target_session="$2"
+  local target_pane="$2"
 
   load_tmux_state
   collect_candidates
@@ -210,8 +210,7 @@ attach_pid() {
       continue
     fi
 
-    local window_name="${tool_name}-${pid}"
-    tmux new-window -d -t "${target_session}:" -n "${window_name}" \
+    tmux respawn-pane -k -t "${target_pane}" \
       "bash -lc '${SUDO_BIN} reptyr -s -T ${pid}; exit_code=\$?; if [[ \$exit_code -ne 0 ]]; then echo; echo \"reptyr failed for pid ${pid} with exit code \$exit_code\"; echo \"Press Enter to close this pane.\"; read -r _; exit \$exit_code; fi'"
     return
   done
@@ -228,8 +227,8 @@ show_menu() {
     return
   fi
 
-  local current_session
-  current_session="$(tmux display-message -p '#{session_name}')"
+  local current_pane
+  current_pane="$(tmux display-message -p '#{pane_id}')"
 
   local -a menu_args=()
   menu_args+=(-T "Reattach LLM")
@@ -245,7 +244,7 @@ show_menu() {
 
     local item_name="${tool_name} pid=${pid} ${tty}"
     local command
-    printf -v command "run-shell %q" "${SELF_BIN} --attach ${pid} ${current_session}"
+    printf -v command "run-shell %q" "${SELF_BIN} --attach ${pid} ${current_pane}"
     menu_args+=("${item_name}" "" "${command}")
   done
 
@@ -257,15 +256,15 @@ main() {
 
   case "${1-}" in
     --attach)
-      [[ $# -eq 3 ]] || fail "Usage: reattach-llm --attach PID TARGET_SESSION"
+      [[ $# -eq 3 ]] || fail "Usage: reattach-llm --attach PID TARGET_PANE"
       attach_pid "$2" "$3"
       ;;
     "")
-      [[ $# -eq 0 ]] || fail "Usage: reattach-llm [--attach PID TARGET_SESSION]"
+      [[ $# -eq 0 ]] || fail "Usage: reattach-llm [--attach PID TARGET_PANE]"
       show_menu
       ;;
     *)
-      fail "Usage: reattach-llm [--attach PID TARGET_SESSION]"
+      fail "Usage: reattach-llm [--attach PID TARGET_PANE]"
       ;;
   esac
 }
