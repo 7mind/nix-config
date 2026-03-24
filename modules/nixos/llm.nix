@@ -32,8 +32,6 @@
   };
 
   config = lib.mkIf config.smind.llm.enable {
-    boot.kernel.sysctl."kernel.yama.ptrace_scope" = 0;
-
     environment.systemPackages = with pkgs; [
       #llama-cpp-rocm
       mistral-rs

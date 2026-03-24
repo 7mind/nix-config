@@ -95,7 +95,6 @@ collect_candidates_for_tty() {
 
   local -A related_pid_set=()
   local tool_name=""
-  local -A related_ppid_set=()
 
   for row in "${tty_rows[@]}"; do
     local pid
@@ -114,7 +113,6 @@ collect_candidates_for_tty() {
     fi
 
     related_pid_set["${pid}"]=1
-    related_ppid_set["${pid}"]="${ppid}"
     if [[ -z "${tool_name}" ]]; then
       tool_name="${label}"
     fi
@@ -124,9 +122,9 @@ collect_candidates_for_tty() {
     return
   fi
 
-  local target_pid=""
-  local target_comm=""
-  local target_args=""
+  local root_pid=""
+  local root_comm=""
+  local root_args=""
 
   for row in "${tty_rows[@]}"; do
     local pid
@@ -139,34 +137,26 @@ collect_candidates_for_tty() {
       continue
     fi
 
-    local is_parent=0
-    local candidate_ppid
-    for candidate_ppid in "${related_ppid_set[@]}"; do
-      if [[ "${candidate_ppid}" == "${pid}" ]]; then
-        is_parent=1
-        break
-      fi
-    done
-
-    if [[ "${is_parent}" -ne 0 ]]; then
+    if [[ -n "${related_pid_set["${ppid}"]+x}" ]]; then
       continue
     fi
 
-    target_pid="${pid}"
-    target_comm="${comm}"
-    target_args="${args}"
+    root_pid="${pid}"
+    root_comm="${comm}"
+    root_args="${args}"
+    break
   done
 
-  if [[ -z "${target_pid}" ]]; then
-    echo "Failed to determine reptyr target for tty ${tty}." >&2
+  if [[ -z "${root_pid}" ]]; then
+    echo "Failed to determine sandbox root for tty ${tty}." >&2
     exit 1
   fi
 
-  if [[ -n "${attached_pid_set["${target_pid}"]+x}" ]]; then
+  if [[ -n "${attached_pid_set["${root_pid}"]+x}" ]]; then
     return
   fi
 
-  candidate_rows+=("${target_pid}"$'\t'"${tool_name}"$'\t'"${tty}"$'\t'"${target_comm}"$'\t'"${target_args}")
+  candidate_rows+=("${root_pid}"$'\t'"${tool_name}"$'\t'"${tty}"$'\t'"${root_comm}"$'\t'"${root_args}")
 }
 
 collect_candidates() {
@@ -200,15 +190,15 @@ attach_candidates() {
     local pid
     local tool_name
     local tty
-    local target_comm
-    local target_args
-    IFS=$'\t' read -r pid tool_name tty target_comm target_args <<<"${row}"
+    local root_comm
+    local root_args
+    IFS=$'\t' read -r pid tool_name tty root_comm root_args <<<"${row}"
 
     local window_name="${tool_name}-${pid}"
     tmux new-window -d -t "${SESSION_NAME}:" -n "${window_name}" \
-      "bash -lc 'reptyr -T ${pid}; exit_code=\$?; if [[ \$exit_code -ne 0 ]]; then echo; echo \"reptyr failed for pid ${pid} with exit code \$exit_code\"; echo \"Press Enter to close this pane.\"; read -r _; exit \$exit_code; fi'"
+      "bash -lc 'sudo reptyr -s -T ${pid}; exit_code=\$?; if [[ \$exit_code -ne 0 ]]; then echo; echo \"reptyr failed for pid ${pid} with exit code \$exit_code\"; echo \"Press Enter to close this pane.\"; read -r _; exit \$exit_code; fi'"
 
-    attached_rows+=("${pid}"$'\t'"${tool_name}"$'\t'"${tty}"$'\t'"${target_comm}")
+    attached_rows+=("${pid}"$'\t'"${tool_name}"$'\t'"${tty}"$'\t'"${root_comm}")
   done
 }
 

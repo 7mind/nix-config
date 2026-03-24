@@ -68,6 +68,7 @@
         pstree
         inotify-tools
         lsof
+        reptyr
 
         # hw tools
         pciutils

@@ -1,4 +1,4 @@
-{ lib, writeShellApplication, tmux, reptyr, procps, gnugrep, gawk, coreutils }:
+{ lib, writeShellApplication, tmux, reptyr, procps, gnugrep, gawk, coreutils, sudo }:
 
 writeShellApplication {
   name = "reattach-llm";
@@ -9,6 +9,7 @@ writeShellApplication {
     gnugrep
     gawk
     coreutils
+    sudo
   ];
   text = builtins.readFile ./reattach-llm.sh;
 
