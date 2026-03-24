@@ -195,8 +195,8 @@ attach_candidates() {
     IFS=$'\t' read -r pid tool_name tty root_comm root_args <<<"${row}"
 
     local window_name="${tool_name}-${pid}"
-    tmux new-window -d -t "${SESSION_NAME}:" -n "${window_name}"
-    tmux send-keys -t "${SESSION_NAME}:${window_name}" "exec reptyr -T ${pid}" C-m
+    tmux new-window -d -t "${SESSION_NAME}:" -n "${window_name}" \
+      "bash -lc 'reptyr ${pid}; exit_code=\$?; if [[ \$exit_code -ne 0 ]]; then echo; echo \"reptyr failed for pid ${pid} with exit code \$exit_code\"; echo \"Press Enter to close this pane.\"; read -r _; exit \$exit_code; fi'"
 
     attached_rows+=("${pid}"$'\t'"${tool_name}"$'\t'"${tty}"$'\t'"${root_comm}")
   done
