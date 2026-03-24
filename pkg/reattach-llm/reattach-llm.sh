@@ -2,6 +2,7 @@ set -euo pipefail
 
 readonly SESSION_NAME="llm"
 readonly INITIAL_WINDOW_NAME="shell"
+readonly SUDO_BIN="/run/wrappers/bin/sudo"
 USER_NAME="$(id -un)"
 readonly USER_NAME
 
@@ -32,6 +33,11 @@ llm_label_from_text() {
 }
 
 ensure_session() {
+  if [[ ! -u "${SUDO_BIN}" ]]; then
+    echo "Expected setuid sudo wrapper at ${SUDO_BIN}." >&2
+    exit 1
+  fi
+
   if ! tmux has-session -t "${SESSION_NAME}" 2>/dev/null; then
     tmux new-session -d -s "${SESSION_NAME}" -n "${INITIAL_WINDOW_NAME}"
   fi
@@ -196,7 +202,7 @@ attach_candidates() {
 
     local window_name="${tool_name}-${pid}"
     tmux new-window -d -t "${SESSION_NAME}:" -n "${window_name}" \
-      "bash -lc 'sudo reptyr -s -T ${pid}; exit_code=\$?; if [[ \$exit_code -ne 0 ]]; then echo; echo \"reptyr failed for pid ${pid} with exit code \$exit_code\"; echo \"Press Enter to close this pane.\"; read -r _; exit \$exit_code; fi'"
+      "bash -lc '${SUDO_BIN} reptyr -s -T ${pid}; exit_code=\$?; if [[ \$exit_code -ne 0 ]]; then echo; echo \"reptyr failed for pid ${pid} with exit code \$exit_code\"; echo \"Press Enter to close this pane.\"; read -r _; exit \$exit_code; fi'"
 
     attached_rows+=("${pid}"$'\t'"${tool_name}"$'\t'"${tty}"$'\t'"${root_comm}")
   done
