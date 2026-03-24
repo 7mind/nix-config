@@ -106,7 +106,7 @@ collect_candidates_for_tty() {
     tty_rows+=("${pid}"$'\t'"${ppid}"$'\t'"${comm}"$'\t'"${args}")
   done
 
-  [[ "${#tty_rows[@]}" -gt 0 ]] || return
+  [[ "${#tty_rows[@]}" -gt 0 ]] || return 0
 
   local -A related_pid_set=()
   local tool_name=""
@@ -133,7 +133,7 @@ collect_candidates_for_tty() {
     fi
   done
 
-  [[ "${#related_pid_set[@]}" -gt 0 ]] || return
+  [[ "${#related_pid_set[@]}" -gt 0 ]] || return 0
 
   local root_pid=""
   local root_comm=""
@@ -156,8 +156,8 @@ collect_candidates_for_tty() {
   done
 
   [[ -n "${root_pid}" ]] || fail "Failed to determine sandbox root for tty ${tty}."
-  [[ -z "${tmux_tty_set["${tty}"]+x}" ]] || return
-  [[ -z "${attached_pid_set["${root_pid}"]+x}" ]] || return
+  [[ -z "${tmux_tty_set["${tty}"]+x}" ]] || return 0
+  [[ -z "${attached_pid_set["${root_pid}"]+x}" ]] || return 0
 
   candidate_rows+=("${root_pid}"$'\t'"${tool_name}"$'\t'"${tty}"$'\t'"${root_comm}"$'\t'"${root_args}")
 }
