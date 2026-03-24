@@ -78,7 +78,7 @@ load_process_rows() {
         ppid = $2
         tty = $3
         comm = $4
-        sub(/^[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+/, "", $0)
+        sub(/^[[:space:]]*[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+/, "", $0)
         print pid "\t" ppid "\t" tty "\t" comm "\t" $0
       }
     '
