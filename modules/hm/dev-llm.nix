@@ -269,6 +269,7 @@ in
             # aider-chat
             # goose-cli
             pkgs.bubblewrap
+            pkgs.reattach-llm
 
             (pkgs.writeShellScriptBin "yolo-claude" ''
               ENV_ARGS=()
