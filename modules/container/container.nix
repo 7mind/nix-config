@@ -1,4 +1,4 @@
-{ cfg-meta, cfg-const, lib, ... }:
+{ cfg-meta, cfg-const, lib, pkgs, ... }:
 
 {
   imports = [
@@ -18,6 +18,10 @@
   };
 
   system.stateVersion = cfg-meta.state-version-system;
+
+  environment.systemPackages = [
+    pkgs.ghostty.terminfo
+  ];
 
   services.openssh = {
     settings = {
