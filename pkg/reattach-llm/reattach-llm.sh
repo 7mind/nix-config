@@ -10,6 +10,27 @@ declare -A attached_pid_set=()
 declare -a candidate_rows=()
 declare -a attached_rows=()
 
+llm_label_from_text() {
+  local text="$1"
+
+  case "${text}" in
+    *claude*)
+      printf '%s\n' "claude"
+      return 0
+      ;;
+    *codex*)
+      printf '%s\n' "codex"
+      return 0
+      ;;
+    *gemini*)
+      printf '%s\n' "gemini"
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
 ensure_session() {
   if ! tmux has-session -t "${SESSION_NAME}" 2>/dev/null; then
     tmux new-session -d -s "${SESSION_NAME}" -n "${INITIAL_WINDOW_NAME}"
@@ -44,78 +65,140 @@ load_session_state() {
   done < <(tmux list-panes -t "${SESSION_NAME}" -F '#{pane_tty}')
 }
 
-is_llm_process() {
-  local comm="$1"
-  local argv0="$2"
+collect_candidates_for_tty() {
+  local tty="$1"
 
-  case "${comm}" in
-    claude|codex|gemini)
-      return 0
-      ;;
-  esac
+  local -a tty_rows=()
+  local row
 
-  case "${argv0}" in
-    claude|codex|gemini)
-      return 0
-      ;;
-  esac
+  while IFS= read -r row; do
+    if [[ -z "${row}" ]]; then
+      continue
+    fi
 
-  return 1
+    tty_rows+=("${row}")
+  done < <(
+    ps -t "${tty#/dev/}" -o pid=,ppid=,comm=,args= --no-headers --sort pid | awk '
+      {
+        pid = $1
+        ppid = $2
+        comm = $3
+        sub(/^[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+/, "", $0)
+        print pid "\t" ppid "\t" comm "\t" $0
+      }
+    '
+  )
+
+  if [[ "${#tty_rows[@]}" -eq 0 ]]; then
+    return
+  fi
+
+  local -A related_pid_set=()
+  local tool_name=""
+
+  for row in "${tty_rows[@]}"; do
+    local pid
+    local ppid
+    local comm
+    local args
+    IFS=$'\t' read -r pid ppid comm args <<<"${row}"
+
+    local label=""
+    if label="$(llm_label_from_text "${comm}")"; then
+      :
+    elif label="$(llm_label_from_text "${args}")"; then
+      :
+    else
+      continue
+    fi
+
+    related_pid_set["${pid}"]=1
+    if [[ -z "${tool_name}" ]]; then
+      tool_name="${label}"
+    fi
+  done
+
+  if [[ "${#related_pid_set[@]}" -eq 0 ]]; then
+    return
+  fi
+
+  local root_pid=""
+  local root_comm=""
+  local root_args=""
+
+  for row in "${tty_rows[@]}"; do
+    local pid
+    local ppid
+    local comm
+    local args
+    IFS=$'\t' read -r pid ppid comm args <<<"${row}"
+
+    if [[ -z "${related_pid_set["${pid}"]+x}" ]]; then
+      continue
+    fi
+
+    if [[ -n "${related_pid_set["${ppid}"]+x}" ]]; then
+      continue
+    fi
+
+    root_pid="${pid}"
+    root_comm="${comm}"
+    root_args="${args}"
+    break
+  done
+
+  if [[ -z "${root_pid}" ]]; then
+    echo "Failed to determine sandbox root for tty ${tty}." >&2
+    exit 1
+  fi
+
+  if [[ -n "${attached_pid_set["${root_pid}"]+x}" ]]; then
+    return
+  fi
+
+  candidate_rows+=("${root_pid}"$'\t'"${tool_name}"$'\t'"${tty}"$'\t'"${root_comm}"$'\t'"${root_args}")
 }
 
 collect_candidates() {
   candidate_rows=()
 
-  while IFS=$'\t' read -r pid comm tty args; do
-    if [[ -z "${pid}" ]]; then
+  while IFS=$'\t' read -r tty; do
+    if [[ -z "${tty}" ]]; then
       continue
     fi
 
-    if [[ "${tty}" == "?" ]]; then
+    if [[ -n "${session_tty_set["${tty}"]+x}" ]]; then
       continue
     fi
 
-    local argv0
-    argv0="$(awk '{ print $1 }' <<<"${args}")"
-    argv0="${argv0##*/}"
-
-    if ! is_llm_process "${comm}" "${argv0}"; then
-      continue
-    fi
-
-    local tty_path="/dev/${tty}"
-
-    if [[ -n "${session_tty_set["${tty_path}"]+x}" ]]; then
-      continue
-    fi
-
-    if [[ -n "${attached_pid_set["${pid}"]+x}" ]]; then
-      continue
-    fi
-
-    candidate_rows+=("${pid}"$'\t'"${comm}"$'\t'"${tty_path}"$'\t'"${args}")
-  done < <(ps -u "${USER_NAME}" -o pid=,comm=,tty=,args= --no-headers --sort pid | awk '
+    collect_candidates_for_tty "${tty}"
+  done < <(ps -u "${USER_NAME}" -o tty= --no-headers | awk '
       {
-        pid = $1
-        comm = $2
-        tty = $3
-        sub(/^[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+/, "", $0)
-        print pid "\t" comm "\t" tty "\t" $0
+        if ($1 == "?") {
+          next
+        }
+
+        print "/dev/" $1
       }
-    ')
+    ' | sort -u)
 }
 
 attach_candidates() {
   local row
 
   for row in "${candidate_rows[@]}"; do
-    IFS=$'\t' read -r pid comm tty args <<<"${row}"
+    local pid
+    local tool_name
+    local tty
+    local root_comm
+    local root_args
+    IFS=$'\t' read -r pid tool_name tty root_comm root_args <<<"${row}"
 
-    local window_name="${comm}-${pid}"
+    local window_name="${tool_name}-${pid}"
     tmux new-window -d -t "${SESSION_NAME}:" -n "${window_name}"
     tmux send-keys -t "${SESSION_NAME}:${window_name}" "exec reptyr -T ${pid}" C-m
 
-    attached_rows+=("${pid}"$'\t'"${comm}"$'\t'"${tty}")
+    attached_rows+=("${pid}"$'\t'"${tool_name}"$'\t'"${tty}"$'\t'"${root_comm}")
   done
 }
 
@@ -129,8 +212,12 @@ print_summary() {
 
   local row
   for row in "${attached_rows[@]}"; do
-    IFS=$'\t' read -r pid comm tty <<<"${row}"
-    printf '  %s pid=%s from %s\n' "${comm}" "${pid}" "${tty}"
+    local pid
+    local tool_name
+    local tty
+    local root_comm
+    IFS=$'\t' read -r pid tool_name tty root_comm <<<"${row}"
+    printf '  %s pid=%s from %s (%s)\n' "${tool_name}" "${pid}" "${tty}" "${root_comm}"
   done
 }
 
