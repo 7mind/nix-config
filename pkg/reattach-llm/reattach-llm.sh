@@ -1,15 +1,23 @@
 set -euo pipefail
 
-readonly SESSION_NAME="llm"
-readonly INITIAL_WINDOW_NAME="shell"
 readonly SUDO_BIN="/run/wrappers/bin/sudo"
+readonly SELF_BIN="$0"
 USER_NAME="$(id -un)"
 readonly USER_NAME
 
-declare -A session_tty_set=()
+declare -A tmux_tty_set=()
 declare -A attached_pid_set=()
 declare -a candidate_rows=()
-declare -a attached_rows=()
+
+fail() {
+  echo "$1" >&2
+  exit 1
+}
+
+ensure_tmux() {
+  [[ -n "${TMUX-}" ]] || fail "reattach-llm must be run from inside tmux."
+  [[ -u "${SUDO_BIN}" ]] || fail "Expected setuid sudo wrapper at ${SUDO_BIN}."
+}
 
 llm_label_from_text() {
   local text="$1"
@@ -32,43 +40,27 @@ llm_label_from_text() {
   return 1
 }
 
-ensure_session() {
-  if [[ ! -u "${SUDO_BIN}" ]]; then
-    echo "Expected setuid sudo wrapper at ${SUDO_BIN}." >&2
-    exit 1
-  fi
-
-  if ! tmux has-session -t "${SESSION_NAME}" 2>/dev/null; then
-    tmux new-session -d -s "${SESSION_NAME}" -n "${INITIAL_WINDOW_NAME}"
-  fi
-}
-
-load_session_state() {
-  session_tty_set=()
+load_tmux_state() {
+  tmux_tty_set=()
   attached_pid_set=()
 
   while IFS= read -r pane_tty; do
-    if [[ -z "${pane_tty}" ]]; then
-      continue
-    fi
+    [[ -n "${pane_tty}" ]] || continue
 
-    session_tty_set["${pane_tty}"]=1
+    tmux_tty_set["${pane_tty}"]=1
 
     while IFS= read -r attached_pid; do
-      if [[ -z "${attached_pid}" ]]; then
-        continue
-      fi
-
+      [[ -n "${attached_pid}" ]] || continue
       attached_pid_set["${attached_pid}"]=1
     done < <(
       ps -t "${pane_tty#/dev/}" -o args= \
         | awk '
-            match($0, /(^|[[:space:]])reptyr[[:space:]]+(-T[[:space:]]+)?([0-9]+)($|[[:space:]])/, groups) {
-              print groups[3]
+            match($0, /(^|[[:space:]])reptyr[[:space:]]+(-s[[:space:]]+)?(-T[[:space:]]+)?([0-9]+)($|[[:space:]])/, groups) {
+              print groups[4]
             }
           '
     )
-  done < <(tmux list-panes -t "${SESSION_NAME}" -F '#{pane_tty}')
+  done < <(tmux list-panes -a -F '#{pane_tty}')
 }
 
 collect_candidates_for_tty() {
@@ -78,10 +70,7 @@ collect_candidates_for_tty() {
   local row
 
   while IFS= read -r row; do
-    if [[ -z "${row}" ]]; then
-      continue
-    fi
-
+    [[ -n "${row}" ]] || continue
     tty_rows+=("${row}")
   done < <(
     ps -t "${tty#/dev/}" -o pid=,ppid=,comm=,args= --no-headers --sort pid | awk '
@@ -95,9 +84,7 @@ collect_candidates_for_tty() {
     '
   )
 
-  if [[ "${#tty_rows[@]}" -eq 0 ]]; then
-    return
-  fi
+  [[ "${#tty_rows[@]}" -gt 0 ]] || return
 
   local -A related_pid_set=()
   local tool_name=""
@@ -124,9 +111,7 @@ collect_candidates_for_tty() {
     fi
   done
 
-  if [[ "${#related_pid_set[@]}" -eq 0 ]]; then
-    return
-  fi
+  [[ "${#related_pid_set[@]}" -gt 0 ]] || return
 
   local root_pid=""
   local root_comm=""
@@ -139,13 +124,8 @@ collect_candidates_for_tty() {
     local args
     IFS=$'\t' read -r pid ppid comm args <<<"${row}"
 
-    if [[ -z "${related_pid_set["${pid}"]+x}" ]]; then
-      continue
-    fi
-
-    if [[ -n "${related_pid_set["${ppid}"]+x}" ]]; then
-      continue
-    fi
+    [[ -n "${related_pid_set["${pid}"]+x}" ]] || continue
+    [[ -z "${related_pid_set["${ppid}"]+x}" ]] || continue
 
     root_pid="${pid}"
     root_comm="${comm}"
@@ -153,14 +133,9 @@ collect_candidates_for_tty() {
     break
   done
 
-  if [[ -z "${root_pid}" ]]; then
-    echo "Failed to determine sandbox root for tty ${tty}." >&2
-    exit 1
-  fi
-
-  if [[ -n "${attached_pid_set["${root_pid}"]+x}" ]]; then
-    return
-  fi
+  [[ -n "${root_pid}" ]] || fail "Failed to determine sandbox root for tty ${tty}."
+  [[ -z "${tmux_tty_set["${tty}"]+x}" ]] || return
+  [[ -z "${attached_pid_set["${root_pid}"]+x}" ]] || return
 
   candidate_rows+=("${root_pid}"$'\t'"${tool_name}"$'\t'"${tty}"$'\t'"${root_comm}"$'\t'"${root_args}")
 }
@@ -168,30 +143,26 @@ collect_candidates_for_tty() {
 collect_candidates() {
   candidate_rows=()
 
-  while IFS=$'\t' read -r tty; do
-    if [[ -z "${tty}" ]]; then
-      continue
-    fi
-
-    if [[ -n "${session_tty_set["${tty}"]+x}" ]]; then
-      continue
-    fi
-
+  while IFS= read -r tty; do
+    [[ -n "${tty}" ]] || continue
     collect_candidates_for_tty "${tty}"
-  done < <(ps -u "${USER_NAME}" -o tty= --no-headers | awk '
-      {
-        if ($1 == "?") {
-          next
-        }
-
+  done < <(
+    ps -u "${USER_NAME}" -o tty= --no-headers | awk '
+      $1 != "?" {
         print "/dev/" $1
       }
-    ' | sort -u)
+    ' | sort -u
+  )
 }
 
-attach_candidates() {
-  local row
+attach_pid() {
+  local selected_pid="$1"
+  local target_session="$2"
 
+  load_tmux_state
+  collect_candidates
+
+  local row
   for row in "${candidate_rows[@]}"; do
     local pid
     local tool_name
@@ -200,35 +171,68 @@ attach_candidates() {
     local root_args
     IFS=$'\t' read -r pid tool_name tty root_comm root_args <<<"${row}"
 
-    local window_name="${tool_name}-${pid}"
-    tmux new-window -d -t "${SESSION_NAME}:" -n "${window_name}" \
-      "bash -lc '${SUDO_BIN} reptyr -s -T ${pid}; exit_code=\$?; if [[ \$exit_code -ne 0 ]]; then echo; echo \"reptyr failed for pid ${pid} with exit code \$exit_code\"; echo \"Press Enter to close this pane.\"; read -r _; exit \$exit_code; fi'"
+    if [[ "${pid}" != "${selected_pid}" ]]; then
+      continue
+    fi
 
-    attached_rows+=("${pid}"$'\t'"${tool_name}"$'\t'"${tty}"$'\t'"${root_comm}")
+    local window_name="${tool_name}-${pid}"
+    tmux new-window -d -t "${target_session}:" -n "${window_name}" \
+      "bash -lc '${SUDO_BIN} reptyr -s -T ${pid}; exit_code=\$?; if [[ \$exit_code -ne 0 ]]; then echo; echo \"reptyr failed for pid ${pid} with exit code \$exit_code\"; echo \"Press Enter to close this pane.\"; read -r _; exit \$exit_code; fi'"
+    return
   done
+
+  tmux display-message "LLM process ${selected_pid} is no longer available."
 }
 
-print_summary() {
-  if [[ "${#attached_rows[@]}" -eq 0 ]]; then
-    echo "No unattached Claude/Codex/Gemini processes found for tmux session '${SESSION_NAME}'."
+show_menu() {
+  load_tmux_state
+  collect_candidates
+
+  if [[ "${#candidate_rows[@]}" -eq 0 ]]; then
+    tmux display-message "No unattached Claude/Codex/Gemini processes found."
     return
   fi
 
-  echo "Attached processes to tmux session '${SESSION_NAME}':"
+  local current_session
+  current_session="$(tmux display-message -p '#{session_name}')"
+
+  local -a menu_args=()
+  menu_args+=(-T "Reattach LLM")
 
   local row
-  for row in "${attached_rows[@]}"; do
+  for row in "${candidate_rows[@]}"; do
     local pid
     local tool_name
     local tty
     local root_comm
-    IFS=$'\t' read -r pid tool_name tty root_comm <<<"${row}"
-    printf '  %s pid=%s from %s (%s)\n' "${tool_name}" "${pid}" "${tty}" "${root_comm}"
+    local root_args
+    IFS=$'\t' read -r pid tool_name tty root_comm root_args <<<"${row}"
+
+    local item_name="${tool_name} pid=${pid} ${tty}"
+    local command
+    printf -v command "run-shell %q" "${SELF_BIN} --attach ${pid} ${current_session}"
+    menu_args+=("${item_name}" "" "${command}")
   done
+
+  tmux display-menu "${menu_args[@]}"
 }
 
-ensure_session
-load_session_state
-collect_candidates
-attach_candidates
-print_summary
+main() {
+  ensure_tmux
+
+  case "${1-}" in
+    --attach)
+      [[ $# -eq 3 ]] || fail "Usage: reattach-llm --attach PID TARGET_SESSION"
+      attach_pid "$2" "$3"
+      ;;
+    "")
+      [[ $# -eq 0 ]] || fail "Usage: reattach-llm [--attach PID TARGET_SESSION]"
+      show_menu
+      ;;
+    *)
+      fail "Usage: reattach-llm [--attach PID TARGET_SESSION]"
+      ;;
+  esac
+}
+
+main "$@"
