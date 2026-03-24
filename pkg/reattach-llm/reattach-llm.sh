@@ -8,6 +8,7 @@ readonly USER_NAME
 declare -A tmux_tty_set=()
 declare -A attached_pid_set=()
 declare -a candidate_rows=()
+declare -a process_rows=()
 
 fail() {
   echo "$1" >&2
@@ -63,26 +64,47 @@ load_tmux_state() {
   done < <(tmux list-panes -a -F '#{pane_tty}')
 }
 
+load_process_rows() {
+  process_rows=()
+
+  local row
+  while IFS= read -r row; do
+    [[ -n "${row}" ]] || continue
+    process_rows+=("${row}")
+  done < <(
+    ps -u "${USER_NAME}" -o pid=,ppid=,tty=,comm=,args= --no-headers --sort tty,pid | awk '
+      {
+        pid = $1
+        ppid = $2
+        tty = $3
+        comm = $4
+        sub(/^[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+/, "", $0)
+        print pid "\t" ppid "\t" tty "\t" comm "\t" $0
+      }
+    '
+  )
+}
+
 collect_candidates_for_tty() {
   local tty="$1"
 
   local -a tty_rows=()
   local row
 
-  while IFS= read -r row; do
-    [[ -n "${row}" ]] || continue
-    tty_rows+=("${row}")
-  done < <(
-    ps -t "${tty#/dev/}" -o pid=,ppid=,comm=,args= --no-headers --sort pid | awk '
-      {
-        pid = $1
-        ppid = $2
-        comm = $3
-        sub(/^[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+/, "", $0)
-        print pid "\t" ppid "\t" comm "\t" $0
-      }
-    '
-  )
+  for row in "${process_rows[@]}"; do
+    local pid
+    local ppid
+    local process_tty
+    local comm
+    local args
+    IFS=$'\t' read -r pid ppid process_tty comm args <<<"${row}"
+
+    if [[ "/dev/${process_tty}" != "${tty}" ]]; then
+      continue
+    fi
+
+    tty_rows+=("${pid}"$'\t'"${ppid}"$'\t'"${comm}"$'\t'"${args}")
+  done
 
   [[ "${#tty_rows[@]}" -gt 0 ]] || return
 
@@ -142,17 +164,30 @@ collect_candidates_for_tty() {
 
 collect_candidates() {
   candidate_rows=()
+  load_process_rows
 
-  while IFS= read -r tty; do
-    [[ -n "${tty}" ]] || continue
+  local -A seen_tty_set=()
+  local row
+  for row in "${process_rows[@]}"; do
+    local pid
+    local ppid
+    local process_tty
+    local comm
+    local args
+    IFS=$'\t' read -r pid ppid process_tty comm args <<<"${row}"
+
+    if [[ "${process_tty}" == "?" ]]; then
+      continue
+    fi
+
+    local tty="/dev/${process_tty}"
+    if [[ -n "${seen_tty_set["${tty}"]+x}" ]]; then
+      continue
+    fi
+
+    seen_tty_set["${tty}"]=1
     collect_candidates_for_tty "${tty}"
-  done < <(
-    ps -u "${USER_NAME}" -o tty= --no-headers | awk '
-      $1 != "?" {
-        print "/dev/" $1
-      }
-    ' | sort -u
-  )
+  done
 }
 
 attach_pid() {
