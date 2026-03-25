@@ -42,8 +42,13 @@
         # Load catppuccin after options are set
         run-shell ${pkgs.tmuxPlugins.catppuccin}/share/tmux-plugins/catppuccin/catppuccin.tmux
 
+        # Store status-right content in a variable so commas in #[fg=,bg=]
+        # don't get parsed as #{?cond,true,false} delimiters.
+        # Use -gF to resolve theme colors now; ## escapes keep dynamic parts for display time.
+        set -gF @_custom_status_right "#[fg=#{@thm_fg},bg=#{@thm_surface_0}] ##(whoami)@##h:##{b:pane_current_path} "
+
         # Wide: user@host:<dirname>, Narrow: nothing
-        set -g status-right "#{?#{e|<|:#{client_width},80},,#[fg=#{@thm_fg},bg=#{@thm_surface_0}] #(whoami)@#h:#{b:pane_current_path} }"
+        set -g status-right "#{?#{e|<|:#{client_width},80},,#{E:@_custom_status_right}}"
       '';
     };
   };
