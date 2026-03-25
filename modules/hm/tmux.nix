@@ -46,16 +46,33 @@
         set -gu @_smind_window_current_text_style
         set -gu @_smind_window_current_text_suffix
 
-        # Window tab format: <space><number><space><dirname:command>
-        # -gF resolves theme colors at set time; ## keeps format codes for display time.
-        set -gF window-status-format \
+        # Window tab format variants (## escapes keep format codes for display time)
+        set -gF @_smind_wfmt_wide \
           "#[fg=#{@thm_crust},bg=#{@thm_overlay_2}] ##I #[fg=#{@thm_fg},bg=#{@thm_surface_0}]##{b:pane_current_path}:##{pane_current_command} "
-        set -gF window-status-current-format \
+        set -gF @_smind_wfmt_narrow \
+          "#[fg=#{@thm_crust},bg=#{@thm_overlay_2}] ##I "
+        set -gF @_smind_cfmt_wide \
           "#[fg=#{@thm_crust},bg=#{@thm_mauve}] ##I #[fg=#{@thm_fg},bg=#{@thm_surface_1}]##{b:pane_current_path}:##{pane_current_command} "
+        set -gF @_smind_cfmt_narrow \
+          "#[fg=#{@thm_crust},bg=#{@thm_mauve}] ##I "
+
+        # Set initial wide format
+        set -gF window-status-format "#{@_smind_wfmt_wide}"
+        set -gF window-status-current-format "#{@_smind_cfmt_wide}"
+
+        # Switch between wide/narrow on resize (#{@var} avoids re-expanding #I)
+        set-hook -g client-resized[0] \
+          'if-shell -F "#{<:#{client_width},80}" \
+            "set -Fg window-status-format \"#{@_smind_wfmt_narrow}\" ; set -Fg window-status-current-format \"#{@_smind_cfmt_narrow}\"" \
+            "set -Fg window-status-format \"#{@_smind_wfmt_wide}\" ; set -Fg window-status-current-format \"#{@_smind_cfmt_wide}\""'
+        set-hook -g client-attached[0] \
+          'if-shell -F "#{<:#{client_width},80}" \
+            "set -Fg window-status-format \"#{@_smind_wfmt_narrow}\" ; set -Fg window-status-current-format \"#{@_smind_cfmt_narrow}\"" \
+            "set -Fg window-status-format \"#{@_smind_wfmt_wide}\" ; set -Fg window-status-current-format \"#{@_smind_cfmt_wide}\""'
 
         # Status right: user@host:<dirname> when wide, nothing when narrow
         set -gF @_custom_status_right "#[fg=#{@thm_fg},bg=#{@thm_surface_0}] ##(whoami)@##h:##{b:pane_current_path} "
-        set -g status-right "#{?#{e|<|:#{client_width},60},,#{E:@_custom_status_right}}"
+        set -g status-right "#{?#{e|<|:#{client_width},80},,#{E:@_custom_status_right}}"
       '';
     };
   };
