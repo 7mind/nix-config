@@ -32,6 +32,20 @@
         # Load catppuccin (theme colors only, window formats skipped)
         run-shell ${pkgs.tmuxPlugins.catppuccin}/share/tmux-plugins/catppuccin/catppuccin.tmux
 
+        # Remove stale hooks and variables from previous config versions
+        set-hook -gu client-resized
+        set-hook -gu client-attached
+        set -gu @_smind_window_status_format_narrow
+        set -gu @_smind_window_status_format_wide
+        set -gu @_smind_window_status_current_format_narrow
+        set -gu @_smind_window_status_current_format_wide
+        set -gu @_smind_window_number_style
+        set -gu @_smind_window_text_style
+        set -gu @_smind_window_text_suffix
+        set -gu @_smind_window_current_number_style
+        set -gu @_smind_window_current_text_style
+        set -gu @_smind_window_current_text_suffix
+
         # Window tab format: <space><number><space><dirname:command>
         # -gF resolves theme colors at set time; ## keeps format codes for display time.
         set -gF window-status-format \
