@@ -133,7 +133,25 @@ in
           };
           statusLine = {
             "type" = "command";
-            "command" = "printf '\\033[2m\\033[37m%s \\033[0m\\033[2m@ %s \\033[0m\\033[2m\\033[36min \\033[1m\\033[36m%s\\033[0m' \"$(whoami)\" \"$(hostname -s)\" \"$(pwd | sed \"s|^$HOME|~|\")\"";
+            "command" = ''
+              CLAUDE_ACCOUNT="$(${pkgs.jq}/bin/jq -r '
+                .oauthAccount.emailAddress //
+                .oauthAccount.email //
+                .oauthAccount.account.emailAddress //
+                .oauthAccount.account.email //
+                .oauthAccount.name //
+                .oauthAccount.displayName //
+                .oauthAccount.accountName //
+                .account.emailAddress //
+                .account.email //
+                .account.name //
+                empty
+              ' "$HOME/.claude.json" 2>/dev/null)"
+              if [ -z "$CLAUDE_ACCOUNT" ]; then
+                CLAUDE_ACCOUNT="unknown-claude-account"
+              fi
+              printf '\033[2m\033[35m%s \033[0m\033[2m\033[37m%s \033[0m\033[2m@ %s \033[0m\033[2m\033[36min \033[1m\033[36m%s\033[0m' "$CLAUDE_ACCOUNT" "$(whoami)" "$(hostname -s)" "$(pwd | sed "s|^$HOME|~|")"
+            '';
           };
         };
         memory.text = claudeMemoryText;
