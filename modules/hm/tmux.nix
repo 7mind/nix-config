@@ -16,6 +16,10 @@
         # Mouse works as expected, incl. scrolling
         set-option -g mouse on
 
+        bind c new-window -c "#{pane_current_path}"
+        bind '"' split-window -v -c "#{pane_current_path}"
+        bind % split-window -h -c "#{pane_current_path}"
+
         # Prefer tmux's own terminfo (more accurate capabilities than screen-256color)
         set -g default-terminal "tmux-256color"
 
