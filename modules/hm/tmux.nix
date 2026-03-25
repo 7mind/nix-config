@@ -62,11 +62,11 @@
 
         # Switch between wide/narrow on resize (#{@var} avoids re-expanding #I)
         set-hook -g client-resized[0] \
-          'if-shell -F "#{<:#{client_width},80}" \
+          'if-shell -F "#{e|<|:#{client_width},80}" \
             "set -Fg window-status-format \"#{@_smind_wfmt_narrow}\" ; set -Fg window-status-current-format \"#{@_smind_cfmt_narrow}\"" \
             "set -Fg window-status-format \"#{@_smind_wfmt_wide}\" ; set -Fg window-status-current-format \"#{@_smind_cfmt_wide}\""'
         set-hook -g client-attached[0] \
-          'if-shell -F "#{<:#{client_width},80}" \
+          'if-shell -F "#{e|<|:#{client_width},80}" \
             "set -Fg window-status-format \"#{@_smind_wfmt_narrow}\" ; set -Fg window-status-current-format \"#{@_smind_cfmt_narrow}\"" \
             "set -Fg window-status-format \"#{@_smind_wfmt_wide}\" ; set -Fg window-status-current-format \"#{@_smind_cfmt_wide}\""'
 
