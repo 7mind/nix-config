@@ -84,9 +84,8 @@ in
     '';
   };
 
-  # Disable PCI runtime PM for WiFi parent bridge to prevent ath12k firmware crash
-  # The bridge (00:02.3) routes to the Qualcomm WCN785x WiFi (c0:00.0)
-  # Runtime PM on the bridge causes ath12k to crash - targeting device directly doesn't work
+  # WiFi card was swapped from Qualcomm WCN785x (ath12k) to MediaTek MT7925 (mt7921e)
+  # Keeping disabled PCI runtime PM workaround for reference:
   # services.udev.extraRules = lib.mkAfter ''
   #   ACTION=="add|change", SUBSYSTEM=="pci", KERNEL=="0000:00:02.3", ATTR{power/control}="on"
   # '';
@@ -135,6 +134,10 @@ in
     # Networking - use NetworkManager for laptop mobility
     net.mode = "networkmanager";
     net.tailscale.enable = true;
+    # MT7925 driver fails 802.11r FT key installation on kernel 6.12;
+    # UniFi APs aggressively steer via 802.11v causing roaming loops
+    net.wifi.disableFT = true;
+    net.wifi.disableBSSTransition = true;
 
     desktop.plymouth.enable = true;
     hw.framework-laptop.enable = true;
