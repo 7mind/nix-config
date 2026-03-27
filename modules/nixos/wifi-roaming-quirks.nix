@@ -2,12 +2,16 @@
 
 let
   cfg = config.smind.net.wifi;
-  wpa_cli = "${pkgs.wpa_supplicant}/bin/wpa_cli";
+  busctl = "${pkgs.systemd}/bin/busctl";
   nmcli = "${pkgs.networkmanager}/bin/nmcli";
   logger = "${pkgs.util-linux}/bin/logger";
   gawk = "${pkgs.gawk}/bin/awk";
   gnused = "${pkgs.gnused}/bin/sed";
   gnugrep = "${pkgs.gnugrep}/bin/grep";
+  tr = "${pkgs.coreutils}/bin/tr";
+
+  wpaDbus = "fi.w1.wpa_supplicant1";
+  wpaRoot = "/fi/w1/wpa_supplicant1";
 in
 {
   options.smind.net.wifi = {
@@ -16,13 +20,14 @@ in
       Works around drivers that fail FT key installation
       (e.g., MediaTek MT7925, Qualcomm ath12k on certain kernels).
       Uses a NetworkManager dispatcher to strip FT-PSK/FT-SAE/FT-EAP
-      from wpa_supplicant key management after connection
+      from wpa_supplicant key management via D-Bus after connection
     '';
 
     disableBSSTransition = lib.mkEnableOption ''
       Disable 802.11v BSS Transition Management.
       Prevents access points from forcefully steering the client
-      to other APs via WNM Disassociation Imminent frames
+      to other APs via WNM Disassociation Imminent frames.
+      Sets bss_transition=0 in wpa_supplicant config
     '';
   };
 
@@ -38,7 +43,12 @@ in
       }
     ];
 
-    networking.networkmanager.dispatcherScripts = [
+    # Disable 802.11v at the wpa_supplicant config level
+    networking.wireless.extraConfig = lib.mkIf cfg.disableBSSTransition ''
+      bss_transition=0
+    '';
+
+    networking.networkmanager.dispatcherScripts = lib.mkIf cfg.disableFT [
       {
         type = "basic";
         source = pkgs.writeScript "wifi-roaming-quirks" ''
@@ -56,32 +66,57 @@ in
             exit 0
           fi
 
-          ${lib.optionalString cfg.disableBSSTransition ''
-            # Disable 802.11v BSS Transition Management - prevents AP-initiated forced roaming
-            ${wpa_cli} -i "$IFACE" SET bss_transition 0 2>/dev/null \
-              && ${logger} -t wifi-roaming-quirks "Disabled BSS Transition (802.11v) on $IFACE" \
-              || true
-          ''}
+          # Resolve wpa_supplicant D-Bus paths for this interface
+          IFACE_PATH=$(${busctl} call ${wpaDbus} ${wpaRoot} \
+            ${wpaDbus} GetInterface s "$IFACE" 2>/dev/null \
+            | ${gawk} '{print $2}' | ${tr} -d '"')
 
-          ${lib.optionalString cfg.disableFT ''
-            # Disable 802.11r Fast Transition by stripping FT key management methods.
-            # wpa_supplicant uses the network block's key_mgmt during roaming;
-            # removing FT variants forces regular (non-FT) reassociation.
-            NET_ID=$(${wpa_cli} -i "$IFACE" list_networks 2>/dev/null \
-              | ${gnugrep} CURRENT \
-              | ${gawk} '{print $1}')
+          if [ -z "$IFACE_PATH" ]; then
+            ${logger} -t wifi-roaming-quirks "Could not find wpa_supplicant interface for $IFACE"
+            exit 0
+          fi
 
-            if [ -n "$NET_ID" ]; then
-              KEY_MGMT=$(${wpa_cli} -i "$IFACE" get_network "$NET_ID" key_mgmt 2>/dev/null)
-              NEW_KEY_MGMT=$(echo "$KEY_MGMT" | ${gnused} 's/FT-PSK//g; s/FT-SAE//g; s/FT-EAP-SHA384//g; s/FT-EAP//g; s/  */ /g; s/^ //; s/ $//')
+          NETWORK_PATH=$(${busctl} get-property ${wpaDbus} "$IFACE_PATH" \
+            ${wpaDbus}.Interface CurrentNetwork 2>/dev/null \
+            | ${gawk} '{print $2}' | ${tr} -d '"')
 
-              if [ "$KEY_MGMT" != "$NEW_KEY_MGMT" ] && [ -n "$NEW_KEY_MGMT" ]; then
-                ${wpa_cli} -i "$IFACE" set_network "$NET_ID" key_mgmt "$NEW_KEY_MGMT" 2>/dev/null \
-                  && ${logger} -t wifi-roaming-quirks "Disabled FT on $IFACE network $NET_ID: $KEY_MGMT -> $NEW_KEY_MGMT" \
-                  || ${logger} -t wifi-roaming-quirks "Failed to disable FT on $IFACE network $NET_ID"
-              fi
-            fi
-          ''}
+          if [ -z "$NETWORK_PATH" ] || [ "$NETWORK_PATH" = "/" ]; then
+            ${logger} -t wifi-roaming-quirks "No current network on $IFACE"
+            exit 0
+          fi
+
+          # Read current key_mgmt from network properties
+          KEY_MGMT=$(${busctl} get-property ${wpaDbus} "$NETWORK_PATH" \
+            ${wpaDbus}.Network Properties 2>/dev/null \
+            | ${gnugrep} -oP '"key_mgmt" s "\K[^"]+')
+
+          if [ -z "$KEY_MGMT" ]; then
+            ${logger} -t wifi-roaming-quirks "Could not read key_mgmt for $IFACE"
+            exit 0
+          fi
+
+          # Strip all FT key management methods
+          NEW_KEY_MGMT=$(echo "$KEY_MGMT" \
+            | ${gnused} 's/FT-EAP-SHA384//g; s/FT-SAE//g; s/FT-PSK//g; s/FT-EAP//g; s/  */ /g; s/^ //; s/ $//')
+
+          if [ "$KEY_MGMT" = "$NEW_KEY_MGMT" ]; then
+            exit 0
+          fi
+
+          if [ -z "$NEW_KEY_MGMT" ]; then
+            ${logger} -t wifi-roaming-quirks "Refusing to set empty key_mgmt on $IFACE (was: $KEY_MGMT)"
+            exit 0
+          fi
+
+          # Write stripped key_mgmt back via D-Bus Properties.Set
+          if ${busctl} call ${wpaDbus} "$NETWORK_PATH" \
+            org.freedesktop.DBus.Properties Set ssv \
+            "${wpaDbus}.Network" "Properties" \
+            "a{sv}" 1 "key_mgmt" "s" "$NEW_KEY_MGMT" 2>/dev/null; then
+            ${logger} -t wifi-roaming-quirks "Disabled FT on $IFACE: $KEY_MGMT -> $NEW_KEY_MGMT"
+          else
+            ${logger} -t wifi-roaming-quirks "Failed to set key_mgmt on $IFACE via D-Bus"
+          fi
         '';
       }
     ];

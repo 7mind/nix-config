@@ -47,6 +47,11 @@
       environment.sessionVariables.GIO_USE_NETWORK_MONITOR =
         if config.smind.isLaptop then "networkmanager" else "base";
 
+      environment.systemPackages = with pkgs; [
+        iw
+        wirelesstools
+      ];
+
       systemd.services.NetworkManager-wait-online.enable = false;
     })
 
