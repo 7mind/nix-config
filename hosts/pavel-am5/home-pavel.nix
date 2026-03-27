@@ -6,6 +6,10 @@
     "${cfg-meta.paths.users}/pavel/hm/home-pavel-generic-linux.nix"
   ];
 
+  home.packages = with pkgs; [
+    kicad
+  ];
+
   smind.hm.electron-wrappers = {
     enable = true;
     slack.enable = true;
@@ -14,4 +18,3 @@
 
   smind.hm.firefox.scrollMultiplier = 200;
 }
-
