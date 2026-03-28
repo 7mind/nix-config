@@ -230,7 +230,12 @@
   networking.hostName = cfg-meta.hostname;
   networking.useDHCP = false;
   networking.firewall = {
-    allowedTCPPorts = [ 8234 ];
+    allowedTCPPortRanges = [
+      {
+        from = 8000;
+        to = 9000;
+      }
+    ];
     trustedInterfaces = [ "vmnet*" ];
   };
 
