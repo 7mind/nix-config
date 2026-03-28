@@ -13,6 +13,7 @@ let
     - **Minimal new comments**: Only write **new** comments to explain something non-obvious. Don't delete existing comments unless they're totally useless, wrong or out-of-date
     - **No workarounds**: Deliver sound, generic, universal solutions. When you discover a bug or problem, don't hide it - attempt to fix underlying issues, ask for assistance when you can't
     - **Ask questions**: When instructions or requirements are unclear, incomplete, or contradictory - always ask for clarifications before proceeding
+    - **Recent versions**: Always use the most recent versions of the relevant libraries and tools
 
     ### References
 
