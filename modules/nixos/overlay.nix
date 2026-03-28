@@ -97,13 +97,14 @@
         hue-setup = pkgs.callPackage "${cfg-meta.paths.pkg}/hue-setup/default.nix" { };
 
         zigbee-mqtt-import = pkgs.callPackage "${cfg-meta.paths.pkg}/zigbee-mqtt-import/default.nix" { };
+        linux-3-finger-drag = pkgs.callPackage "${cfg-meta.paths.pkg}/linux-3-finger-drag/default.nix" { };
 
-        fractal = cfg-flakes.fractal.fractal-tray.overrideAttrs (old: {
-          cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
-            inherit (old) src;
-            hash = "sha256-uULj/9ixqq9cGg7U1m4QnfTl6Hvpjx0nJPjWvF2rW2M=";
-          };
-        });
+      fractal = cfg-flakes.fractal.fractal-tray.overrideAttrs (old: {
+              cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+                inherit (old) src;
+                hash = "sha256-uULj/9ixqq9cGg7U1m4QnfTl6Hvpjx0nJPjWvF2rW2M=";
+              };
+            });
 
         # Pending upstream merge of https://github.com/NixOS/nixpkgs/pull/478140
         keyd = super.keyd.overrideAttrs (drv: {

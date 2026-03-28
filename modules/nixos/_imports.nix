@@ -66,6 +66,7 @@
   ./sway.nix
   ./sudo.nix
   ./tailscale.nix
+  ./three-finger-drag.nix
   ./trezor.nix
   ./uhk-keyboard.nix
   ./virt-manager.nix

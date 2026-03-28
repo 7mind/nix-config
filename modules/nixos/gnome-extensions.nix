@@ -43,6 +43,7 @@ let
   ++ lib.optional extCfg.dash-to-dock.enable pkgs.gnomeExtensions.dash-to-dock
   ++ lib.optional extCfg.dash2dock-lite.enable pkgs.gnomeExtensions.dash2dock-lite
   ++ lib.optional extCfg.no-overview.enable pkgs.gnomeExtensions.no-overview
+  ++ lib.optional extCfg.touchpad-gesture-customization.enable pkgs.gnomeExtensions.touchpad-gesture-customization
   ++ lib.optional hibernateCfg.enable hibernateExtensionPatched
   ++ lib.optional config.smind.desktop.gnome.sticky-keys.enable gnomeExtensions.keyboard-modifiers-status
   ++ lib.optional kanataSwitcherCfg.enable config.services.kanata-switcher.gnomeExtension.package;
@@ -76,6 +77,14 @@ in
       };
       dash2dock-lite.enable = lib.mkEnableOption "dash2dock-lite extension" // { default = false; };
       no-overview.enable = lib.mkEnableOption "no-overview extension - skip overview on login" // { default = false; };
+      touchpad-gesture-customization = {
+        enable = lib.mkEnableOption "Touchpad Gesture Customization — remap touchpad gestures" // {
+          default = config.smind.three-finger-drag.enable;
+        };
+        remap-3-to-4 = lib.mkEnableOption "remap GNOME's 3-finger gestures to 4-finger (frees 3-finger for drag)" // {
+          default = config.smind.three-finger-drag.enable;
+        };
+      };
       run-or-raise.enable = lib.mkEnableOption "run-or-raise extension (D-Bus always enabled)" // { default = ghosttyCfg.enable; };
     };
   };
@@ -111,14 +120,26 @@ in
             "org/gnome/shell/extensions/run-or-raise" = {
               dbus = true;
             };
+          } ++ lib.optional (extCfg.touchpad-gesture-customization.enable && extCfg.touchpad-gesture-customization.remap-3-to-4) {
+            # Move GNOME's default 3-finger swipe gestures to 4-finger,
+            # freeing 3-finger input for linux-3-finger-drag
+            "org/gnome/shell/extensions/touchpad-gesture-customization" = {
+              vertical-swipe-3-fingers-gesture = "NONE";
+              horizontal-swipe-3-fingers-gesture = "NONE";
+              pinch-3-finger-gesture = "NONE";
+              vertical-swipe-4-fingers-gesture = "OVERVIEW_NAVIGATION";
+              horizontal-swipe-4-fingers-gesture = "WORKSPACE_SWITCHING";
+              pinch-4-finger-gesture = "NONE";
+              overview-navigation-states = "GNOME";
+            };
           } ++ lib.optional (extCfg.dash-to-dock.enable && extCfg.dash-to-dock.unity-like-config.enable) {
             "org/gnome/shell/extensions/dash-to-dock" = {
               dock-position = "LEFT";
               dock-fixed = false; # due to upstream bug, only panel mode works for autohide
               custom-theme-shrink = true;
-#              autohide = true;
-#              intellihide = false;
-#              intellihide-mode = "ALL_WINDOWS";
+          #              autohide = true;
+          #              intellihide = false;
+          #              intellihide-mode = "ALL_WINDOWS";
               hot-keys = extCfg.dash-to-dock.unity-like-config.super-num-hotkeys;
               click-action = "focus-or-appspread";
               scroll-action = "cycle-windows";

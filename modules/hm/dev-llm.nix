@@ -2,7 +2,7 @@
 , lib
 , pkgs
 , cfg-meta
-, osConfig
+, outerConfig
 , inputs
 , ...
 }:
@@ -134,7 +134,7 @@ in
   config = lib.mkMerge [
     {
       smind.hm.dev.llm.devstralContextSize = lib.mkDefault (
-        osConfig.smind.llm.ollama.customContextLength or 131072
+        outerConfig.smind.llm.ollama.customContextLength or 131072
       );
       smind.hm.dev.llm.opencodeDefaultModel =
         lib.mkDefault config.smind.hm.dev.llm.opencodeOllamaModelName;

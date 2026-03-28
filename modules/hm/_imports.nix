@@ -26,6 +26,7 @@
   ./prusa-3d-printing.nix
   ./ssh.nix
   ./tailscale.nix
+  ./three-finger-drag.nix
   ./tmux.nix
   ./vscodium.nix
   ./wezterm.nix

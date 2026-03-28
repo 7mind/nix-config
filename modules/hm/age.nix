@@ -5,10 +5,14 @@ let
 in
 {
   config = lib.mkMerge [
+    # Always propagate hostPubkey to suppress agenix-rekey dummy-key warnings
+    {
+      age.rekey.hostPubkey = outerConfig.age.rekey.hostPubkey;
+    }
+
     # Copy rekey config from outer config when age is enabled
     (lib.mkIf ageEnabled {
       age.rekey = {
-        hostPubkey = outerConfig.age.rekey.hostPubkey;
         masterIdentities = outerConfig.age.rekey.masterIdentities;
         storageMode = outerConfig.age.rekey.storageMode;
         localStorageDir = outerConfig.age.rekey.localStorageDir;
