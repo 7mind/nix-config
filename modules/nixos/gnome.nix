@@ -111,6 +111,12 @@
       description = "Path to monitors.xml for GDM login screen display configuration";
     };
 
+    smind.desktop.gnome.xkb.per-window = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Use a separate input source for each window. Set to false to use the same source for all windows.";
+    };
+
     smind.desktop.gnome.xkb.layouts = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = config.smind.desktop.xkb.layouts;
@@ -265,7 +271,7 @@
               in {
                 # Layouts already in GNOME's "layout+variant" format
                 sources = map (layout: lib.gvariant.mkTuple [ "xkb" layout ]) xkb.layouts;
-                per-window = true;
+                per-window = xkb.per-window;
                 xkb-options = xkb.options;
               };
           } ++ lib.optional config.smind.desktop.gnome.sticky-keys.enable {
