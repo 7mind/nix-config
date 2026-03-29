@@ -27,8 +27,8 @@ in
 
   # --- Framework 16 AMD (Strix Point) specific configuration ---
 
-  # Keep Framework host on 6.12 kernel line.
-  boot.kernelPackages = lib.mkForce pkgs.linuxKernel.packages.linux_6_12;
+  # Keep Framework host on 6.19 kernel line.
+  boot.kernelPackages = lib.mkForce pkgs.linuxKernel.packages.linux_6_19;
 
   boot.kernelParams = [
     #"usbcore.autosuspend=-1"
@@ -99,7 +99,6 @@ in
 
     power-management.enable = true;
     power-management.framework-quirks.enable = true;
-    power-management.framework-quirks.psr.enable = true;
     power-management.auto-refresh-rate = {
       enable = true;
       displays."eDP-1" = {
@@ -134,13 +133,10 @@ in
     # Networking - use NetworkManager for laptop mobility
     net.mode = "networkmanager";
     net.tailscale.enable = true;
-    # MT7925 driver fails 802.11r FT key installation on kernel 6.12;
-    # UniFi APs aggressively steer via 802.11v causing roaming loops
-    net.wifi.disableFT = true;
-    net.wifi.disableBSSTransition = true;
 
     desktop.plymouth.enable = true;
     hw.framework-laptop.enable = true;
+    hw.framework-laptop.kernelPatches.vpe-dpm0.enable = false;
     hw.bluetooth.enable = true;
     hw.fingerprint.enable = true;
     hw.nvidia = {
