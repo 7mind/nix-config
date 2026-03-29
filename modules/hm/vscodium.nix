@@ -18,6 +18,8 @@ in
       default = defaultTerminalFontFamily;
       description = "VSCodium terminal font family";
     };
+
+    smind.hm.vscodium.mutableConfig = lib.mkEnableOption "mutable VSCodium config (writable by VSCodium, not pinned by HM)";
   };
 
   config = lib.mkIf config.smind.hm.vscodium.enable {
@@ -25,26 +27,45 @@ in
     ];
 
     # sometimes vscodium borks extensions.json so it's better to make sure there is nothing before deployment
-    home.activation.vscode-cleanup = config.lib.dag.entryBefore [ "writeBoundary" ] ''
-      rm -f "${config.home.homeDirectory}/.vscode-oss/extensions/extensions.json"
-    '';
+    home.activation.vscode-cleanup = lib.mkIf (!config.smind.hm.vscodium.mutableConfig)
+      (config.lib.dag.entryBefore [ "writeBoundary" ] ''
+        rm -f "${config.home.homeDirectory}/.vscode-oss/extensions/extensions.json"
+      '');
 
-    # force overwrite config files to prevent "would be clobbered" errors
-    # Only needed on Linux where VSCodium may have existing config files
-    home.file = lib.optionalAttrs cfg-meta.isLinux {
-      "${config.xdg.configHome}/VSCodium/User/settings.json".force = true;
-      "${config.xdg.configHome}/VSCodium/User/keybindings.json".force = true;
-    };
+    # force overwrite all HM-managed VSCodium config files to prevent "would be clobbered" errors
+    home.file = lib.mkIf (cfg-meta.isLinux && !config.smind.hm.vscodium.mutableConfig) (
+      let
+        userDir = "${config.xdg.configHome}/VSCodium/User";
+        vsc = config.programs.vscode;
+        prof = vsc.profiles.default or { };
+      in
+      lib.mkMerge [
+        (lib.mkIf ((prof.userSettings or { }) != { }) { "${userDir}/settings.json".force = true; })
+        (lib.mkIf ((prof.keybindings or [ ]) != [ ]) { "${userDir}/keybindings.json".force = true; })
+        (lib.mkIf ((prof.userTasks or { }) != { }) { "${userDir}/tasks.json".force = true; })
+        (lib.mkIf ((prof.userMcp or { }) != { }) { "${userDir}/mcp.json".force = true; })
+        (lib.mkIf ((prof.globalSnippets or { }) != { }) { "${userDir}/snippets/global.code-snippets".force = true; })
+        (lib.mkIf ((prof.languageSnippets or { }) != { }) (
+          lib.mapAttrs' (lang: _:
+            lib.nameValuePair "${userDir}/snippets/${lang}.json" { force = true; }
+          ) prof.languageSnippets
+        ))
+        (lib.mkIf ((vsc.argvSettings or { }) != { }) { "${config.home.homeDirectory}/${vsc.dataFolderName}/argv.json".force = true; })
+      ]
+    );
 
-    programs.vscode =
+    programs.vscode = lib.mkMerge [
       {
         enable = true;
+        mutableExtensionsDir = config.smind.hm.vscodium.mutableConfig;
         package = override_pkg {
           pkg = pkgs.vscodium;
           path = "bin/codium";
           ld-libs = [ pkgs.icu pkgs.openssl ];
         };
+      }
 
+      (lib.mkIf (!config.smind.hm.vscodium.mutableConfig) {
         profiles.default.extensions = with pkgs.vscode-marketplace; with pkgs.vscode-extensions; [
           #github.github-vscode-theme
 
@@ -252,7 +273,8 @@ in
           "direnv.restart.automatic" = true;
           "vscode-kanata.includesAndWorkspaces" = "workspace";
         };
-      };
+      })
+    ];
 
   };
 }

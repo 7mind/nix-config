@@ -30,19 +30,22 @@ in
       default = [ ];
       description = "Zed keymaps (passed to programs.zed-editor.userKeymaps)";
     };
+
+    smind.hm.zed.mutableConfig = lib.mkEnableOption "mutable Zed config (writable by Zed, not pinned by HM)";
   };
 
   config = lib.mkIf config.smind.hm.zed.enable (lib.mkMerge [
-    {
+    (lib.mkIf (!config.smind.hm.zed.mutableConfig) {
       # force overwrite settings.json to prevent "would be clobbered" errors
       xdg.configFile."zed/settings.json".force = true;
+    })
 
+    {
       programs.zed-editor = {
         enable = true;
 
-        # use immutable mode so force works
-        mutableUserSettings = false;
-        mutableUserKeymaps = !hasUserKeymaps;
+        mutableUserSettings = config.smind.hm.zed.mutableConfig;
+        mutableUserKeymaps = config.smind.hm.zed.mutableConfig || !hasUserKeymaps;
 
         extensions = [
           "nix"
@@ -222,7 +225,7 @@ in
       };
     }
 
-    (lib.mkIf hasUserKeymaps {
+    (lib.mkIf (hasUserKeymaps && !config.smind.hm.zed.mutableConfig) {
       xdg.configFile."zed/keymap.json".force = true;
     })
   ]);
