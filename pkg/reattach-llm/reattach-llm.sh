@@ -242,7 +242,9 @@ show_menu() {
     local root_args
     IFS=$'\t' read -r pid tool_name tty root_comm root_args <<<"${row}"
 
-    local item_name="${tool_name} pid=${pid} ${tty}"
+    local cwd
+    cwd="$(readlink /proc/"${pid}"/cwd 2>/dev/null || true)"
+    local item_name="${tool_name} pid=${pid} ${tty}${cwd:+ ${cwd}}"
     local command
     printf -v command "run-shell %q" "${SELF_BIN} --attach ${pid} ${current_pane}"
     menu_args+=("${item_name}" "" "${command}")
