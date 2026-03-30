@@ -1,9 +1,18 @@
-{ pkgs, config, smind-hm, lib, cfg-meta, import_if_exists_or, ... }:
+{
+  pkgs,
+  config,
+  smind-hm,
+  lib,
+  cfg-meta,
+  import_if_exists_or,
+  ...
+}:
 
 {
   imports = smind-hm.imports ++ [
     "${cfg-meta.paths.users}/pavel/hm/home-pavel-generic.nix"
     "${cfg-meta.paths.users}/pavel/hm/home-pavel-generic-linux.nix"
+    "${cfg-meta.paths.users}/pavel/hm/home-pavel-electronics.nix"
   ];
 
   services.wluma = {
@@ -23,11 +32,13 @@
           "500" = "500";
         };
       };
-      output.backlight = [{
-        name = "eDP-1";
-        path = "/sys/class/backlight/nvidia_wmi_ec_backlight";
-        capturer = "none";
-      }];
+      output.backlight = [
+        {
+          name = "eDP-1";
+          path = "/sys/class/backlight/nvidia_wmi_ec_backlight";
+          capturer = "none";
+        }
+      ];
     };
   };
 
@@ -44,7 +55,6 @@
       slack.netns = "vpn";
       element.enable = true;
     };
-
 
   };
 }
