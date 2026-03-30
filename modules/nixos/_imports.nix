@@ -55,7 +55,6 @@
   ./power-suspend-quirks.nix
   ./power-quirks-framework.nix
   ./qmk-keyboard.nix
-  ./realtek-kernel-hack.nix
   ./rocm.nix
   ./router.nix
   ./smartd.nix

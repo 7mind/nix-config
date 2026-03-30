@@ -185,18 +185,6 @@
     desktop.cosmic.enable = true;
     # desktop.cosmic.minimal-keybindings = true;
 
-    audio.quirks = {
-      enable = true;
-      devices = [
-        {
-          name = "Jabra Link 390";
-          vendorId = "0b0e";
-          productId = "2e56";
-          formFactor = "headset";
-        }
-      ];
-    };
-
     audio.autoswitch = {
       enable = true;
       formFactors = [ "headset" "headphone" ];
