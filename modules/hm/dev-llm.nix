@@ -79,11 +79,13 @@ let
 
   claudeMemoryText = lib.concatStringsSep "\n\n" config.smind.hm.dev.llm.memorySections;
   copilotConfig = jsonFormat.generate "copilot-config.json" {
+    alt_screen = false;
+    banner = "never";
     experimental = true;
     include_coauthor = config.smind.hm.dev.llm.coAuthored.enable;
-    reasoning_effort = "high";
+    model = "gpt-5.4";
     theme = "dark";
-    trusted_folders = [ "${config.home.homeDirectory}/work" ];
+    trusted_folders = [ ];
   };
 in
 {
@@ -240,12 +242,20 @@ in
       home.file.".claude-work/settings.json".source = config.home.file.".claude/settings.json".source;
       home.file.".claude-work/CLAUDE.md".source = config.home.file.".claude/CLAUDE.md".source;
 
-      home.file.".copilot/config.json".source = copilotConfig;
       home.file.".copilot/copilot-instructions.md".text = claudeMemoryText;
 
-      home.file.".copilot-work/config.json".source = config.home.file.".copilot/config.json".source;
       home.file.".copilot-work/copilot-instructions.md".source =
         config.home.file.".copilot/copilot-instructions.md".source;
+
+      programs.zsh.shellAliases = lib.mkIf cfg-meta.isLinux {
+        copilot = "yolo-copilot";
+        copilot-work = "yolo-copilot-work";
+      };
+
+      programs.nushell.shellAliases = lib.mkIf cfg-meta.isLinux {
+        copilot = "yolo-copilot";
+        copilot-work = "yolo-copilot-work";
+      };
 
       home.file.".vibe/config.toml".source = tomlFormat.generate "vibe-config.toml" {
         system_prompt_id = "default_with_custom_instructions";
@@ -312,6 +322,7 @@ in
 
       # Linux-only: bubblewrap sandbox and yolo-* wrapper scripts
       home.packages = [
+        pkgs.gh
         pkgs.github-copilot-cli
         pkgs.mistral-vibe
       ]
@@ -382,48 +393,157 @@ in
           (pkgs.writeShellScriptBin "yolo-copilot" ''
             ENV_ARGS=()
             CMD_ARGS=()
+            COPILOT_CONFIG_DIR="$HOME/.copilot"
+            RAW_COPILOT="${pkgs.github-copilot-cli}/bin/copilot"
+            COPILOT_DEFAULT_CONFIG="${copilotConfig}"
+
+            ensure_copilot_config() {
+              local config_dir="$1"
+              local trusted_dir="$2"
+              local config_file="$config_dir/config.json"
+              local tmp_config
+
+              mkdir -p "$config_dir"
+              tmp_config="$(mktemp)"
+
+              if [[ -f "$config_file" ]]; then
+                ${pkgs.jq}/bin/jq \
+                  --slurpfile defaults "$COPILOT_DEFAULT_CONFIG" \
+                  --arg trusted_dir "$trusted_dir" \
+                  '
+                    ($defaults[0] + .)
+                    | .trusted_folders = (((.trusted_folders // []) + [$trusted_dir]) | unique)
+                  ' \
+                  "$config_file" > "$tmp_config"
+              else
+                ${pkgs.jq}/bin/jq \
+                  -n \
+                  --slurpfile defaults "$COPILOT_DEFAULT_CONFIG" \
+                  --arg trusted_dir "$trusted_dir" \
+                  '
+                    $defaults[0]
+                    | .trusted_folders = (((.trusted_folders // []) + [$trusted_dir]) | unique)
+                  ' > "$tmp_config"
+              fi
+
+              mv "$tmp_config" "$config_file"
+            }
+
+            copilot_args=(
+              --config-dir "$COPILOT_CONFIG_DIR"
+            )
+
             while [[ $# -gt 0 ]]; do
               case "$1" in
                 --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
                 *) CMD_ARGS+=("$1"); shift ;;
               esac
             done
-            mkdir -p "$HOME/.copilot"
+
+            ensure_copilot_config "$COPILOT_CONFIG_DIR" "$PWD"
+
+            case "''${CMD_ARGS[0]-}" in
+              ""|help|init|login|plugin|update|version)
+                ;;
+              *)
+                copilot_args+=(
+                  --model gpt-5.4
+                  --reasoning-effort xhigh
+                  --autopilot
+                  --yolo
+                )
+                ;;
+            esac
+
             exec ${firejail-wrap}/bin/firejail-wrap \
-              --rw "''${PWD}" \
-              --rw "''${HOME}/.copilot" \
-              --rw "''${HOME}/.cache" \
-              --ro "''${HOME}/.config/git" \
+                --rw "''${PWD}" \
+                --rw "''${HOME}/.copilot" \
+                --rw "''${HOME}/.cache" \
+                --ro "''${HOME}/.config/git" \
               --ro "''${HOME}/.config/gh" \
               --ro "''${HOME}/.config/direnv" \
-              --ro "''${HOME}/.local/share/direnv" \
-              --ro "''${HOME}/.direnvrc" \
-              "''${ENV_ARGS[@]}" \
-              -- copilot --autopilot --yolo "''${CMD_ARGS[@]}"
+                --ro "''${HOME}/.local/share/direnv" \
+                --ro "''${HOME}/.direnvrc" \
+                "''${ENV_ARGS[@]}" \
+                -- "$RAW_COPILOT" "''${copilot_args[@]}" "''${CMD_ARGS[@]}"
           '')
 
           (pkgs.writeShellScriptBin "yolo-copilot-work" ''
             ENV_ARGS=()
             CMD_ARGS=()
+            COPILOT_CONFIG_DIR="$HOME/.copilot-work"
+            RAW_COPILOT="${pkgs.github-copilot-cli}/bin/copilot"
+            COPILOT_DEFAULT_CONFIG="${copilotConfig}"
+
+            ensure_copilot_config() {
+              local config_dir="$1"
+              local trusted_dir="$2"
+              local config_file="$config_dir/config.json"
+              local tmp_config
+
+              mkdir -p "$config_dir"
+              tmp_config="$(mktemp)"
+
+              if [[ -f "$config_file" ]]; then
+                ${pkgs.jq}/bin/jq \
+                  --slurpfile defaults "$COPILOT_DEFAULT_CONFIG" \
+                  --arg trusted_dir "$trusted_dir" \
+                  '
+                    ($defaults[0] + .)
+                    | .trusted_folders = (((.trusted_folders // []) + [$trusted_dir]) | unique)
+                  ' \
+                  "$config_file" > "$tmp_config"
+              else
+                ${pkgs.jq}/bin/jq \
+                  -n \
+                  --slurpfile defaults "$COPILOT_DEFAULT_CONFIG" \
+                  --arg trusted_dir "$trusted_dir" \
+                  '
+                    $defaults[0]
+                    | .trusted_folders = (((.trusted_folders // []) + [$trusted_dir]) | unique)
+                  ' > "$tmp_config"
+              fi
+
+              mv "$tmp_config" "$config_file"
+            }
+
+            copilot_args=(
+              --config-dir "$COPILOT_CONFIG_DIR"
+            )
+
             while [[ $# -gt 0 ]]; do
               case "$1" in
                 --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
                 *) CMD_ARGS+=("$1"); shift ;;
               esac
             done
-            mkdir -p "$HOME/.copilot-work"
+
+            ensure_copilot_config "$COPILOT_CONFIG_DIR" "$PWD"
+
+            case "''${CMD_ARGS[0]-}" in
+              ""|help|init|login|plugin|update|version)
+                ;;
+              *)
+                copilot_args+=(
+                  --model gpt-5.4
+                  --reasoning-effort xhigh
+                  --autopilot
+                  --yolo
+                )
+                ;;
+            esac
+
             exec ${firejail-wrap}/bin/firejail-wrap \
-              --rw "''${PWD}" \
-              --rw "''${HOME}/.copilot-work" \
-              --rw "''${HOME}/.cache" \
-              --ro "''${HOME}/.config/git" \
+                --rw "''${PWD}" \
+                --rw "''${HOME}/.copilot-work" \
+                --rw "''${HOME}/.cache" \
+                --ro "''${HOME}/.config/git" \
               --ro "''${HOME}/.config/gh" \
               --ro "''${HOME}/.config/direnv" \
-              --ro "''${HOME}/.local/share/direnv" \
-              --ro "''${HOME}/.direnvrc" \
-              "''${ENV_ARGS[@]}" \
-              --env "COPILOT_HOME=$HOME/.copilot-work" \
-              -- copilot --autopilot --yolo "''${CMD_ARGS[@]}"
+                --ro "''${HOME}/.local/share/direnv" \
+                --ro "''${HOME}/.direnvrc" \
+                "''${ENV_ARGS[@]}" \
+                -- "$RAW_COPILOT" "''${copilot_args[@]}" "''${CMD_ARGS[@]}"
           '')
 
           (pkgs.writeShellScriptBin "yolo-codex" ''
