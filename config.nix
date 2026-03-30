@@ -30,7 +30,19 @@
 
   cfg-packages = { inputs, pkgs, arch }: {
     jdk-main = pkgs.graalvmPackages.graalvm-ce;
-    linux-kernel = pkgs.linuxKernel.packages.linux_6_19;
+    # Fix amneziawg kernel module build on Linux >= 6.19 (blake2s API change)
+    # https://github.com/amnezia-vpn/amneziawg-linux-kernel-module/commit/26f5df04ec47
+    linux-kernel = pkgs.linuxKernel.packages.linux_6_19.extend (kfinal: kprev: {
+      amneziawg = kprev.amneziawg.overrideAttrs (old: rec {
+        version = "1.0.20260329";
+        src = pkgs.fetchFromGitHub {
+          owner = "amnezia-vpn";
+          repo = "amneziawg-linux-kernel-module";
+          tag = "v${version}";
+          hash = "sha256-csKb8xFnsOYnIbnoqbpIY/R7X8OqF9O9pKC/JZH42pA=";
+        };
+      });
+    });
   };
 
 
