@@ -27,9 +27,6 @@ in
 
   # --- Framework 16 AMD (Strix Point) specific configuration ---
 
-  # Keep Framework host on 6.19 kernel line.
-  boot.kernelPackages = lib.mkForce pkgs.linuxKernel.packages.linux_6_19;
-
   boot.kernelParams = [
     #"usbcore.autosuspend=-1"
     # s2idle quirks for kernel 6.18+ are in smind.power-management.framework-quirks
@@ -136,7 +133,6 @@ in
 
     desktop.plymouth.enable = true;
     hw.framework-laptop.enable = true;
-    hw.framework-laptop.kernelPatches.vpe-dpm0.enable = false;
     hw.bluetooth.enable = true;
     hw.fingerprint.enable = true;
     hw.nvidia = {
@@ -215,9 +211,6 @@ in
     allowedTCPPorts = [ ];
     allowedUDPPorts = [ ];
   };
-
-  # OpenSnitch application firewall (disabled - adds ~80 wakeups/s overhead)
-  smind.net.opensnitch.enable = false;
 
   users = {
     users.root.initialPassword = "nixos";

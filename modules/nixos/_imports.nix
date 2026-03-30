@@ -67,7 +67,6 @@
   ./trezor.nix
   ./uhk-keyboard.nix
   ./virt-manager.nix
-  ./wifi-roaming-quirks.nix
   ./zfs-ssh-initrd.nix
   ./zfs.nix
   ./xkb.nix

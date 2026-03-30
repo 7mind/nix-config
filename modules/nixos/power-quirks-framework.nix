@@ -13,12 +13,6 @@ in
       Needed on kernel 6.18+
     '';
 
-    psr.enable = lib.mkEnableOption ''
-      amdgpu PSR/PSR-SU/PSR2 disable (amdgpu.dcdebugmask=0x610).
-      Panel Self Refresh causes s2idle failures on Strix Point.
-      Needed on kernel 6.18+
-    '';
-
     iommu-fullflush.enable = lib.mkEnableOption ''
       AMD IOMMU full flush (amd_iommu=fullflush).
       Prevents IOMMU-related suspend failures with NVMe on AMD platforms.
@@ -55,10 +49,6 @@ in
 
     (lib.mkIf cfg.cwsr.enable {
       boot.kernelParams = [ "amdgpu.cwsr_enable=0" ];
-    })
-
-    (lib.mkIf cfg.psr.enable {
-      boot.kernelParams = [ "amdgpu.dcdebugmask=0x610" ];
     })
 
     (lib.mkIf cfg.iommu-fullflush.enable {

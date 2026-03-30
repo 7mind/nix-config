@@ -2,8 +2,6 @@
 
 let
   cfg = config.smind.hw.framework-laptop;
-  kernelVersion = config.boot.kernelPackages.kernel.version;
-  isKernel612 = lib.versionAtLeast kernelVersion "6.12" && lib.versionOlder kernelVersion "6.13";
   frameworkToolExecutable = lib.getExe' pkgs.framework-tool "framework_tool";
   macLikeModifiersRemapCommands = ''
     # Framework Laptop 13 keyboard table and scan code examples:
@@ -40,19 +38,6 @@ in
       Framework Laptop 13 initrd key remap for mac-like modifiers.
       Applies an EC-level swap so Command/Option/Control behave like macOS-style modifiers before userspace starts
     '';
-
-    kernelPatches = {
-      vpe-dpm0.enable = lib.mkEnableOption ''
-        amdgpu VPE Strix Point DPM0 fix.
-        Adds IP_VERSION(6, 1, 0) to the DPM0 power-down check in amdgpu_vpe.c
-      '' // { default = cfg.enable; };
-
-      ath12k-pairwise-key.enable = lib.mkEnableOption ''
-        ath12k WCN7850 pairwise key ordering fix (kernel 6.12 only).
-        Backport of upstream commit 66e865f9dc78 — WCN7850 firmware requires PTK before GTK.
-        https://bugzilla.kernel.org/show_bug.cgi?id=218733
-      '' // { default = cfg.enable && isKernel612; };
-    };
   };
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
@@ -133,38 +118,5 @@ in
       };
     })
 
-    # --- Kernel patches ---
-
-    (lib.mkIf cfg.kernelPatches.vpe-dpm0.enable {
-      boot.kernelPatches = [
-        {
-          name = "amdgpu-vpe-strix-point-dpm0-fix";
-          patch = pkgs.writeText "vpe-strix-point.patch" ''
-            --- a/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
-            +++ b/drivers/gpu/drm/amd/amdgpu/amdgpu_vpe.c
-            @@ -325,6 +325,8 @@ static bool vpe_need_dpm0_at_power_down(struct amdgpu_device *adev)
-             {
-             	switch (amdgpu_ip_version(adev, VPE_HWIP, 0)) {
-            +	case IP_VERSION(6, 1, 0):
-            +		return true; /* Strix Point needs DPM0 check regardless of PMFW version */
-             	case IP_VERSION(6, 1, 1):
-             		return adev->pm.fw_version < 0x0a640500;
-             	default:
-          '';
-        }
-      ];
-    })
-
-    (lib.mkIf cfg.kernelPatches.ath12k-pairwise-key.enable {
-      boot.kernelPatches = [
-        {
-          # Backport of upstream commit 66e865f9dc78 ("wifi: ath12k: install pairwise key first")
-          # WCN7850 firmware requires PTK before GTK; without this fix the EAPOL handshake
-          # fails in a loop (PREV_AUTH_NOT_VALID deauth). Not backported to 6.12 LTS upstream.
-          name = "ath12k-wcn7850-install-pairwise-key-first";
-          patch = ./patches/ath12k-pairwise-key-6.12.patch;
-        }
-      ];
-    })
   ]);
 }

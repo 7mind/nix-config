@@ -6,11 +6,9 @@
       description = "Enable NetworkManager with iwd for desktop systems";
     };
 
-    smind.net.opensnitch.enable = lib.mkEnableOption "OpenSnitch application firewall";
   };
 
-  config = lib.mkMerge [
-    (lib.mkIf config.smind.net.desktop.enable {
+  config = lib.mkIf config.smind.net.desktop.enable {
       networking = {
         networkmanager = {
           enable = true;
@@ -53,21 +51,5 @@
       ];
 
       systemd.services.NetworkManager-wait-online.enable = false;
-    })
-
-    (lib.mkIf config.smind.net.opensnitch.enable {
-      services.opensnitch = {
-        enable = true;
-        settings = {
-          DefaultAction = "allow";
-          Firewall = "nftables";
-          ProcMonitorMethod = "ebpf";
-        };
-      };
-
-      environment.systemPackages = with pkgs; [
-        opensnitch-ui
-      ];
-    })
-  ];
+    };
 }
