@@ -109,7 +109,6 @@ in
     };
     desktop.gnome.fractional-scaling.enable = true;
     desktop.gnome.vrr.enable = true;
-    desktop.gnome.framework-fan-control.enable = false;
     desktop.gnome.gdm.monitors-xml = ./monitors.xml;
     desktop.gnome.touchpad.disableWhileTyping = true;
 

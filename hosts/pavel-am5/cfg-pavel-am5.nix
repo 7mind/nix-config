@@ -185,11 +185,6 @@
     desktop.cosmic.enable = true;
     # desktop.cosmic.minimal-keybindings = true;
 
-    audio.autoswitch = {
-      enable = true;
-      formFactors = [ "headset" "headphone" ];
-    };
-
     gaming.steam.enable = true;
 
     desktop.plymouth.enable = true;
