@@ -3,7 +3,6 @@
   ./amnezia-vpn.nix
   ./audio.nix
   ./audio-autoswitch.nix
-  ./audio-quirks.nix
   ./btrfs-snapshots.nix
   ./bluetooth.nix
   ./bootloader-grub.nix
@@ -53,7 +52,6 @@
   ./power-profiles.nix
   ./power-refresh-rate.nix
   ./power-suspend-quirks.nix
-  ./power-quirks-framework.nix
   ./qmk-keyboard.nix
   ./rocm.nix
   ./router.nix

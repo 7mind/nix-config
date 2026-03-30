@@ -29,7 +29,6 @@ in
 
   boot.kernelParams = [
     #"usbcore.autosuspend=-1"
-    # s2idle quirks for kernel 6.18+ are in smind.power-management.framework-quirks
   ];
 
   # Use systemd in initrd for proper LUKS + LVM + hibernate resume sequencing
@@ -95,7 +94,6 @@ in
     dev.wireshark.users = [ "pavel" ];
 
     power-management.enable = true;
-    power-management.framework-quirks.enable = true;
     power-management.auto-refresh-rate = {
       enable = true;
       displays."eDP-1" = {
@@ -111,7 +109,6 @@ in
     };
     desktop.gnome.fractional-scaling.enable = true;
     desktop.gnome.vrr.enable = true;
-    desktop.gnome.ambient-light-sensor.enable = false;
     desktop.gnome.framework-fan-control.enable = false;
     desktop.gnome.gdm.monitors-xml = ./monitors.xml;
     desktop.gnome.touchpad.disableWhileTyping = true;

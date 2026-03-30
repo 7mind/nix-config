@@ -2,7 +2,6 @@
 
 let
   hibernateCfg = config.smind.power-management.hibernate;
-  alsCfg = config.smind.desktop.gnome.ambient-light-sensor;
   fanControlCfg = config.smind.desktop.gnome.framework-fan-control;
   batteryHealthCfg = config.smind.desktop.gnome.battery-health-charging;
   kanataSwitcherCfg = config.smind.keyboard.super-remap.kanata-switcher;
@@ -64,8 +63,6 @@ let
 in
 {
   options = {
-    smind.desktop.gnome.ambient-light-sensor.enable = lib.mkEnableOption "ambient light sensor support for GNOME's automatic screen brightness";
-
     smind.desktop.gnome.framework-fan-control.enable = lib.mkEnableOption "Framework fan control GNOME extension for Framework laptops";
 
     smind.desktop.gnome.battery-health-charging.enable = lib.mkEnableOption "Battery Health Charging GNOME extension for laptops";
@@ -102,16 +99,6 @@ in
   };
 
   config = lib.mkIf config.smind.desktop.gnome.enable {
-
-    # Enable iio-sensor-proxy for ambient light sensor support (GNOME 49+ uses this natively)
-    hardware.sensor.iio.enable = lib.mkIf alsCfg.enable true;
-
-    # Enable IIO buffer scan elements for HID ambient light sensor (Framework 16)
-    # This ensures iio-sensor-proxy can read the sensor via buffer mode
-    services.udev.extraRules = lib.mkIf alsCfg.enable ''
-      # Enable illuminance scan element for ALS buffer mode
-      ACTION=="add", SUBSYSTEM=="iio", ATTR{name}=="als", ATTR{scan_elements/in_illuminance_en}="1"
-    '';
 
     environment.systemPackages = extensions
       # Battery Health Charging extension control script (patched for NixOS)
