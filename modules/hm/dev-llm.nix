@@ -16,6 +16,12 @@ let
 
     ### Core Principles
 
+    - Think before acting. Read existing files before writing code.
+    - Be concise in output but thorough in reasoning.
+    - Prefer editing over rewriting whole files.
+    - Do not re-read files you have already read.
+    - Test your code before declaring done.
+    - No sycophantic openers or closing fluff.
     - **Don't give up**: Provide comprehensive solutions
     - **Fail fast**: Use assertions, throw errors early - no graceful fallbacks
     - **Explicit over implicit**: No default parameters or optional chaining for required values
@@ -23,6 +29,7 @@ let
     - **No workarounds**: Deliver sound, generic, universal solutions. When you discover a bug or problem, don't hide it - attempt to fix underlying issues, ask for assistance when you can't
     - **Ask questions**: When instructions or requirements are unclear, incomplete, or contradictory - always ask for clarifications before proceeding
     - **Recent versions**: Always use the most recent versions of the relevant libraries and tools
+
 
     ### References
 
