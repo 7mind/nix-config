@@ -65,6 +65,28 @@ in
       echo "Done! TPM auto-unlock will work on next boot."
     '')
 
+    (pkgs.writeShellScriptBin "tpm-unenroll-luks" ''
+      set -euo pipefail
+      echo "LUKS TPM2 Unenrollment"
+      echo "======================"
+      echo ""
+      echo "This will remove TPM2 auto-unlock for LUKS device:"
+      echo "  ${luksDevice}"
+      echo ""
+      echo "You may be prompted for your LUKS recovery passphrase."
+      echo ""
+      read -r -p "Remove TPM2 enrollment from this LUKS device? [y/N] " REPLY
+      if [[ ! "$REPLY" =~ ^[Yy]$ ]]; then
+        echo "Aborted."
+        exit 1
+      fi
+      sudo ${pkgs.systemd}/bin/systemd-cryptenroll \
+        --wipe-slot=tpm2 \
+        "${luksDevice}"
+      echo ""
+      echo "Done! TPM auto-unlock has been removed."
+    '')
+
     pkgs.video-trimmer
   ];
 

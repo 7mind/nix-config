@@ -53,6 +53,39 @@ let
     echo "The keyring will be unlocked automatically on next login."
   '';
 
+  tpmUnenrollKeyringScript = pkgs.writeShellScriptBin "tpm-unenroll-keyring" ''
+    set -euo pipefail
+
+    CRED_PATH="${cfg.tpmUnlock.credentialPath}"
+    CRED_DIR="$(dirname "$CRED_PATH")"
+
+    echo "GNOME Keyring TPM Credential Unenrollment"
+    echo "=========================================="
+    echo ""
+    echo "This will remove the TPM-encrypted keyring credential:"
+    echo "  $CRED_PATH"
+    echo ""
+    echo "Your keyring will require the password again on next login."
+    echo ""
+
+    if ! sudo test -f "$CRED_PATH"; then
+      echo "Error: TPM-encrypted credential not found: $CRED_PATH"
+      exit 1
+    fi
+
+    read -r -p "Remove the TPM-encrypted credential? [y/N] " REPLY
+    if [[ ! "$REPLY" =~ ^[Yy]$ ]]; then
+      echo "Aborted."
+      exit 1
+    fi
+
+    sudo rm "$CRED_PATH"
+    sudo rmdir --ignore-fail-on-non-empty "$CRED_DIR"
+
+    echo ""
+    echo "Done! Automatic TPM keyring unlock has been disabled."
+  '';
+
   # Inner script that runs as the user to unlock keyring
   keyringUnlockInner = pkgs.writeShellScript "keyring-unlock-inner" ''
     CRED_PATH="${cfg.tpmUnlock.credentialPath}"
@@ -124,6 +157,7 @@ in
             TPM-based keyring unlock.
             Useful for fingerprint login where password is not available to unlock keyring.
             Requires initial setup: run 'tpm-enroll-keyring' after enabling.
+            Remove the stored credential with 'tpm-unenroll-keyring'.
           '';
 
         credentialPath = lib.mkOption {
@@ -230,7 +264,7 @@ in
       '';
 
       # Enrollment script
-      environment.systemPackages = [ tpmEnrollKeyringScript ];
+      environment.systemPackages = [ tpmEnrollKeyringScript tpmUnenrollKeyringScript ];
 
       # Add pam_exec to login session to unlock keyring after pam_gnome_keyring starts the daemon
       # gdm-fingerprint uses "session include login", so we add our rule to login
