@@ -68,6 +68,9 @@
 
       tgeraser
       geekbench
+
+      # mcus
+      rpi-imager
     ]);
 
     #programs.librewolf.enable = lib.mkIf cfg-meta.isLinux true;
