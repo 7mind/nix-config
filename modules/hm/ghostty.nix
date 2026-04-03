@@ -268,6 +268,11 @@ in
           "shift+page_up=scroll_page_fractional:-0.5"
           "shift+page_down=scroll_page_fractional:0.5"
 
+          # Search
+          "super+f=start_search"
+          "super+g=navigate_search:next"
+          "super+shift+g=navigate_search:previous"
+
           # Essential defaults to keep
           "super+shift+comma=reload_config"
           "super+plus=increase_font_size:1"
