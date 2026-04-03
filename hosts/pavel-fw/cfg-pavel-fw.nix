@@ -186,7 +186,10 @@ in
     # Alternative: ollama-rocm with rocmOverrideGfx = "11.5.0" (gfx1150)
     llm.enable = true;
     llm.ollama.package = pkgs.ollama-vulkan;
-    llm.ollama.customModelBaseName = "qwen3.5:9b";
+    llm.ollama.customModels = [
+      { baseName = "qwen3.5:9b"; }
+      { baseName = "gemma4:e4b"; }
+    ];
     llm.ollama.customContextLength = 131072;
 
     gaming.steam.enable = true;

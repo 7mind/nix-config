@@ -11,6 +11,11 @@ let
   jsonFormat = pkgs.formats.json { };
   tomlFormat = pkgs.formats.toml { };
 
+  customModels = osConfig.smind.llm.ollama.customModels or [];
+  firstCustomModelName =
+    if customModels != [] then (builtins.head customModels).name
+    else "huihui_ai/qwen3.5-abliterated:35b-custom";
+
   baseClaudeMemorySection = ''
     ## Project Guidelines
 
@@ -107,13 +112,13 @@ in
 
     smind.hm.dev.llm.opencodeDefaultModel = lib.mkOption {
       type = lib.types.str;
-      default = osConfig.smind.llm.ollama.customModelName or "huihui_ai/qwen3.5-abliterated:35b-custom";
+      default = firstCustomModelName;
       description = "Default model for opencode";
     };
 
     smind.hm.dev.llm.opencodeOllamaModelName = lib.mkOption {
       type = lib.types.str;
-      default = osConfig.smind.llm.ollama.customModelName or "huihui_ai/qwen3.5-abliterated:35b-custom";
+      default = firstCustomModelName;
       description = "Ollama model name configured for opencode provider";
     };
 

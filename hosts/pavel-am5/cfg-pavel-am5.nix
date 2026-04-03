@@ -175,6 +175,11 @@
     bootloader.lanzaboote.enable = true;
 
     llm.enable = true;
+    llm.ollama.customModels = [
+      { baseName = "huihui_ai/qwen3.5-abliterated:35b"; }
+      { baseName = "gemma4:31b"; }
+      { baseName = "gemma4:e4b"; }
+    ];
     containers.docker.enable = true;
     infra.nix-build.enable = true;
 

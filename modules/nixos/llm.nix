@@ -1,4 +1,7 @@
 { pkgs, lib, config, ... }:
+let
+  ollamaCfg = config.smind.llm.ollama;
+in
 {
   options = {
     smind.llm.enable = lib.mkEnableOption "LLM tools (Ollama, aider, Claude Code)";
@@ -12,22 +15,34 @@
 
     smind.llm.ollama.customContextLength = lib.mkOption {
       type = lib.types.int;
-      # default = 131072;
       default = 131072;
-      description = "Context length for custom Ollama models (default 128k)";
+      description = "Default context length for custom Ollama models (default 128k)";
     };
 
-    smind.llm.ollama.customModelBaseName = lib.mkOption {
-      type = lib.types.str;
-      # default = "qwen3.5:35b"; #"huihui_ai/qwen3.5-abliterated:35b";
-      default = "huihui_ai/qwen3.5-abliterated:35b";
-      description = "Base model name used to create the custom Ollama model";
-    };
-
-    smind.llm.ollama.customModelName = lib.mkOption {
-      type = lib.types.str;
-      default = "${config.smind.llm.ollama.customModelBaseName}-custom";
-      description = "Custom Ollama model name created from customModelBaseName";
+    smind.llm.ollama.customModels = lib.mkOption {
+      type = lib.types.listOf (lib.types.submodule ({ config, ... }: {
+        options = {
+          baseName = lib.mkOption {
+            type = lib.types.str;
+            description = "Base model name used to create the custom Ollama model";
+          };
+          contextLength = lib.mkOption {
+            type = lib.types.int;
+            default = ollamaCfg.customContextLength;
+            description = "Context length for this custom model";
+          };
+          name = lib.mkOption {
+            type = lib.types.str;
+            default = "${config.baseName}-custom";
+            description = "Custom model name";
+          };
+        };
+      }));
+      default = [
+        { baseName = "huihui_ai/qwen3.5-abliterated:35b"; }
+        { baseName = "gemma4:e4b"; }
+      ];
+      description = "List of custom Ollama models to create with specific parameters";
     };
   };
 
@@ -83,7 +98,7 @@
         "mxbai-embed-large"
 
         "huihui_ai/glm-4.7-flash-abliterated:q8_0"
-        config.smind.llm.ollama.customModelBaseName
+      ] ++ (map (m: m.baseName) ollamaCfg.customModels) ++ [
 
         "lfm2:24b-q8_0"
 
@@ -117,15 +132,17 @@
                 MODELFILE=$(mktemp)
                 trap "rm -f $MODELFILE" EXIT
 
-                # Create the configured custom model with configurable context
-                if ! ollama list | grep -Fq "${config.smind.llm.ollama.customModelName}"; then
-                  echo "Creating ${config.smind.llm.ollama.customModelName} from ${config.smind.llm.ollama.customModelBaseName} with context ${toString config.smind.llm.ollama.customContextLength}..."
+                ${lib.concatMapStringsSep "\n" (model: ''
+                # Create custom model: ${model.name}
+                if ! ollama list | grep -Fq "${model.name}"; then
+                  echo "Creating ${model.name} from ${model.baseName} with context ${toString model.contextLength}..."
                   cat > "$MODELFILE" << EOF
-        FROM ${config.smind.llm.ollama.customModelBaseName}
-        PARAMETER num_ctx ${toString config.smind.llm.ollama.customContextLength}
+        FROM ${model.baseName}
+        PARAMETER num_ctx ${toString model.contextLength}
         EOF
-                  ollama create ${config.smind.llm.ollama.customModelName} -f "$MODELFILE"
+                  ollama create ${model.name} -f "$MODELFILE"
                 fi
+                '') ollamaCfg.customModels}
       '';
     };
 
