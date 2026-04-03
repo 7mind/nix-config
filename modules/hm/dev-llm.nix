@@ -450,7 +450,7 @@ in
             ensure_copilot_config "$COPILOT_CONFIG_DIR" "$PWD"
 
             case "''${CMD_ARGS[0]-}" in
-              ""|help|init|login|plugin|update|version)
+              help|init|login|plugin|update|version)
                 ;;
               *)
                 copilot_args+=(
@@ -528,7 +528,7 @@ in
             ensure_copilot_config "$COPILOT_CONFIG_DIR" "$PWD"
 
             case "''${CMD_ARGS[0]-}" in
-              ""|help|init|login|plugin|update|version)
+              help|init|login|plugin|update|version)
                 ;;
               *)
                 copilot_args+=(
