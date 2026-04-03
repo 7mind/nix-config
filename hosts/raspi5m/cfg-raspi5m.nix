@@ -49,8 +49,7 @@
   };
 
   age.rekey = {
-    # Using pavel-fw pubkey as placeholder so rekeying works until real key is known
-    hostPubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILVhIJvhBhZBZwwW+XNYWLRn5wL+ecMkWRYcuqmJVq1r";
+    hostPubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQppBMV2SUZNeKqIP/OlXjuYMYec0xP0ckVyce2l6LY";
   };
 
   networking.hostId = "deadbeef";
