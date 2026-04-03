@@ -1,6 +1,9 @@
 { config, cfg-meta, lib, pkgs, cfg-const, import_if_exists, cfg-flakes, inputs, ... }:
 
 {
+  # Quick initial setup:
+  # nix build github:nvmd/nixos-raspberrypi#installerImages.rpi5
+  # zstd -d --stdout "$(readlink -f result)/sd-image/nixos-installer-rpi5-kernel.img.zst" | sudo dd of=/dev/sdb bs=4M status=progress conv=fsync
   imports = [
     ./hardware-configuration.nix
     inputs.nixos-raspberrypi.nixosModules.raspberry-pi-5.base
