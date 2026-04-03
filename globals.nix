@@ -106,7 +106,24 @@ rec {
             inputs.kanata-switcher.nixosModules.default
             inputs.noctalia.nixosModules.default
 
-            { nixpkgs.overlays = [ inputs.nix-vscode-extensions.overlays.default ]; }
+            { nixpkgs.overlays = [
+                inputs.nix-vscode-extensions.overlays.default
+                (final: prev: {
+                  claude-code = final.callPackage ./pkg/claude-code/package.nix { };
+                  vscode-marketplace = prev.vscode-marketplace // {
+                    anthropic = prev.vscode-marketplace.anthropic // {
+                      claude-code = prev.vscode-marketplace.anthropic.claude-code.overrideAttrs (old: {
+                        postInstall = ''
+                          mkdir -p "$out/$installPrefix/resources/native-binary"
+                          rm -f "$out/$installPrefix/resources/native-binary/claude"*
+                          ln -s "${final.claude-code}/bin/claude" "$out/$installPrefix/resources/native-binary/claude"
+                        '';
+                      });
+                    };
+                  };
+                })
+              ];
+            }
           ];
 
           hm-modules = [
@@ -123,7 +140,24 @@ rec {
             inputs.agenix.darwinModules.default
             inputs.agenix-rekey.nixosModules.default
             inputs.determinate.darwinModules.default
-            { nixpkgs.overlays = [ inputs.nix-vscode-extensions.overlays.default ]; }
+            { nixpkgs.overlays = [
+                inputs.nix-vscode-extensions.overlays.default
+                (final: prev: {
+                  claude-code = final.callPackage ./pkg/claude-code/package.nix { };
+                  vscode-marketplace = prev.vscode-marketplace // {
+                    anthropic = prev.vscode-marketplace.anthropic // {
+                      claude-code = prev.vscode-marketplace.anthropic.claude-code.overrideAttrs (old: {
+                        postInstall = ''
+                          mkdir -p "$out/$installPrefix/resources/native-binary"
+                          rm -f "$out/$installPrefix/resources/native-binary/claude"*
+                          ln -s "${final.claude-code}/bin/claude" "$out/$installPrefix/resources/native-binary/claude"
+                        '';
+                      });
+                    };
+                  };
+                })
+              ];
+            }
           ];
 
           hm-modules = [
