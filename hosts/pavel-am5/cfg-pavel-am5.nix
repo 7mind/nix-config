@@ -179,6 +179,7 @@
       { baseName = "huihui_ai/qwen3.5-abliterated:35b"; }
       { baseName = "gemma4:31b"; }
       { baseName = "gemma4:e4b"; }
+      { baseName = "glm-4.7-flash:q8_0"; }
     ];
     containers.docker.enable = true;
     infra.nix-build.enable = true;
