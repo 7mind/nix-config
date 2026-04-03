@@ -15,7 +15,6 @@
 
       systemd-boot = {
         enable = lib.mkForce false;
-        configurationLimit = 3;
         memtest86.enable = true;
         edk2-uefi-shell.enable = true;
       };
@@ -26,7 +25,6 @@
       pkiBundle = "/var/lib/sbctl";
       settings = {
         consoleMode = "keep";
-        configurationLimit = 3;
         reboot-for-bitlocker = true;
       };
     };

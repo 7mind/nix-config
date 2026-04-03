@@ -33,6 +33,8 @@
 
   config = lib.mkIf config.smind.llm.enable {
     environment.systemPackages = with pkgs; [
+      stable-diffusion-cpp-rocm
+
       #llama-cpp-rocm
       mistral-rs
 
