@@ -107,6 +107,8 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi/main";
+
     fractal = {
       url = "git+https://gitlab.gnome.org/pshirshov/fractal.git?ref=wip/full-patchset";
       inputs.nixpkgs.follows = "nixpkgs";

@@ -22,6 +22,7 @@
   config = lib.mkIf config.smind.host.email.enable {
     programs.msmtp = {
       enable = true;
+      package = lib.mkDefault (pkgs.msmtp.override { withKeyring = false; });
       setSendmail = true;
       defaults = {
         aliases = "/etc/aliases";

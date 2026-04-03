@@ -42,6 +42,7 @@ in
         pulsemeeter
         # neohtop # broken
         # vkmark
+        d-spy # needs gtk!!!
       ];
 
       programs.obs-studio = {

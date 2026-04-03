@@ -161,6 +161,7 @@ rec {
       };
       specialArgs = cfg-args // {
         specialArgsSelfRef = cfg-args;
+        inherit (inputs) nixos-raspberrypi;
       };
     in
     {

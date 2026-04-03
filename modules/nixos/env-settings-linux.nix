@@ -43,7 +43,8 @@
 
       environment.systemPackages = with pkgs; [
         # terminal support
-        ghostty.terminfo
+        ghostty-terminfo
+        ncurses # for generic terminfo
 
         # nix tools
         nixpkgs-fmt
