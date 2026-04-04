@@ -4,6 +4,7 @@ set -euo pipefail
 RW_PATHS=()
 RO_PATHS=()
 BINDS=()
+RO_BINDS=()
 ENVS=()
 
 show_help() {
@@ -15,8 +16,9 @@ Wrapper around bubblewrap with simplified path whitelisting.
 Options:
   --rw PATH        Add read-write path (only if exists)
   --ro PATH        Add read-only path (only if exists)
-  --bind SRC,DST   Bind mount SRC to DST inside sandbox
-  --env VAR=VALUE  Set environment variable inside sandbox
+  --bind SRC,DST      Bind mount SRC to DST inside sandbox (read-write)
+  --ro-bind SRC,DST   Bind mount SRC to DST inside sandbox (read-only)
+  --env VAR=VALUE     Set environment variable inside sandbox
   --help           Show this help
 
 Example:
@@ -37,6 +39,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --bind)
       BINDS+=("$2")
+      shift 2
+      ;;
+    --ro-bind)
+      RO_BINDS+=("$2")
       shift 2
       ;;
     --env)
@@ -128,6 +134,13 @@ for bind in "${BINDS[@]}"; do
   IFS=',' read -r src dst <<< "$bind"
   if [[ -e "$src" ]]; then
     BWRAP_ARGS+=(--bind "$src" "$dst")
+  fi
+done
+
+for bind in "${RO_BINDS[@]}"; do
+  IFS=',' read -r src dst <<< "$bind"
+  if [[ -e "$src" ]]; then
+    BWRAP_ARGS+=(--ro-bind "$src" "$dst")
   fi
 done
 

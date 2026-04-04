@@ -374,6 +374,7 @@ in
       ++ lib.optionals cfg-meta.isLinux (
         let
           firejail-wrap = pkgs.firejail-wrap;
+          nix-ld = pkgs.nix-ld;
         in
         [
           # aichat
@@ -404,6 +405,7 @@ in
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \
               --ro "''${HOME}/.direnvrc" \
+              --ro-bind "${nix-ld}/bin/nix-ld,/lib64/ld-linux-x86-64.so.2" \
               --env SMIND_SANDBOXED=1 \
               "''${ENV_ARGS[@]}" \
               -- claude --permission-mode bypassPermissions "''${CMD_ARGS[@]}"
@@ -435,6 +437,7 @@ in
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \
               --ro "''${HOME}/.direnvrc" \
+              --ro-bind "${nix-ld}/bin/nix-ld,/lib64/ld-linux-x86-64.so.2" \
               --env SMIND_SANDBOXED=1 \
               "''${ENV_ARGS[@]}" \
               -- claude --permission-mode bypassPermissions "''${CMD_ARGS[@]}"
@@ -517,6 +520,7 @@ in
               --ro "''${HOME}/.config/direnv" \
                 --ro "''${HOME}/.local/share/direnv" \
                 --ro "''${HOME}/.direnvrc" \
+                --ro-bind "${nix-ld}/bin/nix-ld,/lib64/ld-linux-x86-64.so.2" \
                 --env SMIND_SANDBOXED=1 \
                 "''${ENV_ARGS[@]}" \
                 -- "$RAW_COPILOT" "''${copilot_args[@]}" "''${CMD_ARGS[@]}"
@@ -599,6 +603,7 @@ in
               --ro "''${HOME}/.config/direnv" \
                 --ro "''${HOME}/.local/share/direnv" \
                 --ro "''${HOME}/.direnvrc" \
+                --ro-bind "${nix-ld}/bin/nix-ld,/lib64/ld-linux-x86-64.so.2" \
                 --env SMIND_SANDBOXED=1 \
                 "''${ENV_ARGS[@]}" \
                 -- "$RAW_COPILOT" "''${copilot_args[@]}" "''${CMD_ARGS[@]}"
@@ -625,6 +630,7 @@ in
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \
               --ro "''${HOME}/.direnvrc" \
+              --ro-bind "${nix-ld}/bin/nix-ld,/lib64/ld-linux-x86-64.so.2" \
               --env SMIND_SANDBOXED=1 \
               "''${ENV_ARGS[@]}" \
               -- codex --dangerously-bypass-approvals-and-sandbox --search "''${CMD_ARGS[@]}"
@@ -650,6 +656,7 @@ in
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \
               --ro "''${HOME}/.direnvrc" \
+              --ro-bind "${nix-ld}/bin/nix-ld,/lib64/ld-linux-x86-64.so.2" \
               --env SMIND_SANDBOXED=1 \
               "''${ENV_ARGS[@]}" \
               -- gemini --yolo "''${CMD_ARGS[@]}"
@@ -675,6 +682,7 @@ in
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \
               --ro "''${HOME}/.direnvrc" \
+              --ro-bind "${nix-ld}/bin/nix-ld,/lib64/ld-linux-x86-64.so.2" \
               --env SMIND_SANDBOXED=1 \
               "''${ENV_ARGS[@]}" \
               -- gemini --yolo "''${CMD_ARGS[@]}"
@@ -703,6 +711,7 @@ in
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \
               --ro "''${HOME}/.direnvrc" \
+              --ro-bind "${nix-ld}/bin/nix-ld,/lib64/ld-linux-x86-64.so.2" \
               --env SMIND_SANDBOXED=1 \
               "''${ENV_ARGS[@]}" \
             -- vibe --agent auto-approve "''${CMD_ARGS[@]}"
@@ -729,6 +738,7 @@ in
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \
               --ro "''${HOME}/.direnvrc" \
+              --ro-bind "${nix-ld}/bin/nix-ld,/lib64/ld-linux-x86-64.so.2" \
               --env SMIND_SANDBOXED=1 \
               "''${ENV_ARGS[@]}" \
               -- opencode "''${CMD_ARGS[@]}"
