@@ -38,7 +38,10 @@ in
           };
         };
       }));
-      default = [];
+      default = [
+        { baseName = "qwen3.5:9b"; }
+        { baseName = "gemma4:e4b"; }
+      ];
       description = "List of custom Ollama models to create with specific parameters";
     };
   };
