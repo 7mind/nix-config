@@ -55,6 +55,7 @@
   ./rocm.nix
   ./router.nix
   ./smartd.nix
+  ./sdr.nix
   ./ssh.nix
   ./steam.nix
   ./sway.nix

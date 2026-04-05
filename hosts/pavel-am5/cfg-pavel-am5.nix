@@ -167,6 +167,8 @@
     hw.ledger.enable = true;
     hw.bluetooth.enable = true;
 
+    sdr.enable = true;
+
     isDesktop = true;
     hw.cpu.isAmd = true;
     hw.amd.gpu.enable = true;
