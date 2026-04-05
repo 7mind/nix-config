@@ -177,11 +177,15 @@
     bootloader.lanzaboote.enable = true;
 
     llm.enable = true;
+    llm.ollama.package = pkgs.ollama-vulkan;
+
     llm.ollama.customModels = [
       { baseName = "huihui_ai/qwen3.5-abliterated:35b"; }
-      { baseName = "gemma4:31b"; }
       { baseName = "glm-4.7-flash:q8_0"; }
       { baseName = "nemotron-cascade-2:30b"; }
+      { baseName = "gemma4:31b-it-q8_0"; contextLength = 65535; }
+      #{ baseName = "gemma4:31b"; }
+
     ];
     containers.docker.enable = true;
     infra.nix-build.enable = true;
