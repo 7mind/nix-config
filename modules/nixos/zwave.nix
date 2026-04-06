@@ -2,6 +2,24 @@
 
 let
   cfg = config.smind.services.zwave-js-ui;
+
+  mqttSettings = {
+    host = "mqtt://localhost:${toString config.smind.services.mosquitto.port}";
+    port = config.smind.services.mosquitto.port;
+    disabled = false;
+    prefix = "zwave";
+    name = "zwave-js-ui";
+    qos = 1;
+    retain = true;
+    clean = true;
+    reconnectPeriod = 3000;
+    store = false;
+    allowSelfsigned = false;
+    auth = false;
+  };
+
+  mqttSettingsJson = builtins.toJSON mqttSettings;
+  storeDir = "/var/lib/zwave-js-ui";
 in
 {
   options = {
@@ -22,6 +40,7 @@ in
         default = 8091;
         description = "The port to listen on.";
       };
+      mqtt.enable = lib.mkEnableOption "MQTT integration with Mosquitto";
     };
   };
 
@@ -35,7 +54,18 @@ in
       };
     };
 
-    # Open the default port in the firewall
+    systemd.services.zwave-js-ui = lib.mkIf cfg.mqtt.enable {
+      preStart = ''
+        SETTINGS="${storeDir}/settings.json"
+        if [ -f "$SETTINGS" ]; then
+          ${lib.getExe pkgs.jq} --argjson mqtt '${mqttSettingsJson}' '.mqtt = $mqtt' "$SETTINGS" > "$SETTINGS.tmp"
+          mv "$SETTINGS.tmp" "$SETTINGS"
+        else
+          echo '{"mqtt":${mqttSettingsJson}}' | ${lib.getExe pkgs.jq} '.' > "$SETTINGS"
+        fi
+      '';
+    };
+
     networking.firewall.allowedTCPPorts = [ cfg.port 3000 ];
   };
 }

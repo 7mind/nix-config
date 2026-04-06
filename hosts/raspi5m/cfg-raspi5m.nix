@@ -51,6 +51,9 @@
     host.email.sender = "${config.networking.hostName}@home.7mind.io";
 
     services.zwave-js-ui.enable = true;
+    services.zwave-js-ui.mqtt.enable = true;
+    services.zigbee2mqtt.enable = true;
+    services.mosquitto.enable = true;
   };
 
   age.rekey = {

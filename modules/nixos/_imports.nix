@@ -37,6 +37,7 @@
   ./llm.nix
   ./locale-ie.nix
   ./metrics.nix
+  ./mosquitto.nix
   ./mouse.nix
   ./networking-desktop.nix
   ./networking.nix
@@ -69,5 +70,6 @@
   ./xkb.nix
   ./zsh.nix
   ./zswap.nix
+  ./zigbee2mqtt.nix
   ./zwave.nix
 ]
