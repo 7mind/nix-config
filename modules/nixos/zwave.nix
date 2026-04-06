@@ -25,7 +25,7 @@ let
     nodeNames = true;
     hassDiscovery = true;
     discoveryPrefix = "homeassistant";
-    retainedDiscovery = true;
+    retainedDiscovery = false;
     includeNodeInfo = true;
     sendEvents = true;
     publishNodeDetails = true;
