@@ -11,7 +11,7 @@ let
     prefix = "zwave";
     name = "zwave";
     qos = 1;
-    retain = true;
+    retain = false;
     clean = true;
     reconnectPeriod = 3000;
     store = false;
@@ -29,6 +29,7 @@ let
     includeNodeInfo = true;
     sendEvents = true;
     publishNodeDetails = true;
+    entityTemplate = "%nid";
   };
 
   mqttSettingsJson = builtins.toJSON mqttSettings;
