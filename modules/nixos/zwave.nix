@@ -57,6 +57,9 @@ in
     };
 
     systemd.services.zwave-js-ui = lib.mkIf cfg.mqtt.enable {
+      serviceConfig = {
+        BindReadOnlyPaths = [ mosquittoCfg.passwordFile ];
+      };
       preStart = ''
         SETTINGS="${storeDir}/settings.json"
         MQTT_PASSWORD="$(cat ${mosquittoCfg.passwordFile})"
