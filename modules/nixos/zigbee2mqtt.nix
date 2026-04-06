@@ -13,6 +13,10 @@ in
         default = "/dev/ttyZigbee";
         description = "The serial port for the Zigbee controller.";
       };
+      adapter = lib.mkOption {
+        type = lib.types.str;
+        description = "The Zigbee adapter type (e.g. zstack, ember).";
+      };
       host = lib.mkOption {
         type = lib.types.str;
         default = "0.0.0.0";
@@ -31,6 +35,7 @@ in
       enable = true;
       settings = {
         serial.port = cfg.serialPort;
+        serial.adapter = cfg.adapter;
         frontend = {
           host = cfg.host;
           port = cfg.port;
