@@ -57,6 +57,11 @@
 
   networking.hostId = "deadbeef";
 
+  services.udev.extraRules = ''
+    SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", ATTRS{serial}=="3041f4e6a689ef118875b095ef8776e9", SYMLINK+="ttyZigbee"
+    SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", ATTRS{serial}=="1c8673aa0322f0119a325d8fb887153e", SYMLINK+="ttyZWave"
+  '';
+
   users = {
     users.root.initialPassword = "nixos";
     users.root.openssh.authorizedKeys.keys = cfg-const.ssh-keys-pavel;
