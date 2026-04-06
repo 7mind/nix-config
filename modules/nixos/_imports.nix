@@ -69,4 +69,5 @@
   ./xkb.nix
   ./zsh.nix
   ./zswap.nix
+  ./zwave.nix
 ]

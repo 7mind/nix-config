@@ -49,6 +49,8 @@
 
     host.email.to = "team@7mind.io";
     host.email.sender = "${config.networking.hostName}@home.7mind.io";
+
+    services.zwave-js-ui.enable = true;
   };
 
   age.rekey = {
