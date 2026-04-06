@@ -12,6 +12,16 @@ in
         default = "/dev/ttyZWave";
         description = "The serial port for the Z-Wave controller.";
       };
+      host = lib.mkOption {
+        type = lib.types.str;
+        default = "0.0.0.0";
+        description = "The host to listen on.";
+      };
+      port = lib.mkOption {
+        type = lib.types.port;
+        default = 8091;
+        description = "The port to listen on.";
+      };
     };
   };
 
@@ -19,17 +29,13 @@ in
     services.zwave-js-ui = {
       enable = true;
       serialPort = cfg.serialPort;
+      settings = {
+        HOST = cfg.host;
+        PORT = toString cfg.port;
+      };
     };
-
-    users.users.zwave-js-ui = {
-      isSystemUser = true;
-      group = "zwave-js-ui";
-      extraGroups = [ "dialout" ];
-    };
-
-    users.groups.zwave-js-ui = {};
 
     # Open the default port in the firewall
-    networking.firewall.allowedTCPPorts = [ 8091 3000 ]; # 3000 is the default Z-Wave JS server port
+    networking.firewall.allowedTCPPorts = [ cfg.port 3000 ];
   };
 }
