@@ -2,6 +2,7 @@
 
 let
   cfg = config.smind.services.zigbee2mqtt;
+  mosquittoCfg = config.smind.services.mosquitto;
 in
 {
   options = {
@@ -34,11 +35,19 @@ in
           host = cfg.host;
           port = cfg.port;
         };
-        mqtt.server = "mqtt://localhost:${toString config.smind.services.mosquitto.port}";
+        mqtt = {
+          server = "mqtt://localhost:${toString mosquittoCfg.port}";
+          user = mosquittoCfg.user;
+          password = "!secret mqtt_password";
+        };
         homeassistant.enabled = true;
         permit_join = false;
       };
     };
+
+    systemd.services.zigbee2mqtt.preStart = ''
+      echo "mqtt_password: $(cat ${mosquittoCfg.passwordFile})" > /var/lib/zigbee2mqtt/secret.yaml
+    '';
 
     networking.firewall.allowedTCPPorts = [ cfg.port ];
   };

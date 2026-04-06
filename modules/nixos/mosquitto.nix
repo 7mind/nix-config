@@ -12,6 +12,15 @@ in
         default = 1883;
         description = "The port for the MQTT broker.";
       };
+      user = lib.mkOption {
+        type = lib.types.str;
+        default = "mqtt";
+        description = "MQTT username.";
+      };
+      passwordFile = lib.mkOption {
+        type = lib.types.path;
+        description = "Path to the file containing the MQTT password.";
+      };
     };
   };
 
@@ -21,8 +30,11 @@ in
       listeners = [
         {
           port = cfg.port;
-          settings.allow_anonymous = true;
           acl = [ "topic readwrite #" ];
+          users.${cfg.user} = {
+            passwordFile = cfg.passwordFile;
+            acl = [ "readwrite #" ];
+          };
         }
       ];
     };

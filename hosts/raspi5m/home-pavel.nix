@@ -1,9 +1,0 @@
-{ smind-hm, cfg-meta, ... }: {
-  imports = smind-hm.imports ++ [
-    "${cfg-meta.paths.users}/pavel/hm/home-pavel-generic.nix"
-  ];
-
-  smind.hm = {
-    roles.server = true;
-  };
-}

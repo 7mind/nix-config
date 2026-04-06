@@ -2,10 +2,11 @@
 
 let
   cfg = config.smind.services.zwave-js-ui;
+  mosquittoCfg = config.smind.services.mosquitto;
 
   mqttSettings = {
-    host = "mqtt://localhost:${toString config.smind.services.mosquitto.port}";
-    port = config.smind.services.mosquitto.port;
+    host = "mqtt://localhost:${toString mosquittoCfg.port}";
+    port = mosquittoCfg.port;
     disabled = false;
     prefix = "zwave";
     name = "zwave-js-ui";
@@ -15,7 +16,8 @@ let
     reconnectPeriod = 3000;
     store = false;
     allowSelfsigned = false;
-    auth = false;
+    auth = true;
+    username = mosquittoCfg.user;
   };
 
   mqttSettingsJson = builtins.toJSON mqttSettings;
@@ -57,11 +59,12 @@ in
     systemd.services.zwave-js-ui = lib.mkIf cfg.mqtt.enable {
       preStart = ''
         SETTINGS="${storeDir}/settings.json"
+        MQTT_PASSWORD="$(cat ${mosquittoCfg.passwordFile})"
         if [ -f "$SETTINGS" ]; then
-          ${lib.getExe pkgs.jq} --argjson mqtt '${mqttSettingsJson}' '.mqtt = $mqtt' "$SETTINGS" > "$SETTINGS.tmp"
+          ${lib.getExe pkgs.jq} --argjson mqtt '${mqttSettingsJson}' --arg pw "$MQTT_PASSWORD" '.mqtt = ($mqtt + {password: $pw})' "$SETTINGS" > "$SETTINGS.tmp"
           mv "$SETTINGS.tmp" "$SETTINGS"
         else
-          echo '{"mqtt":${mqttSettingsJson}}' | ${lib.getExe pkgs.jq} '.' > "$SETTINGS"
+          echo '${mqttSettingsJson}' | ${lib.getExe pkgs.jq} --arg pw "$MQTT_PASSWORD" '{mqtt: (. + {password: $pw})}' > "$SETTINGS"
         fi
       '';
     };

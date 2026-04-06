@@ -47,11 +47,13 @@
   ./nushell.nix
   ./oracle-cloud.nix
   ./overlay.nix
+  ./pylontech.nix
   ./plymouth.nix
   ./power-generic.nix
   ./power-profiles.nix
   ./power-refresh-rate.nix
   ./power-suspend-quirks.nix
+  ./qendercore.nix
   ./qmk-keyboard.nix
   ./rocm.nix
   ./router.nix
