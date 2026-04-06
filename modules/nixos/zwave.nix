@@ -5,11 +5,11 @@ let
   mosquittoCfg = config.smind.services.mosquitto;
 
   mqttSettings = {
-    host = "mqtt://localhost:${toString mosquittoCfg.port}";
+    host = "localhost";
     port = mosquittoCfg.port;
     disabled = false;
     prefix = "zwave";
-    name = "zwave-js-ui";
+    name = "zwave";
     qos = 1;
     retain = true;
     clean = true;
@@ -20,7 +20,19 @@ let
     username = mosquittoCfg.user;
   };
 
+  gatewaySettings = {
+    type = 1;
+    nodeNames = true;
+    hassDiscovery = true;
+    discoveryPrefix = "homeassistant";
+    retainedDiscovery = true;
+    includeNodeInfo = true;
+    sendEvents = true;
+    publishNodeDetails = true;
+  };
+
   mqttSettingsJson = builtins.toJSON mqttSettings;
+  gatewaySettingsJson = builtins.toJSON gatewaySettings;
   storeDir = "/var/lib/zwave-js-ui";
 in
 {
@@ -57,17 +69,29 @@ in
     };
 
     systemd.services.zwave-js-ui = lib.mkIf cfg.mqtt.enable {
-      serviceConfig = {
-        BindReadOnlyPaths = [ mosquittoCfg.passwordFile ];
-      };
+      serviceConfig.BindReadOnlyPaths = [
+        mosquittoCfg.passwordFile
+        "/etc/resolv.conf"
+        "/etc/nsswitch.conf"
+        "/etc/hosts"
+      ];
       preStart = ''
         SETTINGS="${storeDir}/settings.json"
         MQTT_PASSWORD="$(cat ${mosquittoCfg.passwordFile})"
         if [ -f "$SETTINGS" ]; then
-          ${lib.getExe pkgs.jq} --argjson mqtt '${mqttSettingsJson}' --arg pw "$MQTT_PASSWORD" '.mqtt = ($mqtt + {password: $pw})' "$SETTINGS" > "$SETTINGS.tmp"
+          ${lib.getExe pkgs.jq} \
+            --argjson mqtt '${mqttSettingsJson}' \
+            --argjson gw '${gatewaySettingsJson}' \
+            --arg pw "$MQTT_PASSWORD" \
+            '.mqtt = ($mqtt + {password: $pw}) | .gateway = $gw' \
+            "$SETTINGS" > "$SETTINGS.tmp"
           mv "$SETTINGS.tmp" "$SETTINGS"
         else
-          echo '${mqttSettingsJson}' | ${lib.getExe pkgs.jq} --arg pw "$MQTT_PASSWORD" '{mqtt: (. + {password: $pw})}' > "$SETTINGS"
+          ${lib.getExe pkgs.jq} -n \
+            --argjson mqtt '${mqttSettingsJson}' \
+            --argjson gw '${gatewaySettingsJson}' \
+            --arg pw "$MQTT_PASSWORD" \
+            '{mqtt: ($mqtt + {password: $pw}), gateway: $gw}' > "$SETTINGS"
         fi
       '';
     };
