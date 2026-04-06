@@ -50,6 +50,7 @@
   ./pylontech.nix
   ./plymouth.nix
   ./power-generic.nix
+  ./prusa-3d-printing.nix
   ./power-profiles.nix
   ./power-refresh-rate.nix
   ./power-suspend-quirks.nix

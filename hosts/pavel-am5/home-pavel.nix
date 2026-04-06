@@ -23,6 +23,8 @@
     kicad
   ];
 
+  smind.hm.apps.prusa-3d-printing.enable = true;
+
   smind.hm.electron-wrappers = {
     enable = true;
     slack.enable = true;

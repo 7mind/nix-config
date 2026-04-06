@@ -167,6 +167,11 @@
     hw.ledger.enable = true;
     hw.bluetooth.enable = true;
 
+    hw.prusa-3d-printing = {
+      enable = true;
+      users = [ "pavel" ];
+    };
+
     sdr.enable = true;
 
     isDesktop = true;

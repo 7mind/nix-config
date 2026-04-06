@@ -23,6 +23,7 @@
   ./megasync.nix
   ./niri.nix
   ./nushell.nix
+  ./prusa-3d-printing.nix
   ./ssh.nix
   ./tailscale.nix
   ./tmux.nix
