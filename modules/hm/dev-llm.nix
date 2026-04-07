@@ -1,11 +1,10 @@
-{
-  config,
-  lib,
-  pkgs,
-  cfg-meta,
-  osConfig,
-  inputs,
-  ...
+{ config
+, lib
+, pkgs
+, cfg-meta
+, osConfig
+, inputs
+, ...
 }:
 let
   jsonFormat = pkgs.formats.json { };
@@ -37,6 +36,7 @@ let
 
     - **RTFM**: Read documentation, code, and samples thoroughly, download docs when necessary, use search
     - **Prefer recent docs**: When searching, prioritize results from the current year over older sources
+    - **Use available sources**: You can explore nix store and other artifacts stores to get sources and documentation. Example: maven/coursier/ivy storages contain source and document jars
 
     ### Environment
 

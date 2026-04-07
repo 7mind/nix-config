@@ -98,10 +98,27 @@ class GroupSpec(BaseModel):
     scenes: list[SceneSpec] = Field(default_factory=list)
 
 
+class DeviceSpec(BaseModel):
+    """Per-device z2m options to reconcile.
+
+    `options` is an opaque attrset of attributes that get written via
+    the device's `/set` topic when the live state doesn't already
+    match. Each option is dedup-checked against the current state
+    (via the device's retained state topic) so re-runs are no-ops if
+    nothing has changed — important for sensors whose attribute
+    writes hit on-device NVS (e.g. Hue motion sensors).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    options: dict[str, Any] = Field(default_factory=dict)
+
+
 class Config(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     groups: dict[str, GroupSpec]
+    devices: dict[str, DeviceSpec] = Field(default_factory=dict)
 
 
 # ---------- Existing-state models (parsed from bridge/groups) ----------
@@ -201,6 +218,10 @@ class Z2mClient:
         self._response_events: dict[str, Event] = {}
         self._responses: dict[str, Z2mResponse] = {}
 
+        self._retained_lock = Lock()
+        self._retained_payloads: dict[str, bytes] = {}
+        self._retained_events: dict[str, Event] = {}
+
         self._txn_lock = Lock()
         self._txn_counter = itertools.count(1)
 
@@ -254,6 +275,13 @@ class Z2mClient:
                 event = self._response_events.get(resp.transaction)
             if event is not None:
                 event.set()
+            return
+        # Generic retained-message dispatch for fetch_retained callers.
+        with self._retained_lock:
+            self._retained_payloads[message.topic] = message.payload
+            event = self._retained_events.get(message.topic)
+        if event is not None:
+            event.set()
 
     def _next_transaction(self) -> str:
         with self._txn_lock:
@@ -336,6 +364,55 @@ class Z2mClient:
         topic = f"zigbee2mqtt/{group_friendly_name}/set"
         payload = json.dumps({"scene_add": scene.to_scene_add_payload()})
         info = self._client.publish(topic, payload, qos=1)
+        info.wait_for_publish(self._timeout_s)
+        if not info.is_published():
+            raise RuntimeError(
+                f"publish to {topic} did not confirm within {self._timeout_s}s"
+            )
+
+    def fetch_retained(self, topic: str) -> bytes | None:
+        """Subscribe to `topic`, wait for a (possibly retained) message,
+        and return its payload. Returns None on timeout (e.g. no
+        retained state ever published)."""
+        event = Event()
+        with self._retained_lock:
+            self._retained_events[topic] = event
+            self._retained_payloads.pop(topic, None)
+        try:
+            self._client.subscribe(topic, qos=1)
+            if not event.wait(self._timeout_s):
+                return None
+            with self._retained_lock:
+                return self._retained_payloads.get(topic)
+        finally:
+            self._client.unsubscribe(topic)
+            with self._retained_lock:
+                self._retained_events.pop(topic, None)
+                self._retained_payloads.pop(topic, None)
+
+    def fetch_device_state(self, friendly_name: str) -> dict[str, Any] | None:
+        """Read the device's current state JSON from its retained
+        zigbee2mqtt/<name> topic. Returns None if no retained state
+        is available within the timeout."""
+        payload = self.fetch_retained(f"zigbee2mqtt/{friendly_name}")
+        if payload is None:
+            return None
+        try:
+            parsed = json.loads(payload)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(parsed, dict):
+            return None
+        return parsed
+
+    def set_device_options(
+        self, friendly_name: str, options: dict[str, Any]
+    ) -> None:
+        """Publish a single /set with the given attributes. z2m
+        translates these into zigbee writeAttribute commands against
+        the device, and the device persists them to its NVS."""
+        topic = f"zigbee2mqtt/{friendly_name}/set"
+        info = self._client.publish(topic, json.dumps(options), qos=1)
         info.wait_for_publish(self._timeout_s)
         if not info.is_published():
             raise RuntimeError(
@@ -561,6 +638,63 @@ def reconcile_scenes(
     return touched, skipped
 
 
+def reconcile_devices(
+    client: Z2mClient,
+    config: Config,
+    *,
+    dry_run: bool,
+    settle_seconds: float,
+) -> tuple[int, int]:
+    """For each declared device, dedup-check each option against the
+    device's retained state and write any that differ. Returns
+    (touched, skipped). Same option-count semantics as scenes —
+    each declared option is one item, regardless of whether it
+    actually fires a write.
+    """
+    touched = 0
+    skipped = 0
+
+    for device_name, device_spec in config.devices.items():
+        if not device_spec.options:
+            continue
+
+        existing = client.fetch_device_state(device_name)
+        if existing is None:
+            logger.info(
+                "[warn] %s: no retained state available; will write all options unconditionally",
+                device_name,
+            )
+
+        for opt_key, opt_value in device_spec.options.items():
+            current = existing.get(opt_key) if existing is not None else None
+            if current == opt_value:
+                logger.info(
+                    "[skip] %s/%s: already %r",
+                    device_name,
+                    opt_key,
+                    current,
+                )
+                skipped += 1
+                continue
+
+            verb = "[dry-run] would set" if dry_run else "set"
+            logger.info(
+                "%s %s/%s = %r (was %r)",
+                verb,
+                device_name,
+                opt_key,
+                opt_value,
+                current,
+            )
+
+            if not dry_run:
+                client.set_device_options(device_name, { opt_key: opt_value })
+                touched += 1
+                time.sleep(settle_seconds)
+
+    return touched, skipped
+
+
 def reconcile(
     client: Z2mClient,
     config: Config,
@@ -572,7 +706,8 @@ def reconcile(
     fetch_attempts: int,
     fetch_retry_seconds: float,
 ) -> tuple[int, int]:
-    """End-to-end reconcile: groups+members, then scenes.
+    """End-to-end reconcile: groups+members, then scenes, then
+    per-device option writes.
 
     Returns (touched, skipped).
     """
@@ -600,7 +735,17 @@ def reconcile(
         settle_seconds=settle_seconds,
     )
 
-    return (group_touched + scene_touched, group_skipped + scene_skipped)
+    device_touched, device_skipped = reconcile_devices(
+        client,
+        config,
+        dry_run=dry_run,
+        settle_seconds=settle_seconds,
+    )
+
+    return (
+        group_touched + scene_touched + device_touched,
+        group_skipped + scene_skipped + device_skipped,
+    )
 
 
 # ---------- CLI ----------

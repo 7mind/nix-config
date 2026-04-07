@@ -12,17 +12,51 @@ let
   # client IDs. Hyphens become underscores; everything else passes through.
   sanitize = lib.replaceStrings [ "-" ] [ "_" ];
 
+  # Resolve a rule's effective cache label. When a rule sets `cacheLabel`
+  # explicitly, two rules can share state by using the same value.
+  # Otherwise we derive a unique label from the rule name.
+  ruleCacheLabel = ruleName: rule:
+    if rule.cacheLabel != null then rule.cacheLabel else "state_${sanitize ruleName}";
+
   # Build the action-level switch for one rule's handlers. Returns a list
-  # of bento switch cases dispatching on the action plain-text payload,
-  # plus a default case that drops unmatched messages.
+  # of bento switch cases dispatching either on the action plain-text
+  # payload (`format = "action"`) or on user-provided bloblang checks
+  # (`format = "json"`), plus a default case that drops unmatched
+  # messages.
   mkActionCases = ruleName: rule:
     let
-      cacheLabel = "state_${sanitize ruleName}";
+      cacheLabel = ruleCacheLabel ruleName rule;
+
+      # Render `cacheWrites` as a list of cache.set processors that run
+      # after the handler's main payload mapping. Used both by handlers
+      # that want explicit cache side effects and by the resetCycles
+      # convenience macro on cycle-targeting publish handlers.
+      mkCacheWrites = writes: lib.mapAttrsToList
+        (key: value: {
+          cache = {
+            resource = cacheLabel;
+            operator = "set";
+            inherit key value;
+          };
+        })
+        writes;
 
       mkCase = action: handler:
         let
           isCycle = handler.cycle != null;
-          isPublish = handler.publish != null;
+          isPublish = handler.publish != null || handler.publishMapping != null;
+          hasBoth = handler.publish != null && handler.publishMapping != null;
+
+          # Default check varies by source format. For action-format
+          # rules we dispatch on the plain-text payload matching the
+          # handler attribute key; for json-format rules the user must
+          # supply an explicit check expression.
+          defaultCheck =
+            if rule.format == "action" then
+              ''content().string() == "${action}"''
+            else
+              throw "mqtt-automations rule '${ruleName}' action '${action}': handlers in a json-format rule must provide an explicit `check`";
+          checkExpr = if handler.check != null then handler.check else defaultCheck;
 
           # For each cycle stateKey listed in `resetCycles`, render cache
           # writes that zero out both the cycle index and the debounce
@@ -50,12 +84,19 @@ let
             ])
             handler.resetCycles;
 
-          publishCase = {
-            check = ''content().string() == "${action}"'';
-            processors = [
-              { mapping = "root = ${builtins.toJSON handler.publish}"; }
-            ] ++ resetProcessors;
-          };
+          publishMappingText =
+            if handler.publishMapping != null then handler.publishMapping
+            else "root = ${builtins.toJSON handler.publish}";
+
+          publishCase =
+            if hasBoth then
+              throw "mqtt-automations rule '${ruleName}' action '${action}': handler must specify exactly one of `publish` or `publishMapping`, not both"
+            else {
+              check = checkExpr;
+              processors = [
+                { mapping = publishMappingText; }
+              ] ++ resetProcessors ++ mkCacheWrites handler.cacheWrites;
+            };
 
           debounceMs = handler.cycle.debounceMs;
 
@@ -191,7 +232,7 @@ let
             else if !useSlots && !useValues then
               throw "mqtt-automations rule '${ruleName}' action '${action}': cycle must specify either `values` or `slots`"
             else {
-              check = ''content().string() == "${action}"'';
+              check = checkExpr;
               processors = debounceProcessors ++ [
                 # Read current cycle state from cache; default to "0" on
                 # miss. For flat cycles the cache holds an integer index;
@@ -233,7 +274,7 @@ let
                     value = "\${! meta(\"${handler.cycle.stateKey}_next\") }";
                   };
                 }
-              ];
+              ] ++ mkCacheWrites handler.cycle.cacheWrites;
             };
         in
         if isCycle && isPublish then
@@ -251,15 +292,58 @@ let
     (lib.mapAttrsToList mkCase rule.handlers) ++ [ defaultCase ];
 
   # Build the rule-level switch case dispatching on the source MQTT topic.
-  mkRuleCase = ruleName: rule: {
-    check = ''meta("mqtt_topic") == "${rule.source}"'';
-    processors = [
-      # Stamp the output topic so the dynamic mqtt output knows where to publish.
-      { mapping = ''meta out_topic = "${rule.target}"''; }
-      # Dispatch on action value.
-      { switch = mkActionCases ruleName rule; }
-    ];
-  };
+  mkRuleCase = ruleName: rule:
+    let
+      cacheLabel = ruleCacheLabel ruleName rule;
+
+      # When the source publishes JSON state (e.g. a motion sensor), the
+      # rule's first processor parses it so handler checks can use
+      # `this.<field>` directly.
+      parseJsonProcessors = lib.optional (rule.format == "json") {
+        mapping = "root = content().parse_json()";
+      };
+
+      # For each cache key listed in `cacheReads`, render a branch
+      # processor that loads it into a metadata key with the same name.
+      # Used by motion-sensor rules to check the shared `lights_state`
+      # flag before deciding whether to fire.
+      cacheReadProcessors = lib.map
+        (key: {
+          branch = {
+            request_map = ''root = ""'';
+            processors = [
+              {
+                cache = {
+                  resource = cacheLabel;
+                  operator = "get";
+                  inherit key;
+                };
+              }
+              {
+                "catch" = [
+                  { mapping = ''root = ""''; }
+                ];
+              }
+            ];
+            result_map = ''meta ${key} = content().string()'';
+          };
+        })
+        rule.cacheReads;
+    in
+    {
+      check = ''meta("mqtt_topic") == "${rule.source}"'';
+      processors =
+        parseJsonProcessors
+        ++ [
+          # Stamp the output topic so the dynamic mqtt output knows where to publish.
+          { mapping = ''meta out_topic = "${rule.target}"''; }
+        ]
+        ++ cacheReadProcessors
+        ++ [
+          # Dispatch on the per-handler check expression.
+          { switch = mkActionCases ruleName rule; }
+        ];
+    };
 
   # Single bento config rendered from all rules. Uses a `broker` input to
   # combine each rule's source topic into one process, dispatches in the
@@ -269,16 +353,16 @@ let
   bentoConfig = {
     http.enabled = false;
 
-    # One in-memory cache resource per rule, so cycle indices and debounce
-    # timestamps for different rules don't collide. State is in-process —
-    # restarting the service resets all cycle indices to 0 and clears all
-    # debounce windows. That's intentional.
-    cache_resources = lib.mapAttrsToList
-      (name: _rule: {
-        label = "state_${sanitize name}";
-        memory = { };
-      })
-      cfg.rules;
+    # In-memory cache resources for cycle/debounce/flag state. By default
+    # each rule gets its own resource derived from its name so state
+    # doesn't bleed between unrelated rules. Two rules can intentionally
+    # share state by both setting the same `cacheLabel` — we dedup the
+    # rendered resource list so the shared label produces a single
+    # resource. State is in-process; restarting the service clears all
+    # cycle indices and debounce windows. That's intentional.
+    cache_resources = lib.map
+      (label: { inherit label; memory = { }; })
+      (lib.unique (lib.mapAttrsToList ruleCacheLabel cfg.rules));
 
     input = {
       broker = {
@@ -393,16 +477,92 @@ in
             example = "zigbee2mqtt/mid bedroom ceiling/set";
             description = "MQTT topic to publish to.";
           };
+          cacheLabel = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            example = "landing";
+            description = ''
+              In-memory cache resource label used by this rule's cycle
+              state, debounce timestamps, and any explicit cacheReads/
+              cacheWrites. When null (default), a unique label is
+              derived from the rule name. Setting an explicit value
+              that two rules share lets them both read and write the
+              same flags — used for example to share an
+              `lights_state` flag between a switch rule and a motion
+              sensor rule that target the same room.
+            '';
+          };
+          format = lib.mkOption {
+            type = lib.types.enum [ "action" "json" ];
+            default = "action";
+            description = ''
+              How the source topic's payload is parsed before
+              dispatching to handlers.
+
+              - `"action"` (default): the payload is treated as a
+                plain-text action string (e.g. zigbee2mqtt's
+                `<device>/action` subtopic). Handler dispatch
+                defaults to `content().string() == "<handler-name>"`.
+              - `"json"`: the payload is parsed as JSON and the
+                resulting object becomes `this` for handler check
+                expressions. Each handler must provide an explicit
+                `check`. Used for sources like Hue motion sensors
+                that publish state JSON on their main topic.
+            '';
+          };
+          cacheReads = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+            example = [ "lights_state" ];
+            description = ''
+              Cache keys to load into metadata before handler
+              dispatch. For each key listed here, the rule renders a
+              cache.get against the rule's cacheLabel and stores the
+              result (or empty string on miss) in `meta("<key>")`.
+              Handlers can then reference these via
+              `meta("<key>").or("")` in their check expressions and
+              bloblang.
+            '';
+          };
           handlers = lib.mkOption {
             description = "Map from action value to handler.";
             default = { };
             type = lib.types.attrsOf (lib.types.submodule {
               options = {
+                check = lib.mkOption {
+                  type = lib.types.nullOr lib.types.str;
+                  default = null;
+                  example = ''this.occupancy == true && (meta("lights_state").or("")) == ""'';
+                  description = ''
+                    Custom bloblang dispatch expression for this
+                    handler. When null (default), the renderer uses
+                    `content().string() == "<handler-name>"` for
+                    `format = "action"` rules. Required for
+                    `format = "json"` rules, since plain-text matching
+                    on the handler name doesn't apply once the
+                    payload has been parsed into `this`.
+                  '';
+                };
                 publish = lib.mkOption {
                   type = lib.types.nullOr (lib.types.attrsOf lib.types.anything);
                   default = null;
                   example = { state = "OFF"; };
                   description = "Static payload to publish to the target topic.";
+                };
+                publishMapping = lib.mkOption {
+                  type = lib.types.nullOr lib.types.str;
+                  default = null;
+                  example = ''
+                    let h = timestamp_unix().ts_format("15", "Local").number()
+                    root = if $h >= 6 && $h < 23 { {"scene_recall": 1} } else { {"scene_recall": 3} }
+                  '';
+                  description = ''
+                    Raw bloblang mapping to compute the publish payload.
+                    Mutually exclusive with `publish`. Used when the
+                    payload depends on runtime state (e.g. time of day,
+                    cache values) rather than being a fixed Nix
+                    attrset.
+                  '';
                 };
                 resetCycles = lib.mkOption {
                   type = lib.types.listOf lib.types.str;
@@ -420,6 +580,18 @@ in
                     that resets the on-press cycle so OFF→ON always
                     starts at the first preset instead of resuming
                     where the cycle left off.
+                  '';
+                };
+                cacheWrites = lib.mkOption {
+                  type = lib.types.attrsOf lib.types.str;
+                  default = { };
+                  example = { lights_state = "user"; };
+                  description = ''
+                    Cache key/value writes to perform after this
+                    handler's main payload publishes. Used to maintain
+                    cross-handler flags such as `lights_state` for
+                    motion-sensor cancellation. Writes are emitted as
+                    cache.set processors against the rule's cacheLabel.
                   '';
                 };
                 cycle = lib.mkOption {
@@ -491,6 +663,18 @@ in
                           TTL.
 
                           0 disables debouncing.
+                        '';
+                      };
+                      cacheWrites = lib.mkOption {
+                        type = lib.types.attrsOf lib.types.str;
+                        default = { };
+                        example = { lights_state = "user"; };
+                        description = ''
+                          Cache key/value writes to perform after this
+                          cycle handler emits its preset. Same shape as
+                          the publish handler's `cacheWrites`. Used to
+                          maintain cross-handler flags such as
+                          `lights_state` for motion-sensor cancellation.
                         '';
                       };
                     };
