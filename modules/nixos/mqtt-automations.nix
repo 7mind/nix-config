@@ -213,7 +213,7 @@ let
                 let last = (meta("${handler.cycle.stateKey}_last_ms").or("0")).number().or(0)
                 let now = timestamp_unix_milli()
                 meta ${handler.cycle.stateKey}_now_ms = $now.string()
-                root = if ($now - $last) < ${toString debounceMs} { deleted() } else { this }
+                if ($now - $last) < ${toString debounceMs} { root = deleted() }
               '';
             }
             {
