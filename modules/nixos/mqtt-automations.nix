@@ -11,15 +11,9 @@ let
   renderRule = name: rule:
     let
       cacheLabel = "state";
-      debounceLabel = "debounce";
       cacheDir = "${stateRoot}/${name}";
 
       mqttUrl = "tcp://${cfg.mqtt.host}:${toString cfg.mqtt.port}";
-
-      # Whether any handler in this rule needs the in-memory debounce cache.
-      hasDebounce = lib.any
-        (h: h.cycle != null && h.cycle.debounce != "")
-        (lib.attrValues rule.handlers);
 
       # Build a single switch case from one (action, handler) pair.
       mkCase = action: handler:
@@ -35,25 +29,50 @@ let
           };
 
           cycleLen = lib.length handler.cycle.values;
+          debounceMs = handler.cycle.debounceMs;
 
-          # Debounce gate: try to acquire a memory-cache lock that auto-expires
-          # after `debounce`. `add` errors if the key already exists, the
-          # `catch` deletes the message in that case so subsequent processors
-          # never run for it. First-press-wins inside each debounce window.
-          debounceProcessors = lib.optionals (isCycle && handler.cycle.debounce != "") [
+          # Debounce gate: compare current epoch-ms against the persisted
+          # last-fired epoch-ms. If the delta is below the configured window,
+          # drop the message; otherwise update the timestamp and proceed.
+          # Implemented via timestamps because bento's `cache add` operator
+          # ignores TTL on the memory cache (it checks raw map presence
+          # before compaction — see internal/impl/pure/cache_memory.go:223).
+          debounceProcessors = lib.optionals (isCycle && debounceMs > 0) [
             {
-              cache = {
-                resource = debounceLabel;
-                operator = "add";
-                key = "${handler.cycle.stateKey}_lock";
-                value = "1";
-                ttl = handler.cycle.debounce;
+              branch = {
+                request_map = ''root = ""'';
+                processors = [
+                  {
+                    cache = {
+                      resource = cacheLabel;
+                      operator = "get";
+                      key = "${handler.cycle.stateKey}_last_ms";
+                    };
+                  }
+                  {
+                    "catch" = [
+                      { mapping = ''root = "0"''; }
+                    ];
+                  }
+                ];
+                result_map = ''meta ${handler.cycle.stateKey}_last_ms = content().string()'';
               };
             }
             {
-              "catch" = [
-                { mapping = "root = deleted()"; }
-              ];
+              mapping = ''
+                let last = (meta("${handler.cycle.stateKey}_last_ms").or("0")).number()
+                let now = timestamp_unix_milli()
+                meta ${handler.cycle.stateKey}_now_ms = $now.string()
+                root = if ($now - $last) < ${toString debounceMs} { deleted() } else { this }
+              '';
+            }
+            {
+              cache = {
+                resource = cacheLabel;
+                operator = "set";
+                key = "${handler.cycle.stateKey}_last_ms";
+                value = "\${! meta(\"${handler.cycle.stateKey}_now_ms\") }";
+              };
             }
           ];
 
@@ -126,10 +145,7 @@ let
           label = cacheLabel;
           file.directory = cacheDir;
         }
-      ] ++ lib.optional hasDebounce {
-        label = debounceLabel;
-        memory.compaction_interval = "10s";
-      };
+      ];
 
       input = {
         mqtt = {
@@ -254,19 +270,24 @@ in
                         type = lib.types.listOf (lib.types.attrsOf lib.types.anything);
                         description = "List of payloads to cycle through; each press advances by one and wraps at the end.";
                       };
-                      debounce = lib.mkOption {
-                        type = lib.types.str;
-                        default = "";
-                        example = "500ms";
+                      debounceMs = lib.mkOption {
+                        type = lib.types.ints.unsigned;
+                        default = 0;
+                        example = 600;
                         description = ''
-                          Debounce window as a Bento duration string (e.g.
-                          `500ms`, `1s`). When set, presses that arrive within
-                          this window of a previously-accepted press are
-                          dropped (first-wins). Useful for cycle handlers
-                          targeting zigbee groups, where rapid commands can
-                          cause group members to drift out of sync.
+                          Debounce window in milliseconds. When non-zero,
+                          presses that arrive within this many milliseconds of
+                          a previously-accepted press are dropped (first-wins).
+                          Useful for cycle handlers targeting zigbee groups,
+                          where rapid commands can cause group members to
+                          drift out of sync.
 
-                          Empty string disables debouncing.
+                          Implemented as a per-key timestamp comparison
+                          against the persisted state cache (no TTL needed),
+                          because bento's memory-cache `add` operator ignores
+                          TTL.
+
+                          0 disables debouncing.
                         '';
                       };
                     };
