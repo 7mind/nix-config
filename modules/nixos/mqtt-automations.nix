@@ -24,11 +24,37 @@ let
           isCycle = handler.cycle != null;
           isPublish = handler.publish != null;
 
+          # For each cycle stateKey listed in `resetCycles`, render cache
+          # writes that zero out both the cycle index and the debounce
+          # timestamp for that cycle. Used by e.g. an off handler to
+          # restart the cycle from preset 0 next time the cycle handler
+          # fires, without being held back by the debounce window.
+          resetProcessors = lib.concatMap
+            (stateKey: [
+              {
+                cache = {
+                  resource = cacheLabel;
+                  operator = "set";
+                  key = stateKey;
+                  value = "0";
+                };
+              }
+              {
+                cache = {
+                  resource = cacheLabel;
+                  operator = "set";
+                  key = "${stateKey}_last_ms";
+                  value = "0";
+                };
+              }
+            ])
+            handler.resetCycles;
+
           publishCase = {
             check = ''content().string() == "${action}"'';
             processors = [
               { mapping = "root = ${builtins.toJSON handler.publish}"; }
-            ];
+            ] ++ resetProcessors;
           };
 
           cycleLen = lib.length handler.cycle.values;
@@ -297,6 +323,24 @@ in
                   default = null;
                   example = { state = "OFF"; };
                   description = "Static payload to publish to the target topic.";
+                };
+                resetCycles = lib.mkOption {
+                  type = lib.types.listOf lib.types.str;
+                  default = [ ];
+                  example = [ "preset_idx" ];
+                  description = ''
+                    Cycle stateKeys to reset after this publish handler
+                    fires. Each entry zeroes out both the cycle index
+                    (so the next press of the cycle handler plays the
+                    first preset) and the cycle's debounce timestamp
+                    (so the next press fires immediately even if it
+                    arrives within the debounce window).
+
+                    Typical use: an `off_press_release` publish handler
+                    that resets the on-press cycle so OFF→ON always
+                    starts at the first preset instead of resuming
+                    where the cycle left off.
+                  '';
                 };
                 cycle = lib.mkOption {
                   type = lib.types.nullOr (lib.types.submodule {
