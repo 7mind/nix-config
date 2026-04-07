@@ -32,12 +32,20 @@ DEFAULT_SETTLE_SECONDS = 0.4
 class SceneSpec(BaseModel):
     """A single scene to (re)create on a z2m group.
 
-    `transition` is specified in **seconds** (matching z2m's regular API
-    convention) but z2m's `scene_add` converter has an inconsistency: it
-    passes the value straight through to the zigbee `genScenes.add`
-    command's `transtime` field, which is in 1/10-second units. We do the
-    seconds → 1/10s conversion in `to_scene_add_payload` so users can keep
-    the familiar seconds UX in the config.
+    `transition` is specified in **seconds**. z2m's `scene_add` converter
+    has two code paths depending on whether the JSON value is an integer
+    or a float (toZigbee.js:3907-3909):
+
+      - integer N -> issues `genScenes.add` with `transtime=N`
+      - float F   -> issues `genScenes.enhancedAdd` with
+                     `transtime=floor(F*10)`
+
+    Both paths end up sending the same `transtime` value but via different
+    zigbee commands, and Hue bulbs (Datura at least) only honor the
+    transition correctly via the **enhancedAdd** path. So we always
+    force `transition` to a Python float in the JSON payload, which makes
+    z2m route to enhancedAdd regardless of how the user wrote the value
+    in their config (`0.5` or `1` etc.).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -50,14 +58,20 @@ class SceneSpec(BaseModel):
     transition: float = Field(default=0.0, ge=0.0)
 
     def to_scene_add_payload(self) -> dict[str, Any]:
-        """Build the inner attrs of a `scene_add` MQTT command for z2m."""
-        # zigbee genScenes.add transtime is uint16 in 1/10s units; round to
-        # the nearest tenth so 0.5s -> 5, 1.5s -> 15.
-        transtime_tenths = round(self.transition * 10)
+        """Build the inner attrs of a `scene_add` MQTT command for z2m.
+
+        Adds a sub-millisecond epsilon to `transition` so the JSON-encoded
+        value is never a whole number on the JavaScript side (JS doesn't
+        distinguish `1` from `1.0`, so `Number.isInteger(1.0)` returns
+        true). The epsilon is far below the 1/10s resolution that z2m
+        floor()'s on the enhancedAdd path, so it doesn't change the actual
+        transition time — but it forces z2m to take the enhancedAdd
+        branch, which is the only one Hue bulbs honor correctly.
+        """
         payload: dict[str, Any] = {
             "ID": self.id,
             "name": self.name,
-            "transition": transtime_tenths,
+            "transition": self.transition + 1e-4,
             "state": self.state,
         }
         if self.brightness is not None:
