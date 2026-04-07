@@ -507,6 +507,33 @@ def reconcile_groups(
         existing_group = by_name.get(group_name)
 
         if existing_group is None:
+            # When pruning, clean up any ghost settings.groups entry at
+            # the id we're about to claim. z2m's settings.groups and
+            # zigbee network state can disagree: a group can linger in
+            # settings.groups (and block addGroup) after its zigbee side
+            # was removed. Such ghosts aren't visible in `bridge/groups`
+            # so phase 0 above can't see them — we have to explicitly
+            # target the id.
+            if prune and group_spec.id is not None:
+                try:
+                    if not dry_run:
+                        client.remove_group(str(group_spec.id), force=True)
+                        time.sleep(settle_seconds)
+                    logger.info(
+                        "%s ghost entry at group id %d (clearing before create)",
+                        "[dry-run] would prune" if dry_run else "pruned",
+                        group_spec.id,
+                    )
+                    if not dry_run:
+                        touched += 1
+                        state_changed = True
+                except RuntimeError as e:
+                    if "does not exist" in str(e).lower():
+                        # Nothing to clean up at this id — normal case.
+                        pass
+                    else:
+                        raise
+
             verb = "[dry-run] would create" if dry_run else "create"
             logger.info(
                 "%s group %r (id=%s)",
