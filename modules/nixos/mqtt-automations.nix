@@ -11,9 +11,15 @@ let
   renderRule = name: rule:
     let
       cacheLabel = "state";
+      debounceLabel = "debounce";
       cacheDir = "${stateRoot}/${name}";
 
       mqttUrl = "tcp://${cfg.mqtt.host}:${toString cfg.mqtt.port}";
+
+      # Whether any handler in this rule needs the in-memory debounce cache.
+      hasDebounce = lib.any
+        (h: h.cycle != null && h.cycle.debounce != "")
+        (lib.attrValues rule.handlers);
 
       # Build a single switch case from one (action, handler) pair.
       mkCase = action: handler:
@@ -30,9 +36,30 @@ let
 
           cycleLen = lib.length handler.cycle.values;
 
+          # Debounce gate: try to acquire a memory-cache lock that auto-expires
+          # after `debounce`. `add` errors if the key already exists, the
+          # `catch` deletes the message in that case so subsequent processors
+          # never run for it. First-press-wins inside each debounce window.
+          debounceProcessors = lib.optionals (isCycle && handler.cycle.debounce != "") [
+            {
+              cache = {
+                resource = debounceLabel;
+                operator = "add";
+                key = "${handler.cycle.stateKey}_lock";
+                value = "1";
+                ttl = handler.cycle.debounce;
+              };
+            }
+            {
+              "catch" = [
+                { mapping = "root = deleted()"; }
+              ];
+            }
+          ];
+
           cycleCase = {
             check = ''content().string() == "${action}"'';
-            processors = [
+            processors = debounceProcessors ++ [
               # Read current preset index from cache; default to "0" on miss.
               {
                 branch = {
@@ -99,7 +126,10 @@ let
           label = cacheLabel;
           file.directory = cacheDir;
         }
-      ];
+      ] ++ lib.optional hasDebounce {
+        label = debounceLabel;
+        memory.compaction_interval = "10s";
+      };
 
       input = {
         mqtt = {
@@ -223,6 +253,21 @@ in
                       values = lib.mkOption {
                         type = lib.types.listOf (lib.types.attrsOf lib.types.anything);
                         description = "List of payloads to cycle through; each press advances by one and wraps at the end.";
+                      };
+                      debounce = lib.mkOption {
+                        type = lib.types.str;
+                        default = "";
+                        example = "500ms";
+                        description = ''
+                          Debounce window as a Bento duration string (e.g.
+                          `500ms`, `1s`). When set, presses that arrive within
+                          this window of a previously-accepted press are
+                          dropped (first-wins). Useful for cycle handlers
+                          targeting zigbee groups, where rapid commands can
+                          cause group members to drift out of sync.
+
+                          Empty string disables debouncing.
+                        '';
                       };
                     };
                   });
