@@ -5,17 +5,20 @@ let
 
   yaml = pkgs.formats.yaml { };
 
-  stateRoot = "/var/lib/mqtt-automations";
+  mqttUrl = "tcp://${cfg.mqtt.host}:${toString cfg.mqtt.port}";
 
-  # Render a single rule into a bento config attrset.
-  renderRule = name: rule:
+  # Bento labels are restricted to ^[a-z0-9_]+$ (no leading underscore),
+  # so the user-facing rule names get sanitized when used as labels or
+  # client IDs. Hyphens become underscores; everything else passes through.
+  sanitize = lib.replaceStrings [ "-" ] [ "_" ];
+
+  # Build the action-level switch for one rule's handlers. Returns a list
+  # of bento switch cases dispatching on the action plain-text payload,
+  # plus a default case that drops unmatched messages.
+  mkActionCases = ruleName: rule:
     let
-      cacheLabel = "state";
-      cacheDir = "${stateRoot}/${name}";
+      cacheLabel = "state_${sanitize ruleName}";
 
-      mqttUrl = "tcp://${cfg.mqtt.host}:${toString cfg.mqtt.port}";
-
-      # Build a single switch case from one (action, handler) pair.
       mkCase = action: handler:
         let
           isCycle = handler.cycle != null;
@@ -31,12 +34,13 @@ let
           cycleLen = lib.length handler.cycle.values;
           debounceMs = handler.cycle.debounceMs;
 
-          # Debounce gate: compare current epoch-ms against the persisted
-          # last-fired epoch-ms. If the delta is below the configured window,
-          # drop the message; otherwise update the timestamp and proceed.
-          # Implemented via timestamps because bento's `cache add` operator
-          # ignores TTL on the memory cache (it checks raw map presence
-          # before compaction — see internal/impl/pure/cache_memory.go:223).
+          # Debounce gate: compare current epoch-ms against the in-memory
+          # last-fired epoch-ms. If the delta is below the configured
+          # window, drop the message; otherwise update the timestamp and
+          # proceed. Implemented via timestamps because bento's `cache add`
+          # operator ignores TTL on the memory cache (it checks raw map
+          # presence before compaction — see
+          # internal/impl/pure/cache_memory.go:223).
           debounceProcessors = lib.optionals (isCycle && debounceMs > 0) [
             {
               branch = {
@@ -60,7 +64,7 @@ let
             }
             {
               mapping = ''
-                let last = (meta("${handler.cycle.stateKey}_last_ms").or("0")).number()
+                let last = (meta("${handler.cycle.stateKey}_last_ms").or("0")).number().or(0)
                 let now = timestamp_unix_milli()
                 meta ${handler.cycle.stateKey}_now_ms = $now.string()
                 root = if ($now - $last) < ${toString debounceMs} { deleted() } else { this }
@@ -101,9 +105,13 @@ let
                 };
               }
               # Pick current preset, compute next index for storage.
+              # `.or(0)` after `.number()` is the safety net: if the cache
+              # value is somehow not parseable (e.g. it got polluted with
+              # the literal string "null" by a prior failed run), reset to
+              # 0 instead of erroring on every press forever after.
               {
                 mapping = ''
-                  let cur = (meta("${handler.cycle.stateKey}_cur").or("0")).number()
+                  let cur = (meta("${handler.cycle.stateKey}_cur").or("0")).number().or(0)
                   let next = ($cur + 1) % ${toString cycleLen}
                   let presets = ${builtins.toJSON handler.cycle.values}
                   meta ${handler.cycle.stateKey}_next = $next.string()
@@ -123,64 +131,93 @@ let
           };
         in
         if isCycle && isPublish then
-          throw "mqtt-automations rule '${name}' action '${action}': handler must specify exactly one of `publish` or `cycle`, not both"
+          throw "mqtt-automations rule '${ruleName}' action '${action}': handler must specify exactly one of `publish` or `cycle`, not both"
         else if isCycle then cycleCase
         else if isPublish then publishCase
-        else throw "mqtt-automations rule '${name}' action '${action}': handler must specify either `publish` or `cycle`";
+        else throw "mqtt-automations rule '${ruleName}' action '${action}': handler must specify either `publish` or `cycle`";
 
-      cases = lib.mapAttrsToList mkCase rule.handlers;
-
-      # Default branch in the switch: drop unhandled messages so the output isn't spammed.
       defaultCase = {
         processors = [
           { mapping = "root = deleted()"; }
         ];
       };
     in
-    {
-      http.enabled = false;
+    (lib.mapAttrsToList mkCase rule.handlers) ++ [ defaultCase ];
 
-      cache_resources = [
-        {
-          label = cacheLabel;
-          file.directory = cacheDir;
-        }
-      ];
+  # Build the rule-level switch case dispatching on the source MQTT topic.
+  mkRuleCase = ruleName: rule: {
+    check = ''meta("mqtt_topic") == "${rule.source}"'';
+    processors = [
+      # Stamp the output topic so the dynamic mqtt output knows where to publish.
+      { mapping = ''meta out_topic = "${rule.target}"''; }
+      # Dispatch on action value.
+      { switch = mkActionCases ruleName rule; }
+    ];
+  };
 
-      input = {
-        mqtt = {
-          urls = [ mqttUrl ];
-          topics = [ rule.source ];
-          client_id = "bento-${name}-in";
-          user = cfg.mqtt.user;
-          password = "\${MQTT_PASSWORD}";
-        };
-      };
+  # Single bento config rendered from all rules. Uses a `broker` input to
+  # combine each rule's source topic into one process, dispatches in the
+  # pipeline by `meta("mqtt_topic")` (which the mqtt input populates
+  # automatically), and publishes to a per-message dynamic topic via
+  # `${! meta("out_topic") }` interpolation.
+  bentoConfig = {
+    http.enabled = false;
 
-      pipeline.processors = [
-        # The source topic is expected to publish a plain-text action value
-        # per message (e.g. zigbee2mqtt's `<device>/action` subtopic), so we
-        # dispatch directly on `content().string()` without JSON parsing.
-        { switch = cases ++ [ defaultCase ]; }
-      ];
+    # One in-memory cache resource per rule, so cycle indices and debounce
+    # timestamps for different rules don't collide. State is in-process —
+    # restarting the service resets all cycle indices to 0 and clears all
+    # debounce windows. That's intentional.
+    cache_resources = lib.mapAttrsToList
+      (name: _rule: {
+        label = "state_${sanitize name}";
+        memory = { };
+      })
+      cfg.rules;
 
-      output = {
-        mqtt = {
-          urls = [ mqttUrl ];
-          topic = rule.target;
-          client_id = "bento-${name}-out";
-          user = cfg.mqtt.user;
-          password = "\${MQTT_PASSWORD}";
-        };
+    input = {
+      broker = {
+        inputs = lib.mapAttrsToList
+          (name: rule: {
+            mqtt = {
+              urls = [ mqttUrl ];
+              topics = [ rule.source ];
+              client_id = "bento_${sanitize name}_in";
+              user = cfg.mqtt.user;
+              password = "\${MQTT_PASSWORD}";
+            };
+          })
+          cfg.rules;
       };
     };
 
-  # Render a rule and check it with `bento lint` at build time.
-  ruleConfigFile = name: rule:
+    pipeline.processors = [
+      {
+        switch = (lib.mapAttrsToList mkRuleCase cfg.rules) ++ [
+          {
+            processors = [
+              { mapping = "root = deleted()"; }
+            ];
+          }
+        ];
+      }
+    ];
+
+    output = {
+      mqtt = {
+        urls = [ mqttUrl ];
+        topic = "\${! meta(\"out_topic\") }";
+        client_id = "bento_mqtt_automation_out";
+        user = cfg.mqtt.user;
+        password = "\${MQTT_PASSWORD}";
+      };
+    };
+  };
+
+  configFile =
     let
-      raw = yaml.generate "bento-${name}-raw.yaml" (renderRule name rule);
+      raw = yaml.generate "bento-mqtt-automation-raw.yaml" bentoConfig;
     in
-    pkgs.runCommand "bento-${name}.yaml"
+    pkgs.runCommand "bento-mqtt-automation.yaml"
       {
         nativeBuildInputs = [ pkgs.buildPackages.bento ];
       } ''
@@ -224,23 +261,25 @@ in
 
     rules = lib.mkOption {
       description = ''
-        Declarative MQTT automation rules. Each rule subscribes to a single
-        source MQTT topic that publishes a plain-text action value per
-        message (typically a zigbee2mqtt `<device>/action` subtopic),
-        dispatches on the action value, and publishes a payload to a target
+        Declarative MQTT automation rules. All rules run in a single
+        bento process: each rule subscribes to its `source` MQTT topic
+        (which should publish a plain-text action value per message,
+        typically a zigbee2mqtt `<device>/action` subtopic), dispatches
+        on the action value, and publishes a payload to its `target`
         MQTT topic.
 
         Each handler must specify exactly one of:
           - `publish`: a fixed payload to publish on the target topic
-          - `cycle`: a list of payloads to cycle through, with the current
-                     index persisted across restarts in a per-rule file cache
+          - `cycle`: a list of payloads to cycle through, with the
+                     current index held in process memory (resets to 0
+                     when the bento service restarts)
       '';
       default = { };
       type = lib.types.attrsOf (lib.types.submodule {
         options = {
           source = lib.mkOption {
             type = lib.types.str;
-            example = "zigbee2mqtt/mid-bedroom-switch";
+            example = "zigbee2mqtt/mid-bedroom-switch/action";
             description = "MQTT topic to subscribe to.";
           };
           target = lib.mkOption {
@@ -264,7 +303,7 @@ in
                     options = {
                       stateKey = lib.mkOption {
                         type = lib.types.str;
-                        description = "Cache key used to persist the cycle index.";
+                        description = "Cache key used to track the cycle index.";
                       };
                       values = lib.mkOption {
                         type = lib.types.listOf (lib.types.attrsOf lib.types.anything);
@@ -283,7 +322,7 @@ in
                           drift out of sync.
 
                           Implemented as a per-key timestamp comparison
-                          against the persisted state cache (no TTL needed),
+                          against the in-memory state cache (no TTL needed),
                           because bento's memory-cache `add` operator ignores
                           TTL.
 
@@ -293,7 +332,7 @@ in
                     };
                   });
                   default = null;
-                  description = "Cycle through a list of payloads, persisting the current index.";
+                  description = "Cycle through a list of payloads.";
                 };
               };
             });
@@ -303,31 +342,25 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
-    systemd.services = lib.mapAttrs' (name: rule:
-      lib.nameValuePair "mqtt-automation-${name}" {
-        description = "MQTT automation '${name}' (Bento)";
-        wantedBy = [ "multi-user.target" ];
-        after = [ "network.target" "mosquitto.service" ];
-        wants = [ "mosquitto.service" ];
+  config = lib.mkIf (cfg.enable && cfg.rules != { }) {
+    systemd.services.mqtt-automation = {
+      description = "MQTT automation rules (Bento)";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "network.target" "mosquitto.service" ];
+      wants = [ "mosquitto.service" ];
 
-        script = ''
-          export MQTT_PASSWORD=$(cat "$CREDENTIALS_DIRECTORY/mqtt-password")
-          exec ${cfg.package}/bin/bento -c ${ruleConfigFile name rule}
-        '';
+      script = ''
+        export MQTT_PASSWORD=$(cat "$CREDENTIALS_DIRECTORY/mqtt-password")
+        exec ${cfg.package}/bin/bento -c ${configFile}
+      '';
 
-        serviceConfig = {
-          Type = "simple";
-          Restart = "on-failure";
-          RestartSec = 5;
-          LoadCredential = "mqtt-password:${cfg.mqtt.passwordFile}";
-          DynamicUser = true;
-          # systemd creates /var/lib/mqtt-automations/<name> owned by the
-          # dynamic user; bento's file cache requires this directory to exist.
-          StateDirectory = "mqtt-automations/${name}";
-          StateDirectoryMode = "0700";
-        };
-      }
-    ) cfg.rules;
+      serviceConfig = {
+        Type = "simple";
+        Restart = "on-failure";
+        RestartSec = 5;
+        LoadCredential = "mqtt-password:${cfg.mqtt.passwordFile}";
+        DynamicUser = true;
+      };
+    };
   };
 }

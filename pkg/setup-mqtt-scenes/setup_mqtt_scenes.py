@@ -30,7 +30,15 @@ DEFAULT_SETTLE_SECONDS = 0.4
 
 
 class SceneSpec(BaseModel):
-    """A single scene to (re)create on a z2m group."""
+    """A single scene to (re)create on a z2m group.
+
+    `transition` is specified in **seconds** (matching z2m's regular API
+    convention) but z2m's `scene_add` converter has an inconsistency: it
+    passes the value straight through to the zigbee `genScenes.add`
+    command's `transtime` field, which is in 1/10-second units. We do the
+    seconds → 1/10s conversion in `to_scene_add_payload` so users can keep
+    the familiar seconds UX in the config.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -43,10 +51,13 @@ class SceneSpec(BaseModel):
 
     def to_scene_add_payload(self) -> dict[str, Any]:
         """Build the inner attrs of a `scene_add` MQTT command for z2m."""
+        # zigbee genScenes.add transtime is uint16 in 1/10s units; round to
+        # the nearest tenth so 0.5s -> 5, 1.5s -> 15.
+        transtime_tenths = round(self.transition * 10)
         payload: dict[str, Any] = {
             "ID": self.id,
             "name": self.name,
-            "transition": self.transition,
+            "transition": transtime_tenths,
             "state": self.state,
         }
         if self.brightness is not None:
@@ -188,12 +199,35 @@ def reconcile(
     force_update: bool,
     dry_run: bool,
     settle_seconds: float,
+    fetch_attempts: int,
+    fetch_retry_seconds: float,
 ) -> tuple[int, int]:
     """Reconcile scenes against config.
 
     Returns (touched, skipped).
     """
-    existing_groups = client.fetch_groups()
+    last_err: Exception | None = None
+    existing_groups: list[ExistingGroup] | None = None
+    for attempt in range(1, fetch_attempts + 1):
+        try:
+            existing_groups = client.fetch_groups()
+            break
+        except (TimeoutError, ValueError) as e:
+            last_err = e
+            logger.info(
+                "fetch_groups attempt %d/%d failed (%s); retrying in %.1fs",
+                attempt,
+                fetch_attempts,
+                e,
+                fetch_retry_seconds,
+            )
+            time.sleep(fetch_retry_seconds)
+    if existing_groups is None:
+        assert last_err is not None
+        raise RuntimeError(
+            f"could not fetch zigbee2mqtt/bridge/groups after {fetch_attempts} attempts: {last_err}"
+        )
+
     by_name = {g.friendly_name: g for g in existing_groups}
 
     touched = 0
@@ -288,6 +322,21 @@ def main() -> int:
         help="MQTT operation timeout in seconds",
     )
     parser.add_argument(
+        "--fetch-attempts",
+        type=int,
+        default=12,
+        help=(
+            "Number of times to retry fetching zigbee2mqtt/bridge/groups "
+            "when running early in boot before z2m is fully ready"
+        ),
+    )
+    parser.add_argument(
+        "--fetch-retry-seconds",
+        type=float,
+        default=5.0,
+        help="Delay between fetch_groups retries",
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -344,6 +393,8 @@ def main() -> int:
             force_update=args.force_update,
             dry_run=args.dry_run,
             settle_seconds=DEFAULT_SETTLE_SECONDS,
+            fetch_attempts=args.fetch_attempts,
+            fetch_retry_seconds=args.fetch_retry_seconds,
         )
     except (TimeoutError, RuntimeError, ValueError) as e:
         logger.error("reconcile failed: %s", e)
