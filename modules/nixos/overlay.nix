@@ -94,6 +94,8 @@
 
         music-meta-fix = pkgs.callPackage "${cfg-meta.paths.pkg}/music-meta-fix/default.nix" { };
 
+        setup-mqtt-scenes = pkgs.callPackage "${cfg-meta.paths.pkg}/setup-mqtt-scenes/default.nix" { };
+
         fractal = cfg-flakes.fractal.fractal-tray.overrideAttrs (old: {
           cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
             inherit (old) src;
