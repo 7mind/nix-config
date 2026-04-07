@@ -22,7 +22,7 @@ let
           isPublish = handler.publish != null;
 
           publishCase = {
-            check = ''this.action == "${action}"'';
+            check = ''content().string() == "${action}"'';
             processors = [
               { mapping = "root = ${builtins.toJSON handler.publish}"; }
             ];
@@ -31,7 +31,7 @@ let
           cycleLen = lib.length handler.cycle.values;
 
           cycleCase = {
-            check = ''this.action == "${action}"'';
+            check = ''content().string() == "${action}"'';
             processors = [
               # Read current preset index from cache; default to "0" on miss.
               {
@@ -112,11 +112,9 @@ let
       };
 
       pipeline.processors = [
-        # Parse z2m state JSON.
-        { mapping = "root = content().parse_json()"; }
-        # Drop state-only updates (no action field, or action cleared to "").
-        { mapping = ''root = if (this.action | "") == "" { deleted() } else { this }''; }
-        # Dispatch on action value.
+        # The source topic is expected to publish a plain-text action value
+        # per message (e.g. zigbee2mqtt's `<device>/action` subtopic), so we
+        # dispatch directly on `content().string()` without JSON parsing.
         { switch = cases ++ [ defaultCase ]; }
       ];
 
@@ -181,9 +179,10 @@ in
     rules = lib.mkOption {
       description = ''
         Declarative MQTT automation rules. Each rule subscribes to a single
-        source MQTT topic (typically a zigbee2mqtt device state topic), parses
-        the payload as JSON, dispatches on the value of the `action` field,
-        and publishes a payload to a target MQTT topic.
+        source MQTT topic that publishes a plain-text action value per
+        message (typically a zigbee2mqtt `<device>/action` subtopic),
+        dispatches on the action value, and publishes a payload to a target
+        MQTT topic.
 
         Each handler must specify exactly one of:
           - `publish`: a fixed payload to publish on the target topic
