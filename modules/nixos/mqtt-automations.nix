@@ -57,8 +57,87 @@ let
             ] ++ resetProcessors;
           };
 
-          cycleLen = lib.length handler.cycle.values;
           debounceMs = handler.cycle.debounceMs;
+
+          # A cycle handler must specify exactly one of `values` (flat
+          # list) or `slots` (time-of-day slots). Both paths render
+          # different bloblang but share the same debounce, cache,
+          # and control-flow structure.
+          useSlots = handler.cycle.slots != null;
+          useValues = handler.cycle.values != null;
+
+          # The mapping processor for the non-slotted (flat) case.
+          flatCycleMapping = ''
+            let cur = (meta("${handler.cycle.stateKey}_cur").or("0")).number().or(0)
+            let next = ($cur + 1) % ${toString (lib.length handler.cycle.values)}
+            let presets = ${builtins.toJSON handler.cycle.values}
+            meta ${handler.cycle.stateKey}_next = $next.string()
+            root = $presets.index($cur)
+          '';
+
+          # The mapping processor for the slotted (time-of-day) case.
+          # State is stored as `"slot_name:index"` in a single cache key;
+          # resetting the cache to `"0"` makes last_slot parse to "0"
+          # which won't match any real slot, so the next press starts
+          # at index 0 of whichever slot is current.
+          slottedCycleMapping =
+            let
+              slotNames = lib.attrNames handler.cycle.slots;
+              # Build `if cond1 { "name1" } else if cond2 { "name2" } else { "name1" }`
+              # where the final else is a fallback (the hour ranges
+              # should cover all 24 hours so the else is unreachable in
+              # practice; using the first slot as a safety net).
+              mkSlotPredicate = slotName:
+                let
+                  slot = handler.cycle.slots.${slotName};
+                  from = slot.fromHour;
+                  to = slot.toHour;
+                in
+                if from < to then
+                  ''$h >= ${toString from} && $h < ${toString to}''
+                else
+                  ''$h >= ${toString from} || $h < ${toString to}'';
+
+              slotNameExpr =
+                let
+                  chain = lib.foldr
+                    (slotName: rest:
+                      ''if ${mkSlotPredicate slotName} { "${slotName}" } else ${rest}''
+                    )
+                    ''{ "${lib.head slotNames}" }''
+                    slotNames;
+                in
+                chain;
+
+              # `if current_slot == "day" { 3 } else if ... else { 0 }`
+              slotLenExpr = lib.foldr
+                (slotName: rest:
+                  ''if $current_slot == "${slotName}" { ${toString (lib.length handler.cycle.slots.${slotName}.values)} } else ${rest}''
+                )
+                ''{ 1 }''
+                slotNames;
+
+              # `if current_slot == "day" { [...] } else if ... else { [] }`
+              slotValuesExpr = lib.foldr
+                (slotName: rest:
+                  ''if $current_slot == "${slotName}" { ${builtins.toJSON handler.cycle.slots.${slotName}.values} } else ${rest}''
+                )
+                ''{ [] }''
+                slotNames;
+            in
+            ''
+              let h = timestamp_unix().ts_format("15", "Local").number()
+              let current_slot = ${slotNameExpr}
+              let raw = (meta("${handler.cycle.stateKey}_cur").or("")).string()
+              let parts = $raw.split(":")
+              let last_slot = $parts.index(0).or("")
+              let last_index = $parts.index(1).or("0").number().or(0)
+              let current_len = ${slotLenExpr}
+              let index = if $current_slot == $last_slot { ($last_index + 1) % $current_len } else { 0 }
+              let current_values = ${slotValuesExpr}
+              meta ${handler.cycle.stateKey}_next = $current_slot + ":" + $index.string()
+              root = $current_values.index($index)
+            '';
 
           # Debounce gate: compare current epoch-ms against the in-memory
           # last-fired epoch-ms. If the delta is below the configured
@@ -106,55 +185,56 @@ let
             }
           ];
 
-          cycleCase = {
-            check = ''content().string() == "${action}"'';
-            processors = debounceProcessors ++ [
-              # Read current preset index from cache; default to "0" on miss.
-              {
-                branch = {
-                  request_map = ''root = ""'';
-                  processors = [
-                    {
-                      cache = {
-                        resource = cacheLabel;
-                        operator = "get";
-                        key = handler.cycle.stateKey;
-                      };
-                    }
-                    {
-                      "catch" = [
-                        { mapping = ''root = "0"''; }
-                      ];
-                    }
-                  ];
-                  result_map = ''meta ${handler.cycle.stateKey}_cur = content().string()'';
-                };
-              }
-              # Pick current preset, compute next index for storage.
-              # `.or(0)` after `.number()` is the safety net: if the cache
-              # value is somehow not parseable (e.g. it got polluted with
-              # the literal string "null" by a prior failed run), reset to
-              # 0 instead of erroring on every press forever after.
-              {
-                mapping = ''
-                  let cur = (meta("${handler.cycle.stateKey}_cur").or("0")).number().or(0)
-                  let next = ($cur + 1) % ${toString cycleLen}
-                  let presets = ${builtins.toJSON handler.cycle.values}
-                  meta ${handler.cycle.stateKey}_next = $next.string()
-                  root = $presets.index($cur)
-                '';
-              }
-              # Persist the next index for the following press.
-              {
-                cache = {
-                  resource = cacheLabel;
-                  operator = "set";
-                  key = handler.cycle.stateKey;
-                  value = "\${! meta(\"${handler.cycle.stateKey}_next\") }";
-                };
-              }
-            ];
-          };
+          cycleCase =
+            if useSlots && useValues then
+              throw "mqtt-automations rule '${ruleName}' action '${action}': cycle must specify exactly one of `values` or `slots`, not both"
+            else if !useSlots && !useValues then
+              throw "mqtt-automations rule '${ruleName}' action '${action}': cycle must specify either `values` or `slots`"
+            else {
+              check = ''content().string() == "${action}"'';
+              processors = debounceProcessors ++ [
+                # Read current cycle state from cache; default to "0" on
+                # miss. For flat cycles the cache holds an integer index;
+                # for slotted cycles it holds "slot:index".
+                {
+                  branch = {
+                    request_map = ''root = ""'';
+                    processors = [
+                      {
+                        cache = {
+                          resource = cacheLabel;
+                          operator = "get";
+                          key = handler.cycle.stateKey;
+                        };
+                      }
+                      {
+                        "catch" = [
+                          { mapping = ''root = "0"''; }
+                        ];
+                      }
+                    ];
+                    result_map = ''meta ${handler.cycle.stateKey}_cur = content().string()'';
+                  };
+                }
+                # Pick current preset, compute next state for storage.
+                # `.or(0)` after `.number()` is the safety net: if the cache
+                # value is somehow not parseable (e.g. it got polluted with
+                # the literal string "null" by a prior failed run), reset to
+                # 0 instead of erroring on every press forever after.
+                {
+                  mapping = if useSlots then slottedCycleMapping else flatCycleMapping;
+                }
+                # Persist the next state for the following press.
+                {
+                  cache = {
+                    resource = cacheLabel;
+                    operator = "set";
+                    key = handler.cycle.stateKey;
+                    value = "\${! meta(\"${handler.cycle.stateKey}_next\") }";
+                  };
+                }
+              ];
+            };
         in
         if isCycle && isPublish then
           throw "mqtt-automations rule '${ruleName}' action '${action}': handler must specify exactly one of `publish` or `cycle`, not both"
@@ -347,11 +427,51 @@ in
                     options = {
                       stateKey = lib.mkOption {
                         type = lib.types.str;
-                        description = "Cache key used to track the cycle index.";
+                        description = "Cache key used to track the cycle state.";
                       };
                       values = lib.mkOption {
-                        type = lib.types.listOf (lib.types.attrsOf lib.types.anything);
-                        description = "List of payloads to cycle through; each press advances by one and wraps at the end.";
+                        type = lib.types.nullOr (lib.types.listOf (lib.types.attrsOf lib.types.anything));
+                        default = null;
+                        description = ''
+                          Flat list of payloads to cycle through; each
+                          press advances by one and wraps at the end.
+                          Mutually exclusive with `slots`.
+                        '';
+                      };
+                      slots = lib.mkOption {
+                        type = lib.types.nullOr (lib.types.attrsOf (lib.types.submodule {
+                          options = {
+                            fromHour = lib.mkOption {
+                              type = lib.types.ints.between 0 23;
+                              description = "Start hour (inclusive, local time).";
+                            };
+                            toHour = lib.mkOption {
+                              type = lib.types.ints.between 0 23;
+                              description = "End hour (exclusive, local time). When `toHour <= fromHour` the slot wraps around midnight.";
+                            };
+                            values = lib.mkOption {
+                              type = lib.types.listOf (lib.types.attrsOf lib.types.anything);
+                              description = "Payloads to cycle through while this slot is active.";
+                            };
+                          };
+                        }));
+                        default = null;
+                        description = ''
+                          Time-of-day slots for the cycle, keyed by
+                          slot name. When set (mutually exclusive with
+                          `values`), each press evaluates the current
+                          local hour, finds the matching slot, and
+                          cycles through that slot's values. Switching
+                          slots between presses restarts the cycle at
+                          index 0 of the new slot.
+
+                          Cycle state is stored as `"slot_name:index"`
+                          in a single cache key; `resetCycles` on a
+                          publish handler still works — writing "0" to
+                          the key produces a last_slot that can't match
+                          any real slot, so the next press starts fresh
+                          at index 0 of whichever slot is current.
+                        '';
                       };
                       debounceMs = lib.mkOption {
                         type = lib.types.ints.unsigned;
@@ -376,7 +496,7 @@ in
                     };
                   });
                   default = null;
-                  description = "Cycle through a list of payloads.";
+                  description = "Cycle through a list of payloads (flat or slot-based).";
                 };
               };
             });
