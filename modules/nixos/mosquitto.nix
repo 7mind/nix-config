@@ -39,6 +39,8 @@ in
       ];
     };
 
+    environment.systemPackages = [ pkgs.mosquitto ];
+
     networking.firewall.allowedTCPPorts = [ cfg.port ];
   };
 }
