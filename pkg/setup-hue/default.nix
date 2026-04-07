@@ -6,8 +6,8 @@ let
     pydantic
   ]);
 
-  # Type-checking python: the runtime env plus mypy. Built separately so
-  # mypy doesn't end up on the runtime PYTHONPATH.
+  # Type-checking python: runtime env plus mypy. Built separately so mypy
+  # doesn't end up on the runtime PYTHONPATH.
   typecheckEnv = pkgs.python3.withPackages (ps: with ps; [
     paho-mqtt
     pydantic
@@ -15,8 +15,8 @@ let
   ]);
 in
 stdenvNoCC.mkDerivation {
-  name = "setup-mqtt-scenes";
-  src = ./setup_mqtt_scenes.py;
+  name = "setup-hue";
+  src = ./setup_hue.py;
 
   nativeBuildInputs = [ makeWrapper ];
 
@@ -32,19 +32,19 @@ stdenvNoCC.mkDerivation {
   installPhase = ''
     runHook preInstall
     mkdir -p $out/bin
-    cp $src $out/bin/setup-mqtt-scenes
-    chmod +x $out/bin/setup-mqtt-scenes
-    wrapProgram $out/bin/setup-mqtt-scenes \
+    cp $src $out/bin/setup-hue
+    chmod +x $out/bin/setup-hue
+    wrapProgram $out/bin/setup-hue \
       --set PYTHONPATH "${pythonEnv}/${pythonEnv.sitePackages}" \
       --prefix PATH : ${lib.makeBinPath [ pythonEnv ]}
     runHook postInstall
   '';
 
   meta = with lib; {
-    description = "Declarative zigbee2mqtt scene setup over MQTT";
+    description = "Declarative zigbee2mqtt group and scene setup over MQTT";
     license = licenses.mit;
     maintainers = with maintainers; [ pshirshov ];
-    mainProgram = "setup-mqtt-scenes";
+    mainProgram = "setup-hue";
     platforms = platforms.all;
   };
 }
