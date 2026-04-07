@@ -339,6 +339,7 @@ let
           { mapping = ''meta out_topic = "${rule.target}"''; }
         ]
         ++ cacheReadProcessors
+        ++ rule.preDispatch
         ++ [
           # Dispatch on the per-handler check expression.
           { switch = mkActionCases ruleName rule; }
@@ -524,6 +525,21 @@ in
               bloblang.
             '';
           };
+          preDispatch = lib.mkOption {
+            type = lib.types.listOf (lib.types.attrsOf lib.types.anything);
+            default = [ ];
+            description = ''
+              Raw bento processors to run after `cacheReads` loads
+              metadata but before the action dispatch switch. Used by
+              rules that need to update cache state based on every
+              incoming message regardless of which handler (if any)
+              ends up matching — e.g. multi-sensor motion rules that
+              track per-sensor occupancy flags, since otherwise a
+              sensor whose motion-on is short-circuited (because
+              lights are already on) never records its flag and later
+              motion-off from another sensor sees stale state.
+            '';
+          };
           handlers = lib.mkOption {
             description = "Map from action value to handler.";
             default = { };
@@ -688,9 +704,25 @@ in
         };
       });
     };
+
+    renderedConfig = lib.mkOption {
+      type = lib.types.attrs;
+      readOnly = true;
+      internal = true;
+      description = ''
+        Internal: the rendered bento config attrset, before YAML
+        serialization. Exposed for test introspection so the
+        bento-rules test suite can drive the real renderer instead of
+        a hand-rolled YAML twin that drifts.
+      '';
+    };
   };
 
-  config = lib.mkIf (cfg.enable && cfg.rules != { }) {
+  config = lib.mkMerge [
+    {
+      smind.services.mqtt-automations.renderedConfig = bentoConfig;
+    }
+    (lib.mkIf (cfg.enable && cfg.rules != { }) {
     systemd.services.mqtt-automation = {
       description = "MQTT automation rules (Bento)";
       wantedBy = [ "multi-user.target" ];
@@ -710,5 +742,6 @@ in
         DynamicUser = true;
       };
     };
-  };
+    })
+  ];
 }

@@ -13,10 +13,13 @@ port substituted for `{MQTT_HOST}` / `{MQTT_PORT}` placeholders.
 from __future__ import annotations
 
 import contextlib
+import os
 import socket
 import subprocess
 import tempfile
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from threading import Lock
 from typing import Any, Callable, Iterator
@@ -82,7 +85,64 @@ def mosquitto() -> Iterator[tuple[str, int]]:
 # ---------- bento fixture ----------
 
 
-BentoRunner = Callable[[str], None]
+BentoRunner = Callable[..., None]
+
+
+def tz_for_target_local_hour(target_hour: int) -> str:
+    """Return an IANA TZ identifier that makes Go's `time.Local`
+    report the supplied local hour when the test runs.
+
+    Go's `time` package accepts IANA zone names like
+    `Etc/GMT-5` but does NOT parse POSIX TZ strings like `UTC-5`
+    (it treats them as plain UTC). The `Etc/GMT±N` zones also use
+    inverted signs per historical POSIX convention: `Etc/GMT-5`
+    means UTC+5, and `Etc/GMT+5` means UTC-5.
+
+    We compute the offset so that `(utc_hour + offset) % 24 ==
+    target_hour`, then pick the right `Etc/GMT±N` zone depending
+    on whether the offset fits in the positive or negative range.
+
+    Used by tests that need to exercise time-of-day slot dispatch
+    without waiting for the wall clock to reach a given hour.
+    """
+    assert 0 <= target_hour <= 23, f"target_hour must be 0..23, got {target_hour}"
+    now_utc_hour = time.gmtime().tm_hour
+    offset = (target_hour - now_utc_hour) % 24  # 0..23
+    if offset == 0:
+        return "UTC"
+    if offset <= 12:
+        # Desired shift is UTC+offset (up to +12), expressed as
+        # Etc/GMT-offset (note the sign flip).
+        return f"Etc/GMT-{offset}"
+    # offset > 12: express as UTC-(24-offset) instead, i.e. shifting
+    # backwards through midnight. Etc/GMT+N means UTC-N.
+    return f"Etc/GMT+{24 - offset}"
+
+
+def _wait_for_bento_ready(http_port: int, timeout_s: float = 10.0) -> None:
+    """Poll bento's `/ready` endpoint until it returns 200.
+
+    Bento exposes `/ready` once every input *and* output is connected,
+    which for our tests means the MQTT input has subscribed to its
+    topics. Polling this is what lets us drop the previous fixed
+    `time.sleep(0.8)` — that sleep was both too long for fast
+    machines and not always long enough on contended ones.
+    """
+    url = f"http://127.0.0.1:{http_port}/ready"
+    deadline = time.time() + timeout_s
+    last_err: Exception | None = None
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=0.3) as resp:
+                if resp.status == 200:
+                    return
+        except (urllib.error.URLError, ConnectionError, TimeoutError, OSError) as e:
+            last_err = e
+        time.sleep(0.02)
+    raise TimeoutError(
+        f"bento /ready did not respond within {timeout_s}s "
+        f"(last error: {last_err!r})"
+    )
 
 
 @pytest.fixture
@@ -90,29 +150,45 @@ def bento_runner(
     mosquitto: tuple[str, int], tmp_path: Path
 ) -> Iterator[BentoRunner]:
     """Factory: call with a bento YAML string (possibly containing
-    `{MQTT_HOST}` / `{MQTT_PORT}` placeholders) to start a bento instance
-    against the fixture mosquitto. All instances are cleaned up after
-    the test. Blocks briefly after spawn to give bento time to subscribe
-    before the test starts publishing."""
+    `{MQTT_HOST}` / `{MQTT_PORT}` / `{HTTP_PORT}` placeholders) to
+    start a bento instance against the fixture mosquitto. All
+    instances are cleaned up after the test. Blocks until bento's
+    `/ready` endpoint reports 200 before returning, so subsequent
+    publishes can't race the input subscription.
+
+    Each spawn gets a fresh ephemeral HTTP port — config builders
+    must include an `http: enabled: true, address: 127.0.0.1:{HTTP_PORT}`
+    block so the readiness probe has somewhere to land.
+
+    Optional `tz` argument sets the `TZ` environment variable for the
+    child bento process, which Go's `time` package reads at process
+    start to populate `time.Local`. Use `tz_for_target_local_hour(h)`
+    to compute a string that makes bento's `timestamp_unix().ts_format("15", "Local")`
+    return a specific hour regardless of wall-clock time at test runtime.
+    """
     host, port = mosquitto
     procs: list[subprocess.Popen[bytes]] = []
 
-    def start(config_yaml: str) -> None:
-        rendered = config_yaml.replace("{MQTT_HOST}", host).replace(
-            "{MQTT_PORT}", str(port)
+    def start(config_yaml: str, *, tz: str | None = None) -> None:
+        http_port = _free_port()
+        rendered = (
+            config_yaml.replace("{MQTT_HOST}", host)
+            .replace("{MQTT_PORT}", str(port))
+            .replace("{HTTP_PORT}", str(http_port))
         )
         config_path = tmp_path / f"bento-{len(procs)}.yaml"
         config_path.write_text(rendered)
+        env = os.environ.copy()
+        if tz is not None:
+            env["TZ"] = tz
         proc = subprocess.Popen(
             ["bento", "-c", str(config_path)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            env=env,
         )
         procs.append(proc)
-        # Bento takes a beat to connect to MQTT and subscribe. Without
-        # this, early publishes race ahead of the subscription and are
-        # dropped — the test becomes flaky. 0.8s is enough in practice.
-        time.sleep(0.8)
+        _wait_for_bento_ready(http_port)
 
     try:
         yield start

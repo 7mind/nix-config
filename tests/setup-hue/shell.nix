@@ -4,24 +4,20 @@ let
     pytest
     pytest-xdist
     paho-mqtt
+    pydantic
   ]);
 in
 pkgs.mkShellNoCC {
-  name = "bento-rules-tests";
+  name = "setup-hue-tests";
   packages = [
-    pkgs.bento
     pkgs.mosquitto
-    pkgs.nix      # for the renderer tests which shell out to `nix eval`
-    pkgs.tzdata   # for IANA zone data used by slot-dispatch tests
     pythonEnv
   ];
   shellHook = ''
-    echo "bento-rules test shell ready"
-    echo "  bento:     $(bento --version 2>/dev/null | head -1)"
+    echo "setup-hue test shell ready"
     echo "  mosquitto: $(mosquitto -h 2>&1 | head -1)"
     echo "  python:    $(python3 --version)"
     echo "  pytest:    $(pytest --version 2>&1 | head -1)"
-    echo "  nix:       $(nix --version 2>&1 | head -1)"
     echo
     echo "run: pytest -v"
   '';
