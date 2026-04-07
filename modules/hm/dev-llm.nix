@@ -17,34 +17,33 @@ let
 
     ### Core Principles
 
-    - Think before acting. Read existing files before writing code.
-    - Be concise in output but thorough in reasoning.
-    - Prefer editing over rewriting whole files.
-    - Do not re-read files you have already read.
-    - Test your code before declaring done.
-    - No sycophantic openers or closing fluff.
-    - **Don't give up**: Provide comprehensive solutions
-    - **Fail fast**: Use assertions, throw errors early - no graceful fallbacks
-    - **Explicit over implicit**: No default parameters or optional chaining for required values
-    - **Minimal new comments**: Only write **new** comments to explain something non-obvious. Don't delete existing comments unless they're totally useless, wrong or out-of-date
-    - **No workarounds**: Deliver sound, generic, universal solutions. When you discover a bug or problem, don't hide it - attempt to fix underlying issues, ask for assistance when you can't
-    - **Ask questions**: When instructions or requirements are unclear, incomplete, or contradictory - always ask for clarifications before proceeding
-    - **Recent versions**: Always use the most recent versions of the relevant libraries and tools
-
+    - **Think first**: Read existing files before writing code.
+    - **Concise output, thorough reasoning**: Be concise in what you write to the user; be thorough in what you think through.
+    - **Edit over rewrite**: Prefer editing over rewriting whole files.
+    - **No re-reads**: Don't re-read files you have already read.
+    - **Test before done**: Test your code before declaring it done.
+    - **No fluff**: No sycophantic openers or closing fluff.
+    - **Persistence**: Don't bail out partway through a task. If stuck, investigate, try a different angle, or ask — half-finished work is worse than none.
+    - **Fail fast**: Use assertions, throw errors early — no graceful fallbacks.
+    - **Explicit over implicit**: No default parameters or optional chaining for required values.
+    - **Minimal new comments**: Only write **new** comments to explain something non-obvious. Don't delete existing comments unless they're totally useless, wrong or out-of-date.
+    - **No workarounds**: Deliver sound, generic, universal solutions. When you discover a bug or problem, don't hide it — attempt to fix underlying issues, ask for assistance when you can't.
+    - **Ask questions**: When instructions or requirements are unclear, incomplete, or contradictory — always ask for clarifications before proceeding.
+    - **Recent versions**: Always use the most recent versions of the relevant libraries and tools.
 
     ### References
 
-    - **RTFM**: Read documentation, code, and samples thoroughly, download docs when necessary, use search
-    - **Prefer recent docs**: When searching, prioritize results from the current year over older sources
-    - **Use available sources**: You can explore nix store and other artifacts stores to get sources and documentation. Example: maven/coursier/ivy storages contain source and document jars
+    - **RTFM**: Read documentation, code, and samples thoroughly, download docs when necessary, use search.
+    - **Prefer recent docs**: When searching, prioritize results from the current year over older sources.
+    - **Use available sources**: Explore package-manager caches when you need sources or docs that aren't in the project tree — `nix store`, cargo registry, npm cache, pip wheels, maven/coursier/ivy jars, etc.
 
     ### Environment
 
-    - **Sandboxed**: You run in a bubblewrap sandbox with access to the project directory, /nix, and /tmp/exchange
-    - **Write restrictions**: Only write to the project directory and /tmp/exchange - all other locations are sandboxed and changes will be lost!
-    - **Direct execution**: Always run project commands directly (compilation, tests, linting, git, formatting, etc.) - these work fine in the sandbox. Only use the script workflow for true sandbox escapes.
-    - **For system interaction**: When you need to access $HOME, modify system configuration, or reach files outside the sandbox, use this workflow:
-      1. Write a shell script to /tmp/exchange/{name}.sh
+    - **Sandbox detection**: Check `$SMIND_SANDBOXED` in your environment. When set to `1`, you are running inside a bubblewrap sandbox via the `yolo-*` wrapper and the sandbox-specific guidance below applies. When unset, you are running unsandboxed with the user's normal filesystem permissions — ignore the sandbox-specific workflow and write wherever the task requires.
+    - **Sandbox layout** (when `SMIND_SANDBOXED=1`): The sandbox grants access to the project directory, `/nix`, and `/tmp/exchange`. Only writes to the project directory and `/tmp/exchange` persist — everything else is ephemeral and changes will be lost.
+    - **Direct execution**: Always run project commands directly (compilation, tests, linting, git, formatting, etc.) — these work fine in or out of the sandbox. Only use the script workflow below for true sandbox escapes.
+    - **For system interaction** (when `SMIND_SANDBOXED=1`): When you need to access `$HOME`, modify system configuration, or reach files outside the sandbox, use this workflow:
+      1. Write a shell script to `/tmp/exchange/{name}.sh`.
       2. Script structure MUST be:
          ```bash
          #!/usr/bin/env bash
@@ -54,36 +53,36 @@ let
          # Your commands here, with output captured:
          command 2>&1 | tee /tmp/exchange/{name}.out
          ```
-      3. Ask user to run: `bash /tmp/exchange/{name}.sh`
-      4. After user confirms execution, use Read tool to read /tmp/exchange/{name}.out
-      5. NEVER proceed without reading the output file - it contains the information you need
-    - **Verbose debug scripts**: Use `set -x` so the user can see commands together with output
-    - **Nix environment**: Use flake.nix and direnv for dependencies
-    - **Commands**: Use `direnv exec DIR COMMAND [...ARGS]` and `nix run`
-      - **Commands exception**: IFF your shell has a defined `DIRENV_DIR` env var, then you are already in a direnv environment, and
-    you **DO NOT NEED TO** execute commands via `direnv exec DIR COMMAND [...ARGS]` syntax.
+      3. Ask user to run: `bash /tmp/exchange/{name}.sh`.
+      4. After user confirms execution, use Read tool to read `/tmp/exchange/{name}.out`.
+      5. NEVER proceed without reading the output file — it contains the information you need.
+    - **Verbose debug scripts**: Use `set -x` so the user can see commands together with output.
+    - **Nix environment**: Use `flake.nix` and `direnv` for dependencies.
+    - **Commands**: Use `direnv exec DIR COMMAND [...ARGS]` and `nix run`.
+      - **Commands exception**: IFF your shell has a defined `DIRENV_DIR` env var, then you are already in a direnv environment, and you **DO NOT NEED TO** execute commands via `direnv exec DIR COMMAND [...ARGS]` syntax.
 
     ### Code Style
 
-    - **Type safety**: Encode domain concepts as named types (interfaces/classes/records), avoid catch-all types (Object, any) and untyped containers (string-keyed maps)
-    - **SOLID**: Adhere to SOLID principles
-    - **No magic constants**: Use named constants
-    - **No backwards compatibility**: Refactor freely
-    - **Composition over conditionals**: Prefer composition over conditional logic
-    - **DRY**: Never duplicate, always generalize
+    - **Type safety**: Encode domain concepts as named types (interfaces/classes/records), avoid catch-all types (Object, any) and untyped containers (string-keyed maps).
+    - **SOLID**: Adhere to SOLID principles.
+    - **No globals**: Pass dependencies explicitly via constructors, parameters, or DI containers — never rely on singletons, module-level mutable state, or ambient globals.
+    - **No magic constants**: Use named constants.
+    - **No backwards compatibility**: Refactor freely.
+    - **Composition over conditionals**: Prefer composition over conditional logic.
+    - **DRY**: Never duplicate, always generalize.
 
     ### Project Structure
 
-    - Docs: ./docs/drafts/{YYYYMMDD-HHMM}-{name}.md
-    - Debug scripts: ./debug/{YYYYMMDD-HHMMSS}-{name}.{ext} (use appropriate extension for project language)
-    - **Services**: Use interface + implementation pattern when possible
-    - **Gitignore**: Always create and maintain reasonable .gitignore files
+    - **New docs**: When creating documentation in projects without an established docs layout, prefer `./docs/drafts/{YYYYMMDD-HHMM}-{name}.md`.
+    - **Debug scripts**: When creating throwaway debug scripts, prefer `./debug/{YYYYMMDD-HHMMSS}-{name}.{ext}` (use the appropriate extension for the project language).
+    - **Services**: Use interface + implementation pattern when possible.
+    - **Gitignore**: Always create and maintain reasonable `.gitignore` files.
 
     ### Tools
 
-    - **Debuggers**: Use gdb, lldb, jdb, pdb and any other debuggers
-    - **Parallelism**: Use nproc to determine available parallel processes
-    - **Unattended mode**: Always run tools in batch mode, especially tools like SBT which expect user input by default
+    - **Debuggers**: Use the debugger appropriate for the language at hand.
+    - **Parallelism**: Use `nproc` to determine available parallel processes.
+    - **Unattended mode**: Always run tools in batch mode, especially tools like SBT which expect user input by default.
   '';
 
   claudeMemoryText = lib.concatStringsSep "\n\n" config.smind.hm.dev.llm.memorySections;
@@ -368,6 +367,7 @@ in
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \
               --ro "''${HOME}/.direnvrc" \
+              --env SMIND_SANDBOXED=1 \
               "''${ENV_ARGS[@]}" \
               -- claude --permission-mode bypassPermissions "''${CMD_ARGS[@]}"
           '')
@@ -395,6 +395,7 @@ in
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \
               --ro "''${HOME}/.direnvrc" \
+              --env SMIND_SANDBOXED=1 \
               "''${ENV_ARGS[@]}" \
               -- claude --permission-mode bypassPermissions "''${CMD_ARGS[@]}"
           '')
@@ -473,6 +474,7 @@ in
               --ro "''${HOME}/.config/direnv" \
                 --ro "''${HOME}/.local/share/direnv" \
                 --ro "''${HOME}/.direnvrc" \
+                --env SMIND_SANDBOXED=1 \
                 "''${ENV_ARGS[@]}" \
                 -- "$RAW_COPILOT" "''${copilot_args[@]}" "''${CMD_ARGS[@]}"
           '')
@@ -551,6 +553,7 @@ in
               --ro "''${HOME}/.config/direnv" \
                 --ro "''${HOME}/.local/share/direnv" \
                 --ro "''${HOME}/.direnvrc" \
+                --env SMIND_SANDBOXED=1 \
                 "''${ENV_ARGS[@]}" \
                 -- "$RAW_COPILOT" "''${copilot_args[@]}" "''${CMD_ARGS[@]}"
           '')
@@ -573,6 +576,7 @@ in
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \
               --ro "''${HOME}/.direnvrc" \
+              --env SMIND_SANDBOXED=1 \
               "''${ENV_ARGS[@]}" \
               -- codex --dangerously-bypass-approvals-and-sandbox --search "''${CMD_ARGS[@]}"
           '')
@@ -594,6 +598,7 @@ in
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \
               --ro "''${HOME}/.direnvrc" \
+              --env SMIND_SANDBOXED=1 \
               "''${ENV_ARGS[@]}" \
               -- gemini --yolo "''${CMD_ARGS[@]}"
           '')
@@ -615,6 +620,7 @@ in
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \
               --ro "''${HOME}/.direnvrc" \
+              --env SMIND_SANDBOXED=1 \
               "''${ENV_ARGS[@]}" \
               -- gemini --yolo "''${CMD_ARGS[@]}"
           '')
@@ -639,6 +645,7 @@ in
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \
               --ro "''${HOME}/.direnvrc" \
+              --env SMIND_SANDBOXED=1 \
               "''${ENV_ARGS[@]}" \
             -- vibe --agent auto-approve "''${CMD_ARGS[@]}"
           '')
@@ -661,6 +668,7 @@ in
               --ro "''${HOME}/.config/direnv" \
               --ro "''${HOME}/.local/share/direnv" \
               --ro "''${HOME}/.direnvrc" \
+              --env SMIND_SANDBOXED=1 \
               "''${ENV_ARGS[@]}" \
               -- opencode "''${CMD_ARGS[@]}"
           '')
