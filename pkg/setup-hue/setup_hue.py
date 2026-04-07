@@ -346,6 +346,12 @@ class Z2mClient:
             payload["id"] = str(group_id)
         self._request("zigbee2mqtt/bridge/request/group/add", payload)
 
+    def remove_group(self, friendly_name: str, *, force: bool = True) -> None:
+        self._request(
+            "zigbee2mqtt/bridge/request/group/remove",
+            {"id": friendly_name, "force": force},
+        )
+
     def add_member(self, group_friendly_name: str, device: str, endpoint: int) -> None:
         self._request(
             "zigbee2mqtt/bridge/request/group/members/add",
@@ -465,9 +471,37 @@ def reconcile_groups(
     that the caller should re-fetch groups before the scene phase.
     """
     by_name = {g.friendly_name: g for g in existing}
+    desired_names = set(config.groups.keys())
     touched = 0
     skipped = 0
     state_changed = False
+
+    # Phase 0: if pruning, remove any group present in z2m but not in
+    # the config. This must happen BEFORE the create phase so stale
+    # group ids/friendly_names are freed and don't collide with
+    # newly-declared groups using the same id.
+    if prune:
+        for stale_group in existing:
+            if stale_group.friendly_name in desired_names:
+                continue
+            verb = "[dry-run] would remove" if dry_run else "remove"
+            logger.info(
+                "%s group %r (id=%d): not in config",
+                verb,
+                stale_group.friendly_name,
+                stale_group.id,
+            )
+            if not dry_run:
+                client.remove_group(stale_group.friendly_name, force=True)
+                time.sleep(settle_seconds)
+                touched += 1
+                state_changed = True
+
+        if state_changed and not dry_run:
+            # Re-fetch so the create phase below sees a clean slate.
+            time.sleep(settle_seconds)
+            existing = client.fetch_groups()
+            by_name = {g.friendly_name: g for g in existing}
 
     for group_name, group_spec in config.groups.items():
         existing_group = by_name.get(group_name)
