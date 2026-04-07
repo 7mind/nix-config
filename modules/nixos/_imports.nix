@@ -38,6 +38,7 @@
   ./locale-ie.nix
   ./metrics.nix
   ./mosquitto.nix
+  ./mqtt-automations.nix
   ./mouse.nix
   ./networking-desktop.nix
   ./networking.nix
