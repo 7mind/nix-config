@@ -32,6 +32,25 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 TOOLS_PATH = REPO_ROOT / "private/hosts/raspi5m/hue-lights-tools.nix"
 
 
+# Test scene presets, defined as a Nix `let`-binding that's prepended
+# to every test expression below. Tests reference these via the bound
+# names (`defaultDayScenes`, `defaultScheduledScenes`) just like the
+# production hue-lights.nix does. Kept here rather than in the tools
+# file so the tools file stays purely schema/renderer code.
+TEST_SCENES_NIX = """
+  defaultDayScenes = [
+    { id = 1; name = "bright cool";   state = "ON"; brightness = 254; color_temp = 250; transition = 0.5; }
+    { id = 2; name = "warm relaxing"; state = "ON"; brightness = 254; color_temp = 370; transition = 0.5; }
+    { id = 3; name = "dim warm";      state = "ON"; brightness = 238; color_temp = 454; transition = 0.5; }
+  ];
+  defaultNightScenes = lib.reverseList defaultDayScenes;
+  defaultScheduledScenes = {
+    day   = { fromHour = 6;  toHour = 23; values = defaultDayScenes; };
+    night = { fromHour = 23; toHour = 6;  values = defaultNightScenes; };
+  };
+"""
+
+
 _TYPE_PREFIXES = {
     "light": "hue-l-",
     "switch": "hue-s-",
@@ -148,6 +167,7 @@ def _eval_define_rooms(
     rooms_nix: str,
     *,
     devices_by_address: dict[str, dict[str, str]] | None = None,
+    defaults_nix: str = "{ }",
 ) -> dict[str, Any]:
     """Evaluate `defineRooms { devices = ...; rooms = ...; }`
     with the given rooms snippet and return the JSON-decoded result.
@@ -157,6 +177,12 @@ def _eval_define_rooms(
     inferred from the friendly_name prefix convention. Tests that
     want to verify a specific catalog (or trigger a validation
     error) pass their own.
+
+    `defaults_nix` is a Nix expression for the optional `defaults`
+    parameter on `defineRooms`. Defaults to `{ }` so existing tests
+    behave exactly as before (the helper falls back to built-in
+    defaults). Tests that exercise default overrides pass an
+    explicit attrset literal.
     """
     if devices_by_address is None:
         devices_by_address = _auto_devices_by_address(rooms_nix)
@@ -166,11 +192,12 @@ let
   pkgs = import <nixpkgs> {{ }};
   lib = pkgs.lib;
   tools = import {TOOLS_PATH} {{ inherit lib; }};
-  inherit (tools) defaultScheduledScenes defaultDayScenes;
+  {TEST_SCENES_NIX}
 in
 tools.defineRooms {{
   devices = {devices_nix};
   rooms = {rooms_nix};
+  defaults = {defaults_nix};
 }}
 """
     result = subprocess.run(
@@ -313,8 +340,8 @@ def test_motion_on_check_has_luminance_and_lights_state_gates() -> None:
 
 def test_motion_on_check_respects_max_illuminance_override() -> None:
     """`maxIlluminance` is a per-sensor catalog field, and
-    `offCooldownSeconds` is a room-level `motion.offCooldownSeconds`
-    setting. The motion-on check should pick both up."""
+    `offCooldownSeconds` is a flat room-level field. The motion-on
+    check should pick both up."""
     result = _eval_define_rooms(
         """{
       closet = {
@@ -323,7 +350,7 @@ def test_motion_on_check_respects_max_illuminance_override() -> None:
         members = [ "0xeeee/11" ];
         scenes = defaultDayScenes;
         devices = [ { device = "hue-ms-closet"; } ];
-        motion.offCooldownSeconds = 5;
+        offCooldownSeconds = 5;
       };
     }""",
         devices_by_address={
@@ -566,6 +593,7 @@ def _eval_expect_error(
     rooms_nix: str,
     *,
     devices_by_address: dict[str, dict[str, str]] | None = None,
+    defaults_nix: str = "{ }",
 ) -> str:
     """Evaluate the given rooms block and expect nix eval to fail.
     Returns the stderr text for assertions."""
@@ -577,11 +605,12 @@ let
   pkgs = import <nixpkgs> {{ }};
   lib = pkgs.lib;
   tools = import {TOOLS_PATH} {{ inherit lib; }};
-  inherit (tools) defaultDayScenes;
+  {TEST_SCENES_NIX}
 in
 tools.defineRooms {{
   devices = {devices_nix};
   rooms = {rooms_nix};
+  defaults = {defaults_nix};
 }}
 """
     result = subprocess.run(
@@ -1325,5 +1354,246 @@ def test_validation_dispatches_tap_vs_switch_by_resolved_type() -> None:
     # Motion rule
     assert "hall-motion-hue_ms_foo" in rules
     assert rules["hall-motion-hue_ms_foo"]["source"] == "zigbee2mqtt/hue-ms-foo"
+
+
+# ---------- defineRooms.defaults ----------
+
+
+def test_defaults_room_off_cooldown_overrides_builtin() -> None:
+    """A `defaults.room.offCooldownSeconds` override flows through
+    to the motion rule's cooldown clause for every room that doesn't
+    set its own. Built-in is 30s (30000ms); override to 5s (5000ms)."""
+    result = _eval_define_rooms(
+        """{
+      hall = {
+        groupName = "hall"; id = 1; members = [ "hue-l-a/11" ];
+        devices = [ { device = "hue-ms-a"; } ];
+        scenes = defaultDayScenes;
+      };
+    }""",
+        defaults_nix='{ room = { offCooldownSeconds = 5; }; }',
+    )
+    rule = result["smind"]["services"]["mqtt-automations"]["rules"][
+        "hall-motion-hue_ms_a"
+    ]
+    _assert_handler_check_contains(rule, "motion-on", "5000")
+    # And the built-in 30000 must be gone — otherwise we accidentally
+    # left both clauses on.
+    assert "30000" not in rule["handlers"]["motion-on"]["check"]
+
+
+def test_defaults_room_field_room_override_wins() -> None:
+    """A per-room `offCooldownSeconds` setting beats the
+    `defaults.room.offCooldownSeconds` global. Confirms the merge
+    order is `defaults.room // room`."""
+    result = _eval_define_rooms(
+        """{
+      hall = {
+        groupName = "hall"; id = 1; members = [ "hue-l-a/11" ];
+        devices = [ { device = "hue-ms-a"; } ];
+        scenes = defaultDayScenes;
+        offCooldownSeconds = 7;
+      };
+    }""",
+        defaults_nix='{ room = { offCooldownSeconds = 99; }; }',
+    )
+    rule = result["smind"]["services"]["mqtt-automations"]["rules"][
+        "hall-motion-hue_ms_a"
+    ]
+    _assert_handler_check_contains(rule, "motion-on", "7000")
+    assert "99000" not in rule["handlers"]["motion-on"]["check"]
+
+
+def test_defaults_motion_sensor_settings_override_builtin() -> None:
+    """A `defaults.motion-sensor.<field>` override flows through to
+    every motion-sensor catalog entry that doesn't set its own."""
+    result = _eval_define_rooms(
+        """{
+      hall = {
+        groupName = "hall"; id = 1; members = [ "hue-l-a/11" ];
+        devices = [ { device = "hue-ms-a"; } ];
+        scenes = defaultDayScenes;
+      };
+    }""",
+        defaults_nix='''{
+          "motion-sensor" = {
+            occupancyTimeoutSeconds = 120;
+            sensitivity = "high";
+            ledIndication = false;
+            maxIlluminance = 25;
+          };
+        }''',
+    )
+    # The catalog entry's settings flow into the hue-setup devices
+    # output (occupancy_timeout, motion_sensitivity, led_indication)
+    devices = result["smind"]["services"]["hue-setup"]["config"]["devices"]
+    assert devices["hue-ms-a"]["options"] == {
+        "occupancy_timeout": 120,
+        "motion_sensitivity": "high",
+        "led_indication": False,
+    }
+    # And maxIlluminance flows into the motion-on luminance clause
+    rule = result["smind"]["services"]["mqtt-automations"]["rules"][
+        "hall-motion-hue_ms_a"
+    ]
+    _assert_handler_check_contains(rule, "motion-on", "< 25")
+
+
+def test_defaults_motion_sensor_per_entry_override_wins() -> None:
+    """A per-catalog-entry setting beats the
+    `defaults.motion-sensor.<field>` global."""
+    result = _eval_define_rooms(
+        """{
+      hall = {
+        groupName = "hall"; id = 1; members = [ "hue-l-a/11" ];
+        devices = [ { device = "hue-ms-a"; } ];
+        scenes = defaultDayScenes;
+      };
+    }""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {
+                "type": "motion-sensor",
+                "name": "hue-ms-a",
+                "occupancyTimeoutSeconds": 240,  # per-entry override
+            },
+        },
+        defaults_nix='''{
+          "motion-sensor" = { occupancyTimeoutSeconds = 120; };
+        }''',
+    )
+    devices = result["smind"]["services"]["hue-setup"]["config"]["devices"]
+    assert devices["hue-ms-a"]["options"]["occupancy_timeout"] == 240
+
+
+def test_defaults_partial_override_preserves_other_scopes() -> None:
+    """Setting only `defaults.room.offCooldownSeconds` must NOT wipe
+    out the built-in `motion-sensor` defaults — they're separate
+    scopes and the merge is per-scope."""
+    result = _eval_define_rooms(
+        """{
+      hall = {
+        groupName = "hall"; id = 1; members = [ "hue-l-a/11" ];
+        devices = [ { device = "hue-ms-a"; } ];
+        scenes = defaultDayScenes;
+      };
+    }""",
+        defaults_nix='{ room = { offCooldownSeconds = 5; }; }',
+    )
+    devices = result["smind"]["services"]["hue-setup"]["config"]["devices"]
+    # Built-in motion-sensor defaults still apply
+    assert devices["hue-ms-a"]["options"] == {
+        "occupancy_timeout": 60,         # built-in default
+        "motion_sensitivity": "medium",  # built-in default
+        "led_indication": True,          # built-in default
+    }
+
+
+def test_defaults_validation_rejects_unknown_scope() -> None:
+    """A typo in the top-level scope name is caught up front."""
+    err = _eval_expect_error(
+        """{
+      hall = {
+        groupName = "hall"; id = 1; members = [ "hue-l-a/11" ];
+        devices = [ { device = "hue-s-a"; } ]; scenes = defaultDayScenes;
+      };
+    }""",
+        defaults_nix='{ rooms = { offCooldownSeconds = 5; }; }',  # `rooms` typo
+    )
+    assert "unknown scope" in err
+    assert "rooms" in err
+
+
+def test_defaults_validation_rejects_unknown_field_in_room_scope() -> None:
+    """A typo in a room defaults field is caught up front."""
+    err = _eval_expect_error(
+        """{
+      hall = {
+        groupName = "hall"; id = 1; members = [ "hue-l-a/11" ];
+        devices = [ { device = "hue-s-a"; } ]; scenes = defaultDayScenes;
+      };
+    }""",
+        defaults_nix='{ room = { offCoolDownSeconds = 5; }; }',  # camelCase typo
+    )
+    assert "unknown field" in err
+    assert "room.offCoolDownSeconds" in err
+
+
+def test_defaults_validation_rejects_unknown_field_in_type_scope() -> None:
+    """A typo in a per-type defaults field is caught up front."""
+    err = _eval_expect_error(
+        """{
+      hall = {
+        groupName = "hall"; id = 1; members = [ "hue-l-a/11" ];
+        devices = [ { device = "hue-ms-a"; } ]; scenes = defaultDayScenes;
+      };
+    }""",
+        defaults_nix='''{
+          "motion-sensor" = { sensetivity = "high"; };
+        }''',  # `sensetivity` typo
+    )
+    assert "unknown field" in err
+    assert "motion-sensor.sensetivity" in err
+
+
+def test_defaults_omitted_uses_builtins() -> None:
+    """Omitting `defaults` entirely (well, passing `{ }`) lands the
+    built-in values: 30s offCooldown, 60s timeout, medium sensitivity,
+    50 lux threshold."""
+    result = _eval_define_rooms(
+        """{
+      hall = {
+        groupName = "hall"; id = 1; members = [ "hue-l-a/11" ];
+        devices = [ { device = "hue-ms-a"; } ];
+        scenes = defaultDayScenes;
+      };
+    }"""
+    )
+    rule = result["smind"]["services"]["mqtt-automations"]["rules"][
+        "hall-motion-hue_ms_a"
+    ]
+    _assert_handler_check_contains(rule, "motion-on", "30000")  # 30s
+    _assert_handler_check_contains(rule, "motion-on", "< 50")   # 50 lux
+    devices = result["smind"]["services"]["hue-setup"]["config"]["devices"]
+    assert devices["hue-ms-a"]["options"] == {
+        "occupancy_timeout": 60,
+        "motion_sensitivity": "medium",
+        "led_indication": True,
+    }
+
+
+# ---------- members attrset shape ----------
+
+
+def test_members_accept_attrset_form() -> None:
+    """Members can be either `"<name>/<endpoint>"` strings (legacy)
+    or `{ device = "<ref>"; endpoint ? 11; }` attrsets (new). Both
+    forms resolve to the same canonical `<friendly>/<endpoint>`."""
+    result = _eval_define_rooms(
+        """{
+      hall = {
+        groupName = "hall"; id = 1;
+        members = [
+          { device = "hue-l-a"; }              # default endpoint
+          { device = "hue-l-b"; endpoint = 22; } # explicit endpoint
+          "hue-l-c/11"                          # legacy string form
+        ];
+        devices = [ { device = "hue-s-foo"; } ];
+        scenes = defaultDayScenes;
+      };
+    }""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "light", "name": "hue-l-b"},
+            "0xcccc": {"type": "light", "name": "hue-l-c"},
+            "0xdddd": {"type": "switch", "name": "hue-s-foo"},
+        },
+    )
+    group = result["smind"]["services"]["hue-setup"]["config"]["groups"]["hall"]
+    assert group["members"] == [
+        "hue-l-a/11",
+        "hue-l-b/22",
+        "hue-l-c/11",
+    ]
 
 
