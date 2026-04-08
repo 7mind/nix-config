@@ -50,6 +50,20 @@ TEST_SCENES_NIX = """
   };
 """
 
+# Sensible test defaults — `defineRooms.defaults` is required (no
+# built-in fallbacks) so every test that calls `_eval_define_rooms`
+# without overriding `defaults_nix` lands these values. Tests that
+# specifically exercise the defaults system pass their own block.
+DEFAULT_TEST_DEFAULTS_NIX = """{
+  room = { motionOffCooldownSeconds = 30; };
+  "motion-sensor" = {
+    occupancyTimeoutSeconds = 60;
+    sensitivity = "medium";
+    ledIndication = true;
+    maxIlluminance = 50;
+  };
+}"""
+
 
 _TYPE_PREFIXES = {
     "light": "hue-l-",
@@ -167,7 +181,7 @@ def _eval_define_rooms(
     rooms_nix: str,
     *,
     devices_by_address: dict[str, dict[str, str]] | None = None,
-    defaults_nix: str = "{ }",
+    defaults_nix: str = DEFAULT_TEST_DEFAULTS_NIX,
 ) -> dict[str, Any]:
     """Evaluate `defineRooms { devices = ...; rooms = ...; }`
     with the given rooms snippet and return the JSON-decoded result.
@@ -311,14 +325,14 @@ def test_switch_plus_motion_share_cache_label() -> None:
 
 
 # ---------- motion-on check composition ----------
-
+motionOffCooldownSeconds
 
 def test_motion_on_check_has_luminance_and_lights_state_gates() -> None:
     result = _eval_define_rooms(
         """{
       hall = {
         groupName = "hall";
-        id = 53;
+     motionOffCooldownSecondsmotionOffCooldownSeconds
         members = [ "0xdddd/11" ];
         scenes = defaultDayScenes;
         devices = [ { device = "hue-ms-hall"; } ];
@@ -328,19 +342,19 @@ def test_motion_on_check_has_luminance_and_lights_state_gates() -> None:
     rule = result["smind"]["services"]["mqtt-automations"]["rules"][
         "hall-motion-hue_ms_hall"
     ]
-    _assert_handler_check_contains(rule, "motion-on", "this.occupancy == true")
+    _assert_hanmotionOffCooldownSecondss(rule, "motion-on", "this.occupancy == true")
     _assert_handler_check_contains(rule, "motion-on", "this.illuminance")
     _assert_handler_check_contains(rule, "motion-on", '(meta("lights_state")')
     # Default maxIlluminance is 50
     _assert_handler_check_contains(rule, "motion-on", "< 50")
-    # Default offCooldownSeconds is 30 → 30000ms
+    # Default motionOffCooldownSeconds is 30 → 30000ms
     _assert_handler_check_contains(rule, "motion-on", "30000")
     _assert_handler_check_contains(rule, "motion-on", "last_off_at")
 
 
 def test_motion_on_check_respects_max_illuminance_override() -> None:
     """`maxIlluminance` is a per-sensor catalog field, and
-    `offCooldownSeconds` is a flat room-level field. The motion-on
+    `motionOffCooldownSeconds` is a flat room-level field. The motion-on
     check should pick both up."""
     result = _eval_define_rooms(
         """{
@@ -350,7 +364,7 @@ def test_motion_on_check_respects_max_illuminance_override() -> None:
         members = [ "0xeeee/11" ];
         scenes = defaultDayScenes;
         devices = [ { device = "hue-ms-closet"; } ];
-        offCooldownSeconds = 5;
+        motionOffCooldownSeconds = 5;
       };
     }""",
         devices_by_address={
@@ -593,7 +607,7 @@ def _eval_expect_error(
     rooms_nix: str,
     *,
     devices_by_address: dict[str, dict[str, str]] | None = None,
-    defaults_nix: str = "{ }",
+    defaults_nix: str = DEFAULT_TEST_DEFAULTS_NIX,
 ) -> str:
     """Evaluate the given rooms block and expect nix eval to fail.
     Returns the stderr text for assertions."""
@@ -1359,10 +1373,28 @@ def test_validation_dispatches_tap_vs_switch_by_resolved_type() -> None:
 # ---------- defineRooms.defaults ----------
 
 
-def test_defaults_room_off_cooldown_overrides_builtin() -> None:
-    """A `defaults.room.offCooldownSeconds` override flows through
-    to the motion rule's cooldown clause for every room that doesn't
-    set its own. Built-in is 30s (30000ms); override to 5s (5000ms)."""
+def _full_defaults(*, room_off_cooldown=30, occupancy=60, sensitivity="medium",
+                   led=True, max_lux=50) -> str:
+    """Render a complete `defaults` block with the given overrides.
+    Every field is required by the validator, so tests that want to
+    override ONE field still have to spell out the rest. This helper
+    keeps the test bodies focused on the override that matters."""
+    led_nix = "true" if led else "false"
+    return f'''{{
+  room = {{ motionOffCooldownSeconds = {room_off_cooldown}; }};
+  "motion-sensor" = {{
+    occupancyTimeoutSeconds = {occupancy};
+    sensitivity = "{sensitivity}";
+    ledIndication = {led_nix};
+    maxIlluminance = {max_lux};
+  }};
+}}'''
+
+
+def test_defaults_room_off_cooldown_flows_through() -> None:
+    """`defaults.room.motionOffCooldownSeconds` flows through to the
+    motion rule's cooldown clause for every room that doesn't
+    set its own. Override to 5s (5000ms)."""
     result = _eval_define_rooms(
         """{
       hall = {
@@ -1371,20 +1403,17 @@ def test_defaults_room_off_cooldown_overrides_builtin() -> None:
         scenes = defaultDayScenes;
       };
     }""",
-        defaults_nix='{ room = { offCooldownSeconds = 5; }; }',
+        defaults_nix=_full_defaults(room_off_cooldown=5),
     )
     rule = result["smind"]["services"]["mqtt-automations"]["rules"][
         "hall-motion-hue_ms_a"
     ]
     _assert_handler_check_contains(rule, "motion-on", "5000")
-    # And the built-in 30000 must be gone — otherwise we accidentally
-    # left both clauses on.
-    assert "30000" not in rule["handlers"]["motion-on"]["check"]
 
 
-def test_defaults_room_field_room_override_wins() -> None:
-    """A per-room `offCooldownSeconds` setting beats the
-    `defaults.room.offCooldownSeconds` global. Confirms the merge
+def test_defaults_room_per_room_override_wins() -> None:
+    """A per-room `motionOffCooldownSeconds` setting beats the
+    `defaults.room.motionOffCooldownSeconds` global. Confirms the merge
     order is `defaults.room // room`."""
     result = _eval_define_rooms(
         """{
@@ -1392,10 +1421,10 @@ def test_defaults_room_field_room_override_wins() -> None:
         groupName = "hall"; id = 1; members = [ "hue-l-a/11" ];
         devices = [ { device = "hue-ms-a"; } ];
         scenes = defaultDayScenes;
-        offCooldownSeconds = 7;
+        motionOffCooldownSeconds = 7;
       };
     }""",
-        defaults_nix='{ room = { offCooldownSeconds = 99; }; }',
+        defaults_nix=_full_defaults(room_off_cooldown=99),
     )
     rule = result["smind"]["services"]["mqtt-automations"]["rules"][
         "hall-motion-hue_ms_a"
@@ -1404,9 +1433,9 @@ def test_defaults_room_field_room_override_wins() -> None:
     assert "99000" not in rule["handlers"]["motion-on"]["check"]
 
 
-def test_defaults_motion_sensor_settings_override_builtin() -> None:
-    """A `defaults.motion-sensor.<field>` override flows through to
-    every motion-sensor catalog entry that doesn't set its own."""
+def test_defaults_motion_sensor_settings_flow_through() -> None:
+    """`defaults.motion-sensor.<field>` flows through to every
+    motion-sensor catalog entry that doesn't set its own."""
     result = _eval_define_rooms(
         """{
       hall = {
@@ -1415,24 +1444,18 @@ def test_defaults_motion_sensor_settings_override_builtin() -> None:
         scenes = defaultDayScenes;
       };
     }""",
-        defaults_nix='''{
-          "motion-sensor" = {
-            occupancyTimeoutSeconds = 120;
-            sensitivity = "high";
-            ledIndication = false;
-            maxIlluminance = 25;
-          };
-        }''',
+        defaults_nix=_full_defaults(
+            occupancy=120, sensitivity="high", led=False, max_lux=25,
+        ),
     )
-    # The catalog entry's settings flow into the hue-setup devices
-    # output (occupancy_timeout, motion_sensitivity, led_indication)
+    # Per-device options flow into the hue-setup devices output.
     devices = result["smind"]["services"]["hue-setup"]["config"]["devices"]
     assert devices["hue-ms-a"]["options"] == {
         "occupancy_timeout": 120,
         "motion_sensitivity": "high",
         "led_indication": False,
     }
-    # And maxIlluminance flows into the motion-on luminance clause
+    # And maxIlluminance flows into the motion-on luminance clause.
     rule = result["smind"]["services"]["mqtt-automations"]["rules"][
         "hall-motion-hue_ms_a"
     ]
@@ -1458,35 +1481,10 @@ def test_defaults_motion_sensor_per_entry_override_wins() -> None:
                 "occupancyTimeoutSeconds": 240,  # per-entry override
             },
         },
-        defaults_nix='''{
-          "motion-sensor" = { occupancyTimeoutSeconds = 120; };
-        }''',
+        defaults_nix=_full_defaults(occupancy=120),
     )
     devices = result["smind"]["services"]["hue-setup"]["config"]["devices"]
     assert devices["hue-ms-a"]["options"]["occupancy_timeout"] == 240
-
-
-def test_defaults_partial_override_preserves_other_scopes() -> None:
-    """Setting only `defaults.room.offCooldownSeconds` must NOT wipe
-    out the built-in `motion-sensor` defaults — they're separate
-    scopes and the merge is per-scope."""
-    result = _eval_define_rooms(
-        """{
-      hall = {
-        groupName = "hall"; id = 1; members = [ "hue-l-a/11" ];
-        devices = [ { device = "hue-ms-a"; } ];
-        scenes = defaultDayScenes;
-      };
-    }""",
-        defaults_nix='{ room = { offCooldownSeconds = 5; }; }',
-    )
-    devices = result["smind"]["services"]["hue-setup"]["config"]["devices"]
-    # Built-in motion-sensor defaults still apply
-    assert devices["hue-ms-a"]["options"] == {
-        "occupancy_timeout": 60,         # built-in default
-        "motion_sensitivity": "medium",  # built-in default
-        "led_indication": True,          # built-in default
-    }
 
 
 def test_defaults_validation_rejects_unknown_scope() -> None:
@@ -1498,7 +1496,14 @@ def test_defaults_validation_rejects_unknown_scope() -> None:
         devices = [ { device = "hue-s-a"; } ]; scenes = defaultDayScenes;
       };
     }""",
-        defaults_nix='{ rooms = { offCooldownSeconds = 5; }; }',  # `rooms` typo
+        defaults_nix='''{
+          rooms = { motionOffCooldownSeconds = 5; };  # `rooms` typo
+          room = { motionOffCooldownSeconds = 30; };
+          "motion-sensor" = {
+            occupancyTimeoutSeconds = 60; sensitivity = "medium";
+            ledIndication = true; maxIlluminance = 50;
+          };
+        }''',
     )
     assert "unknown scope" in err
     assert "rooms" in err
@@ -1513,10 +1518,19 @@ def test_defaults_validation_rejects_unknown_field_in_room_scope() -> None:
         devices = [ { device = "hue-s-a"; } ]; scenes = defaultDayScenes;
       };
     }""",
-        defaults_nix='{ room = { offCoolDownSeconds = 5; }; }',  # camelCase typo
+        defaults_nix='''{
+          room = {
+            motionOffCooldownSeconds = 30;
+            motionOffCooldownSeconds = 5;  # camelCase typo
+          };
+          "motion-sensor" = {
+            occupancyTimeoutSeconds = 60; sensitivity = "medium";
+            ledIndication = true; maxIlluminance = 50;
+          };
+        }''',
     )
     assert "unknown field" in err
-    assert "room.offCoolDownSeconds" in err
+    assert "room.motionOffCooldownSeconds" in err
 
 
 def test_defaults_validation_rejects_unknown_field_in_type_scope() -> None:
@@ -1529,71 +1543,82 @@ def test_defaults_validation_rejects_unknown_field_in_type_scope() -> None:
       };
     }""",
         defaults_nix='''{
-          "motion-sensor" = { sensetivity = "high"; };
-        }''',  # `sensetivity` typo
+          room = { motionOffCooldownSeconds = 30; };
+          "motion-sensor" = {
+            occupancyTimeoutSeconds = 60;
+            sensitivity = "medium";
+            ledIndication = true;
+            maxIlluminance = 50;
+            sensetivity = "high";  # typo
+          };
+        }''',
     )
     assert "unknown field" in err
     assert "motion-sensor.sensetivity" in err
 
 
-def test_defaults_omitted_uses_builtins() -> None:
-    """Omitting `defaults` entirely (well, passing `{ }`) lands the
-    built-in values: 30s offCooldown, 60s timeout, medium sensitivity,
-    50 lux threshold."""
-    result = _eval_define_rooms(
+def test_defaults_validation_rejects_missing_required_scope() -> None:
+    """`defaults` must contain every required scope. Omitting one
+    fails up front rather than producing a confusing downstream
+    error when the renderer tries to read the missing field."""
+    err = _eval_expect_error(
         """{
       hall = {
         groupName = "hall"; id = 1; members = [ "hue-l-a/11" ];
-        devices = [ { device = "hue-ms-a"; } ];
-        scenes = defaultDayScenes;
+        devices = [ { device = "hue-s-a"; } ]; scenes = defaultDayScenes;
       };
-    }"""
+    }""",
+        defaults_nix='{ room = { motionOffCooldownSeconds = 30; }; }',
     )
-    rule = result["smind"]["services"]["mqtt-automations"]["rules"][
-        "hall-motion-hue_ms_a"
-    ]
-    _assert_handler_check_contains(rule, "motion-on", "30000")  # 30s
-    _assert_handler_check_contains(rule, "motion-on", "< 50")   # 50 lux
-    devices = result["smind"]["services"]["hue-setup"]["config"]["devices"]
-    assert devices["hue-ms-a"]["options"] == {
-        "occupancy_timeout": 60,
-        "motion_sensitivity": "medium",
-        "led_indication": True,
-    }
+    assert "missing required scope" in err
+    assert "motion-sensor" in err
 
 
-# ---------- members attrset shape ----------
+def test_defaults_validation_rejects_missing_required_field() -> None:
+    """`defaults.<scope>` must contain every required field for that
+    scope. Omitting one fails up front."""
+    err = _eval_expect_error(
+        """{
+      hall = {
+        groupName = "hall"; id = 1; members = [ "hue-l-a/11" ];
+        devices = [ { device = "hue-ms-a"; } ]; scenes = defaultDayScenes;
+      };
+    }""",
+        defaults_nix='''{
+          room = { motionOffCooldownSeconds = 30; };
+          "motion-sensor" = {
+            occupancyTimeoutSeconds = 60;
+            sensitivity = "medium";
+            ledIndication = true;
+            # maxIlluminance deliberately omitted
+          };
+        }''',
+    )
+    assert "missing required field" in err
+    assert "motion-sensor.maxIlluminance" in err
 
 
-def test_members_accept_attrset_form() -> None:
-    """Members can be either `"<name>/<endpoint>"` strings (legacy)
-    or `{ device = "<ref>"; endpoint ? 11; }` attrsets (new). Both
-    forms resolve to the same canonical `<friendly>/<endpoint>`."""
-    result = _eval_define_rooms(
+# ---------- members shape ----------
+
+
+def test_members_must_be_string_form() -> None:
+    """Members are strings of the form `"<name>/<endpoint>"`. The
+    attrset form `{ device = ...; }` is NOT accepted — that shape
+    only applies to the unified `room.devices` list (controls), not
+    to `members` (the bulb roster). Catches accidental copy-paste
+    between the two fields."""
+    err = _eval_expect_error(
         """{
       hall = {
         groupName = "hall"; id = 1;
-        members = [
-          { device = "hue-l-a"; }              # default endpoint
-          { device = "hue-l-b"; endpoint = 22; } # explicit endpoint
-          "hue-l-c/11"                          # legacy string form
-        ];
+        members = [ { device = "hue-l-a"; } ];
         devices = [ { device = "hue-s-foo"; } ];
         scenes = defaultDayScenes;
       };
     }""",
-        devices_by_address={
-            "0xaaaa": {"type": "light", "name": "hue-l-a"},
-            "0xbbbb": {"type": "light", "name": "hue-l-b"},
-            "0xcccc": {"type": "light", "name": "hue-l-c"},
-            "0xdddd": {"type": "switch", "name": "hue-s-foo"},
-        },
     )
-    group = result["smind"]["services"]["hue-setup"]["config"]["groups"]["hall"]
-    assert group["members"] == [
-        "hue-l-a/11",
-        "hue-l-b/22",
-        "hue-l-c/11",
-    ]
+    # The error comes from the bloblang split inside the resolver:
+    # an attrset can't be coerced to a string.
+    assert "members" in err.lower() or "coerce" in err.lower()
 
 
