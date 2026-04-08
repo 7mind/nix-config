@@ -377,12 +377,59 @@ let
         ];
     };
 
+  # The set of cache resource labels that the rendered bento config
+  # will declare. Built from each rule's `cacheLabel` (deduped). Used
+  # both to emit `cache_resources` AND to validate that every
+  # `extraCacheWrites` entry's `resource` field references one of
+  # these — a dangling reference makes bento exit at startup with
+  # "cache resource X was not found", which `bento lint` does NOT
+  # catch (it's a runtime resource-init check, not a syntax check).
+  declaredCacheLabels = lib.unique
+    (lib.mapAttrsToList ruleCacheLabel cfg.rules);
+
+  # Walk every handler in every rule, collect each `extraCacheWrites`
+  # entry, and report any that target a cache resource not in
+  # `declaredCacheLabels`. Returns a list of human-readable error
+  # strings; empty if everything checks out.
+  extraCacheWritesValidationErrors =
+    let
+      collectFromRule = ruleName: rule:
+        lib.concatLists (lib.mapAttrsToList
+          (handlerName: handler:
+            let extras = handler.extraCacheWrites or [ ]; in
+            lib.filter (e: !(lib.elem e.resource declaredCacheLabels))
+              (lib.map
+                (entry: entry // { inherit ruleName handlerName; })
+                extras))
+          rule.handlers);
+    in
+    lib.concatLists (lib.mapAttrsToList collectFromRule cfg.rules);
+
+  # Force the validation by referencing it from `bentoConfig`.
+  # `lib.warn` would be too soft — a dangling resource reference
+  # makes bento exit at startup, taking the entire automation
+  # process down with it. Fail the build instead.
+  validatedExtraCacheWrites =
+    if extraCacheWritesValidationErrors == [ ] then null
+    else
+      throw (
+        "mqtt-automations: extraCacheWrites references undeclared "
+        + "cache resources (bento would fail to init at runtime):\n  "
+        + lib.concatStringsSep "\n  "
+            (lib.map
+              (e:
+                "rule '${e.ruleName}' handler '${e.handlerName}' "
+                + "→ resource '${e.resource}' (not in: "
+                + "${lib.concatStringsSep ", " declaredCacheLabels})")
+              extraCacheWritesValidationErrors)
+      );
+
   # Single bento config rendered from all rules. Uses a `broker` input to
   # combine each rule's source topic into one process, dispatches in the
   # pipeline by `meta("mqtt_topic")` (which the mqtt input populates
   # automatically), and publishes to a per-message dynamic topic via
   # `${! meta("out_topic") }` interpolation.
-  bentoConfig = {
+  bentoConfig = builtins.seq validatedExtraCacheWrites {
     http.enabled = false;
 
     # In-memory cache resources for cycle/debounce/flag state. By default
@@ -394,7 +441,7 @@ let
     # cycle indices and debounce windows. That's intentional.
     cache_resources = lib.map
       (label: { inherit label; memory = { }; })
-      (lib.unique (lib.mapAttrsToList ruleCacheLabel cfg.rules));
+      declaredCacheLabels;
 
     input = {
       # Dedupe MQTT inputs by source topic. Two rules can legitimately

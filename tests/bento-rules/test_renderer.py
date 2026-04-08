@@ -1640,24 +1640,30 @@ def test_child_room_handlers_have_no_invalidation() -> None:
 
 
 def test_parent_invalidates_multiple_children() -> None:
-    """A parent with several children invalidates all of them."""
+    """A parent with several children invalidates all of them.
+    Each child has its own switch (so each gets a rule and a
+    declared cache resource — rule-less children are filtered out
+    of the invalidation list to avoid dangling cache.set targets)."""
     result = _eval_rooms_list(
         """[
       { name = "a"; parent = "all"; id = 1; members = [ "hue-l-a/11" ];
-        devices = [ ]; scenes = defaultDayScenes; }
+        devices = [ "hue-s-a" ]; scenes = defaultDayScenes; }
       { name = "b"; parent = "all"; id = 2; members = [ "hue-l-b/11" ];
-        devices = [ ]; scenes = defaultDayScenes; }
+        devices = [ "hue-s-b" ]; scenes = defaultDayScenes; }
       { name = "c"; parent = "all"; id = 3; members = [ "hue-l-c/11" ];
-        devices = [ ]; scenes = defaultDayScenes; }
+        devices = [ "hue-s-c" ]; scenes = defaultDayScenes; }
       { name = "all"; id = 4;
         members = [ "hue-l-a/11" "hue-l-b/11" "hue-l-c/11" ];
-        devices = [ "hue-s-foo" ]; scenes = defaultDayScenes; }
+        devices = [ "hue-s-all" ]; scenes = defaultDayScenes; }
     ]""",
         devices_by_address={
             "0xaaaa": {"type": "light", "name": "hue-l-a"},
             "0xbbbb": {"type": "light", "name": "hue-l-b"},
             "0xcccc": {"type": "light", "name": "hue-l-c"},
-            "0xdddd": {"type": "switch", "name": "hue-s-foo"},
+            "0xdddd": {"type": "switch", "name": "hue-s-a"},
+            "0xeeee": {"type": "switch", "name": "hue-s-b"},
+            "0xffff": {"type": "switch", "name": "hue-s-c"},
+            "0xff00": {"type": "switch", "name": "hue-s-all"},
         },
     )
     off_writes = result["smind"]["services"]["mqtt-automations"]["rules"][
@@ -1676,11 +1682,13 @@ def test_motion_handlers_also_invalidate_children() -> None:
     """A motion sensor in a parent room must also clear children
     when motion-on/motion-off fires — same reasoning as for taps
     and switches: the parent's state change covers all the
-    children's bulbs."""
+    children's bulbs. The child needs at least one device so its
+    cache resource gets declared (rule-less children are filtered
+    out to avoid dangling cache.set references)."""
     result = _eval_rooms_list(
         """[
       { name = "sub"; parent = "all"; id = 1; members = [ "hue-l-a/11" ];
-        devices = [ ]; scenes = defaultDayScenes; }
+        devices = [ "hue-s-sub" ]; scenes = defaultDayScenes; }
       { name = "all"; id = 2;
         members = [ "hue-l-a/11" "hue-l-b/11" ];
         devices = [ "hue-ms-a" ]; scenes = defaultDayScenes; }
@@ -1689,6 +1697,7 @@ def test_motion_handlers_also_invalidate_children() -> None:
             "0xaaaa": {"type": "light", "name": "hue-l-a"},
             "0xbbbb": {"type": "light", "name": "hue-l-b"},
             "0xcccc": {"type": "motion-sensor", "name": "hue-ms-a"},
+            "0xdddd": {"type": "switch", "name": "hue-s-sub"},
         },
     )
     motion_handlers = result["smind"]["services"]["mqtt-automations"]["rules"][
@@ -1739,6 +1748,139 @@ def test_validation_rejects_unknown_parent() -> None:
     )
     assert "parent 'ghost'" in err
     assert "not a known room" in err
+
+
+def test_validation_rejects_parent_chain_cycle() -> None:
+    """A multi-room parent cycle (`A → B → A`) is caught up front,
+    so the transitive descendant expansion doesn't infinite-loop."""
+    err = _expect_rooms_list_error(
+        """[
+      {
+        name = "a"; parent = "b";
+        id = 1; members = [ "hue-l-a/11" ];
+        devices = [ "hue-s-foo" ]; scenes = defaultDayScenes;
+      }
+      {
+        name = "b"; parent = "a";
+        id = 2; members = [ "hue-l-b/11" ];
+        devices = [ "hue-s-foo2" ]; scenes = defaultDayScenes;
+      }
+    ]""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "light", "name": "hue-l-b"},
+            "0xcccc": {"type": "switch", "name": "hue-s-foo"},
+            "0xdddd": {"type": "switch", "name": "hue-s-foo2"},
+        },
+    )
+    assert "parent chain cycle" in err
+
+
+def test_invalidation_propagates_through_multi_level_hierarchy() -> None:
+    """Pressing an ancestor must clear EVERY descendant, not just
+    the direct children. With a 3-level hierarchy
+    (grandparent → parent → child), pressing grandparent's
+    handler should emit invalidation entries for both parent AND
+    child."""
+    result = _eval_rooms_list(
+        """[
+      {
+        name = "child"; parent = "parent";
+        id = 1; members = [ "hue-l-a/11" ];
+        devices = [ "hue-s-child" ]; scenes = defaultDayScenes;
+      }
+      {
+        name = "parent"; parent = "grandparent";
+        id = 2; members = [ "hue-l-a/11" "hue-l-b/11" ];
+        devices = [ "hue-s-parent" ]; scenes = defaultDayScenes;
+      }
+      {
+        name = "grandparent";
+        id = 3; members = [ "hue-l-a/11" "hue-l-b/11" "hue-l-c/11" ];
+        devices = [ "hue-s-top" ]; scenes = defaultDayScenes;
+      }
+    ]""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "light", "name": "hue-l-b"},
+            "0xcccc": {"type": "light", "name": "hue-l-c"},
+            "0xdddd": {"type": "switch", "name": "hue-s-top"},
+            "0xeeee": {"type": "switch", "name": "hue-s-parent"},
+            "0xffff": {"type": "switch", "name": "hue-s-child"},
+        },
+    )
+    off_writes = result["smind"]["services"]["mqtt-automations"]["rules"][
+        "grandparent-switch"
+    ]["handlers"]["off_press_release"]["extraCacheWrites"]
+    resources = {w["resource"] for w in off_writes}
+    # Both parent (direct child) AND child (grandchild) must be
+    # invalidated when grandparent fires.
+    assert resources == {"room_parent", "room_child"}, (
+        f"grandparent press should invalidate every descendant, got {resources}"
+    )
+
+
+def test_sibling_rooms_do_not_invalidate_each_other() -> None:
+    """Sibling rooms (rooms with the same parent but no parent-child
+    link between them) MUST NOT invalidate each other. Catches the
+    inverse mistake — accidentally over-broadcasting invalidation."""
+    result = _eval_rooms_list(
+        """[
+      { name = "a"; parent = "all";
+        id = 1; members = [ "hue-l-a/11" ];
+        devices = [ "hue-s-a" ]; scenes = defaultDayScenes; }
+      { name = "b"; parent = "all";
+        id = 2; members = [ "hue-l-b/11" ];
+        devices = [ "hue-s-b" ]; scenes = defaultDayScenes; }
+      { name = "all";
+        id = 3; members = [ "hue-l-a/11" "hue-l-b/11" ];
+        devices = [ ]; scenes = defaultDayScenes; }
+    ]""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "light", "name": "hue-l-b"},
+            "0xcccc": {"type": "switch", "name": "hue-s-a"},
+            "0xdddd": {"type": "switch", "name": "hue-s-b"},
+        },
+    )
+    rules = result["smind"]["services"]["mqtt-automations"]["rules"]
+    # Sibling 'a' has no descendants → no invalidation entries.
+    a_off = rules["a-switch"]["handlers"]["off_press_release"]["extraCacheWrites"]
+    assert a_off == []
+    # Sibling 'b' has no descendants → no invalidation entries.
+    b_off = rules["b-switch"]["handlers"]["off_press_release"]["extraCacheWrites"]
+    assert b_off == []
+
+
+def test_child_press_does_not_affect_parent_state() -> None:
+    """The inverse direction: pressing a CHILD must not invalidate
+    the parent's state. Parent state stays whatever it was so the
+    next parent press goes through the right state-machine branch."""
+    result = _eval_rooms_list(
+        """[
+      { name = "child"; parent = "parent";
+        id = 1; members = [ "hue-l-a/11" ];
+        devices = [ "hue-s-c" ]; scenes = defaultDayScenes; }
+      { name = "parent";
+        id = 2; members = [ "hue-l-a/11" "hue-l-b/11" ];
+        devices = [ "hue-s-p" ]; scenes = defaultDayScenes; }
+    ]""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "light", "name": "hue-l-b"},
+            "0xcccc": {"type": "switch", "name": "hue-s-c"},
+            "0xdddd": {"type": "switch", "name": "hue-s-p"},
+        },
+    )
+    rules = result["smind"]["services"]["mqtt-automations"]["rules"]
+    # Child has no descendants — no invalidation.
+    child_off = rules["child-switch"]["handlers"]["off_press_release"]["extraCacheWrites"]
+    assert child_off == []
+    # Parent has one descendant (the child) — invalidates child only.
+    parent_off = rules["parent-switch"]["handlers"]["off_press_release"]["extraCacheWrites"]
+    assert parent_off == [{
+        "resource": "room_child", "key": "lights_state", "value": "",
+    }]
 
 
 # ---------- type-aware validation (devices catalog) ----------
