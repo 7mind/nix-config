@@ -41,6 +41,19 @@ let
         })
         writes;
 
+      # Render `extraCacheWrites` as a list of cache.set processors
+      # targeting ARBITRARY cache resources (not just the rule's
+      # own). Each entry already carries an explicit `resource`
+      # field. Used for cross-room invalidation.
+      mkExtraCacheWrites = writes: lib.map
+        (entry: {
+          cache = {
+            inherit (entry) resource key value;
+            operator = "set";
+          };
+        })
+        writes;
+
       mkCase = action: handler:
         let
           isCycle = handler.cycle != null;
@@ -95,7 +108,10 @@ let
               check = checkExpr;
               processors = [
                 { mapping = publishMappingText; }
-              ] ++ resetProcessors ++ mkCacheWrites handler.cacheWrites;
+              ]
+              ++ resetProcessors
+              ++ mkCacheWrites handler.cacheWrites
+              ++ mkExtraCacheWrites handler.extraCacheWrites;
             };
 
           debounceMs = handler.cycle.debounceMs;
@@ -274,7 +290,9 @@ let
                     value = "\${! meta(\"${handler.cycle.stateKey}_next\") }";
                   };
                 }
-              ] ++ mkCacheWrites handler.cycle.cacheWrites;
+              ]
+              ++ mkCacheWrites handler.cycle.cacheWrites
+              ++ mkExtraCacheWrites handler.extraCacheWrites;
             };
         in
         if isCycle && isPublish then
@@ -657,6 +675,39 @@ in
                     cross-handler flags such as `lights_state` for
                     motion-sensor cancellation. Writes are emitted as
                     cache.set processors against the rule's cacheLabel.
+                  '';
+                };
+                extraCacheWrites = lib.mkOption {
+                  type = lib.types.listOf (lib.types.submodule {
+                    options = {
+                      resource = lib.mkOption {
+                        type = lib.types.str;
+                        description = "Cache resource label to write to.";
+                      };
+                      key = lib.mkOption {
+                        type = lib.types.str;
+                        description = "Cache key.";
+                      };
+                      value = lib.mkOption {
+                        type = lib.types.str;
+                        description = ''
+                          Cache value (string, supports bento
+                          `''${! ... }` interpolation).
+                        '';
+                      };
+                    };
+                  });
+                  default = [ ];
+                  description = ''
+                    Additional cache writes to ARBITRARY cache
+                    resources beyond the rule's own `cacheLabel`.
+                    Each entry is a fully-qualified
+                    `{ resource; key; value; }` triple. Used for
+                    cross-room invalidation: when a parent room's
+                    handler fires (e.g. kitchen-all turns off), it
+                    writes `lights_state = ""` to every child
+                    room's cache resource so the children's stale
+                    state machine doesn't trip up later presses.
                   '';
                 };
                 cycle = lib.mkOption {

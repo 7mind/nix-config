@@ -1380,3 +1380,156 @@ def test_tap_cycle_after_off_starts_fresh_from_first_scene(
         {"state": "OFF", "transition": 0.8},
         {"scene_recall": 1},  # cycle reset
     ]
+
+
+# ---------- parent/child invalidation (cross-room) ----------
+
+
+def _tap_parent_child_config() -> str:
+    """Two per-binding tap rules sharing one source topic, with
+    parent → child invalidation: pressing button 1 (the parent)
+    clears the child's `lights_state` via `extraCacheWrites`.
+
+    Mirrors the production `mkTapButtonRule` shape:
+      * `child` rule: cacheLabel = "room_child", standard 3-handler
+        state machine, no `extraCacheWrites`.
+      * `parent` rule: cacheLabel = "room_parent", standard 3-handler
+        state machine, every handler ALSO writes
+        `lights_state = ""` to "room_child" via `extraCacheWrites`.
+    """
+    delta_expr = (
+        '(timestamp_unix_milli() - '
+        'meta("tap_last_press_ms").or("0").number().or(0))'
+    )
+    lights_on_pred = '(meta("lights_state").or("")) != ""'
+    advance_mapping = (
+        'let scene_ids = [1, 2, 3]\n'
+        'let n = $scene_ids.length()\n'
+        'let cur_idx = (meta("tap_cycle_idx").or("0").number().or(0))\n'
+        'let next_idx = ($cur_idx + 1) % $n\n'
+        'meta tap_cycle_idx_next = $next_idx.string()\n'
+        'root = {"scene_recall": $scene_ids.index($next_idx)}\n'
+    )
+
+    def make_handlers(extra_writes):
+        return {
+            "lights_off_press": {
+                "check": '(meta("lights_state").or("")) == ""',
+                "publish": {"scene_recall": 1},
+                "cacheWrites": {
+                    "lights_state": "user",
+                    "tap_cycle_idx": "0",
+                    "tap_last_press_ms": '${! timestamp_unix_milli() }',
+                },
+                "extraCacheWrites": extra_writes,
+            },
+            "cycle_press": {
+                "check": f'{lights_on_pred} && {delta_expr} < 1000',
+                "publishMapping": advance_mapping,
+                "cacheWrites": {
+                    "lights_state": "user",
+                    "tap_cycle_idx": '${! meta("tap_cycle_idx_next") }',
+                    "tap_last_press_ms": '${! timestamp_unix_milli() }',
+                },
+                "extraCacheWrites": extra_writes,
+            },
+            "expire_press": {
+                "check": f'{lights_on_pred} && {delta_expr} >= 1000',
+                "publish": {"state": "OFF"},
+                "cacheWrites": {
+                    "lights_state": "",
+                    "tap_cycle_idx": "0",
+                    "tap_last_press_ms": '${! timestamp_unix_milli() }',
+                },
+                "extraCacheWrites": extra_writes,
+            },
+        }
+
+    rules = {
+        "child-binding": {
+            "source": TAP_SOURCE,
+            "sourceFilter": (
+                f'meta("mqtt_topic") == "{TAP_SOURCE}"'
+                ' && content().string() == "press_2"'
+            ),
+            "target": TAP_TARGET_A,
+            "format": "action",
+            "cacheLabel": "room_child",
+            "cacheReads": [
+                "lights_state", "tap_cycle_idx", "tap_last_press_ms",
+            ],
+            "handlers": make_handlers([]),
+        },
+        "parent-binding": {
+            "source": TAP_SOURCE,
+            "sourceFilter": (
+                f'meta("mqtt_topic") == "{TAP_SOURCE}"'
+                ' && content().string() == "press_1"'
+            ),
+            "target": TAP_TARGET_B,
+            "format": "action",
+            "cacheLabel": "room_parent",
+            "cacheReads": [
+                "lights_state", "tap_cycle_idx", "tap_last_press_ms",
+            ],
+            "handlers": make_handlers([
+                {"resource": "room_child", "key": "lights_state", "value": ""},
+            ]),
+        },
+    }
+    return _render_bento_config(rules)
+
+
+def test_parent_press_clears_child_state_no_double_press(
+    bento_runner: BentoRunner,
+    mqtt_client: tuple[mqtt.Client, MqttInbox],
+) -> None:
+    """The user-reported bug: child→parent→parent off→child should
+    NOT require two presses on the child. Without parent→child
+    invalidation, the child's stale `lights_state="user"` from the
+    first press routes the next child press into the expire path
+    (off) instead of the lights_off path (on)."""
+    client, inbox = mqtt_client
+    bento_runner(_tap_parent_child_config())
+    _subscribe(client, TAP_TARGET_A)  # child target
+    _subscribe(client, TAP_TARGET_B)  # parent target
+
+    # 1. Press child (button 2) → child on, scene 1
+    _publish(client, TAP_SOURCE, "press_2")
+    time.sleep(0.15)
+
+    # 2. Press parent (button 1) → parent on, scene 1.
+    #    Parent's handler ALSO clears child's lights_state.
+    _publish(client, TAP_SOURCE, "press_1")
+    time.sleep(1.5)  # > cyclePauseMs so the next parent press is "expire"
+
+    # 3. Press parent (button 1) → parent off (expire path).
+    #    Parent's expire handler again clears child's lights_state
+    #    (no-op since it was already cleared in step 2).
+    _publish(client, TAP_SOURCE, "press_1")
+    time.sleep(0.15)
+
+    # 4. Press child (button 2) → child should turn ON (scene 1)
+    #    on the FIRST press, not the second. With invalidation
+    #    working, child.lights_state is "" so this hits the
+    #    lights_off_press path → scene_recall: 1.
+    _publish(client, TAP_SOURCE, "press_2")
+    time.sleep(0.15)
+
+    # Child target receives exactly two messages: scene 1 (step 1)
+    # and scene 1 again (step 4 — fresh on, not OFF).
+    child_payloads = [json.loads(p) for p in inbox.payloads_on(TAP_TARGET_A)]
+    assert child_payloads == [
+        {"scene_recall": 1},  # step 1
+        {"scene_recall": 1},  # step 4 — KEY ASSERTION: not {"state": "OFF"}
+    ], (
+        f"child press after parent OFF should turn ON immediately, "
+        f"not require two presses. got: {child_payloads}"
+    )
+
+    # Parent target sees: on (step 2) + off (step 3).
+    parent_payloads = [json.loads(p) for p in inbox.payloads_on(TAP_TARGET_B)]
+    assert parent_payloads == [
+        {"scene_recall": 1},  # step 2
+        {"state": "OFF"},     # step 3
+    ]

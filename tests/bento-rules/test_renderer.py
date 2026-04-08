@@ -1557,6 +1557,190 @@ def test_tap_button_with_slotted_scenes_picks_active_slot() -> None:
     assert "$scene_ids.index($next_idx)" in cycle_mapping
 
 
+# ---------- parent/child invalidation ----------
+
+
+def test_parent_room_handlers_emit_child_lights_state_invalidation() -> None:
+    """When a parent room's handler fires (tap on/cycle/expire),
+    every child's `lights_state` is cleared via `extraCacheWrites`.
+    Without this, pressing a child after a parent press leaves the
+    child's stale `lights_state="user"` in place and the next press
+    routes to the wrong handler."""
+    result = _eval_rooms_list(
+        """[
+      {
+        name = "kitchen-cooker";
+        parent = "kitchen-all";
+        id = 15;
+        members = [ "hue-l-cooker/11" ];
+        devices = [ { device = "hue-ts-foo"; button = 2; } ];
+        scenes = defaultDayScenes;
+      }
+      {
+        name = "kitchen-all";
+        id = 18;
+        members = [ "hue-l-cooker/11" "hue-l-other/11" ];
+        devices = [ { device = "hue-ts-foo"; button = 1; } ];
+        scenes = defaultDayScenes;
+      }
+    ]""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-cooker"},
+            "0xbbbb": {"type": "light", "name": "hue-l-other"},
+            "0xcccc": {"type": "tap", "name": "hue-ts-foo"},
+        },
+    )
+    rules = result["smind"]["services"]["mqtt-automations"]["rules"]
+    parent_handlers = rules["kitchen-all-tap-hue_ts_foo-1"]["handlers"]
+
+    expected_invalidation = [{
+        "resource": "room_kitchen_cooker",
+        "key": "lights_state",
+        "value": "",
+    }]
+    assert parent_handlers["lights_off_press"]["extraCacheWrites"] == expected_invalidation
+    assert parent_handlers["cycle_press"]["extraCacheWrites"] == expected_invalidation
+    assert parent_handlers["expire_press"]["extraCacheWrites"] == expected_invalidation
+
+
+def test_child_room_handlers_have_no_invalidation() -> None:
+    """The child's own handlers don't invalidate anything — only
+    parent handlers do. The child's press is "below" the parent in
+    the topology so the parent's state stays intact."""
+    result = _eval_rooms_list(
+        """[
+      {
+        name = "kitchen-cooker";
+        parent = "kitchen-all";
+        id = 15;
+        members = [ "hue-l-cooker/11" ];
+        devices = [ { device = "hue-ts-foo"; button = 2; } ];
+        scenes = defaultDayScenes;
+      }
+      {
+        name = "kitchen-all";
+        id = 18;
+        members = [ "hue-l-cooker/11" "hue-l-other/11" ];
+        devices = [ { device = "hue-ts-foo"; button = 1; } ];
+        scenes = defaultDayScenes;
+      }
+    ]""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-cooker"},
+            "0xbbbb": {"type": "light", "name": "hue-l-other"},
+            "0xcccc": {"type": "tap", "name": "hue-ts-foo"},
+        },
+    )
+    child_handlers = result["smind"]["services"]["mqtt-automations"]["rules"][
+        "kitchen-cooker-tap-hue_ts_foo-2"
+    ]["handlers"]
+    assert child_handlers["lights_off_press"]["extraCacheWrites"] == []
+    assert child_handlers["cycle_press"]["extraCacheWrites"] == []
+    assert child_handlers["expire_press"]["extraCacheWrites"] == []
+
+
+def test_parent_invalidates_multiple_children() -> None:
+    """A parent with several children invalidates all of them."""
+    result = _eval_rooms_list(
+        """[
+      { name = "a"; parent = "all"; id = 1; members = [ "hue-l-a/11" ];
+        devices = [ ]; scenes = defaultDayScenes; }
+      { name = "b"; parent = "all"; id = 2; members = [ "hue-l-b/11" ];
+        devices = [ ]; scenes = defaultDayScenes; }
+      { name = "c"; parent = "all"; id = 3; members = [ "hue-l-c/11" ];
+        devices = [ ]; scenes = defaultDayScenes; }
+      { name = "all"; id = 4;
+        members = [ "hue-l-a/11" "hue-l-b/11" "hue-l-c/11" ];
+        devices = [ "hue-s-foo" ]; scenes = defaultDayScenes; }
+    ]""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "light", "name": "hue-l-b"},
+            "0xcccc": {"type": "light", "name": "hue-l-c"},
+            "0xdddd": {"type": "switch", "name": "hue-s-foo"},
+        },
+    )
+    off_writes = result["smind"]["services"]["mqtt-automations"]["rules"][
+        "all-switch"
+    ]["handlers"]["off_press_release"]["extraCacheWrites"]
+    resources = {w["resource"] for w in off_writes}
+    assert resources == {"room_a", "room_b", "room_c"}
+    # Same invalidation also applied to the cycle handler.
+    cycle_writes = result["smind"]["services"]["mqtt-automations"]["rules"][
+        "all-switch"
+    ]["handlers"]["on_press_release"]["extraCacheWrites"]
+    assert {w["resource"] for w in cycle_writes} == {"room_a", "room_b", "room_c"}
+
+
+def test_motion_handlers_also_invalidate_children() -> None:
+    """A motion sensor in a parent room must also clear children
+    when motion-on/motion-off fires — same reasoning as for taps
+    and switches: the parent's state change covers all the
+    children's bulbs."""
+    result = _eval_rooms_list(
+        """[
+      { name = "sub"; parent = "all"; id = 1; members = [ "hue-l-a/11" ];
+        devices = [ ]; scenes = defaultDayScenes; }
+      { name = "all"; id = 2;
+        members = [ "hue-l-a/11" "hue-l-b/11" ];
+        devices = [ "hue-ms-a" ]; scenes = defaultDayScenes; }
+    ]""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "light", "name": "hue-l-b"},
+            "0xcccc": {"type": "motion-sensor", "name": "hue-ms-a"},
+        },
+    )
+    motion_handlers = result["smind"]["services"]["mqtt-automations"]["rules"][
+        "all-motion-hue_ms_a"
+    ]["handlers"]
+    assert motion_handlers["motion-on"]["extraCacheWrites"] == [{
+        "resource": "room_sub", "key": "lights_state", "value": "",
+    }]
+    assert motion_handlers["motion-off"]["extraCacheWrites"] == [{
+        "resource": "room_sub", "key": "lights_state", "value": "",
+    }]
+
+
+def test_validation_rejects_self_parent() -> None:
+    """A room can't be its own parent."""
+    err = _expect_rooms_list_error(
+        """[
+      {
+        name = "loop";
+        parent = "loop";
+        id = 1; members = [ "hue-l-a/11" ];
+        devices = [ "hue-s-a" ]; scenes = defaultDayScenes;
+      }
+    ]""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "switch", "name": "hue-s-a"},
+        },
+    )
+    assert "lists itself as `parent`" in err
+
+
+def test_validation_rejects_unknown_parent() -> None:
+    """A room whose parent doesn't exist fails the build."""
+    err = _expect_rooms_list_error(
+        """[
+      {
+        name = "child";
+        parent = "ghost";
+        id = 1; members = [ "hue-l-a/11" ];
+        devices = [ "hue-s-a" ]; scenes = defaultDayScenes;
+      }
+    ]""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "switch", "name": "hue-s-a"},
+        },
+    )
+    assert "parent 'ghost'" in err
+    assert "not a known room" in err
+
+
 # ---------- type-aware validation (devices catalog) ----------
 
 
