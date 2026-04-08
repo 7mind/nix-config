@@ -1,4 +1,4 @@
-name: nixox-config
+name: nixos-config
 
 on:
   push:
@@ -45,8 +45,8 @@ jobs:
               rmdir "$mod"
             fi
           done
-          nix flake check --no-build
-  build-max:
+          nix flake check --no-build '.'
+  build-mac:
     strategy:
       fail-fast: false
       matrix:
@@ -73,4 +73,4 @@ jobs:
               rmdir "$mod"
             fi
           done
-          nix flake check --no-build
+          nix flake check --no-build '.'

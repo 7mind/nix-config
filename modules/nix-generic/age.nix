@@ -19,7 +19,9 @@ let
     then import secretsFile { inherit cfg-meta owner group; }
     else {};
   hostPubkey = config.age.rekey.hostPubkey;
-  hostPubkeySet = hostPubkey != null && hostPubkey != "";
+  # agenix-rekey's "not yet configured" placeholder; treat as unset here.
+  agenixRekeyDummyPubkey = "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs3290gq";
+  hostPubkeySet = hostPubkey != null && hostPubkey != "" && hostPubkey != agenixRekeyDummyPubkey;
   hostPubkeyPattern = "^ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI[0-9A-Za-z+/]+={0,3}$";
 in
 {
