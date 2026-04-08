@@ -94,7 +94,7 @@
 
         music-meta-fix = pkgs.callPackage "${cfg-meta.paths.pkg}/music-meta-fix/default.nix" { };
 
-        hue-setup = pkgs.callPackage "${cfg-meta.paths.pkg}/hue-setup/default.nix" { };
+        hue-controller = pkgs.callPackage "${cfg-meta.paths.pkg}/hue-controller/default.nix" { };
 
         zigbee-mqtt-import = pkgs.callPackage "${cfg-meta.paths.pkg}/zigbee-mqtt-import/default.nix" { };
         linux-3-finger-drag = pkgs.callPackage "${cfg-meta.paths.pkg}/linux-3-finger-drag/default.nix" { };

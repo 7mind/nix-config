@@ -1,0 +1,1490 @@
+//! The runtime controller. Holds the immutable [`Topology`] and the
+//! mutable per-zone [`ZoneState`] map. One entry point —
+//! [`Controller::handle_event`] — that the daemon's main loop calls for
+//! every incoming MQTT message.
+//!
+//! Pure-ish:
+//!
+//!   * It mutates `self` (the in-memory state map). The daemon owns the
+//!     only copy, so this is fine for the controller's serial event loop.
+//!   * It reads "now" from a [`Clock`]. Tests inject a [`FakeClock`].
+//!   * It does NOT touch MQTT or any other I/O. Side effects flow OUT
+//!     via the returned `Vec<Action>`.
+//!
+//! ## State machine summary
+//!
+//! For every room, we keep a [`ZoneState`] holding:
+//!   - `physically_on`  — last known physical state (refreshed from
+//!     `zigbee2mqtt/<group>` retained messages on startup, then updated
+//!     every time we publish or receive a group state)
+//!   - `cycle_idx`      — index into the active slot's cycle list
+//!   - `last_press_at`  — Instant of the room's most recent cycle press
+//!     (used by the cycle window comparison)
+//!   - `motion_owned`   — true if the lights were turned on by motion
+//!     (only motion-on can transition to motion-off; user presses clear
+//!     this flag)
+//!   - `motion_active_by_sensor` — per-sensor occupancy flags (multi-
+//!     sensor OR-gate so motion-off only fires when *every* sensor is
+//!     idle)
+//!   - `last_off_at`    — Instant of the most recent OFF (motion
+//!     cooldown gate)
+//!
+//! ### Cycle button (wall switch `on_press_release`, tap button)
+//!
+//! Unified semantics across both kinds of cycle button:
+//!   1. If `!physically_on` → fresh on. Publish first scene of the
+//!      active slot. Reset cycle to 1, mark `last_press_at = now`,
+//!      `motion_owned = false`.
+//!   2. If `physically_on` AND `now - last_press_at < cycle_window`
+//!      → cycle. Publish next scene (`cycle_idx + 1` mod N). Update
+//!      `cycle_idx`, `last_press_at`, clear `motion_owned`.
+//!   3. If `physically_on` AND `now - last_press_at >= cycle_window`
+//!      → expire. Publish state OFF. Reset cycle, clear `motion_owned`,
+//!      stamp `last_off_at`.
+//!
+//! After every transition, we propagate the new physical state to every
+//! transitive descendant: descendants get their `physically_on` set, their
+//! `last_press_at` cleared (so the next press takes the expire branch),
+//! their `cycle_idx` reset.
+//!
+//! ### Wall switch off button
+//!
+//! Always immediate OFF, regardless of state. Same propagation as expire.
+//!
+//! ### Wall switch brightness buttons
+//!
+//! `up_press_release` → brightness step +N; `down_press_release` → -N.
+//! `up_hold` → brightness move +rate; `*_hold_release` → move 0.
+//! These don't touch `cycle_idx` or `last_press_at` — they're brightness
+//! adjustments, not cycle steps.
+//!
+//! ### Motion sensor
+//!
+//! `motion-on` fires iff:
+//!   - this sensor reports occupied
+//!   - room is `physically_off`
+//!   - illuminance gate passes (or no gate)
+//!   - cooldown gate passes (`now - last_off_at >= cooldown`)
+//!
+//! When it fires: publish first scene of slot, mark `motion_owned = true`.
+//!
+//! `motion-off` fires iff:
+//!   - this sensor reports unoccupied
+//!   - `motion_owned == true` (we lit the lights, so we own the off)
+//!   - all OTHER sensors in the room report inactive
+//!   - room is still `physically_on`
+//!
+//! When it fires: publish state OFF, clear `motion_owned`,
+//! stamp `last_off_at`.
+//!
+//! Every motion event ALSO updates the per-sensor flag in
+//! `motion_active_by_sensor` regardless of whether either handler fires.
+//!
+//! ### External group state
+//!
+//! When `zigbee2mqtt/<group>` reports a state change, the controller
+//! reconciles `physically_on`. If the new state is OFF, also clears
+//! `motion_owned` (something else turned the lights off). If the new
+//! state is ON and we didn't initiate it, clears `motion_owned` too
+//! (the user used HA / the Hue app and we shouldn't motion-off that).
+//! `last_press_at` is NOT touched on external state changes — only on
+//! actual button presses.
+
+use std::collections::BTreeMap;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use crate::config::{Defaults, Slot};
+use crate::domain::action::{Action, Payload};
+use crate::domain::event::{Event, SwitchAction};
+use crate::domain::state::ZoneState;
+use crate::time::Clock;
+use crate::topology::{RoomName, Topology};
+
+#[derive(Debug)]
+pub struct Controller {
+    topology: Arc<Topology>,
+    clock: Arc<dyn Clock>,
+    defaults: Defaults,
+
+    /// Per-room state. Initialized lazily on first access — every room
+    /// starts at [`ZoneState::default`] and gets its `physically_on`
+    /// refreshed by the daemon's startup state-refresh routine before
+    /// the first event arrives. Tests can pre-populate via
+    /// [`Controller::set_physical_state_for_test`].
+    states: BTreeMap<RoomName, ZoneState>,
+}
+
+impl Controller {
+    pub fn new(topology: Arc<Topology>, clock: Arc<dyn Clock>, defaults: Defaults) -> Self {
+        Self {
+            topology,
+            clock,
+            defaults,
+            states: BTreeMap::new(),
+        }
+    }
+
+    /// Single entry point for the daemon's event loop.
+    pub fn handle_event(&mut self, event: Event) -> Vec<Action> {
+        match event {
+            Event::SwitchAction { device, action, ts } => {
+                self.handle_switch_action(&device, action, ts)
+            }
+            Event::TapAction { device, button, ts } => self.handle_tap_action(&device, button, ts),
+            Event::Occupancy {
+                sensor,
+                occupied,
+                illuminance,
+                ts,
+            } => self.handle_occupancy(&sensor, occupied, illuminance, ts),
+            Event::GroupState { group, on, ts: _ } => self.handle_group_state(&group, on),
+        }
+    }
+
+    /// Read-only peek at a room's state. Used by tests and by the
+    /// startup state-refresh code path.
+    pub fn state_for(&self, room: &str) -> Option<&ZoneState> {
+        self.states.get(room)
+    }
+
+    /// Set the physical-on flag for a room directly. Used by:
+    ///   - the daemon's startup state-refresh routine after it reads the
+    ///     retained `zigbee2mqtt/<group>` topic for a room
+    ///   - tests that want to set up an initial physical state without
+    ///     going through a button press
+    pub fn set_physical_state(&mut self, room: &str, on: bool) {
+        let state = self.states.entry(room.to_string()).or_default();
+        state.physically_on = on;
+    }
+
+    // ----- internal handlers ---------------------------------------------
+
+    fn handle_switch_action(
+        &mut self,
+        device: &str,
+        action: SwitchAction,
+        ts: Instant,
+    ) -> Vec<Action> {
+        let rooms: Vec<RoomName> = self.topology.rooms_for_switch(device).to_vec();
+        if rooms.is_empty() {
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        for room_name in &rooms {
+            self.dispatch_switch(room_name, action, ts, &mut out);
+        }
+        out
+    }
+
+    fn dispatch_switch(
+        &mut self,
+        room_name: &str,
+        action: SwitchAction,
+        ts: Instant,
+        out: &mut Vec<Action>,
+    ) {
+        // Snapshot the immutable bits we need from the topology so the
+        // mutable borrow on `self.states` below doesn't fight with the
+        // immutable borrow on `self.topology`.
+        let Some(room) = self.topology.room_by_name(room_name) else {
+            return;
+        };
+        let group_name = room.group_name.clone();
+        let off_transition = room.off_transition_seconds;
+
+        match action {
+            SwitchAction::OnPressRelease => {
+                self.cycle_button_press(room_name, ts, out);
+            }
+            SwitchAction::OffPressRelease => {
+                self.publish_off(room_name, &group_name, off_transition, ts, out);
+            }
+            SwitchAction::UpPressRelease => {
+                let step = self.defaults.wall_switch.brightness_step;
+                let trans = self.defaults.wall_switch.brightness_step_transition_seconds;
+                out.push(Action::new(group_name, Payload::brightness_step(step, trans)));
+            }
+            SwitchAction::DownPressRelease => {
+                let step = self.defaults.wall_switch.brightness_step;
+                let trans = self.defaults.wall_switch.brightness_step_transition_seconds;
+                out.push(Action::new(
+                    group_name,
+                    Payload::brightness_step(-step, trans),
+                ));
+            }
+            SwitchAction::UpHold => {
+                let rate = self.defaults.wall_switch.brightness_move_rate;
+                out.push(Action::new(group_name, Payload::brightness_move(rate)));
+            }
+            SwitchAction::DownHold => {
+                let rate = self.defaults.wall_switch.brightness_move_rate;
+                out.push(Action::new(group_name, Payload::brightness_move(-rate)));
+            }
+            SwitchAction::UpHoldRelease | SwitchAction::DownHoldRelease => {
+                out.push(Action::new(group_name, Payload::brightness_move(0)));
+            }
+        }
+    }
+
+    fn handle_tap_action(&mut self, device: &str, button: u8, ts: Instant) -> Vec<Action> {
+        let Some(room_name) = self.topology.room_for_tap_button(device, button).cloned() else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        self.cycle_button_press(&room_name, ts, &mut out);
+        out
+    }
+
+    /// The unified cycle button handler — used by both wall switch
+    /// `on_press_release` and tap buttons. The state-machine semantics:
+    ///
+    ///   - lights physically off → fresh on (first scene)
+    ///   - lights on, within cycle window → next scene
+    ///   - lights on, past cycle window → expire (turn off)
+    ///
+    /// `out` collects the [`Action`]s to publish.
+    fn cycle_button_press(&mut self, room_name: &str, ts: Instant, out: &mut Vec<Action>) {
+        // Re-snapshot the immutable bits we need; the mutable state
+        // borrow comes after.
+        let (group_name, scenes_for_now, off_transition) = {
+            let Some(room) = self.topology.room_by_name(room_name) else {
+                return;
+            };
+            let hour = self.clock.local_hour();
+            let scene_ids = active_slot_scene_ids(&room.scenes, hour);
+            (
+                room.group_name.clone(),
+                scene_ids,
+                room.off_transition_seconds,
+            )
+        };
+        let cycle_window = Duration::from_secs_f64(self.defaults.cycle_window_seconds);
+
+        let state_snapshot = self.states.get(room_name).cloned().unwrap_or_default();
+
+        if !state_snapshot.physically_on {
+            // Fresh on → first scene of the active slot.
+            let Some(&first) = scenes_for_now.first() else {
+                return;
+            };
+            out.push(Action::new(group_name.clone(), Payload::scene_recall(first)));
+            self.write_after_on(room_name, ts, /* cycle_idx_after = */ 0);
+            self.propagate_to_descendants(room_name, true);
+        } else if let Some(last) = state_snapshot.last_press_at
+            && ts.duration_since(last) < cycle_window
+        {
+            // Cycle: advance to next scene mod N.
+            let n = scenes_for_now.len();
+            if n == 0 {
+                return;
+            }
+            let next_idx = (state_snapshot.cycle_idx + 1) % n;
+            let next_scene = scenes_for_now[next_idx];
+            out.push(Action::new(group_name.clone(), Payload::scene_recall(next_scene)));
+            self.write_after_on(room_name, ts, next_idx);
+            self.propagate_to_descendants(room_name, true);
+        } else {
+            // Expire: turn off.
+            self.publish_off(room_name, &group_name, off_transition, ts, out);
+        }
+    }
+
+    fn publish_off(
+        &mut self,
+        room_name: &str,
+        group_name: &str,
+        off_transition: f64,
+        ts: Instant,
+        out: &mut Vec<Action>,
+    ) {
+        out.push(Action::new(
+            group_name.to_string(),
+            Payload::state_off(off_transition),
+        ));
+        self.write_after_off(room_name, ts);
+        self.propagate_to_descendants(room_name, false);
+    }
+
+    fn handle_occupancy(
+        &mut self,
+        sensor: &str,
+        occupied: bool,
+        illuminance: Option<u32>,
+        ts: Instant,
+    ) -> Vec<Action> {
+        let rooms: Vec<RoomName> = self.topology.rooms_for_motion(sensor).to_vec();
+        if rooms.is_empty() {
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        for room_name in &rooms {
+            self.dispatch_motion(room_name, sensor, occupied, illuminance, ts, &mut out);
+        }
+        out
+    }
+
+    fn dispatch_motion(
+        &mut self,
+        room_name: &str,
+        sensor: &str,
+        occupied: bool,
+        illuminance: Option<u32>,
+        ts: Instant,
+        out: &mut Vec<Action>,
+    ) {
+        // Capture room metadata before borrowing mut state.
+        let (group_name, max_lux, cooldown_ms, off_transition, scenes_for_now) = {
+            let Some(room) = self.topology.room_by_name(room_name) else {
+                return;
+            };
+            let max_lux = room
+                .bound_motion
+                .iter()
+                .find(|m| m.sensor == sensor)
+                .and_then(|m| m.max_illuminance);
+            let cooldown_ms = room.motion_off_cooldown_seconds * 1000;
+            let hour = self.clock.local_hour();
+            let scenes = active_slot_scene_ids(&room.scenes, hour);
+            (
+                room.group_name.clone(),
+                max_lux,
+                cooldown_ms,
+                room.off_transition_seconds,
+                scenes,
+            )
+        };
+
+        // Always update the per-sensor flag, even if the gates below
+        // skip the dispatch. This mirrors bento's preDispatch unconditional
+        // update — without it, multi-sensor coordination would see stale
+        // flags from the sensor that just fired.
+        {
+            let state = self.states.entry(room_name.to_string()).or_default();
+            state.motion_active_by_sensor.insert(sensor.to_string(), occupied);
+        }
+        let state_snapshot = self.states.get(room_name).cloned().unwrap_or_default();
+
+        if occupied {
+            // motion-on gates:
+            //   - room currently off
+            //   - illuminance < max (or no gate)
+            //   - cooldown expired
+            if state_snapshot.physically_on {
+                return;
+            }
+            if let (Some(max), Some(actual)) = (max_lux, illuminance)
+                && actual >= max
+            {
+                return;
+            }
+            if cooldown_ms > 0
+                && let Some(last_off) = state_snapshot.last_off_at
+                && ts.duration_since(last_off) < Duration::from_millis(cooldown_ms as u64)
+            {
+                return;
+            }
+            let Some(&first) = scenes_for_now.first() else {
+                return;
+            };
+            out.push(Action::new(group_name, Payload::scene_recall(first)));
+            // Mark as motion-owned so motion-off can later run.
+            let state = self.states.entry(room_name.to_string()).or_default();
+            state.physically_on = true;
+            state.motion_owned = true;
+            state.cycle_idx = 0;
+            // Don't touch last_press_at — this isn't a button press.
+            self.propagate_to_descendants(room_name, true);
+        } else {
+            // motion-off gates:
+            //   - we own the lights (motion turned them on)
+            //   - all other sensors in this room are also inactive
+            //   - lights are physically still on
+            if !state_snapshot.motion_owned {
+                return;
+            }
+            if !state_snapshot.physically_on {
+                return;
+            }
+            if !state_snapshot.all_other_sensors_inactive(sensor) {
+                return;
+            }
+            out.push(Action::new(group_name, Payload::state_off(off_transition)));
+            let state = self.states.entry(room_name.to_string()).or_default();
+            state.physically_on = false;
+            state.motion_owned = false;
+            state.last_off_at = Some(ts);
+            state.cycle_idx = 0;
+            self.propagate_to_descendants(room_name, false);
+        }
+    }
+
+    fn handle_group_state(&mut self, group_name: &str, on: bool) -> Vec<Action> {
+        let Some(room) = self.topology.room_by_group_name(group_name) else {
+            return Vec::new();
+        };
+        let room_name = room.name.clone();
+        let state = self.states.entry(room_name).or_default();
+        let was_on = state.physically_on;
+        state.physically_on = on;
+        // External state change → clear motion ownership. We're either
+        // off (so motion can re-arm) or someone else turned it on (so
+        // motion-off shouldn't try to undo their action).
+        if was_on != on {
+            state.motion_owned = false;
+            if !on {
+                state.cycle_idx = 0;
+            }
+        }
+        Vec::new()
+    }
+
+    // ----- internal helpers ----------------------------------------------
+
+    fn write_after_on(&mut self, room_name: &str, ts: Instant, cycle_idx_after: usize) {
+        let state = self.states.entry(room_name.to_string()).or_default();
+        state.physically_on = true;
+        state.cycle_idx = cycle_idx_after;
+        state.last_press_at = Some(ts);
+        // Manual press supersedes any motion ownership.
+        state.motion_owned = false;
+    }
+
+    fn write_after_off(&mut self, room_name: &str, ts: Instant) {
+        let state = self.states.entry(room_name.to_string()).or_default();
+        state.physically_on = false;
+        state.cycle_idx = 0;
+        state.last_press_at = Some(ts);
+        state.last_off_at = Some(ts);
+        state.motion_owned = false;
+    }
+
+    /// Optimistically propagate a parent's new physical state to every
+    /// transitive descendant. Mirrors what z2m would tell us via group
+    /// state events anyway, but lets the next button press see the
+    /// correct state immediately instead of racing the broker round-trip.
+    fn propagate_to_descendants(&mut self, ancestor: &str, on: bool) {
+        let descendants: Vec<RoomName> = self.topology.descendants_of(ancestor).to_vec();
+        for desc in descendants {
+            let state = self.states.entry(desc).or_default();
+            state.physically_on = on;
+            // Force the next press of the descendant to take the expire
+            // branch (turn off if on, fresh on if off): clear
+            // last_press_at so `now - last_press_at` is treated as
+            // "infinite". Same idea as the bento `tap_last_press_ms = "0"`
+            // we wrote on parent invalidation.
+            state.last_press_at = None;
+            state.cycle_idx = 0;
+            // Descendant is no longer motion-owned: an ancestor press
+            // (or motion event) overrides the descendant's previous
+            // motion ownership.
+            state.motion_owned = false;
+            if !on {
+                // Mirror what an own-room OFF would do.
+                state.last_off_at = None; // reset cooldown for descendants too
+            }
+        }
+    }
+}
+
+/// Pull out the `scene_ids` of the slot covering `hour`. Returns an empty
+/// slice if no slot matches (which means the schedule is invalid; topology
+/// validation rejects that, so this should never happen at runtime — but
+/// the controller plays it safe rather than panicking).
+fn active_slot_scene_ids(schedule: &crate::config::SceneSchedule, hour: u8) -> Vec<u8> {
+    let Some((_name, slot)) = schedule.slot_for_hour(hour) else {
+        return Vec::new();
+    };
+    slot_scene_ids(slot)
+}
+
+fn slot_scene_ids(slot: &Slot) -> Vec<u8> {
+    slot.scene_ids.clone()
+}
+
+#[cfg(test)]
+mod tests {
+    //! Unit tests for the controller state machine. These run directly
+    //! against the controller — no MQTT, no async, sub-millisecond per
+    //! test. Each test sets up a small topology, feeds events with a
+    //! fake clock, and asserts on the returned actions plus the
+    //! resulting zone state.
+    //!
+    //! Test helpers live in `tests::fixtures`.
+
+    use super::*;
+    use crate::config::scenes::{Scene, SceneSchedule, Slot};
+    use crate::config::{
+        CommonFields, Config, DeviceBinding, DeviceCatalogEntry, Defaults, Room,
+    };
+    use crate::time::FakeClock;
+    use pretty_assertions::assert_eq;
+
+    // ---- fixtures -------------------------------------------------------
+
+    fn day_scenes(ids: Vec<u8>) -> SceneSchedule {
+        SceneSchedule {
+            scenes: ids
+                .iter()
+                .map(|&id| Scene {
+                    id,
+                    name: format!("scene-{id}"),
+                    state: "ON".into(),
+                    brightness: None,
+                    color_temp: None,
+                    transition: 0.0,
+                })
+                .collect(),
+            slots: BTreeMap::from([(
+                "day".into(),
+                Slot {
+                    start_hour: 0,
+                    end_hour_exclusive: 24,
+                    scene_ids: ids,
+                },
+            )]),
+        }
+    }
+
+    fn day_night_scenes() -> SceneSchedule {
+        let scenes = vec![
+            Scene {
+                id: 1,
+                name: "bright".into(),
+                state: "ON".into(),
+                brightness: None,
+                color_temp: None,
+                transition: 0.0,
+            },
+            Scene {
+                id: 2,
+                name: "relaxed".into(),
+                state: "ON".into(),
+                brightness: None,
+                color_temp: None,
+                transition: 0.0,
+            },
+            Scene {
+                id: 3,
+                name: "dim".into(),
+                state: "ON".into(),
+                brightness: None,
+                color_temp: None,
+                transition: 0.0,
+            },
+        ];
+        SceneSchedule {
+            scenes,
+            slots: BTreeMap::from([
+                (
+                    "day".into(),
+                    Slot {
+                        start_hour: 6,
+                        end_hour_exclusive: 23,
+                        scene_ids: vec![1, 2, 3],
+                    },
+                ),
+                (
+                    "night".into(),
+                    Slot {
+                        start_hour: 23,
+                        end_hour_exclusive: 6,
+                        scene_ids: vec![3, 2, 1],
+                    },
+                ),
+            ]),
+        }
+    }
+
+    fn light(ieee: &str) -> DeviceCatalogEntry {
+        DeviceCatalogEntry::Light(CommonFields {
+            ieee_address: ieee.into(),
+            description: None,
+            options: BTreeMap::new(),
+        })
+    }
+    fn switch_dev(ieee: &str) -> DeviceCatalogEntry {
+        DeviceCatalogEntry::Switch(CommonFields {
+            ieee_address: ieee.into(),
+            description: None,
+            options: BTreeMap::new(),
+        })
+    }
+    fn tap_dev(ieee: &str) -> DeviceCatalogEntry {
+        DeviceCatalogEntry::Tap(CommonFields {
+            ieee_address: ieee.into(),
+            description: None,
+            options: BTreeMap::new(),
+        })
+    }
+    fn motion(ieee: &str) -> DeviceCatalogEntry {
+        DeviceCatalogEntry::MotionSensor {
+            common: CommonFields {
+                ieee_address: ieee.into(),
+                description: None,
+                options: BTreeMap::new(),
+            },
+            occupancy_timeout_seconds: 60,
+            max_illuminance: None,
+        }
+    }
+
+    fn binding(device: &str, button: Option<u8>) -> DeviceBinding {
+        DeviceBinding {
+            device: device.into(),
+            button,
+        }
+    }
+
+    /// Build a controller from a tiny "kitchen" topology used by most
+    /// tests. Layout:
+    ///   - kitchen-cooker (parent: kitchen-all) — tap button 2
+    ///   - kitchen-dining (parent: kitchen-all) — tap button 3
+    ///   - kitchen-all                          — tap button 1
+    fn kitchen_controller(clock: Arc<FakeClock>) -> Controller {
+        let cfg = Config {
+            name_by_address: BTreeMap::new(),
+            devices: BTreeMap::from([
+                ("hue-l-cooker".into(), light("0xa")),
+                ("hue-l-dining".into(), light("0xb")),
+                ("hue-l-empty".into(), light("0xc")),
+                ("hue-ts-foo".into(), tap_dev("0x1")),
+            ]),
+            rooms: vec![
+                Room {
+                    name: "kitchen-cooker".into(),
+                    group_name: "hue-lz-kitchen-cooker".into(),
+                    id: 1,
+                    members: vec!["hue-l-cooker/11".into()],
+                    parent: Some("kitchen-all".into()),
+                    devices: vec![binding("hue-ts-foo", Some(2))],
+                    scenes: day_scenes(vec![1, 2, 3]),
+                    off_transition_seconds: 0.8,
+                    motion_off_cooldown_seconds: 0,
+                },
+                Room {
+                    name: "kitchen-dining".into(),
+                    group_name: "hue-lz-kitchen-dining".into(),
+                    id: 2,
+                    members: vec!["hue-l-dining/11".into()],
+                    parent: Some("kitchen-all".into()),
+                    devices: vec![binding("hue-ts-foo", Some(3))],
+                    scenes: day_scenes(vec![1, 2, 3]),
+                    off_transition_seconds: 0.8,
+                    motion_off_cooldown_seconds: 0,
+                },
+                Room {
+                    name: "kitchen-all".into(),
+                    group_name: "hue-lz-kitchen-all".into(),
+                    id: 3,
+                    members: vec![
+                        "hue-l-cooker/11".into(),
+                        "hue-l-dining/11".into(),
+                        "hue-l-empty/11".into(),
+                    ],
+                    parent: None,
+                    devices: vec![binding("hue-ts-foo", Some(1))],
+                    scenes: day_scenes(vec![1, 2, 3]),
+                    off_transition_seconds: 0.8,
+                    motion_off_cooldown_seconds: 0,
+                },
+            ],
+            defaults: Defaults::default(),
+        };
+        let topo = Arc::new(Topology::build(&cfg).unwrap());
+        Controller::new(topo, clock, cfg.defaults)
+    }
+
+    fn study_with_motion_controller(clock: Arc<FakeClock>) -> Controller {
+        let cfg = Config {
+            name_by_address: BTreeMap::new(),
+            devices: BTreeMap::from([
+                ("hue-l-a".into(), light("0xa")),
+                ("hue-s-study".into(), switch_dev("0x1")),
+                ("hue-ms-study".into(), motion("0x2")),
+            ]),
+            rooms: vec![Room {
+                name: "study".into(),
+                group_name: "hue-lz-study".into(),
+                id: 1,
+                members: vec!["hue-l-a/11".into()],
+                parent: None,
+                devices: vec![
+                    binding("hue-s-study", None),
+                    binding("hue-ms-study", None),
+                ],
+                scenes: day_night_scenes(),
+                off_transition_seconds: 0.8,
+                motion_off_cooldown_seconds: 30,
+            }],
+            defaults: Defaults::default(),
+        };
+        let topo = Arc::new(Topology::build(&cfg).unwrap());
+        Controller::new(topo, clock, cfg.defaults)
+    }
+
+    // ---- cycle button: fresh on / cycle / expire ------------------------
+
+    #[test]
+    fn tap_press_on_off_zone_publishes_first_scene() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = kitchen_controller(clk.clone());
+
+        let actions = c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 2,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            actions,
+            vec![Action::new(
+                "hue-lz-kitchen-cooker",
+                Payload::scene_recall(1)
+            )]
+        );
+        let s = c.state_for("kitchen-cooker").unwrap();
+        assert!(s.physically_on);
+        assert_eq!(s.cycle_idx, 0);
+        assert!(s.last_press_at.is_some());
+    }
+
+    #[test]
+    fn tap_press_within_window_cycles_scene() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = kitchen_controller(clk.clone());
+
+        c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 2,
+            ts: clk.now(),
+        });
+        clk.advance(Duration::from_millis(200));
+
+        let actions = c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 2,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            actions,
+            vec![Action::new(
+                "hue-lz-kitchen-cooker",
+                Payload::scene_recall(2)
+            )]
+        );
+        assert_eq!(c.state_for("kitchen-cooker").unwrap().cycle_idx, 1);
+    }
+
+    #[test]
+    fn tap_press_outside_window_expires_to_off() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = kitchen_controller(clk.clone());
+
+        c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 2,
+            ts: clk.now(),
+        });
+        // Past the 1.0s default cycle window.
+        clk.advance(Duration::from_millis(1500));
+
+        let actions = c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 2,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            actions,
+            vec![Action::new(
+                "hue-lz-kitchen-cooker",
+                Payload::state_off(0.8)
+            )]
+        );
+        assert!(!c.state_for("kitchen-cooker").unwrap().physically_on);
+    }
+
+    #[test]
+    fn tap_cycle_wraps_at_n() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = kitchen_controller(clk.clone());
+
+        // press 1: scene 1
+        c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 2,
+            ts: clk.now(),
+        });
+        clk.advance(Duration::from_millis(100));
+        // press 2: scene 2
+        c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 2,
+            ts: clk.now(),
+        });
+        clk.advance(Duration::from_millis(100));
+        // press 3: scene 3
+        c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 2,
+            ts: clk.now(),
+        });
+        clk.advance(Duration::from_millis(100));
+        // press 4: wraps to scene 1
+        let actions = c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 2,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            actions,
+            vec![Action::new(
+                "hue-lz-kitchen-cooker",
+                Payload::scene_recall(1)
+            )]
+        );
+    }
+
+    // ---- the kitchen-all → kitchen-cooker bug ---------------------------
+    //
+    // The bento-era regression. After parent-on, child press should
+    // toggle the child off — even though the child was lit by the
+    // parent.
+
+    #[test]
+    fn parent_on_then_child_press_toggles_child_off() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = kitchen_controller(clk.clone());
+
+        // 1. press button 1 (parent kitchen-all) → fresh on
+        let p = c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 1,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            p,
+            vec![Action::new(
+                "hue-lz-kitchen-all",
+                Payload::scene_recall(1)
+            )]
+        );
+        // Descendants are now physically_on with last_press_at = None.
+        assert!(c.state_for("kitchen-cooker").unwrap().physically_on);
+        assert!(c.state_for("kitchen-cooker").unwrap().last_press_at.is_none());
+
+        clk.advance(Duration::from_millis(150));
+
+        // 2. press button 2 (child kitchen-cooker) → expire path → OFF
+        let actions = c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 2,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            actions,
+            vec![Action::new(
+                "hue-lz-kitchen-cooker",
+                Payload::state_off(0.8)
+            )]
+        );
+        assert!(!c.state_for("kitchen-cooker").unwrap().physically_on);
+    }
+
+    #[test]
+    fn parent_on_then_delayed_child_press_still_toggles_off() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = kitchen_controller(clk.clone());
+
+        c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 1,
+            ts: clk.now(),
+        });
+        clk.advance(Duration::from_millis(2500)); // well past the cycle window
+
+        let actions = c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 2,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            actions,
+            vec![Action::new(
+                "hue-lz-kitchen-cooker",
+                Payload::state_off(0.8)
+            )]
+        );
+    }
+
+    #[test]
+    fn parent_on_then_child_off_then_child_on_fresh() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = kitchen_controller(clk.clone());
+
+        // parent on
+        c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 1,
+            ts: clk.now(),
+        });
+        clk.advance(Duration::from_millis(100));
+        // child off (the bug-fix path)
+        c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 2,
+            ts: clk.now(),
+        });
+        clk.advance(Duration::from_millis(100));
+        // child on (fresh — scene 1)
+        let actions = c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 2,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            actions,
+            vec![Action::new(
+                "hue-lz-kitchen-cooker",
+                Payload::scene_recall(1)
+            )]
+        );
+    }
+
+    #[test]
+    fn child_press_does_not_alter_parent_state() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = kitchen_controller(clk.clone());
+
+        // child on
+        c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 2,
+            ts: clk.now(),
+        });
+        clk.advance(Duration::from_millis(100));
+        // parent press → parent's own cache says off → fresh on
+        let actions = c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 1,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            actions,
+            vec![Action::new(
+                "hue-lz-kitchen-all",
+                Payload::scene_recall(1)
+            )]
+        );
+    }
+
+    #[test]
+    fn parent_cycle_keeps_descendants_marked_on() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = kitchen_controller(clk.clone());
+
+        c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 1,
+            ts: clk.now(),
+        });
+        clk.advance(Duration::from_millis(200));
+        // Cycle the parent.
+        c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 1,
+            ts: clk.now(),
+        });
+        clk.advance(Duration::from_millis(200));
+        // Child press should still toggle off.
+        let actions = c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 2,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            actions,
+            vec![Action::new(
+                "hue-lz-kitchen-cooker",
+                Payload::state_off(0.8)
+            )]
+        );
+    }
+
+    #[test]
+    fn sibling_press_independent_of_other_sibling() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = kitchen_controller(clk.clone());
+
+        // cooker on
+        c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 2,
+            ts: clk.now(),
+        });
+        clk.advance(Duration::from_millis(100));
+        // dining on (independent — its own state was off)
+        let actions = c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(),
+            button: 3,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            actions,
+            vec![Action::new(
+                "hue-lz-kitchen-dining",
+                Payload::scene_recall(1)
+            )]
+        );
+    }
+
+    // ---- wall switch off button + brightness ----------------------------
+
+    #[test]
+    fn wall_switch_off_press_immediately_off() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+
+        // simulate room is on
+        c.set_physical_state("study", true);
+
+        let actions = c.handle_event(Event::SwitchAction {
+            device: "hue-s-study".into(),
+            action: SwitchAction::OffPressRelease,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            actions,
+            vec![Action::new("hue-lz-study", Payload::state_off(0.8))]
+        );
+    }
+
+    #[test]
+    fn wall_switch_brightness_up_press_release() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+
+        let actions = c.handle_event(Event::SwitchAction {
+            device: "hue-s-study".into(),
+            action: SwitchAction::UpPressRelease,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            actions,
+            vec![Action::new(
+                "hue-lz-study",
+                Payload::brightness_step(25, 0.2)
+            )]
+        );
+    }
+
+    #[test]
+    fn wall_switch_brightness_down_press_release() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+
+        let actions = c.handle_event(Event::SwitchAction {
+            device: "hue-s-study".into(),
+            action: SwitchAction::DownPressRelease,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            actions,
+            vec![Action::new(
+                "hue-lz-study",
+                Payload::brightness_step(-25, 0.2)
+            )]
+        );
+    }
+
+    #[test]
+    fn wall_switch_hold_and_release_brightness_move() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+
+        let hold = c.handle_event(Event::SwitchAction {
+            device: "hue-s-study".into(),
+            action: SwitchAction::UpHold,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            hold,
+            vec![Action::new("hue-lz-study", Payload::brightness_move(40))]
+        );
+
+        let release = c.handle_event(Event::SwitchAction {
+            device: "hue-s-study".into(),
+            action: SwitchAction::UpHoldRelease,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            release,
+            vec![Action::new("hue-lz-study", Payload::brightness_move(0))]
+        );
+    }
+
+    // ---- motion sensor --------------------------------------------------
+
+    #[test]
+    fn motion_on_in_dark_room_publishes_first_scene() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+
+        let actions = c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: true,
+            illuminance: None,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            actions,
+            vec![Action::new("hue-lz-study", Payload::scene_recall(1))]
+        );
+        let s = c.state_for("study").unwrap();
+        assert!(s.physically_on);
+        assert!(s.motion_owned);
+    }
+
+    #[test]
+    fn motion_on_skipped_when_lights_already_on() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+        c.set_physical_state("study", true);
+
+        let actions = c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: true,
+            illuminance: None,
+            ts: clk.now(),
+        });
+        assert!(actions.is_empty());
+        // We still recorded the sensor as active.
+        assert!(c
+            .state_for("study")
+            .unwrap()
+            .motion_active_by_sensor
+            .get("hue-ms-study")
+            .copied()
+            .unwrap_or(false));
+    }
+
+    #[test]
+    fn motion_off_only_after_owning_motion_on() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+
+        // motion on → owned
+        c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: true,
+            illuminance: None,
+            ts: clk.now(),
+        });
+        clk.advance(Duration::from_secs(60));
+        // motion off
+        let actions = c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: false,
+            illuminance: None,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            actions,
+            vec![Action::new("hue-lz-study", Payload::state_off(0.8))]
+        );
+    }
+
+    #[test]
+    fn motion_off_skipped_when_user_owns_lights() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+
+        // user press → motion_owned cleared, lights on
+        c.handle_event(Event::SwitchAction {
+            device: "hue-s-study".into(),
+            action: SwitchAction::OnPressRelease,
+            ts: clk.now(),
+        });
+        // sensor reports motion (no-op, lights already on)
+        c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: true,
+            illuminance: None,
+            ts: clk.now(),
+        });
+        clk.advance(Duration::from_secs(60));
+        // sensor reports clear
+        let actions = c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: false,
+            illuminance: None,
+            ts: clk.now(),
+        });
+        // No off action — user owns the lights.
+        assert!(actions.is_empty());
+    }
+
+    #[test]
+    fn motion_cooldown_blocks_motion_on_after_recent_off() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+
+        // motion on, then motion off (sets last_off_at)
+        c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: true,
+            illuminance: None,
+            ts: clk.now(),
+        });
+        clk.advance(Duration::from_secs(60));
+        c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: false,
+            illuminance: None,
+            ts: clk.now(),
+        });
+        // Inside cooldown (30s default in fixture).
+        clk.advance(Duration::from_secs(5));
+        let blocked = c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: true,
+            illuminance: None,
+            ts: clk.now(),
+        });
+        assert!(blocked.is_empty());
+
+        // Past the cooldown.
+        clk.advance(Duration::from_secs(30));
+        let allowed = c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: true,
+            illuminance: None,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            allowed,
+            vec![Action::new("hue-lz-study", Payload::scene_recall(1))]
+        );
+    }
+
+    #[test]
+    fn motion_luminance_gate() {
+        // Build a controller with the motion sensor's max_illuminance set
+        // to 25, so a reading of 30 should suppress motion-on.
+        let clk = Arc::new(FakeClock::new(12));
+        let cfg = Config {
+            name_by_address: BTreeMap::new(),
+            devices: BTreeMap::from([
+                ("hue-l-a".into(), light("0xa")),
+                (
+                    "hue-ms-study".into(),
+                    DeviceCatalogEntry::MotionSensor {
+                        common: CommonFields {
+                            ieee_address: "0x2".into(),
+                            description: None,
+                            options: BTreeMap::new(),
+                        },
+                        occupancy_timeout_seconds: 60,
+                        max_illuminance: Some(25),
+                    },
+                ),
+            ]),
+            rooms: vec![Room {
+                name: "study".into(),
+                group_name: "hue-lz-study".into(),
+                id: 1,
+                members: vec!["hue-l-a/11".into()],
+                parent: None,
+                devices: vec![binding("hue-ms-study", None)],
+                scenes: day_scenes(vec![1]),
+                off_transition_seconds: 0.8,
+                motion_off_cooldown_seconds: 0,
+            }],
+            defaults: Defaults::default(),
+        };
+        let topo = Arc::new(Topology::build(&cfg).unwrap());
+        let mut c = Controller::new(topo, clk.clone(), cfg.defaults);
+
+        let bright = c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: true,
+            illuminance: Some(50),
+            ts: clk.now(),
+        });
+        assert!(bright.is_empty());
+
+        let dim = c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: true,
+            illuminance: Some(10),
+            ts: clk.now(),
+        });
+        assert_eq!(
+            dim,
+            vec![Action::new("hue-lz-study", Payload::scene_recall(1))]
+        );
+    }
+
+    // ---- multi-sensor coordination --------------------------------------
+
+    #[test]
+    fn multi_sensor_motion_off_waits_for_all_inactive() {
+        // Two motion sensors in one room. motion-off only fires once
+        // both report inactive.
+        let clk = Arc::new(FakeClock::new(12));
+        let cfg = Config {
+            name_by_address: BTreeMap::new(),
+            devices: BTreeMap::from([
+                ("hue-l-a".into(), light("0xa")),
+                ("hue-ms-a".into(), motion("0x1")),
+                ("hue-ms-b".into(), motion("0x2")),
+            ]),
+            rooms: vec![Room {
+                name: "hall".into(),
+                group_name: "hue-lz-hall".into(),
+                id: 1,
+                members: vec!["hue-l-a/11".into()],
+                parent: None,
+                devices: vec![binding("hue-ms-a", None), binding("hue-ms-b", None)],
+                scenes: day_scenes(vec![1]),
+                off_transition_seconds: 0.8,
+                motion_off_cooldown_seconds: 0,
+            }],
+            defaults: Defaults::default(),
+        };
+        let topo = Arc::new(Topology::build(&cfg).unwrap());
+        let mut c = Controller::new(topo, clk.clone(), cfg.defaults);
+
+        // sensor a fires occupied → fresh on, motion_owned=true
+        c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-a".into(),
+            occupied: true,
+            illuminance: None,
+            ts: clk.now(),
+        });
+        // sensor b also fires occupied → no-op (lights on, but record flag)
+        c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-b".into(),
+            occupied: true,
+            illuminance: None,
+            ts: clk.now(),
+        });
+        // sensor a clears — but b is still active → no off
+        let no_off = c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-a".into(),
+            occupied: false,
+            illuminance: None,
+            ts: clk.now(),
+        });
+        assert!(no_off.is_empty());
+        // sensor b clears → off fires
+        let off = c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-b".into(),
+            occupied: false,
+            illuminance: None,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            off,
+            vec![Action::new("hue-lz-hall", Payload::state_off(0.8))]
+        );
+    }
+
+    // ---- group state reconciliation -------------------------------------
+
+    #[test]
+    fn external_group_off_resets_zone_state() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+
+        // Motion turns lights on (motion-owned).
+        c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: true,
+            illuminance: None,
+            ts: clk.now(),
+        });
+        assert!(c.state_for("study").unwrap().motion_owned);
+
+        // Someone uses the Hue app to turn the lights off → group state OFF.
+        c.handle_event(Event::GroupState {
+            group: "hue-lz-study".into(),
+            on: false,
+            ts: clk.now(),
+        });
+
+        let s = c.state_for("study").unwrap();
+        assert!(!s.physically_on);
+        assert!(!s.motion_owned);
+    }
+
+    #[test]
+    fn external_group_on_clears_motion_ownership() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+
+        // Motion turned them on…
+        c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: true,
+            illuminance: None,
+            ts: clk.now(),
+        });
+        // …and then someone re-publishes the group on (e.g. an HA scene
+        // call). We shouldn't keep the motion ownership across that.
+        // Setting from on→on with motion_owned should still leave
+        // motion_owned set; the clear only happens on a transition.
+        // Let's verify: same-state event leaves things alone.
+        c.handle_event(Event::GroupState {
+            group: "hue-lz-study".into(),
+            on: true,
+            ts: clk.now(),
+        });
+        assert!(c.state_for("study").unwrap().motion_owned);
+
+        // But an external off→on transition clears the flag (the previous
+        // on must have come from somewhere else).
+        c.set_physical_state("study", false);
+        c.handle_event(Event::GroupState {
+            group: "hue-lz-study".into(),
+            on: true,
+            ts: clk.now(),
+        });
+        assert!(!c.state_for("study").unwrap().motion_owned);
+    }
+
+    // ---- time-of-day slot dispatch --------------------------------------
+
+    #[test]
+    fn cycle_uses_active_slot_at_press_time() {
+        let clk = Arc::new(FakeClock::new(12)); // day → cycle [1,2,3]
+        let mut c = study_with_motion_controller(clk.clone());
+
+        let day_press = c.handle_event(Event::SwitchAction {
+            device: "hue-s-study".into(),
+            action: SwitchAction::OnPressRelease,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            day_press,
+            vec![Action::new("hue-lz-study", Payload::scene_recall(1))]
+        );
+
+        // Reset back to off.
+        c.set_physical_state("study", false);
+        let s = c.state_for("study").unwrap().clone();
+        assert!(!s.physically_on);
+
+        // Switch to night.
+        clk.set_hour(2);
+        let night_press = c.handle_event(Event::SwitchAction {
+            device: "hue-s-study".into(),
+            action: SwitchAction::OnPressRelease,
+            ts: clk.now(),
+        });
+        // Night cycle = [3, 2, 1] → first scene is 3.
+        assert_eq!(
+            night_press,
+            vec![Action::new("hue-lz-study", Payload::scene_recall(3))]
+        );
+    }
+}
