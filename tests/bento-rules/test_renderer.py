@@ -224,6 +224,42 @@ tools.defineRooms {{
     return json.loads(result.stdout)
 
 
+def _eval_define_rooms_with_warnings(
+    rooms_nix: str,
+    *,
+    devices_by_address: dict[str, dict[str, str]] | None = None,
+    defaults_nix: str = DEFAULT_TEST_DEFAULTS_NIX,
+) -> tuple[dict[str, Any], str]:
+    """Same as `_eval_define_rooms`, but also returns nix eval's
+    stderr text so tests can assert on `lib.warn` output. Used by
+    the no-devices warning test (and any future test that needs to
+    verify warnings without failing on them)."""
+    if devices_by_address is None:
+        devices_by_address = _auto_devices_by_address(rooms_nix)
+    devices_nix = _render_devices_by_address_nix(devices_by_address)
+    expr = f"""
+let
+  pkgs = import <nixpkgs> {{ }};
+  lib = pkgs.lib;
+  tools = import {TOOLS_PATH} {{ inherit lib; }};
+  {TEST_SCENES_NIX}
+in
+tools.defineRooms {{
+  devices = {devices_nix};
+  rooms = {rooms_nix};
+  defaults = {defaults_nix};
+}}
+"""
+    result = subprocess.run(
+        ["nix", "eval", "--impure", "--json", "--expr", expr],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "NIX_CONFIG": "experimental-features = nix-command flakes"},
+    )
+    return json.loads(result.stdout), result.stderr
+
+
 # ---------- helpers ----------
 
 
@@ -325,14 +361,14 @@ def test_switch_plus_motion_share_cache_label() -> None:
 
 
 # ---------- motion-on check composition ----------
-motionOffCooldownSeconds
+
 
 def test_motion_on_check_has_luminance_and_lights_state_gates() -> None:
     result = _eval_define_rooms(
         """{
       hall = {
         groupName = "hall";
-     motionOffCooldownSecondsmotionOffCooldownSeconds
+        id = 53;
         members = [ "0xdddd/11" ];
         scenes = defaultDayScenes;
         devices = [ { device = "hue-ms-hall"; } ];
@@ -342,12 +378,12 @@ def test_motion_on_check_has_luminance_and_lights_state_gates() -> None:
     rule = result["smind"]["services"]["mqtt-automations"]["rules"][
         "hall-motion-hue_ms_hall"
     ]
-    _assert_hanmotionOffCooldownSecondss(rule, "motion-on", "this.occupancy == true")
+    _assert_handler_check_contains(rule, "motion-on", "this.occupancy == true")
     _assert_handler_check_contains(rule, "motion-on", "this.illuminance")
     _assert_handler_check_contains(rule, "motion-on", '(meta("lights_state")')
-    # Default maxIlluminance is 50
+    # Test default maxIlluminance is 50 (from DEFAULT_TEST_DEFAULTS_NIX)
     _assert_handler_check_contains(rule, "motion-on", "< 50")
-    # Default motionOffCooldownSeconds is 30 → 30000ms
+    # Test default motionOffCooldownSeconds is 30 → 30000ms
     _assert_handler_check_contains(rule, "motion-on", "30000")
     _assert_handler_check_contains(rule, "motion-on", "last_off_at")
 
@@ -655,16 +691,210 @@ def test_validation_duplicate_group_id() -> None:
     assert "duplicate group id" in err
 
 
-def test_validation_requires_control_source() -> None:
-    err = _eval_expect_error(
+def test_room_without_devices_warns_but_succeeds() -> None:
+    """A room with no `devices` is legal — the z2m group + scenes
+    are still provisioned, but no bento rules are emitted (the bulbs
+    are controlled externally, e.g. via HA dashboard or voice
+    assistant). The build must succeed and emit a warning so
+    accidentally-orphaned rooms are still visible."""
+    result, stderr = _eval_define_rooms_with_warnings(
         """{
-      orphan = {
-        groupName = "orphan"; id = 1; members = [ "0x1/11" ];
+      decorative = {
+        groupName = "decorative"; id = 1; members = [ "hue-l-deco/11" ];
         scenes = defaultDayScenes;
       };
     }"""
     )
-    assert "no `devices`" in err
+    # Build succeeded — we got a result.
+    # Group still rendered into the hue-setup config.
+    groups = result["smind"]["services"]["hue-setup"]["config"]["groups"]
+    assert "decorative" in groups
+    assert groups["decorative"]["members"] == ["hue-l-deco/11"]
+    # No bento rules generated for it (no devices → no bindings).
+    rules = result["smind"]["services"]["mqtt-automations"]["rules"]
+    assert not any(name.startswith("decorative-") for name in rules)
+    # Warning emitted on stderr — `lib.warn` output goes there.
+    assert "evaluation warning" in stderr
+    assert "decorative" in stderr
+    assert "no `devices`" in stderr
+
+
+def test_room_without_devices_does_not_block_other_rooms() -> None:
+    """A device-less room is silently rendered alongside normal
+    rooms; the warning fires but doesn't disrupt the rest of the
+    config."""
+    result, stderr = _eval_define_rooms_with_warnings(
+        """{
+      hall = {
+        groupName = "hall"; id = 1; members = [ "hue-l-a/11" ];
+        devices = [ { device = "hue-s-a"; } ];
+        scenes = defaultDayScenes;
+      };
+      decorative = {
+        groupName = "decorative"; id = 2; members = [ "hue-l-b/11" ];
+        scenes = defaultDayScenes;
+      };
+    }"""
+    )
+    rules = result["smind"]["services"]["mqtt-automations"]["rules"]
+    # Normal room got its switch rule
+    assert "hall-switch" in rules
+    # Device-less room got nothing
+    assert not any(name.startswith("decorative-") for name in rules)
+    # Both rooms in the hue-setup output
+    groups = result["smind"]["services"]["hue-setup"]["config"]["groups"]
+    assert {"hall", "decorative"}.issubset(set(groups))
+    # Warning fired for the device-less room only
+    assert "decorative" in stderr
+
+
+# ---------- unattached-device warnings ----------
+
+
+def test_unattached_light_warns() -> None:
+    """A light that's in the catalog but not referenced by any
+    room's `members` triggers a warning. The build still succeeds
+    so the user can fix it incrementally."""
+    result, stderr = _eval_define_rooms_with_warnings(
+        """{
+      hall = {
+        groupName = "hall"; id = 1; members = [ "hue-l-a/11" ];
+        devices = [ { device = "hue-s-a"; } ];
+        scenes = defaultDayScenes;
+      };
+    }""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "light", "name": "hue-l-orphan"},  # never referenced
+            "0xcccc": {"type": "switch", "name": "hue-s-a"},
+        },
+    )
+    assert "evaluation warning" in stderr
+    assert "hue-l-orphan" in stderr
+    assert "type=light" in stderr
+    # The build still produced output.
+    assert "hall" in result["smind"]["services"]["hue-setup"]["config"]["groups"]
+
+
+def test_unattached_switch_warns() -> None:
+    """A switch that's in the catalog but not referenced by any
+    room's `devices` triggers a warning."""
+    result, stderr = _eval_define_rooms_with_warnings(
+        """{
+      hall = {
+        groupName = "hall"; id = 1; members = [ "hue-l-a/11" ];
+        devices = [ { device = "hue-s-a"; } ];
+        scenes = defaultDayScenes;
+      };
+    }""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "switch", "name": "hue-s-a"},
+            "0xcccc": {"type": "switch", "name": "hue-s-orphan"},  # never referenced
+        },
+    )
+    assert "hue-s-orphan" in stderr
+    assert "type=switch" in stderr
+
+
+def test_unattached_motion_sensor_warns() -> None:
+    """Same warning fires for a motion sensor that's not bound to a
+    room — common during incremental wiring of new sensors."""
+    result, stderr = _eval_define_rooms_with_warnings(
+        """{
+      hall = {
+        groupName = "hall"; id = 1; members = [ "hue-l-a/11" ];
+        devices = [ { device = "hue-s-a"; } ];
+        scenes = defaultDayScenes;
+      };
+    }""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "switch", "name": "hue-s-a"},
+            "0xcccc": {"type": "motion-sensor", "name": "hue-ms-orphan"},
+        },
+    )
+    assert "hue-ms-orphan" in stderr
+    assert "type=motion-sensor" in stderr
+
+
+def test_unattached_tap_warns() -> None:
+    """And taps too — same rule, since taps are referenced from
+    `room.devices` like switches."""
+    result, stderr = _eval_define_rooms_with_warnings(
+        """{
+      hall = {
+        groupName = "hall"; id = 1; members = [ "hue-l-a/11" ];
+        devices = [ { device = "hue-s-a"; } ];
+        scenes = defaultDayScenes;
+      };
+    }""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "switch", "name": "hue-s-a"},
+            "0xcccc": {"type": "tap", "name": "hue-ts-orphan"},
+        },
+    )
+    assert "hue-ts-orphan" in stderr
+    assert "type=tap" in stderr
+
+
+def test_unknown_type_does_not_trigger_unattached_warning() -> None:
+    """The whole point of `unknown` is to park a device in the
+    catalog without a role. It must NOT trigger the unattached
+    warning — otherwise every parked device would noise up the
+    build forever."""
+    result, stderr = _eval_define_rooms_with_warnings(
+        """{
+      hall = {
+        groupName = "hall"; id = 1; members = [ "hue-l-a/11" ];
+        devices = [ { device = "hue-s-a"; } ];
+        scenes = defaultDayScenes;
+      };
+    }""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "switch", "name": "hue-s-a"},
+            "0xparked-device-1": {
+                "type": "unknown",
+                "name": "0xparked-device-x-3",
+            },
+        },
+    )
+    # The parked device is in the catalog (rename phase will keep
+    # its name pinned) but no warning fires for it.
+    assert "0xparked-device-x-3" not in stderr
+    name_by_address = result["smind"]["services"]["hue-setup"]["config"]["name_by_address"]
+    assert name_by_address["0xparked-device-1"] == "0xparked-device-x-3"
+
+
+def test_no_warning_when_every_device_is_attached() -> None:
+    """Sanity check: a clean catalog where every typed entry is
+    referenced by some room emits no unattached-device warnings."""
+    result, stderr = _eval_define_rooms_with_warnings(
+        """{
+      hall = {
+        groupName = "hall"; id = 1; members = [ "hue-l-a/11" ];
+        devices = [ { device = "hue-s-a"; } { device = "hue-ms-a"; } ];
+        scenes = defaultDayScenes;
+      };
+      kitchen = {
+        groupName = "kitchen"; id = 2; members = [ "hue-l-b/11" ];
+        devices = [ { device = "hue-ts-a"; button = 1; } ];
+        scenes = defaultDayScenes;
+      };
+    }""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "light", "name": "hue-l-b"},
+            "0xcccc": {"type": "switch", "name": "hue-s-a"},
+            "0xdddd": {"type": "motion-sensor", "name": "hue-ms-a"},
+            "0xeeee": {"type": "tap", "name": "hue-ts-a"},
+        },
+    )
+    # No "not referenced by any room" warnings — only library noise
+    # like "fold has been deprecated" might be present.
+    assert "not referenced by any room" not in stderr
 
 
 def test_validation_catches_shared_bulb_scene_conflict() -> None:
@@ -1521,7 +1751,7 @@ def test_defaults_validation_rejects_unknown_field_in_room_scope() -> None:
         defaults_nix='''{
           room = {
             motionOffCooldownSeconds = 30;
-            motionOffCooldownSeconds = 5;  # camelCase typo
+            motionOfCooldownSeconds = 5;  # typo: missing `f`
           };
           "motion-sensor" = {
             occupancyTimeoutSeconds = 60; sensitivity = "medium";
@@ -1530,7 +1760,7 @@ def test_defaults_validation_rejects_unknown_field_in_room_scope() -> None:
         }''',
     )
     assert "unknown field" in err
-    assert "room.motionOffCooldownSeconds" in err
+    assert "room.motionOfCooldownSeconds" in err
 
 
 def test_defaults_validation_rejects_unknown_field_in_type_scope() -> None:
