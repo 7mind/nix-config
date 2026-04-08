@@ -685,27 +685,52 @@ impl Controller {
         let state = self.states.entry(room_name.clone()).or_default();
         let was_on = state.physically_on;
         state.physically_on = on;
-        // External state change → clear motion ownership. We're either
-        // off (so motion can re-arm) or someone else turned it on (so
-        // motion-off shouldn't try to undo their action).
-        if was_on != on {
-            state.motion_owned = false;
-            if !on {
-                state.cycle_idx = 0;
-            }
-            tracing::info!(
-                group = group_name,
-                room = %room_name,
-                from = was_on,
-                to = on,
-                "group state echo → physically_on transition (motion ownership cleared)"
-            );
-        } else {
+
+        if was_on == on {
             tracing::debug!(
                 group = group_name,
                 room = %room_name,
                 state = on,
                 "group state echo → no transition"
+            );
+            return Vec::new();
+        }
+
+        // We have a state transition we didn't initiate ourselves
+        // (button press handlers set physically_on synchronously, so
+        // their own echoes hit the no-transition branch above).
+        if on {
+            // off → on. We have no way to know whether the user pressed
+            // a switch, opened the Hue app, or a motion sensor we don't
+            // know about turned the lights on. Default to motion-owned
+            // so motion-off can later auto-clear the room. The cost of
+            // being wrong is at most one false auto-off; the cost of
+            // defaulting the OTHER way is lights stuck on indefinitely
+            // until the user manually toggles them. The same reasoning
+            // is applied at startup by `seed_motion_ownership_for_lit_rooms`,
+            // which still runs as defense in depth for rooms whose
+            // group-state event arrived during the refresh window.
+            state.motion_owned = true;
+            tracing::info!(
+                group = group_name,
+                room = %room_name,
+                from = was_on,
+                to = on,
+                "group state echo → off→on transition (defaulting to motion-owned)"
+            );
+        } else {
+            // on → off. The lights are gone; reset cycle position so
+            // the next on press starts at scene 1. Clear motion
+            // ownership too — the room is now off, so motion-off
+            // doesn't need ownership to do anything.
+            state.motion_owned = false;
+            state.cycle_idx = 0;
+            tracing::info!(
+                group = group_name,
+                room = %room_name,
+                from = was_on,
+                to = on,
+                "group state echo → on→off transition (motion ownership cleared)"
             );
         }
         Vec::new()
@@ -1929,38 +1954,118 @@ mod tests {
     }
 
     #[test]
-    fn external_group_on_clears_motion_ownership() {
+    fn group_state_same_state_echo_is_a_noop() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = study_with_motion_controller(clk.clone());
 
-        // Motion turned them on…
+        // Motion turned the lights on (motion-owned).
         c.handle_event(Event::Occupancy {
             sensor: "hue-ms-study".into(),
             occupied: true,
             illuminance: None,
             ts: clk.now(),
         });
-        // …and then someone re-publishes the group on (e.g. an HA scene
-        // call). We shouldn't keep the motion ownership across that.
-        // Setting from on→on with motion_owned should still leave
-        // motion_owned set; the clear only happens on a transition.
-        // Let's verify: same-state event leaves things alone.
+        assert!(c.state_for("study").unwrap().motion_owned);
+
+        // z2m re-publishes the same `state: ON` (could be a periodic
+        // update or a retained re-delivery on broker reconnect). No
+        // transition → no state changes. Motion ownership preserved.
         c.handle_event(Event::GroupState {
             group: "hue-lz-study".into(),
             on: true,
             ts: clk.now(),
         });
         assert!(c.state_for("study").unwrap().motion_owned);
+    }
 
-        // But an external off→on transition clears the flag (the previous
-        // on must have come from somewhere else).
-        c.set_physical_state("study", false);
+    #[test]
+    fn external_off_to_on_transition_defaults_to_motion_owned() {
+        // Off→on transitions we didn't initiate ourselves (HA, the Hue
+        // app, manual press at the bulb, /get response after refresh
+        // window) default to motion-owned. This way the next motion-off
+        // can auto-clear the room. The cost of being wrong is at most
+        // one false auto-off; the cost of clearing was lights stuck on
+        // until the user manually intervened. The user explicitly
+        // requested this default after observing the latter.
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+
+        // Room is currently off.
+        assert!(!c.state_for("study").map(|s| s.physically_on).unwrap_or(false));
+
+        // External transition to on (e.g. /get response arrives after
+        // the refresh window for a room the seed didn't catch).
         c.handle_event(Event::GroupState {
             group: "hue-lz-study".into(),
             on: true,
             ts: clk.now(),
         });
-        assert!(!c.state_for("study").unwrap().motion_owned);
+
+        let s = c.state_for("study").unwrap();
+        assert!(s.physically_on);
+        assert!(
+            s.motion_owned,
+            "external off→on transition must default to motion-owned"
+        );
+    }
+
+    #[test]
+    fn external_on_to_off_transition_clears_motion_ownership() {
+        // The inverse direction: external on→off transitions reset
+        // ownership (and cycle position). Anyone can have turned the
+        // lights off, and motion-off doesn't need ownership of an
+        // already-off room.
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+
+        // Motion turned the lights on, then someone uses HA to turn off.
+        c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: true,
+            illuminance: None,
+            ts: clk.now(),
+        });
+        c.handle_event(Event::GroupState {
+            group: "hue-lz-study".into(),
+            on: false,
+            ts: clk.now(),
+        });
+
+        let s = c.state_for("study").unwrap();
+        assert!(!s.physically_on);
+        assert!(!s.motion_owned);
+        assert_eq!(s.cycle_idx, 0);
+    }
+
+    #[test]
+    fn motion_off_fires_after_external_on_transition() {
+        // Full path of the user's bug report: lights came on via an
+        // external trigger (or a slow /get response after restart),
+        // then motion goes idle, motion-off should fire instead of
+        // suppressing.
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+
+        // External on (transition off→on, defaults to motion-owned).
+        c.handle_event(Event::GroupState {
+            group: "hue-lz-study".into(),
+            on: true,
+            ts: clk.now(),
+        });
+
+        // Motion sensor goes idle.
+        let actions = c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: false,
+            illuminance: None,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            actions,
+            vec![Action::new("hue-lz-study", Payload::state_off(0.8))],
+            "motion-off should fire even on rooms whose physically_on \
+             came from an external transition"
+        );
     }
 
     // ---- time-of-day slot dispatch --------------------------------------
