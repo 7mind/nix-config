@@ -32,25 +32,53 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 TOOLS_PATH = REPO_ROOT / "private/hosts/raspi5m/hue-lights-tools.nix"
 
 
-def _auto_address_by_name(rooms_nix: str) -> dict[str, str]:
-    """Synthesize an addressByName mapping that covers every device
+_TYPE_PREFIXES = {
+    "light": "hue-l-",
+    "switch": "hue-s-",
+    "tap": "hue-ts-",
+    "motion-sensor": "hue-ms-",
+}
+
+
+def _infer_type_from_name(name: str) -> str:
+    """Reverse the prefix convention to guess a device's type from
+    its friendly_name. Used by the auto-mapper so test snippets can
+    just write `device = "hue-l-foo"` without spelling out the type.
+
+    Order matters: longer prefixes are checked first because
+    `hue-ts-` would match `hue-s-` if the latter were checked first.
+    """
+    for type_name, prefix in sorted(
+        _TYPE_PREFIXES.items(), key=lambda kv: -len(kv[1])
+    ):
+        if name.startswith(prefix):
+            return type_name
+    return "light"  # default — most synthetic test refs are bulbs
+
+
+def _auto_devices_by_address(rooms_nix: str) -> dict[str, dict[str, str]]:
+    """Synthesize a `devicesByAddress` catalog that covers every device
     reference present in the given rooms snippet.
 
     `defineRooms` now requires every reference (in `members`,
-    `switches[*].{switch,tap}`, `motionSensor.name(s)`) to resolve
-    through an explicit mapping. Auto-generating one from the
-    snippet keeps the test suite ergonomic — each test config still
-    reads as a free-form Nix expression, no boilerplate mapping per
-    test.
+    `switches[*].device`, `motionSensor.device(s)`) to resolve
+    through an explicit catalog of `{ type; name; }` keyed by ieee.
+    Auto-generating one from the snippet keeps tests ergonomic.
 
-    Walks the snippet for tokens that look like device references in
-    the relevant positions. For each unique friendly name, assigns a
-    unique synthetic ieee. For each unique 0x... reference, assigns
-    a unique synthetic friendly name keyed in the output mapping.
+    For each friendly_name reference, the type is inferred from its
+    `hue-l-`/`hue-s-`/`hue-ts-`/`hue-ms-` prefix. Refs that don't
+    match any prefix default to `light`.
+
+    For each 0x... reference, a synthetic friendly_name is invented
+    with the `hue-l-` prefix so prefix validation passes for the
+    default `light` type.
     """
     member_re = re.compile(r'"([^"\s/]+)/\d+"')
-    name_assign_re = re.compile(r'(?:switch|tap|name)\s*=\s*"([^"]+)"')
-    names_list_re = re.compile(r'names\s*=\s*\[\s*((?:"[^"]+"\s*)+)\]')
+    # Only match `device = "..."` device refs. Scene blocks have
+    # `name = "..."` fields too, and matching them would pollute the
+    # auto-mapper with scene names that aren't devices at all.
+    name_assign_re = re.compile(r'device\s*=\s*"([^"]+)"')
+    names_list_re = re.compile(r'devices\s*=\s*\[\s*((?:"[^"]+"\s*)+)\]')
 
     refs: set[str] = set()
     refs.update(member_re.findall(rooms_nix))
@@ -58,27 +86,33 @@ def _auto_address_by_name(rooms_nix: str) -> dict[str, str]:
     for names_block in names_list_re.findall(rooms_nix):
         refs.update(re.findall(r'"([^"]+)"', names_block))
 
-    mapping: dict[str, str] = {}
-    synth_friendly_counter = 0
+    catalog: dict[str, dict[str, str]] = {}
+    synth_bulb_counter = 0
     synth_ieee_counter = 0
     for ref in sorted(refs):
         if ref.startswith("0x"):
-            synth_name = f"_synth_bulb_{synth_friendly_counter}"
-            synth_friendly_counter += 1
-            mapping[synth_name] = ref
+            synth_name = f"hue-l-_synth_bulb_{synth_bulb_counter}"
+            synth_bulb_counter += 1
+            catalog[ref] = {"type": "light", "name": synth_name}
         else:
             synth_addr = f"0xfe00000000{synth_ieee_counter:06x}"
             synth_ieee_counter += 1
-            mapping[ref] = synth_addr
-    return mapping
+            catalog[synth_addr] = {
+                "type": _infer_type_from_name(ref),
+                "name": ref,
+            }
+    return catalog
 
 
-def _render_address_by_name_nix(address_by_name: dict[str, str]) -> str:
-    """Render a Python dict as a Nix attrset literal. Both keys and
-    values are device-id strings, which never contain quotes — a
-    naive renderer is sufficient and avoids pulling in a Nix encoder."""
+def _render_devices_by_address_nix(
+    devices: dict[str, dict[str, str]],
+) -> str:
+    """Render a Python catalog as a Nix attrset literal in the
+    `{ ieee = { type; name; }; ... }` form. Device-id strings never
+    contain quotes so a naive renderer is sufficient."""
     entries = " ".join(
-        f'"{name}" = "{addr}";' for name, addr in sorted(address_by_name.items())
+        f'"{ieee}" = {{ type = "{d["type"]}"; name = "{d["name"]}"; }};'
+        for ieee, d in sorted(devices.items())
     )
     return "{ " + entries + " }"
 
@@ -86,19 +120,20 @@ def _render_address_by_name_nix(address_by_name: dict[str, str]) -> str:
 def _eval_define_rooms(
     rooms_nix: str,
     *,
-    address_by_name: dict[str, str] | None = None,
+    devices_by_address: dict[str, dict[str, str]] | None = None,
 ) -> dict[str, Any]:
-    """Evaluate `defineRooms { addressByName = ...; rooms = ...; }` with
-    the given rooms snippet and return the JSON-decoded result.
+    """Evaluate `defineRooms { devicesByAddress = ...; rooms = ...; }`
+    with the given rooms snippet and return the JSON-decoded result.
 
-    `address_by_name` defaults to an auto-extracted mapping covering
-    every device reference in `rooms_nix`. Tests that want to verify
-    a specific mapping (or trigger a missing-reference error) pass
-    their own.
+    `devices_by_address` defaults to an auto-extracted catalog
+    covering every device reference in `rooms_nix`, with types
+    inferred from the friendly_name prefix convention. Tests that
+    want to verify a specific catalog (or trigger a validation
+    error) pass their own.
     """
-    if address_by_name is None:
-        address_by_name = _auto_address_by_name(rooms_nix)
-    addr_nix = _render_address_by_name_nix(address_by_name)
+    if devices_by_address is None:
+        devices_by_address = _auto_devices_by_address(rooms_nix)
+    devices_nix = _render_devices_by_address_nix(devices_by_address)
     expr = f"""
 let
   pkgs = import <nixpkgs> {{ }};
@@ -107,7 +142,7 @@ let
   inherit (tools) defaultScheduledScenes defaultDayScenes;
 in
 tools.defineRooms {{
-  addressByName = {addr_nix};
+  devicesByAddress = {devices_nix};
   rooms = {rooms_nix};
 }}
 """
@@ -148,7 +183,7 @@ def test_switch_only_room_generates_single_rule() -> None:
         groupName = "study";
         id = 50;
         members = [ "0xaaaa/11" ];
-        switches = [ { switch = "hue-s-study"; } ];
+        switches = [ { device = "hue-s-study"; } ];
         scenes = defaultDayScenes;
       };
     }"""
@@ -174,7 +209,7 @@ def test_motion_only_room_generates_single_motion_rule() -> None:
         id = 51;
         members = [ "0xbbbb/11" ];
         scenes = defaultDayScenes;
-        motionSensor.name = "hue-ms-cellar";
+        motionSensor.device = "hue-ms-cellar";
       };
     }"""
     )
@@ -199,8 +234,8 @@ def test_switch_plus_motion_share_cache_label() -> None:
         groupName = "living room";
         id = 52;
         members = [ "0xcccc/11" ];
-        switches = [ { switch = "hue-s-living-room"; } ];
-        motionSensor.name = "hue-ms-living-room";
+        switches = [ { device = "hue-s-living-room"; } ];
+        motionSensor.device = "hue-ms-living-room";
         scenes = defaultDayScenes;
       };
     }"""
@@ -230,7 +265,7 @@ def test_motion_on_check_has_luminance_and_lights_state_gates() -> None:
         id = 53;
         members = [ "0xdddd/11" ];
         scenes = defaultDayScenes;
-        motionSensor.name = "hue-ms-hall";
+        motionSensor.device = "hue-ms-hall";
       };
     }"""
     )
@@ -256,7 +291,7 @@ def test_motion_on_check_respects_max_illuminance_override() -> None:
         members = [ "0xeeee/11" ];
         scenes = defaultDayScenes;
         motionSensor = {
-          name = "hue-ms-closet";
+          device = "hue-ms-closet";
           maxIlluminance = 25;
           offCooldownSeconds = 5;
         };
@@ -279,7 +314,7 @@ def test_luminance_gate_can_be_disabled() -> None:
         members = [ "0xffff/11" ];
         scenes = defaultDayScenes;
         motionSensor = {
-          name = "hue-ms-darkroom";
+          device = "hue-ms-darkroom";
           maxIlluminance = null;
         };
       };
@@ -306,7 +341,7 @@ def test_multi_sensor_generates_rule_per_sensor() -> None:
         id = 56;
         members = [ "0x1111/11" ];
         scenes = defaultDayScenes;
-        motionSensor.names = [ "hue-ms-hall-a" "hue-ms-hall-b" "hue-ms-hall-c" ];
+        motionSensor.devices = [ "hue-ms-hall-a" "hue-ms-hall-b" "hue-ms-hall-c" ];
       };
     }"""
     )
@@ -329,7 +364,7 @@ def test_multi_sensor_motion_off_checks_other_sensors() -> None:
         id = 57;
         members = [ "0x2222/11" ];
         scenes = defaultDayScenes;
-        motionSensor.names = [ "hue-ms-a" "hue-ms-b" ];
+        motionSensor.devices = [ "hue-ms-a" "hue-ms-b" ];
       };
     }"""
     )
@@ -367,7 +402,7 @@ def test_multi_sensor_pre_dispatch_updates_own_flag() -> None:
         id = 58;
         members = [ "0x3333/11" ];
         scenes = defaultDayScenes;
-        motionSensor.names = [ "hue-ms-a" "hue-ms-b" ];
+        motionSensor.devices = [ "hue-ms-a" "hue-ms-b" ];
       };
     }"""
     )
@@ -401,22 +436,22 @@ def test_hue_setup_groups_contain_members_and_scenes() -> None:
       study = {
         groupName = "study";
         id = 60;
-        members = [ "lamp-study-1/11" "lamp-study-2/11" ];
-        switches = [ { switch = "hue-s-study"; } ];
+        members = [ "hue-l-study-1/11" "hue-l-study-2/11" ];
+        switches = [ { device = "hue-s-study"; } ];
         scenes = defaultDayScenes;
       };
     }""",
-        address_by_name={
-            "lamp-study-1": "0x4444",
-            "lamp-study-2": "0x5555",
-            "hue-s-study": "0xff01",
+        devices_by_address={
+            "0x4444": {"type": "light", "name": "hue-l-study-1"},
+            "0x5555": {"type": "light", "name": "hue-l-study-2"},
+            "0xff01": {"type": "switch", "name": "hue-s-study"},
         },
     )
     groups = result["smind"]["services"]["hue-setup"]["config"]["groups"]
     assert "study" in groups
     study = groups["study"]
     assert study["id"] == 60
-    assert study["members"] == ["lamp-study-1/11", "lamp-study-2/11"]
+    assert study["members"] == ["hue-l-study-1/11", "hue-l-study-2/11"]
     # Three default scenes
     assert len(study["scenes"]) == 3
     scene_ids = sorted(s["id"] for s in study["scenes"])
@@ -435,7 +470,7 @@ def test_hue_setup_devices_emits_motion_sensor_options() -> None:
         members = [ "0x6666/11" ];
         scenes = defaultDayScenes;
         motionSensor = {
-          names = [ "hue-ms-hall-a" "hue-ms-hall-b" ];
+          devices = [ "hue-ms-hall-a" "hue-ms-hall-b" ];
           occupancyTimeoutSeconds = 75;
           sensitivity = "high";
           ledIndication = false;
@@ -459,13 +494,13 @@ def test_hue_setup_devices_emits_motion_sensor_options() -> None:
 def _eval_expect_error(
     rooms_nix: str,
     *,
-    address_by_name: dict[str, str] | None = None,
+    devices_by_address: dict[str, dict[str, str]] | None = None,
 ) -> str:
     """Evaluate the given rooms block and expect nix eval to fail.
     Returns the stderr text for assertions."""
-    if address_by_name is None:
-        address_by_name = _auto_address_by_name(rooms_nix)
-    addr_nix = _render_address_by_name_nix(address_by_name)
+    if devices_by_address is None:
+        devices_by_address = _auto_devices_by_address(rooms_nix)
+    devices_nix = _render_devices_by_address_nix(devices_by_address)
     expr = f"""
 let
   pkgs = import <nixpkgs> {{ }};
@@ -474,7 +509,7 @@ let
   inherit (tools) defaultDayScenes;
 in
 tools.defineRooms {{
-  addressByName = {addr_nix};
+  devicesByAddress = {devices_nix};
   rooms = {rooms_nix};
 }}
 """
@@ -495,11 +530,11 @@ def test_validation_duplicate_group_id() -> None:
         """{
       a = {
         groupName = "a"; id = 1; members = [ "0x1/11" ];
-        switches = [ { switch = "hue-s-a"; } ]; scenes = defaultDayScenes;
+        switches = [ { device = "hue-s-a"; } ]; scenes = defaultDayScenes;
       };
       b = {
         groupName = "b"; id = 1; members = [ "0x2/11" ];
-        switches = [ { switch = "hue-s-b"; } ]; scenes = defaultDayScenes;
+        switches = [ { device = "hue-s-b"; } ]; scenes = defaultDayScenes;
       };
     }"""
     )
@@ -522,15 +557,15 @@ def test_validation_catches_shared_bulb_scene_conflict() -> None:
     err = _eval_expect_error(
         """{
       room-a = {
-        groupName = "room-a"; id = 1; members = [ "shared-bulb/11" ];
-        switches = [ { switch = "hue-s-a"; } ];
+        groupName = "room-a"; id = 1; members = [ "hue-l-shared/11" ];
+        switches = [ { device = "hue-s-a"; } ];
         scenes = [
           { id = 1; name = "bright"; state = "ON"; brightness = 254; color_temp = 250; transition = 0.5; }
         ];
       };
       room-b = {
-        groupName = "room-b"; id = 2; members = [ "shared-bulb/11" ];
-        switches = [ { switch = "hue-s-b"; } ];
+        groupName = "room-b"; id = 2; members = [ "hue-l-shared/11" ];
+        switches = [ { device = "hue-s-b"; } ];
         scenes = [
           { id = 1; name = "dim"; state = "ON"; brightness = 100; color_temp = 400; transition = 0.5; }
         ];
@@ -538,13 +573,13 @@ def test_validation_catches_shared_bulb_scene_conflict() -> None:
     }"""
     )
     assert "per-bulb scene conflicts" in err
-    assert "shared-bulb/11" in err
+    assert "hue-l-shared/11" in err
 
 
 # ---------- addressByName / device reference resolution ----------
 
 
-def test_address_by_name_translates_hardware_id_to_friendly() -> None:
+def test_devices_by_address_translates_hardware_id_to_friendly() -> None:
     """A room that references a bulb by its `0x...` hardware id has
     that reference rewritten to the canonical friendly name in the
     rendered hue-setup config. The bento source/target topics are
@@ -555,131 +590,139 @@ def test_address_by_name_translates_hardware_id_to_friendly() -> None:
         groupName = "study";
         id = 60;
         members = [ "0x1234abcd/11" ];
-        switches = [ { switch = "0xff00aabb"; } ];
+        switches = [ { device = "0xff00aabb"; } ];
         scenes = defaultDayScenes;
       };
     }""",
-        address_by_name={
-            "lamp-study": "0x1234abcd",
-            "hue-s-study": "0xff00aabb",
+        devices_by_address={
+            "0x1234abcd": {"type": "light", "name": "hue-l-study"},
+            "0xff00aabb": {"type": "switch", "name": "hue-s-study"},
         },
     )
     study = result["smind"]["services"]["hue-setup"]["config"]["groups"]["study"]
-    assert study["members"] == ["lamp-study/11"]
+    assert study["members"] == ["hue-l-study/11"]
     rule = result["smind"]["services"]["mqtt-automations"]["rules"]["study-switch"]
     # The bento source topic uses the friendly name, not the 0x form,
     # because z2m only publishes /action under the friendly_name path.
     assert rule["source"] == "zigbee2mqtt/hue-s-study/action"
 
 
-def test_address_by_name_inverse_threaded_into_hue_setup_config() -> None:
-    """The inverse mapping (ieee → friendly) is rendered into
-    `hue-setup.config.name_by_address` so the runtime rename phase
-    has the same source of truth that drove the build-time
+def test_devices_by_address_inverse_threaded_into_hue_setup_config() -> None:
+    """The catalog's name_by_address (ieee → friendly) is rendered
+    into `hue-setup.config.name_by_address` so the runtime rename
+    phase has the same source of truth that drove the build-time
     translation."""
     result = _eval_define_rooms(
         """{
       study = {
         groupName = "study";
         id = 60;
-        members = [ "lamp-a/11" ];
-        switches = [ { switch = "hue-s-study"; } ];
+        members = [ "hue-l-a/11" ];
+        switches = [ { device = "hue-s-study"; } ];
         scenes = defaultDayScenes;
       };
     }""",
-        address_by_name={
-            "lamp-a": "0x0000000000000aaa",
-            "hue-s-study": "0x0000000000000bbb",
+        devices_by_address={
+            "0x0000000000000aaa": {"type": "light", "name": "hue-l-a"},
+            "0x0000000000000bbb": {"type": "switch", "name": "hue-s-study"},
         },
     )
     name_by_address = result["smind"]["services"]["hue-setup"]["config"]["name_by_address"]
     assert name_by_address == {
-        "0x0000000000000aaa": "lamp-a",
+        "0x0000000000000aaa": "hue-l-a",
         "0x0000000000000bbb": "hue-s-study",
     }
 
 
 def test_validation_unknown_friendly_name_in_members() -> None:
-    """A friendly name in `members` that isn't in `addressByName`
+    """A friendly name in `members` that isn't in `devicesByAddress`
     fails the build with a precise error message."""
     err = _eval_expect_error(
         """{
       study = {
-        groupName = "study"; id = 1; members = [ "lamp-mystery/11" ];
-        switches = [ { switch = "hue-s-study"; } ]; scenes = defaultDayScenes;
+        groupName = "study"; id = 1; members = [ "hue-l-mystery/11" ];
+        switches = [ { device = "hue-s-study"; } ]; scenes = defaultDayScenes;
       };
     }""",
-        address_by_name={
-            "hue-s-study": "0xff01",
-            # lamp-mystery deliberately omitted
+        devices_by_address={
+            "0xff01": {"type": "switch", "name": "hue-s-study"},
+            # hue-l-mystery deliberately omitted
         },
     )
-    assert "lamp-mystery" in err
-    assert "addressByName" in err
+    assert "hue-l-mystery" in err
+    assert "devicesByAddress" in err
 
 
 def test_validation_unknown_hardware_id_in_members() -> None:
-    """A `0x...` hardware id in `members` that isn't in `addressByName`
-    fails the build with a precise error message."""
+    """A `0x...` hardware id in `members` that isn't in
+    `devicesByAddress` fails the build with a precise error
+    message."""
     err = _eval_expect_error(
         """{
       study = {
         groupName = "study"; id = 1; members = [ "0xdeadbeef/11" ];
-        switches = [ { switch = "hue-s-study"; } ]; scenes = defaultDayScenes;
+        switches = [ { device = "hue-s-study"; } ]; scenes = defaultDayScenes;
       };
     }""",
-        address_by_name={
-            "hue-s-study": "0xff01",
+        devices_by_address={
+            "0xff01": {"type": "switch", "name": "hue-s-study"},
             # 0xdeadbeef deliberately omitted
         },
     )
     assert "0xdeadbeef" in err
-    assert "addressByName" in err
+    assert "devicesByAddress" in err
 
 
 def test_validation_unknown_switch_friendly_name() -> None:
-    """A switch reference that isn't in addressByName also fails."""
+    """A switch reference that isn't in devicesByAddress also fails."""
     err = _eval_expect_error(
         """{
       study = {
-        groupName = "study"; id = 1; members = [ "lamp-a/11" ];
-        switches = [ { switch = "hue-s-mystery"; } ]; scenes = defaultDayScenes;
+        groupName = "study"; id = 1; members = [ "hue-l-a/11" ];
+        switches = [ { device = "hue-s-mystery"; } ]; scenes = defaultDayScenes;
       };
     }""",
-        address_by_name={"lamp-a": "0xaaaa"},
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+        },
     )
     assert "hue-s-mystery" in err
 
 
-def test_validation_unknown_motion_sensor_name() -> None:
-    """A motionSensor.name that isn't in addressByName also fails."""
+def test_validation_unknown_motion_sensor_device() -> None:
+    """A motionSensor.device that isn't in devicesByAddress also fails."""
     err = _eval_expect_error(
         """{
       study = {
-        groupName = "study"; id = 1; members = [ "lamp-a/11" ];
-        motionSensor = { name = "hue-ms-mystery"; };
+        groupName = "study"; id = 1; members = [ "hue-l-a/11" ];
+        motionSensor = { device = "hue-ms-mystery"; };
         scenes = defaultDayScenes;
       };
     }""",
-        address_by_name={"lamp-a": "0xaaaa"},
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+        },
     )
     assert "hue-ms-mystery" in err
 
 
-def test_validation_duplicate_address_in_address_by_name() -> None:
-    """Two friendly names mapping to the same hardware id is a
-    typo/paste-error signal — surfaced as a build error."""
+def test_validation_duplicate_friendly_name_in_devices_by_address() -> None:
+    """Two ieee entries claiming the same friendly_name is a
+    typo/paste-error signal — surfaced as a build error. (Under the
+    old schema this was the inverse: two friendly_names mapping to
+    one ieee. The new schema is keyed by ieee, so the inverse is
+    structurally impossible — Nix attrset keys are unique.)"""
     err = _eval_expect_error(
         """{
       study = {
-        groupName = "study"; id = 1; members = [ "lamp-a/11" ];
-        switches = [ { switch = "hue-s-study"; } ]; scenes = defaultDayScenes;
+        groupName = "study"; id = 1; members = [ "hue-l-a/11" ];
+        switches = [ { device = "hue-s-study"; } ]; scenes = defaultDayScenes;
       };
     }""",
-        address_by_name={
-            "lamp-a": "0xaaaa",
-            "lamp-b": "0xaaaa",  # duplicate ieee
-            "hue-s-study": "0xff01",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "light", "name": "hue-l-a"},  # duplicate friendly
+            "0xff01": {"type": "switch", "name": "hue-s-study"},
         },
     )
     assert "must be unique per device" in err
@@ -700,8 +743,8 @@ def test_multiple_wall_switches_in_one_room_generate_one_rule_each() -> None:
         groupName = "hall"; id = 70;
         members = [ "0x7000/11" ];
         switches = [
-          { switch = "hue-s-hall-front"; }
-          { switch = "hue-s-hall-back"; }
+          { device = "hue-s-hall-front"; }
+          { device = "hue-s-hall-back"; }
         ];
         scenes = defaultDayScenes;
       };
@@ -725,7 +768,7 @@ def test_tap_button_room_generates_tap_rule() -> None:
         groupName = "kitchen-all"; id = 71;
         members = [ "0x7100/11" ];
         switches = [
-          { tap = "hue-ts-kitchen"; button = 1; }
+          { device = "hue-ts-kitchen"; button = 1; }
         ];
         scenes = defaultDayScenes;
       };
@@ -756,7 +799,7 @@ def test_tap_button_handlers_check_action_and_state() -> None:
         groupName = "kitchen-all"; id = 72;
         members = [ "0x7200/11" ];
         switches = [
-          { tap = "hue-ts-kitchen"; button = 1; }
+          { device = "hue-ts-kitchen"; button = 1; }
         ];
         scenes = defaultDayScenes;
       };
@@ -798,25 +841,25 @@ def test_one_tap_with_multiple_rooms_generates_single_rule() -> None:
       kitchen-all = {
         groupName = "kitchen-all"; id = 80;
         members = [ "0x8000/11" ];
-        switches = [ { tap = "hue-ts-kitchen"; button = 1; } ];
+        switches = [ { device = "hue-ts-kitchen"; button = 1; } ];
         scenes = defaultDayScenes;
       };
       kitchen-cooker = {
         groupName = "kitchen-cooker"; id = 81;
         members = [ "0x8001/11" ];
-        switches = [ { tap = "hue-ts-kitchen"; button = 2; } ];
+        switches = [ { device = "hue-ts-kitchen"; button = 2; } ];
         scenes = defaultDayScenes;
       };
       kitchen-dining = {
         groupName = "kitchen-dining"; id = 82;
         members = [ "0x8002/11" ];
-        switches = [ { tap = "hue-ts-kitchen"; button = 3; } ];
+        switches = [ { device = "hue-ts-kitchen"; button = 3; } ];
         scenes = defaultDayScenes;
       };
       kitchen-empty = {
         groupName = "kitchen-empty"; id = 83;
         members = [ "0x8003/11" ];
-        switches = [ { tap = "hue-ts-kitchen"; button = 4; } ];
+        switches = [ { device = "hue-ts-kitchen"; button = 4; } ];
         scenes = defaultDayScenes;
       };
     }"""
@@ -858,13 +901,13 @@ def test_tap_handlers_publish_to_per_room_targets() -> None:
       kitchen-all = {
         groupName = "kitchen-all"; id = 90;
         members = [ "0x9000/11" ];
-        switches = [ { tap = "hue-ts-kitchen"; button = 1; } ];
+        switches = [ { device = "hue-ts-kitchen"; button = 1; } ];
         scenes = defaultDayScenes;
       };
       kitchen-cooker = {
         groupName = "kitchen-cooker"; id = 91;
         members = [ "0x9001/11" ];
-        switches = [ { tap = "hue-ts-kitchen"; button = 2; } ];
+        switches = [ { device = "hue-ts-kitchen"; button = 2; } ];
         scenes = defaultDayScenes;
       };
     }"""
@@ -892,13 +935,13 @@ def test_validation_duplicate_tap_button() -> None:
       kitchen-all = {
         groupName = "kitchen-all"; id = 100;
         members = [ "0xaa00/11" ];
-        switches = [ { tap = "hue-ts-kitchen"; button = 1; } ];
+        switches = [ { device = "hue-ts-kitchen"; button = 1; } ];
         scenes = defaultDayScenes;
       };
       kitchen-other = {
         groupName = "kitchen-other"; id = 101;
         members = [ "0xaa01/11" ];
-        switches = [ { tap = "hue-ts-kitchen"; button = 1; } ];
+        switches = [ { device = "hue-ts-kitchen"; button = 1; } ];
         scenes = defaultDayScenes;
       };
     }"""
@@ -915,13 +958,13 @@ def test_validation_duplicate_wall_switch_across_rooms() -> None:
       a = {
         groupName = "a"; id = 110;
         members = [ "0xb000/11" ];
-        switches = [ { switch = "hue-s-shared"; } ];
+        switches = [ { device = "hue-s-shared"; } ];
         scenes = defaultDayScenes;
       };
       b = {
         groupName = "b"; id = 111;
         members = [ "0xb001/11" ];
-        switches = [ { switch = "hue-s-shared"; } ];
+        switches = [ { device = "hue-s-shared"; } ];
         scenes = defaultDayScenes;
       };
     }"""
@@ -929,36 +972,62 @@ def test_validation_duplicate_wall_switch_across_rooms() -> None:
     assert "duplicate wall switch friendly_name" in err
 
 
-def test_validation_switches_entry_must_pick_one_kind() -> None:
-    """A switches entry that sets both `switch` and `tap` is invalid."""
+def test_validation_switches_entry_requires_device_field() -> None:
+    """A switches entry must have a `device` field."""
     err = _eval_expect_error(
         """{
       a = {
         groupName = "a"; id = 120;
         members = [ "0xc000/11" ];
         switches = [
-          { switch = "hue-s-confused"; tap = "hue-ts-confused"; button = 1; }
+          { button = 1; }  # missing `device`
         ];
         scenes = defaultDayScenes;
       };
     }"""
     )
-    assert "either `switch` or `tap`" in err
+    assert "must specify `device" in err
 
 
 def test_validation_tap_entry_requires_button() -> None:
-    """A tap entry without a button can't be wired to anything."""
+    """A tap-typed device referenced from a switches entry must come
+    with a `button = N` field — without it the renderer wouldn't
+    know which button to bind."""
     err = _eval_expect_error(
         """{
       a = {
         groupName = "a"; id = 130;
         members = [ "0xd000/11" ];
-        switches = [ { tap = "hue-ts-foo"; } ];
+        switches = [ { device = "hue-ts-foo"; } ];
         scenes = defaultDayScenes;
       };
-    }"""
+    }""",
+        devices_by_address={
+            "0xd000": {"type": "light", "name": "hue-l-_synth_bulb_0"},
+            "0xfeed00000000": {"type": "tap", "name": "hue-ts-foo"},
+        },
     )
     assert "must specify `button = N`" in err
+
+
+def test_validation_wall_switch_entry_rejects_button() -> None:
+    """A wall-switch device referenced with a `button` field is a
+    config error — buttons only make sense for taps."""
+    err = _eval_expect_error(
+        """{
+      a = {
+        groupName = "a"; id = 131;
+        members = [ "0xd100/11" ];
+        switches = [ { device = "hue-s-foo"; button = 1; } ];
+        scenes = defaultDayScenes;
+      };
+    }""",
+        devices_by_address={
+            "0xd100": {"type": "light", "name": "hue-l-_synth_bulb_0"},
+            "0xfeed00000000": {"type": "switch", "name": "hue-s-foo"},
+        },
+    )
+    assert "must not specify `button`" in err
 
 
 def test_tap_button_with_slotted_scenes_picks_active_slot() -> None:
@@ -971,7 +1040,7 @@ def test_tap_button_with_slotted_scenes_picks_active_slot() -> None:
       kitchen-all = {
         groupName = "kitchen-all"; id = 140;
         members = [ "0xe000/11" ];
-        switches = [ { tap = "hue-ts-kitchen"; button = 1; } ];
+        switches = [ { device = "hue-ts-kitchen"; button = 1; } ];
         scenes = defaultScheduledScenes;
       };
     }"""
@@ -986,3 +1055,182 @@ def test_tap_button_with_slotted_scenes_picks_active_slot() -> None:
     assert "if " in on_mapping and "else" in on_mapping
     # Both day and night scene IDs are referenced
     assert '"scene_recall"' in on_mapping
+
+
+# ---------- type-aware validation (devicesByAddress) ----------
+
+
+def test_validation_friendly_name_must_match_type_prefix() -> None:
+    """A typed entry whose friendly_name doesn't start with the
+    convention prefix fails the build. Catches typos like
+    `type = "light"; name = "hue-s-foo"`."""
+    err = _eval_expect_error(
+        """{
+      study = {
+        groupName = "study"; id = 1; members = [ "hue-l-foo/11" ];
+        switches = [ { device = "hue-s-foo"; } ]; scenes = defaultDayScenes;
+      };
+    }""",
+        devices_by_address={
+            # Light entry with switch-shaped name → fails
+            "0xaaaa": {"type": "light", "name": "hue-s-foo"},
+            "0xbbbb": {"type": "switch", "name": "hue-s-foo"},
+        },
+    )
+    assert "does not start with the required prefix" in err
+    assert "hue-l-" in err
+
+
+def test_validation_unknown_type_rejected() -> None:
+    """A device with a type that isn't in the known set fails the
+    build with a clear list of known types."""
+    err = _eval_expect_error(
+        """{
+      study = {
+        groupName = "study"; id = 1; members = [ "hue-l-a/11" ];
+        switches = [ { device = "hue-s-a"; } ]; scenes = defaultDayScenes;
+      };
+    }""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "wall-plug", "name": "hue-s-a"},  # invalid type
+        },
+    )
+    assert "unknown type 'wall-plug'" in err
+
+
+def test_validation_unknown_type_skips_prefix_check() -> None:
+    """The escape-hatch `unknown` type allows arbitrary friendly_names
+    so devices can be parked in the catalog without committing to a
+    role. The unknown device may not itself be referenced from any
+    room, so this test only puts it alongside a normal entry."""
+    result = _eval_define_rooms(
+        """{
+      study = {
+        groupName = "study"; id = 1; members = [ "hue-l-a/11" ];
+        switches = [ { device = "hue-s-a"; } ]; scenes = defaultDayScenes;
+      };
+    }""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "switch", "name": "hue-s-a"},
+            # Free-form name, no prefix — would fail for any other type
+            "0xcccc": {"type": "unknown", "name": "0xparked-device-x-3"},
+        },
+    )
+    # Catalog includes the unknown device but rooms don't reference it
+    name_by_address = result["smind"]["services"]["hue-setup"]["config"]["name_by_address"]
+    assert name_by_address["0xcccc"] == "0xparked-device-x-3"
+
+
+def test_validation_unknown_type_cannot_be_referenced() -> None:
+    """A device of type `unknown` may not appear in any room
+    reference position — that's the whole point of `unknown`."""
+    err = _eval_expect_error(
+        """{
+      study = {
+        groupName = "study"; id = 1; members = [ "0xparked-device/11" ];
+        switches = [ { device = "hue-s-a"; } ]; scenes = defaultDayScenes;
+      };
+    }""",
+        devices_by_address={
+            "0xparked-device": {"type": "unknown", "name": "0xparked-device-1"},
+            "0xbbbb": {"type": "switch", "name": "hue-s-a"},
+        },
+    )
+    assert "type 'unknown'" in err
+    assert "requires one of" in err
+
+
+def test_validation_member_must_be_a_light() -> None:
+    """A switch (or anything non-light) referenced in `members` is a
+    config error — only lights belong in a group's member list."""
+    err = _eval_expect_error(
+        """{
+      study = {
+        groupName = "study"; id = 1; members = [ "hue-s-a/11" ];
+        switches = [ { device = "hue-s-b"; } ]; scenes = defaultDayScenes;
+      };
+    }""",
+        devices_by_address={
+            "0xaaaa": {"type": "switch", "name": "hue-s-a"},
+            "0xbbbb": {"type": "switch", "name": "hue-s-b"},
+        },
+    )
+    assert "type 'switch'" in err
+    assert "requires one of [light]" in err
+
+
+def test_validation_switches_entry_rejects_a_light() -> None:
+    """A light referenced in a switches entry is a config error —
+    only switch and tap types are valid control devices."""
+    err = _eval_expect_error(
+        """{
+      study = {
+        groupName = "study"; id = 1; members = [ "hue-l-a/11" ];
+        switches = [ { device = "hue-l-other"; } ]; scenes = defaultDayScenes;
+      };
+    }""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "light", "name": "hue-l-other"},
+        },
+    )
+    assert "type 'light'" in err
+    assert "requires one of [switch, tap]" in err
+
+
+def test_validation_motion_sensor_rejects_a_light() -> None:
+    """A light referenced as a motionSensor.device is a config
+    error — only motion-sensor types are valid there."""
+    err = _eval_expect_error(
+        """{
+      study = {
+        groupName = "study"; id = 1; members = [ "hue-l-a/11" ];
+        motionSensor = { device = "hue-l-other"; };
+        scenes = defaultDayScenes;
+      };
+    }""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "light", "name": "hue-l-other"},
+        },
+    )
+    assert "type 'light'" in err
+    assert "requires one of [motion-sensor]" in err
+
+
+def test_validation_dispatches_tap_vs_switch_by_resolved_type() -> None:
+    """The renderer dispatches a switches entry to either a wall-
+    switch (cycle) rule or a tap (toggle) rule based on the *type*
+    of the resolved device. Same `{ device = ... }` shape, two
+    different rule kinds in the output."""
+    result = _eval_define_rooms(
+        """{
+      study = {
+        groupName = "study"; id = 1; members = [ "hue-l-a/11" ];
+        switches = [ { device = "hue-s-foo"; } ];
+        scenes = defaultDayScenes;
+      };
+      kitchen = {
+        groupName = "kitchen"; id = 2; members = [ "hue-l-b/11" ];
+        switches = [ { device = "hue-ts-foo"; button = 1; } ];
+        scenes = defaultDayScenes;
+      };
+    }""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "light", "name": "hue-l-b"},
+            "0xcccc": {"type": "switch", "name": "hue-s-foo"},
+            "0xdddd": {"type": "tap", "name": "hue-ts-foo"},
+        },
+    )
+    rules = result["smind"]["services"]["mqtt-automations"]["rules"]
+    # Cycle rule for the wall switch
+    assert "study-switch" in rules
+    assert rules["study-switch"]["source"] == "zigbee2mqtt/hue-s-foo/action"
+    # Tap rule for the tap device
+    assert "tap-hue_ts_foo" in rules
+    assert rules["tap-hue_ts_foo"]["source"] == "zigbee2mqtt/hue-ts-foo/action"
+
+

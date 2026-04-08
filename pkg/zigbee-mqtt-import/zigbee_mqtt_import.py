@@ -1,14 +1,30 @@
 #!/usr/bin/env python3
-"""Dump the current zigbee2mqtt friendly_name → ieee_address mapping.
+"""Dump the current zigbee2mqtt device catalog as a typed mapping.
 
 Connects to MQTT, reads the retained `zigbee2mqtt/bridge/devices`
 topic, and writes a JSON object of the form
 
-  { "<friendly_name>": "<ieee_address>", ... }
+  {
+    "<ieee_address>": { "type": "<inferred>", "name": "<friendly_name>" },
+    ...
+  }
 
-to stdout. Output is sorted by friendly_name for stable diffs so the
-result can be checked into source control as the canonical mapping
-that the rest of the hue tooling consumes.
+to stdout. Output is sorted by ieee_address for stable diffs so the
+result can be checked into source control / pasted into the
+`devicesByAddress` block of `hue-lights.nix`.
+
+`type` is inferred from the device's `definition.exposes` payload:
+
+  * any exposure with `type == "light"`              → "light"
+  * any feature named `occupancy` (Hue motion)       → "motion-sensor"
+  * any `action` feature whose values include
+    `press_1` (Hue Tap)                              → "tap"
+  * any `action` feature whose values include
+    `on_press_release` (Hue dimmer / wall switch)    → "switch"
+  * otherwise                                        → "unknown"
+
+Inference is best-effort — review the result and correct any
+miscategorisations before pasting into the Nix catalog.
 
 Coordinator entries (z2m's own bridge endpoint) are skipped: they
 don't represent a real device the user would ever rename, and
@@ -24,7 +40,7 @@ import logging
 import sys
 from pathlib import Path
 from threading import Event
-from typing import Any
+from typing import Any, Iterator
 
 import paho.mqtt.client as mqtt
 from paho.mqtt.enums import CallbackAPIVersion
@@ -117,15 +133,82 @@ class Z2mDevicesClient:
         self._client.disconnect()
 
 
-def build_mapping(devices: list[dict[str, Any]]) -> dict[str, str]:
-    """Reduce z2m's bridge/devices payload to {friendly_name: ieee_address}.
+def _walk_features(exposes: list[Any]) -> Iterator[dict[str, Any]]:
+    """Yield every feature dict from a (possibly composite) exposes list.
 
-    Skips the coordinator and any entry that is missing either field.
-    Raises on a duplicate friendly_name (z2m enforces uniqueness, so
-    this is a corruption signal — surface it loudly rather than
-    silently dropping a bulb on the floor).
+    z2m's expose schema is recursive: a top-level entry can be a leaf
+    feature (`{name, type, ...}`) or a composite (`{type: "switch",
+    features: [...]}`). Walk both forms so the type-inference checks
+    below see every leaf regardless of nesting depth.
     """
-    mapping: dict[str, str] = {}
+    for entry in exposes:
+        if not isinstance(entry, dict):
+            continue
+        yield entry
+        sub = entry.get("features")
+        if isinstance(sub, list):
+            yield from _walk_features(sub)
+
+
+def infer_device_type(device: dict[str, Any]) -> str:
+    """Best-effort classify a z2m device into one of the catalog types.
+
+    Returns one of: "light", "switch", "tap", "motion-sensor",
+    "unknown". The classification is purely structural — based on
+    `definition.exposes` — so it works for any vendor that follows
+    the z2m feature conventions, not just Hue.
+
+    Order of checks matters when a device exposes multiple kinds of
+    features (e.g., a future motion sensor with a built-in light):
+    `light` is the most specific signal a device can emit, so it
+    wins; the rest are checked in decreasing specificity.
+    """
+    definition = device.get("definition") or {}
+    exposes = definition.get("exposes")
+    if not isinstance(exposes, list):
+        return "unknown"
+
+    has_light = False
+    has_occupancy = False
+    has_press_n = False
+    has_dimmer_action = False
+    for feat in _walk_features(exposes):
+        if feat.get("type") == "light":
+            has_light = True
+        if feat.get("name") == "occupancy":
+            has_occupancy = True
+        if feat.get("name") == "action":
+            values = feat.get("values") or []
+            if isinstance(values, list):
+                if "press_1" in values:
+                    has_press_n = True
+                if "on_press_release" in values:
+                    has_dimmer_action = True
+
+    if has_light:
+        return "light"
+    if has_occupancy:
+        return "motion-sensor"
+    if has_press_n:
+        return "tap"
+    if has_dimmer_action:
+        return "switch"
+    return "unknown"
+
+
+def build_mapping(devices: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
+    """Reduce z2m's bridge/devices payload to a `devicesByAddress`
+    catalog: `{ieee_address: {type, name}}` keyed by ieee, sorted
+    for stable diffs.
+
+    Skips the coordinator and any entry that is missing either the
+    ieee or the friendly_name. Raises on a duplicate friendly_name
+    (z2m enforces uniqueness, so this is a corruption signal —
+    surface it loudly rather than silently dropping a bulb on the
+    floor).
+    """
+    catalog: dict[str, dict[str, str]] = {}
+    seen_friendly: dict[str, str] = {}
     for device in devices:
         if device.get("type") == "Coordinator":
             continue
@@ -137,13 +220,17 @@ def build_mapping(devices: list[dict[str, Any]]) -> dict[str, str]:
                 device,
             )
             continue
-        if friendly_name in mapping:
+        if friendly_name in seen_friendly:
             raise ValueError(
                 f"duplicate friendly_name {friendly_name!r} in bridge/devices: "
-                f"{mapping[friendly_name]} vs {ieee_address}"
+                f"{seen_friendly[friendly_name]} vs {ieee_address}"
             )
-        mapping[friendly_name] = ieee_address
-    return dict(sorted(mapping.items()))
+        seen_friendly[friendly_name] = ieee_address
+        catalog[ieee_address] = {
+            "type": infer_device_type(device),
+            "name": friendly_name,
+        }
+    return dict(sorted(catalog.items()))
 
 
 def main() -> int:
