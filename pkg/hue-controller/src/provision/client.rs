@@ -29,6 +29,10 @@ use crate::config::scenes::Scene;
 use crate::mqtt::MqttConfig;
 use crate::mqtt::codec::bridge;
 
+/// Per-direction packet size limit. 2 MB; see `Z2mClient::connect` for
+/// the rationale.
+const MAX_PACKET_SIZE: usize = 2 * 1024 * 1024;
+
 #[derive(Debug, Error)]
 pub enum Z2mClientError {
     #[error("rumqttc client error: {0}")]
@@ -149,6 +153,14 @@ impl Z2mClient {
         opts.set_credentials(&config.user, &config.password);
         opts.set_keep_alive(config.keep_alive);
         opts.set_inflight(20);
+        // rumqttc's default max packet size is 10 KB, which is far too
+        // small for z2m's `bridge/devices` retained payload — that's
+        // ~200 KB on a 50-device mesh and grows with the inventory.
+        // When the eventloop hits a too-big incoming packet it errors
+        // out without dispatching the publish, so the topic cache
+        // never gets the payload and fetches time out. 2 MB is well
+        // above any plausible z2m payload.
+        opts.set_max_packet_size(MAX_PACKET_SIZE, MAX_PACKET_SIZE);
 
         let (client, eventloop) = AsyncClient::new(opts, 100);
 

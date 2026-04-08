@@ -35,7 +35,12 @@ fn pick_free_port() -> u16 {
 fn broker_config(port: u16) -> Config {
     let connection = ConnectionSettings {
         connection_timeout_ms: 60_000,
-        max_payload_size: 20480,
+        // Bumped from rumqttd's example default of 20 KB so the
+        // large-payload regression test (~250 KB bridge/devices) can
+        // actually pass through the broker. Mosquitto's default is
+        // 256 MB, so 4 MB is comfortably below any realistic limit
+        // and well above any plausible z2m payload.
+        max_payload_size: 4 * 1024 * 1024,
         max_inflight_count: 100,
         auth: None,
         external_auth: None,
@@ -176,6 +181,9 @@ impl TestClient {
     pub async fn connect(broker: &TestBroker, client_id: &str) -> Self {
         let mut opts = MqttOptions::new(client_id, "127.0.0.1", broker.port);
         opts.set_keep_alive(Duration::from_secs(30));
+        // Match the production client's max packet size so tests can
+        // exercise the same large-payload paths the daemon supports.
+        opts.set_max_packet_size(2 * 1024 * 1024, 2 * 1024 * 1024);
         let (client, eventloop) = AsyncClient::new(opts, 200);
         let inbox = Inbox::new();
         let inbox_for_loop = inbox.clone();

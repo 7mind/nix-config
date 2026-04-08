@@ -111,6 +111,12 @@ impl MqttBridge {
         // Bigger inflight window — we'll briefly burst a lot of /get
         // publishes during startup state refresh.
         opts.set_inflight(50);
+        // rumqttc defaults to a 10 KB max incoming packet, which is too
+        // small for z2m bridge inventory payloads (~200 KB) and could
+        // also bite on large group state messages. Bump to 2 MB so the
+        // eventloop never trips on a legitimate z2m publish. See the
+        // matching note in `provision::client`.
+        opts.set_max_packet_size(2 * 1024 * 1024, 2 * 1024 * 1024);
 
         let (client, eventloop) = AsyncClient::new(opts, 256);
 
