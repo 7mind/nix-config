@@ -176,6 +176,37 @@ impl Controller {
         state.physically_on = on;
     }
 
+    /// Walk every room that the startup state refresh observed as
+    /// physically on, and mark it as motion-owned.
+    ///
+    /// Motivation: `motion_owned` doesn't survive a daemon restart (it
+    /// only lives in the in-memory `ZoneState` map), so we have no way
+    /// to know on cold start whether the lights came on via a user
+    /// press, an HA call, or a motion sensor. The conservative default
+    /// would be "user-owned" (don't auto-off), but that means lights
+    /// that happened to be on at boot stay on indefinitely until the
+    /// user explicitly toggles them. The opposite default — assume
+    /// motion ownership — costs us at most one false auto-off after
+    /// reboot (only if the user genuinely had the lights on for a
+    /// non-motion reason), which is far less annoying than lights that
+    /// won't go off on their own.
+    ///
+    /// Called by [`crate::daemon::run`] after the three-phase state
+    /// refresh completes, before the event loop starts processing
+    /// real-world events.
+    pub fn seed_motion_ownership_for_lit_rooms(&mut self) {
+        for (room_name, state) in self.states.iter_mut() {
+            if state.physically_on && !state.motion_owned {
+                tracing::info!(
+                    room = %room_name,
+                    "startup: seeding motion ownership (room is physically on; \
+                     defaulting to motion-owned so motion-off can clear it later)"
+                );
+                state.motion_owned = true;
+            }
+        }
+    }
+
     // ----- internal handlers ---------------------------------------------
 
     fn handle_switch_action(
@@ -1805,6 +1836,67 @@ mod tests {
         assert_eq!(
             off,
             vec![Action::new("hue-lz-hall", Payload::state_off(0.8))]
+        );
+    }
+
+    // ---- startup motion-ownership seed ----------------------------------
+
+    #[test]
+    fn seed_motion_ownership_marks_lit_rooms_motion_owned() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+        // Pretend the daemon's startup state refresh saw the room
+        // physically on (e.g. from a retained group-state message).
+        c.set_physical_state("study", true);
+        assert!(!c.state_for("study").unwrap().motion_owned);
+
+        c.seed_motion_ownership_for_lit_rooms();
+
+        assert!(
+            c.state_for("study").unwrap().motion_owned,
+            "lit rooms should default to motion-owned at startup"
+        );
+    }
+
+    #[test]
+    fn seed_motion_ownership_skips_unlit_rooms() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+        // Room is physically off — motion ownership shouldn't be
+        // touched (it's irrelevant; motion-off won't fire on an off room).
+        c.set_physical_state("study", false);
+
+        c.seed_motion_ownership_for_lit_rooms();
+
+        assert!(!c.state_for("study").unwrap().motion_owned);
+    }
+
+    #[test]
+    fn motion_off_fires_after_startup_seed() {
+        // Full path: room was physically on at startup → seed motion
+        // ownership → next motion-off event auto-clears the room.
+        // This is the regression scenario the user reported.
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+
+        // Simulate startup: retained group state showed lights on.
+        c.set_physical_state("study", true);
+        c.seed_motion_ownership_for_lit_rooms();
+
+        // Sensor stops reporting motion → should publish state OFF
+        // (without the seed, this would log "motion-off suppressed:
+        // lights are user-owned" and do nothing).
+        let actions = c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: false,
+            illuminance: None,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            actions,
+            vec![Action::new("hue-lz-study", Payload::state_off(0.8))],
+            "seeded motion ownership must let motion-off fire on the first \
+             clearance after startup"
         );
     }
 

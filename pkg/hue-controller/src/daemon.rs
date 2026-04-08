@@ -91,6 +91,14 @@ pub async fn run(
         .context("connecting to mqtt broker")?;
 
     refresh_state(&mut controller, &bridge, &mut event_rx, &topology).await?;
+
+    // Default any room that the refresh found "physically on" to
+    // motion-owned. We can't tell from MQTT alone whether it was a
+    // user press or a motion event that turned the lights on; the
+    // motion-default loses one false auto-off in the worst case but
+    // gains the ability to auto-clear lights left on at boot.
+    controller.seed_motion_ownership_for_lit_rooms();
+
     tracing::info!("startup state refresh complete; entering event loop");
 
     run_event_loop(&mut controller, &bridge, &mut event_rx).await
