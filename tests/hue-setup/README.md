@@ -31,6 +31,13 @@ nix-shell --run pytest
 | `test_prune_removes_extra_member` | `--prune` deletes members not in the config |
 | `test_prune_removes_stale_group` | `--prune` deletes groups not in the config (phase 0) |
 | `test_prune_clears_ghost_id_before_recreate` | `--prune` clears a ghost id from `settings.groups` before re-creating at the same id |
+| `test_group_rename_when_id_matches_but_name_differs` | A group whose id is unchanged but whose declared name has changed is renamed via `bridge/request/group/rename` (members preserved) |
+| `test_group_rename_preserves_scenes` | Scenes survive a group rename and are not re-issued by the scene phase |
+| `test_group_rename_skip_when_no_id_in_config` | Groups declared without an explicit `id` cannot be matched for rename and fall through to the create flow |
+| `test_group_rename_collision_aborts` | Renaming to a name already used by a different group raises rather than corrupting state |
+| `test_group_rename_dry_run_does_not_publish` | Dry-run logs the planned rename but never publishes |
+| `test_group_rename_then_prune_does_not_delete_renamed_group` | Rename phase runs BEFORE prune, so renamed groups are not destroyed by `--prune` |
+| `test_group_rename_skip_when_already_correct` | No rename request when the existing friendly_name already matches the config |
 | `test_scene_add_uses_float_transition` | The scene_add JSON encodes `transition` as a float, so z2m routes through `enhancedAdd` (Hue bulbs need this) |
 | `test_scene_skip_when_id_and_name_match` | Scenes with matching id+name are not re-issued |
 | `test_scene_force_update_reissues` | `--force-update` re-issues even matching scenes |

@@ -128,6 +128,10 @@ class FakeZ2m:
         # Captured rename calls (ieee, from, to) for assertions on
         # the rename phase.
         self.rename_calls: list[tuple[str, str, str]] = []
+        # Captured group rename calls (from, to) — group renames go
+        # through `bridge/request/group/rename` and don't carry an
+        # ieee, so the tuple shape is different from device renames.
+        self.group_rename_calls: list[tuple[str, str]] = []
         # Pre-seeded retained device states for option dedup tests:
         # tests put values here, the bridge republishes them as
         # retained on subscribe via mosquitto.
@@ -386,6 +390,44 @@ class FakeZ2m:
                 existing["name"] = scene["name"]
             self._publish_groups_locked_unsafe()
 
+    def _handle_group_rename(self, payload: dict[str, Any]) -> None:
+        """Handle `bridge/request/group/rename`.
+
+        z2m identifies the group by its current friendly_name. The
+        rename mutates the in-memory inventory and republishes
+        bridge/groups so a subsequent fetch sees the new name.
+        Members and scenes are preserved.
+        """
+        from_value = payload["from"]
+        to_value = payload["to"]
+        with self._lock:
+            if from_value not in self._groups:
+                self._respond(
+                    "zigbee2mqtt/bridge/request/group/rename",
+                    payload,
+                    status="error",
+                    error=f"group {from_value} does not exist",
+                )
+                return
+            if to_value in self._groups:
+                self._respond(
+                    "zigbee2mqtt/bridge/request/group/rename",
+                    payload,
+                    status="error",
+                    error=f"group {to_value} already exists",
+                )
+                return
+            group = self._groups.pop(from_value)
+            group["friendly_name"] = to_value
+            self._groups[to_value] = group
+            self.group_rename_calls.append((from_value, to_value))
+            self._publish_groups_locked_unsafe()
+        self._respond(
+            "zigbee2mqtt/bridge/request/group/rename",
+            payload,
+            data={"from": from_value, "to": to_value},
+        )
+
     def _handle_device_rename(self, payload: dict[str, Any]) -> None:
         """Handle `bridge/request/device/rename`.
 
@@ -463,6 +505,8 @@ class FakeZ2m:
             self._handle_members_add(payload)
         elif topic == "zigbee2mqtt/bridge/request/group/members/remove":
             self._handle_members_remove(payload)
+        elif topic == "zigbee2mqtt/bridge/request/group/rename":
+            self._handle_group_rename(payload)
         elif topic == "zigbee2mqtt/bridge/request/device/rename":
             self._handle_device_rename(payload)
         elif topic.startswith("zigbee2mqtt/") and topic.endswith("/set"):

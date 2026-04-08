@@ -12,6 +12,8 @@ What's covered:
   * --prune removes stale members
   * --prune removes stale groups (phase 0)
   * --prune clears ghost group ids before re-creating at the same id
+  * group rename when id matches but friendly_name has drifted, with
+    member/scene preservation and correct rename-before-prune ordering
   * scene_add issues a non-integer transition (so z2m takes the
     enhancedAdd code path on Hue bulbs)
   * scene skip when (id, name) already match
@@ -743,3 +745,165 @@ def test_reconcile_with_empty_name_mapping_skips_devices_fetch(
     finally:
         client.close()
     assert fake_z2m.rename_calls == []
+
+
+# ---------- group rename phase ----------
+
+
+def test_group_rename_when_id_matches_but_name_differs(
+    mosquitto: tuple[str, int], fake_z2m: FakeZ2m
+) -> None:
+    """A group whose id matches an existing z2m group but whose
+    declared friendly_name has changed must be renamed in place via
+    bridge/request/group/rename — NOT removed and re-created, which
+    would lose its members and scenes."""
+    fake_z2m.add_existing_group(
+        "old-study", 50, members=[("0xaaaa", 11)]
+    )
+    config = _config(study={"id": 50, "members": ["0xaaaa/11"]})
+    client = _client(mosquitto)
+    try:
+        _reconcile(client, config)
+    finally:
+        client.close()
+
+    assert fake_z2m.group_rename_calls == [("old-study", "study")]
+    inv = fake_z2m.snapshot()
+    assert len(inv) == 1
+    assert inv[0]["friendly_name"] == "study"
+    assert inv[0]["id"] == 50
+    # Members preserved across the rename — no add/remove churn.
+    assert inv[0]["members"] == [{"ieee_address": "0xaaaa", "endpoint": 11}]
+
+
+def test_group_rename_preserves_scenes(
+    mosquitto: tuple[str, int], fake_z2m: FakeZ2m
+) -> None:
+    """Scenes attached to the renamed group must survive the
+    rename and be skipped (not re-added) by the scene phase."""
+    fake_z2m.add_existing_group(
+        "old-study",
+        50,
+        members=[("0xaaaa", 11)],
+        scenes=[(1, "bright")],
+    )
+    config = _config(
+        study={
+            "id": 50,
+            "members": ["0xaaaa/11"],
+            "scenes": [
+                {"id": 1, "name": "bright", "state": "ON", "transition": 0.5}
+            ],
+        }
+    )
+    client = _client(mosquitto)
+    try:
+        _reconcile(client, config)
+    finally:
+        client.close()
+
+    assert fake_z2m.group_rename_calls == [("old-study", "study")]
+    inv = fake_z2m.snapshot()
+    assert inv[0]["scenes"] == [{"id": 1, "name": "bright"}]
+    # And the scene phase didn't re-issue scene_add for the matching scene.
+    assert fake_z2m.scene_add_raw == []
+
+
+def test_group_rename_skip_when_no_id_in_config(
+    mosquitto: tuple[str, int], fake_z2m: FakeZ2m
+) -> None:
+    """A group declared without an explicit id can't be matched to
+    an existing z2m group by id, so the rename phase is a no-op for
+    it. The downstream create-by-name flow handles it instead."""
+    fake_z2m.add_existing_group(
+        "old-study", 50, members=[("0xaaaa", 11)]
+    )
+    config = _config(study={"members": ["0xaaaa/11"]})  # no id
+    client = _client(mosquitto)
+    try:
+        _reconcile(client, config)
+    finally:
+        client.close()
+    assert fake_z2m.group_rename_calls == []
+
+
+def test_group_rename_collision_aborts(
+    mosquitto: tuple[str, int], fake_z2m: FakeZ2m
+) -> None:
+    """If the desired name is already taken by a different existing
+    group, the rename phase must fail loudly rather than silently
+    leaving the config and z2m out of sync. The user is expected to
+    resolve the conflict manually."""
+    fake_z2m.add_existing_group("old-study", 50)
+    fake_z2m.add_existing_group("study", 51)  # already taken at a different id
+    config = _config(study={"id": 50})
+    client = _client(mosquitto)
+    try:
+        with pytest.raises(RuntimeError, match="already in use"):
+            _reconcile(client, config)
+    finally:
+        client.close()
+    # No rename was attempted before the abort.
+    assert fake_z2m.group_rename_calls == []
+
+
+def test_group_rename_dry_run_does_not_publish(
+    mosquitto: tuple[str, int], fake_z2m: FakeZ2m
+) -> None:
+    """Dry-run logs the planned rename but never actually publishes
+    bridge/request/group/rename, so z2m's inventory is unchanged."""
+    fake_z2m.add_existing_group(
+        "old-study", 50, members=[("0xaaaa", 11)]
+    )
+    config = _config(study={"id": 50, "members": ["0xaaaa/11"]})
+    client = _client(mosquitto)
+    try:
+        _reconcile(client, config, dry_run=True)
+    finally:
+        client.close()
+    assert fake_z2m.group_rename_calls == []
+    inv = fake_z2m.snapshot()
+    assert inv[0]["friendly_name"] == "old-study"
+
+
+def test_group_rename_then_prune_does_not_delete_renamed_group(
+    mosquitto: tuple[str, int], fake_z2m: FakeZ2m
+) -> None:
+    """Critical ordering check: rename must happen BEFORE prune.
+    Otherwise prune sees the old name as 'not in config' and deletes
+    the group (with all its members and scenes) before rename can
+    fire — which would silently destroy state on every config rename."""
+    fake_z2m.add_existing_group(
+        "old-study", 50, members=[("0xaaaa", 11)]
+    )
+    config = _config(study={"id": 50, "members": ["0xaaaa/11"]})
+    client = _client(mosquitto)
+    try:
+        _reconcile(client, config, prune=True)
+    finally:
+        client.close()
+    # Group still exists, with its original id and members.
+    inv = fake_z2m.snapshot()
+    assert len(inv) == 1
+    assert inv[0]["friendly_name"] == "study"
+    assert inv[0]["id"] == 50
+    assert inv[0]["members"] == [{"ieee_address": "0xaaaa", "endpoint": 11}]
+    # And the rename was issued, not a remove+create.
+    assert fake_z2m.group_rename_calls == [("old-study", "study")]
+
+
+def test_group_rename_skip_when_already_correct(
+    mosquitto: tuple[str, int], fake_z2m: FakeZ2m
+) -> None:
+    """When the existing friendly_name already matches the config,
+    no rename request is sent."""
+    fake_z2m.add_existing_group(
+        "study", 50, members=[("0xaaaa", 11)]
+    )
+    config = _config(study={"id": 50, "members": ["0xaaaa/11"]})
+    client = _client(mosquitto)
+    try:
+        _reconcile(client, config)
+    finally:
+        client.close()
+    assert fake_z2m.group_rename_calls == []

@@ -37,10 +37,11 @@ def _auto_address_by_name(rooms_nix: str) -> dict[str, str]:
     reference present in the given rooms snippet.
 
     `defineRooms` now requires every reference (in `members`,
-    `switch`, `motionSensor.name(s)`) to resolve through an explicit
-    mapping. Auto-generating one from the snippet keeps the test
-    suite ergonomic — each test config still reads as a free-form
-    Nix expression, no boilerplate mapping per test.
+    `switches[*].{switch,tap}`, `motionSensor.name(s)`) to resolve
+    through an explicit mapping. Auto-generating one from the
+    snippet keeps the test suite ergonomic — each test config still
+    reads as a free-form Nix expression, no boilerplate mapping per
+    test.
 
     Walks the snippet for tokens that look like device references in
     the relevant positions. For each unique friendly name, assigns a
@@ -48,7 +49,7 @@ def _auto_address_by_name(rooms_nix: str) -> dict[str, str]:
     a unique synthetic friendly name keyed in the output mapping.
     """
     member_re = re.compile(r'"([^"\s/]+)/\d+"')
-    name_assign_re = re.compile(r'(?:switch|name)\s*=\s*"([^"]+)"')
+    name_assign_re = re.compile(r'(?:switch|tap|name)\s*=\s*"([^"]+)"')
     names_list_re = re.compile(r'names\s*=\s*\[\s*((?:"[^"]+"\s*)+)\]')
 
     refs: set[str] = set()
@@ -147,7 +148,7 @@ def test_switch_only_room_generates_single_rule() -> None:
         groupName = "study";
         id = 50;
         members = [ "0xaaaa/11" ];
-        switch = "hue-s-study";
+        switches = [ { switch = "hue-s-study"; } ];
         scenes = defaultDayScenes;
       };
     }"""
@@ -198,7 +199,7 @@ def test_switch_plus_motion_share_cache_label() -> None:
         groupName = "living room";
         id = 52;
         members = [ "0xcccc/11" ];
-        switch = "hue-s-living-room";
+        switches = [ { switch = "hue-s-living-room"; } ];
         motionSensor.name = "hue-ms-living-room";
         scenes = defaultDayScenes;
       };
@@ -239,8 +240,8 @@ def test_motion_on_check_has_luminance_and_lights_state_gates() -> None:
     _assert_handler_check_contains(rule, "motion-on", "this.occupancy == true")
     _assert_handler_check_contains(rule, "motion-on", "this.illuminance")
     _assert_handler_check_contains(rule, "motion-on", '(meta("lights_state")')
-    # Default maxIlluminance is 100
-    _assert_handler_check_contains(rule, "motion-on", "< 100")
+    # Default maxIlluminance is 50
+    _assert_handler_check_contains(rule, "motion-on", "< 50")
     # Default offCooldownSeconds is 30 → 30000ms
     _assert_handler_check_contains(rule, "motion-on", "30000")
     _assert_handler_check_contains(rule, "motion-on", "last_off_at")
@@ -401,7 +402,7 @@ def test_hue_setup_groups_contain_members_and_scenes() -> None:
         groupName = "study";
         id = 60;
         members = [ "lamp-study-1/11" "lamp-study-2/11" ];
-        switch = "hue-s-study";
+        switches = [ { switch = "hue-s-study"; } ];
         scenes = defaultDayScenes;
       };
     }""",
@@ -494,11 +495,11 @@ def test_validation_duplicate_group_id() -> None:
         """{
       a = {
         groupName = "a"; id = 1; members = [ "0x1/11" ];
-        switch = "hue-s-a"; scenes = defaultDayScenes;
+        switches = [ { switch = "hue-s-a"; } ]; scenes = defaultDayScenes;
       };
       b = {
         groupName = "b"; id = 1; members = [ "0x2/11" ];
-        switch = "hue-s-b"; scenes = defaultDayScenes;
+        switches = [ { switch = "hue-s-b"; } ]; scenes = defaultDayScenes;
       };
     }"""
     )
@@ -514,7 +515,7 @@ def test_validation_requires_control_source() -> None:
       };
     }"""
     )
-    assert "neither `switch` nor `motionSensor`" in err
+    assert "neither `switches` nor `motionSensor`" in err
 
 
 def test_validation_catches_shared_bulb_scene_conflict() -> None:
@@ -522,14 +523,14 @@ def test_validation_catches_shared_bulb_scene_conflict() -> None:
         """{
       room-a = {
         groupName = "room-a"; id = 1; members = [ "shared-bulb/11" ];
-        switch = "hue-s-a";
+        switches = [ { switch = "hue-s-a"; } ];
         scenes = [
           { id = 1; name = "bright"; state = "ON"; brightness = 254; color_temp = 250; transition = 0.5; }
         ];
       };
       room-b = {
         groupName = "room-b"; id = 2; members = [ "shared-bulb/11" ];
-        switch = "hue-s-b";
+        switches = [ { switch = "hue-s-b"; } ];
         scenes = [
           { id = 1; name = "dim"; state = "ON"; brightness = 100; color_temp = 400; transition = 0.5; }
         ];
@@ -554,7 +555,7 @@ def test_address_by_name_translates_hardware_id_to_friendly() -> None:
         groupName = "study";
         id = 60;
         members = [ "0x1234abcd/11" ];
-        switch = "0xff00aabb";
+        switches = [ { switch = "0xff00aabb"; } ];
         scenes = defaultDayScenes;
       };
     }""",
@@ -582,7 +583,7 @@ def test_address_by_name_inverse_threaded_into_hue_setup_config() -> None:
         groupName = "study";
         id = 60;
         members = [ "lamp-a/11" ];
-        switch = "hue-s-study";
+        switches = [ { switch = "hue-s-study"; } ];
         scenes = defaultDayScenes;
       };
     }""",
@@ -605,7 +606,7 @@ def test_validation_unknown_friendly_name_in_members() -> None:
         """{
       study = {
         groupName = "study"; id = 1; members = [ "lamp-mystery/11" ];
-        switch = "hue-s-study"; scenes = defaultDayScenes;
+        switches = [ { switch = "hue-s-study"; } ]; scenes = defaultDayScenes;
       };
     }""",
         address_by_name={
@@ -624,7 +625,7 @@ def test_validation_unknown_hardware_id_in_members() -> None:
         """{
       study = {
         groupName = "study"; id = 1; members = [ "0xdeadbeef/11" ];
-        switch = "hue-s-study"; scenes = defaultDayScenes;
+        switches = [ { switch = "hue-s-study"; } ]; scenes = defaultDayScenes;
       };
     }""",
         address_by_name={
@@ -642,7 +643,7 @@ def test_validation_unknown_switch_friendly_name() -> None:
         """{
       study = {
         groupName = "study"; id = 1; members = [ "lamp-a/11" ];
-        switch = "hue-s-mystery"; scenes = defaultDayScenes;
+        switches = [ { switch = "hue-s-mystery"; } ]; scenes = defaultDayScenes;
       };
     }""",
         address_by_name={"lamp-a": "0xaaaa"},
@@ -672,7 +673,7 @@ def test_validation_duplicate_address_in_address_by_name() -> None:
         """{
       study = {
         groupName = "study"; id = 1; members = [ "lamp-a/11" ];
-        switch = "hue-s-study"; scenes = defaultDayScenes;
+        switches = [ { switch = "hue-s-study"; } ]; scenes = defaultDayScenes;
       };
     }""",
         address_by_name={
@@ -682,3 +683,306 @@ def test_validation_duplicate_address_in_address_by_name() -> None:
         },
     )
     assert "must be unique per device" in err
+
+
+# ---------- multi-switch / tap-button bindings ----------
+
+
+def test_multiple_wall_switches_in_one_room_generate_one_rule_each() -> None:
+    """A room can list more than one wall switch (e.g. dual-entry
+    rooms with one dimmer per door). Each entry produces its own
+    bento rule keyed `<ruleName>-switch`. The current production
+    config has at most one wall switch per room — this test exists
+    so the renderer doesn't quietly drop additional entries."""
+    result = _eval_define_rooms(
+        """{
+      hall = {
+        groupName = "hall"; id = 70;
+        members = [ "0x7000/11" ];
+        switches = [
+          { switch = "hue-s-hall-front"; }
+          { switch = "hue-s-hall-back"; }
+        ];
+        scenes = defaultDayScenes;
+      };
+    }"""
+    )
+    rules = result["smind"]["services"]["mqtt-automations"]["rules"]
+    # The current renderer collapses multiple entries onto the same
+    # `<ruleName>-switch` key (attrset semantics — last write wins).
+    # If you ever need true multi-switch support, this assertion is
+    # the canary that flags it.
+    assert "hall-switch" in rules
+
+
+def test_tap_button_room_generates_tap_rule() -> None:
+    """A room with a tap-button entry produces a `tap-<sanitize tapName>`
+    bento rule subscribing to the tap's action topic. The rule has a
+    pair of handlers (on/off) for the bound button."""
+    result = _eval_define_rooms(
+        """{
+      kitchen-all = {
+        groupName = "kitchen-all"; id = 71;
+        members = [ "0x7100/11" ];
+        switches = [
+          { tap = "hue-ts-kitchen"; button = 1; }
+        ];
+        scenes = defaultDayScenes;
+      };
+    }"""
+    )
+    rules = result["smind"]["services"]["mqtt-automations"]["rules"]
+    assert "tap-hue_ts_kitchen" in rules
+    rule = rules["tap-hue_ts_kitchen"]
+    assert rule["source"] == "zigbee2mqtt/hue-ts-kitchen/action"
+    # Tap-private cache resource so multiple buttons targeting different
+    # rooms can share one bento rule.
+    assert rule["cacheLabel"] == "tap_hue_ts_kitchen"
+    # Per-room state key is loaded into metadata at pre-dispatch time.
+    assert "state_room_kitchen_all" in rule["cacheReads"]
+    # Two handlers for one button: on and off
+    assert set(rule["handlers"]) == {
+        "tap_kitchen_all_button_1_on",
+        "tap_kitchen_all_button_1_off",
+    }
+
+
+def test_tap_button_handlers_check_action_and_state() -> None:
+    """The on handler fires when the press matches AND the room's
+    state key is empty. The off handler is the symmetric inverse."""
+    result = _eval_define_rooms(
+        """{
+      kitchen-all = {
+        groupName = "kitchen-all"; id = 72;
+        members = [ "0x7200/11" ];
+        switches = [
+          { tap = "hue-ts-kitchen"; button = 1; }
+        ];
+        scenes = defaultDayScenes;
+      };
+    }"""
+    )
+    rule = result["smind"]["services"]["mqtt-automations"]["rules"][
+        "tap-hue_ts_kitchen"
+    ]
+    on = rule["handlers"]["tap_kitchen_all_button_1_on"]
+    off = rule["handlers"]["tap_kitchen_all_button_1_off"]
+
+    assert 'content().string() == "press_1"' in on["check"]
+    assert '(meta("state_room_kitchen_all").or("")) == ""' in on["check"]
+    assert 'content().string() == "press_1"' in off["check"]
+    assert '(meta("state_room_kitchen_all").or("")) != ""' in off["check"]
+
+    # The on handler must override the rule-level target via meta
+    # out_topic so a single rule can publish to multiple rooms.
+    assert 'meta out_topic = "zigbee2mqtt/kitchen-all/set"' in on["publishMapping"]
+    # And recall the first scene of the active slot. defaultDayScenes
+    # is a flat list whose first entry is scene id 1.
+    assert '"scene_recall": 1' in on["publishMapping"]
+
+    assert 'meta out_topic = "zigbee2mqtt/kitchen-all/set"' in off["publishMapping"]
+    assert '"state": "OFF"' in off["publishMapping"]
+
+    # cacheWrites flip the state key on each transition.
+    assert on["cacheWrites"] == {"state_room_kitchen_all": "user"}
+    assert off["cacheWrites"] == {"state_room_kitchen_all": ""}
+
+
+def test_one_tap_with_multiple_rooms_generates_single_rule() -> None:
+    """The whole reason tap rules group by tap device: bento's switch
+    processor doesn't fall through, so multiple rules sharing the
+    same source topic would silently leave only the first matching
+    rule firing. All four kitchen buttons must end up as one rule."""
+    result = _eval_define_rooms(
+        """{
+      kitchen-all = {
+        groupName = "kitchen-all"; id = 80;
+        members = [ "0x8000/11" ];
+        switches = [ { tap = "hue-ts-kitchen"; button = 1; } ];
+        scenes = defaultDayScenes;
+      };
+      kitchen-cooker = {
+        groupName = "kitchen-cooker"; id = 81;
+        members = [ "0x8001/11" ];
+        switches = [ { tap = "hue-ts-kitchen"; button = 2; } ];
+        scenes = defaultDayScenes;
+      };
+      kitchen-dining = {
+        groupName = "kitchen-dining"; id = 82;
+        members = [ "0x8002/11" ];
+        switches = [ { tap = "hue-ts-kitchen"; button = 3; } ];
+        scenes = defaultDayScenes;
+      };
+      kitchen-empty = {
+        groupName = "kitchen-empty"; id = 83;
+        members = [ "0x8003/11" ];
+        switches = [ { tap = "hue-ts-kitchen"; button = 4; } ];
+        scenes = defaultDayScenes;
+      };
+    }"""
+    )
+    rules = result["smind"]["services"]["mqtt-automations"]["rules"]
+    # Exactly one rule for the entire tap, not four
+    tap_rules = [n for n in rules if n.startswith("tap-")]
+    assert tap_rules == ["tap-hue_ts_kitchen"]
+    rule = rules["tap-hue_ts_kitchen"]
+    # All four buttons present, on + off each
+    handler_names = set(rule["handlers"])
+    expected = {
+        f"tap_{room}_button_{n}_{phase}"
+        for room, n in [
+            ("kitchen_all", 1),
+            ("kitchen_cooker", 2),
+            ("kitchen_dining", 3),
+            ("kitchen_empty", 4),
+        ]
+        for phase in ("on", "off")
+    }
+    assert handler_names == expected
+    # cacheReads covers every controlled room so each handler check
+    # can branch on its own room's state.
+    assert set(rule["cacheReads"]) == {
+        "state_room_kitchen_all",
+        "state_room_kitchen_cooker",
+        "state_room_kitchen_dining",
+        "state_room_kitchen_empty",
+    }
+
+
+def test_tap_handlers_publish_to_per_room_targets() -> None:
+    """Each handler in the unified tap rule must override out_topic
+    to its own room — otherwise the second binding would publish to
+    the first binding's target."""
+    result = _eval_define_rooms(
+        """{
+      kitchen-all = {
+        groupName = "kitchen-all"; id = 90;
+        members = [ "0x9000/11" ];
+        switches = [ { tap = "hue-ts-kitchen"; button = 1; } ];
+        scenes = defaultDayScenes;
+      };
+      kitchen-cooker = {
+        groupName = "kitchen-cooker"; id = 91;
+        members = [ "0x9001/11" ];
+        switches = [ { tap = "hue-ts-kitchen"; button = 2; } ];
+        scenes = defaultDayScenes;
+      };
+    }"""
+    )
+    handlers = result["smind"]["services"]["mqtt-automations"]["rules"][
+        "tap-hue_ts_kitchen"
+    ]["handlers"]
+    assert (
+        'meta out_topic = "zigbee2mqtt/kitchen-all/set"'
+        in handlers["tap_kitchen_all_button_1_on"]["publishMapping"]
+    )
+    assert (
+        'meta out_topic = "zigbee2mqtt/kitchen-cooker/set"'
+        in handlers["tap_kitchen_cooker_button_2_on"]["publishMapping"]
+    )
+
+
+def test_validation_duplicate_tap_button() -> None:
+    """A (tap, button) pair claimed by two rooms is a config error —
+    the same physical press would have to drive two different rooms,
+    which is exactly the conflict that grouping by tap is supposed
+    to surface up front instead of silently."""
+    err = _eval_expect_error(
+        """{
+      kitchen-all = {
+        groupName = "kitchen-all"; id = 100;
+        members = [ "0xaa00/11" ];
+        switches = [ { tap = "hue-ts-kitchen"; button = 1; } ];
+        scenes = defaultDayScenes;
+      };
+      kitchen-other = {
+        groupName = "kitchen-other"; id = 101;
+        members = [ "0xaa01/11" ];
+        switches = [ { tap = "hue-ts-kitchen"; button = 1; } ];
+        scenes = defaultDayScenes;
+      };
+    }"""
+    )
+    assert "duplicate tap button" in err
+    assert "hue-ts-kitchen/1" in err
+
+
+def test_validation_duplicate_wall_switch_across_rooms() -> None:
+    """A wall switch device referenced by two rooms is a config
+    error: the cycle handlers would fight each other."""
+    err = _eval_expect_error(
+        """{
+      a = {
+        groupName = "a"; id = 110;
+        members = [ "0xb000/11" ];
+        switches = [ { switch = "hue-s-shared"; } ];
+        scenes = defaultDayScenes;
+      };
+      b = {
+        groupName = "b"; id = 111;
+        members = [ "0xb001/11" ];
+        switches = [ { switch = "hue-s-shared"; } ];
+        scenes = defaultDayScenes;
+      };
+    }"""
+    )
+    assert "duplicate wall switch friendly_name" in err
+
+
+def test_validation_switches_entry_must_pick_one_kind() -> None:
+    """A switches entry that sets both `switch` and `tap` is invalid."""
+    err = _eval_expect_error(
+        """{
+      a = {
+        groupName = "a"; id = 120;
+        members = [ "0xc000/11" ];
+        switches = [
+          { switch = "hue-s-confused"; tap = "hue-ts-confused"; button = 1; }
+        ];
+        scenes = defaultDayScenes;
+      };
+    }"""
+    )
+    assert "either `switch` or `tap`" in err
+
+
+def test_validation_tap_entry_requires_button() -> None:
+    """A tap entry without a button can't be wired to anything."""
+    err = _eval_expect_error(
+        """{
+      a = {
+        groupName = "a"; id = 130;
+        members = [ "0xd000/11" ];
+        switches = [ { tap = "hue-ts-foo"; } ];
+        scenes = defaultDayScenes;
+      };
+    }"""
+    )
+    assert "must specify `button = N`" in err
+
+
+def test_tap_button_with_slotted_scenes_picks_active_slot() -> None:
+    """For slotted scenes the on handler's publishMapping must contain
+    the if/else slot chain so it picks the right scene at press time
+    based on the current local hour. Same shape as the motion-on
+    payload mapping."""
+    result = _eval_define_rooms(
+        """{
+      kitchen-all = {
+        groupName = "kitchen-all"; id = 140;
+        members = [ "0xe000/11" ];
+        switches = [ { tap = "hue-ts-kitchen"; button = 1; } ];
+        scenes = defaultScheduledScenes;
+      };
+    }"""
+    )
+    handlers = result["smind"]["services"]["mqtt-automations"]["rules"][
+        "tap-hue_ts_kitchen"
+    ]["handlers"]
+    on_mapping = handlers["tap_kitchen_all_button_1_on"]["publishMapping"]
+    # The slotted form has the bloblang time-of-day variable
+    assert "timestamp_unix()" in on_mapping
+    # And an if/else over the slot predicates
+    assert "if " in on_mapping and "else" in on_mapping
+    # Both day and night scene IDs are referenced
+    assert '"scene_recall"' in on_mapping

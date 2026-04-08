@@ -903,3 +903,167 @@ def test_motion_cooldown_does_not_block_after_user_on_then_off(
         {"state": "OFF"},      # off_press_release
         {"scene_recall": 1},   # motion after cooldown expired
     ]
+
+
+# ---------- tap toggle tests ----------
+
+
+TAP_SOURCE = "test/tap/action"
+TAP_TARGET_A = "test/room-a/set"
+TAP_TARGET_B = "test/room-b/set"
+
+
+def _tap_toggle_config() -> str:
+    """Bento config for a Hue Tap-style rule with two buttons binding
+    two different rooms via per-handler `meta out_topic` overrides.
+
+    Mirrors the production `mkTapRule` shape: a single rule with
+    `cacheLabel = tap_<name>`, `cacheReads` listing per-room state
+    keys, and on/off handler pairs whose `publishMapping` sets both
+    `meta out_topic` and the payload in one shot. The rule-level
+    target is set to one of the rooms as a placeholder; every
+    handler overrides it.
+
+    The point of this test is to verify that:
+      * bento accepts a publishMapping that sets metadata AND root
+        in the same mapping
+      * the dynamic out_topic interpolation in the output stage picks
+        up the per-handler override
+      * the cache-based toggle correctly alternates between on (with
+        scene recall) and off paths on repeated presses of the same
+        physical button
+      * different buttons in the same rule correctly target different
+        rooms (no cross-talk through the shared cache resource)
+    """
+    rules = {
+        "test-tap": {
+            "source": TAP_SOURCE,
+            "target": TAP_TARGET_A,  # placeholder, overridden per handler
+            "format": "action",
+            "cacheLabel": "tap_test",
+            "cacheReads": ["state_room_a", "state_room_b"],
+            "handlers": {
+                "btn_1_on": {
+                    "check": (
+                        'content().string() == "press_1" '
+                        '&& (meta("state_room_a").or("")) == ""'
+                    ),
+                    "publishMapping": (
+                        f'meta out_topic = "{TAP_TARGET_A}"\n'
+                        'root = {"scene_recall": 1}'
+                    ),
+                    "cacheWrites": {"state_room_a": "user"},
+                },
+                "btn_1_off": {
+                    "check": (
+                        'content().string() == "press_1" '
+                        '&& (meta("state_room_a").or("")) != ""'
+                    ),
+                    "publishMapping": (
+                        f'meta out_topic = "{TAP_TARGET_A}"\n'
+                        'root = {"state": "OFF"}'
+                    ),
+                    "cacheWrites": {"state_room_a": ""},
+                },
+                "btn_2_on": {
+                    "check": (
+                        'content().string() == "press_2" '
+                        '&& (meta("state_room_b").or("")) == ""'
+                    ),
+                    "publishMapping": (
+                        f'meta out_topic = "{TAP_TARGET_B}"\n'
+                        'root = {"scene_recall": 1}'
+                    ),
+                    "cacheWrites": {"state_room_b": "user"},
+                },
+                "btn_2_off": {
+                    "check": (
+                        'content().string() == "press_2" '
+                        '&& (meta("state_room_b").or("")) != ""'
+                    ),
+                    "publishMapping": (
+                        f'meta out_topic = "{TAP_TARGET_B}"\n'
+                        'root = {"state": "OFF"}'
+                    ),
+                    "cacheWrites": {"state_room_b": ""},
+                },
+            },
+        },
+    }
+    return _render_bento_config(rules)
+
+
+def test_tap_button_toggles_room_on_then_off(
+    bento_runner: BentoRunner,
+    mqtt_client: tuple[mqtt.Client, MqttInbox],
+) -> None:
+    """First press of button 1 turns room A on (scene_recall:1).
+    Second press of the same button turns room A off (state:OFF).
+    Verifies that the cache-based toggle and the per-handler
+    out_topic override both work end-to-end through bento + mosquitto."""
+    client, inbox = mqtt_client
+    bento_runner(_tap_toggle_config())
+    _subscribe(client, TAP_TARGET_A)
+
+    _publish(client, TAP_SOURCE, "press_1")
+    time.sleep(0.15)
+    _publish(client, TAP_SOURCE, "press_1")
+
+    inbox.wait_for_count(TAP_TARGET_A, 2)
+    payloads = [json.loads(p) for p in inbox.payloads_on(TAP_TARGET_A)]
+    assert payloads == [
+        {"scene_recall": 1},
+        {"state": "OFF"},
+    ]
+
+
+def test_tap_buttons_target_different_rooms_independently(
+    bento_runner: BentoRunner,
+    mqtt_client: tuple[mqtt.Client, MqttInbox],
+) -> None:
+    """Button 1 → room A, button 2 → room B. Pressing one button
+    must NOT affect the other room's state, even though they share
+    a cache resource: each button's handlers reference its own state
+    key."""
+    client, inbox = mqtt_client
+    bento_runner(_tap_toggle_config())
+    _subscribe(client, TAP_TARGET_A)
+    _subscribe(client, TAP_TARGET_B)
+
+    _publish(client, TAP_SOURCE, "press_1")
+    time.sleep(0.15)
+    _publish(client, TAP_SOURCE, "press_2")
+
+    inbox.wait_for_count(TAP_TARGET_A, 1)
+    inbox.wait_for_count(TAP_TARGET_B, 1)
+    assert [json.loads(p) for p in inbox.payloads_on(TAP_TARGET_A)] == [
+        {"scene_recall": 1}
+    ]
+    assert [json.loads(p) for p in inbox.payloads_on(TAP_TARGET_B)] == [
+        {"scene_recall": 1}
+    ]
+
+
+def test_tap_button_off_press_then_on_press_works(
+    bento_runner: BentoRunner,
+    mqtt_client: tuple[mqtt.Client, MqttInbox],
+) -> None:
+    """Sequence: on, off, on, off. Each press must alternate the
+    room state correctly. Catches a class of state-machine bugs
+    where the off path forgets to clear its flag."""
+    client, inbox = mqtt_client
+    bento_runner(_tap_toggle_config())
+    _subscribe(client, TAP_TARGET_A)
+
+    for _ in range(4):
+        _publish(client, TAP_SOURCE, "press_1")
+        time.sleep(0.15)
+
+    inbox.wait_for_count(TAP_TARGET_A, 4)
+    payloads = [json.loads(p) for p in inbox.payloads_on(TAP_TARGET_A)]
+    assert payloads == [
+        {"scene_recall": 1},
+        {"state": "OFF"},
+        {"scene_recall": 1},
+        {"state": "OFF"},
+    ]

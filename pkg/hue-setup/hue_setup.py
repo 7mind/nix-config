@@ -462,6 +462,19 @@ class Z2mClient:
             payload["id"] = str(group_id)
         self._request("zigbee2mqtt/bridge/request/group/add", payload)
 
+    def rename_group(self, current_name: str, new_name: str) -> None:
+        """Rename a z2m group via `bridge/request/group/rename`.
+
+        z2m identifies the group by its current `friendly_name` (the
+        `from` field). Members, scenes, and the numeric id are
+        preserved across the rename — only the friendly_name (and the
+        retained MQTT topic z2m publishes group state under) changes.
+        """
+        self._request(
+            "zigbee2mqtt/bridge/request/group/rename",
+            {"from": current_name, "to": new_name},
+        )
+
     def remove_group(self, friendly_name: str, *, force: bool = True) -> None:
         self._request(
             "zigbee2mqtt/bridge/request/group/remove",
@@ -660,16 +673,96 @@ def reconcile_groups(
     dry_run: bool,
     settle_seconds: float,
 ) -> tuple[int, int, bool]:
-    """Create missing groups and reconcile members.
+    """Reconcile z2m groups against the config.
+
+    Phases, in order:
+      1. Rename groups whose `id` matches an existing z2m group but
+         whose declared name has changed. Matching is by id, so only
+         groups with an explicit `id` in the config can be renamed —
+         id-less groups are matched by name in later phases and would
+         look like a delete+create instead.
+      2. (Optional) Prune groups present in z2m but not in the config.
+      3. Create missing groups.
+      4. Reconcile member sets.
 
     Returns (touched, skipped, state_changed). `state_changed` signals
     that the caller should re-fetch groups before the scene phase.
     """
     by_name = {g.friendly_name: g for g in existing}
+    by_id = {g.id: g for g in existing}
     desired_names = set(config.groups.keys())
     touched = 0
     skipped = 0
     state_changed = False
+
+    # Phase RENAME: detect groups whose id is already in z2m but whose
+    # friendly_name has drifted from the config, and rename them in
+    # place. This MUST run before the prune phase: prune matches by
+    # name, so without an upfront rename it would see the old name as
+    # "not in config" and delete the group (taking its members and
+    # scenes with it).
+    rename_plan: list[tuple[str, str]] = []
+    for desired_name, group_spec in config.groups.items():
+        if group_spec.id is None:
+            # Without an explicit id we can't disambiguate "user
+            # renamed an existing group" from "user added a new group
+            # whose name happens not to exist yet". Skip — the
+            # create/skip flow downstream handles both cases.
+            continue
+        existing_by_id = by_id.get(group_spec.id)
+        if existing_by_id is None:
+            # No group at this id yet; the create phase below will
+            # handle it.
+            continue
+        if existing_by_id.friendly_name == desired_name:
+            continue
+        # Collision: another group already owns the target name. We
+        # don't try to be clever about swap cycles — fail loud and
+        # ask the user to resolve manually (e.g. by renaming one of
+        # the conflicting groups to a temporary name first).
+        collision = by_name.get(desired_name)
+        if collision is not None and collision.id != group_spec.id:
+            raise RuntimeError(
+                f"cannot rename group id={group_spec.id} from "
+                f"{existing_by_id.friendly_name!r} to {desired_name!r}: "
+                f"name already in use by group id={collision.id}. "
+                f"Resolve the conflict manually before re-running."
+            )
+        rename_plan.append((existing_by_id.friendly_name, desired_name))
+
+    for current_name, new_name in rename_plan:
+        verb = "[dry-run] would rename" if dry_run else "rename"
+        logger.info("%s group %r -> %r", verb, current_name, new_name)
+        if not dry_run:
+            client.rename_group(current_name, new_name)
+            time.sleep(settle_seconds)
+            touched += 1
+            state_changed = True
+
+    if rename_plan:
+        if dry_run:
+            # Patch the in-memory snapshot so the prune/create/member
+            # phases below don't print misleading messages about the
+            # un-renamed groups still being "missing" or "stale".
+            new_by_name = {old: new for old, new in rename_plan}
+            patched: list[ExistingGroup] = []
+            for eg in existing:
+                if eg.friendly_name in new_by_name:
+                    patched.append(
+                        eg.model_copy(
+                            update={"friendly_name": new_by_name[eg.friendly_name]}
+                        )
+                    )
+                else:
+                    patched.append(eg)
+            existing = patched
+            by_name = {g.friendly_name: g for g in existing}
+            by_id = {g.id: g for g in existing}
+        else:
+            time.sleep(settle_seconds)
+            existing = client.fetch_groups()
+            by_name = {g.friendly_name: g for g in existing}
+            by_id = {g.id: g for g in existing}
 
     # Phase 0: if pruning, remove any group present in z2m but not in
     # the config. This must happen BEFORE the create phase so stale
