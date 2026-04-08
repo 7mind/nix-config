@@ -64,6 +64,19 @@ DEFAULT_TEST_DEFAULTS_NIX = """{
   };
 }"""
 
+# Test-side adapter that converts the legacy attrset-shape rooms
+# (`{ hall = { ... }; }`) the existing tests are written in to the
+# new list-shape (`[ { name = "hall"; ... } ]`) the renderer now
+# requires. Tests stay readable — the attrset shape is more compact
+# for many small rooms in test snippets — without forcing a 60-test
+# rewrite. Tests that specifically exercise the list shape (or the
+# `groupName` default behavior) pass a literal list and skip this
+# adapter.
+TEST_ROOMS_HELPER_NIX = """
+  toRoomsList = roomsAttrs:
+    lib.mapAttrsToList (n: r: r // { name = n; }) roomsAttrs;
+"""
+
 
 _TYPE_PREFIXES = {
     "light": "hue-l-",
@@ -207,10 +220,11 @@ let
   lib = pkgs.lib;
   tools = import {TOOLS_PATH} {{ inherit lib; }};
   {TEST_SCENES_NIX}
+  {TEST_ROOMS_HELPER_NIX}
 in
 tools.defineRooms {{
   devices = {devices_nix};
-  rooms = {rooms_nix};
+  rooms = toRoomsList {rooms_nix};
   defaults = {defaults_nix};
 }}
 """
@@ -243,10 +257,11 @@ let
   lib = pkgs.lib;
   tools = import {TOOLS_PATH} {{ inherit lib; }};
   {TEST_SCENES_NIX}
+  {TEST_ROOMS_HELPER_NIX}
 in
 tools.defineRooms {{
   devices = {devices_nix};
-  rooms = {rooms_nix};
+  rooms = toRoomsList {rooms_nix};
   defaults = {defaults_nix};
 }}
 """
@@ -656,10 +671,11 @@ let
   lib = pkgs.lib;
   tools = import {TOOLS_PATH} {{ inherit lib; }};
   {TEST_SCENES_NIX}
+  {TEST_ROOMS_HELPER_NIX}
 in
 tools.defineRooms {{
   devices = {devices_nix};
-  rooms = {rooms_nix};
+  rooms = toRoomsList {rooms_nix};
   defaults = {defaults_nix};
 }}
 """
@@ -1850,5 +1866,332 @@ def test_members_must_be_string_form() -> None:
     # The error comes from the bloblang split inside the resolver:
     # an attrset can't be coerced to a string.
     assert "members" in err.lower() or "coerce" in err.lower()
+
+
+# ---------- rooms list form & devices shorthand ----------
+#
+# These tests bypass the `toRoomsList` adapter and pass literal
+# list-shape `rooms` straight through, exercising the new schema
+# directly: required `name` field, optional `groupName` defaulting
+# to `name`, string shorthand in `devices`, and the structural
+# error cases (missing name, duplicate name, wrong outer shape).
+
+
+def _eval_rooms_list(
+    rooms_list_nix: str,
+    *,
+    devices_by_address: dict[str, dict[str, str]],
+    defaults_nix: str = DEFAULT_TEST_DEFAULTS_NIX,
+) -> dict[str, Any]:
+    """Like `_eval_define_rooms`, but `rooms_list_nix` is a literal
+    Nix list expression that's passed straight to `defineRooms.rooms`
+    without going through the `toRoomsList` adapter. Used by the
+    list-form tests below to exercise the new schema directly."""
+    devices_nix = _render_devices_by_address_nix(devices_by_address)
+    expr = f"""
+let
+  pkgs = import <nixpkgs> {{ }};
+  lib = pkgs.lib;
+  tools = import {TOOLS_PATH} {{ inherit lib; }};
+  {TEST_SCENES_NIX}
+in
+tools.defineRooms {{
+  devices = {devices_nix};
+  rooms = {rooms_list_nix};
+  defaults = {defaults_nix};
+}}
+"""
+    result = subprocess.run(
+        ["nix", "eval", "--impure", "--json", "--expr", expr],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "NIX_CONFIG": "experimental-features = nix-command flakes"},
+    )
+    return json.loads(result.stdout)
+
+
+def _expect_rooms_list_error(
+    rooms_list_nix: str,
+    *,
+    devices_by_address: dict[str, dict[str, str]],
+    defaults_nix: str = DEFAULT_TEST_DEFAULTS_NIX,
+) -> str:
+    """Same as `_eval_rooms_list` but expects nix eval to fail and
+    returns the stderr text."""
+    devices_nix = _render_devices_by_address_nix(devices_by_address)
+    expr = f"""
+let
+  pkgs = import <nixpkgs> {{ }};
+  lib = pkgs.lib;
+  tools = import {TOOLS_PATH} {{ inherit lib; }};
+  {TEST_SCENES_NIX}
+in
+tools.defineRooms {{
+  devices = {devices_nix};
+  rooms = {rooms_list_nix};
+  defaults = {defaults_nix};
+}}
+"""
+    result = subprocess.run(
+        ["nix", "eval", "--impure", "--json", "--expr", expr],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "NIX_CONFIG": "experimental-features = nix-command flakes"},
+    )
+    assert result.returncode != 0, (
+        f"expected failure, got success: {result.stdout}"
+    )
+    return result.stderr
+
+
+def test_rooms_as_list_basic() -> None:
+    """Rooms passed as a literal list of records (each with `name`)
+    produce the expected groups and rules. The `name` field becomes
+    both the rule identifier and (by default) the z2m group name."""
+    result = _eval_rooms_list(
+        """[
+      {
+        name = "hall";
+        id = 1;
+        members = [ "hue-l-a/11" ];
+        devices = [ { device = "hue-s-a"; } ];
+        scenes = defaultDayScenes;
+      }
+    ]""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "switch", "name": "hue-s-a"},
+        },
+    )
+    groups = result["smind"]["services"]["hue-setup"]["config"]["groups"]
+    # groupName defaulted to `name`
+    assert "hall" in groups
+    rules = result["smind"]["services"]["mqtt-automations"]["rules"]
+    assert "hall-switch" in rules
+    assert rules["hall-switch"]["target"] == "zigbee2mqtt/hall/set"
+
+
+def test_rooms_list_group_name_default() -> None:
+    """`groupName` defaults to `name` when not set explicitly."""
+    result = _eval_rooms_list(
+        """[
+      {
+        name = "decorative";
+        id = 1;
+        members = [ "hue-l-a/11" ];
+        devices = [ "hue-s-a" ];
+        scenes = defaultDayScenes;
+      }
+    ]""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "switch", "name": "hue-s-a"},
+        },
+    )
+    groups = result["smind"]["services"]["hue-setup"]["config"]["groups"]
+    assert "decorative" in groups
+    rules = result["smind"]["services"]["mqtt-automations"]["rules"]
+    assert rules["decorative-switch"]["target"] == "zigbee2mqtt/decorative/set"
+
+
+def test_rooms_list_explicit_group_name_overrides_default() -> None:
+    """An explicit `groupName` field beats the `groupName = name`
+    default. Catches the case where the rule identifier is short
+    (`hallway`) but the z2m group name is long (`hue-lz-hallway`)."""
+    result = _eval_rooms_list(
+        """[
+      {
+        name = "hallway";
+        groupName = "hue-lz-hallway";
+        id = 1;
+        members = [ "hue-l-a/11" ];
+        devices = [ "hue-s-a" ];
+        scenes = defaultDayScenes;
+      }
+    ]""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "switch", "name": "hue-s-a"},
+        },
+    )
+    groups = result["smind"]["services"]["hue-setup"]["config"]["groups"]
+    assert "hue-lz-hallway" in groups  # the user-set groupName
+    assert "hallway" not in groups       # NOT defaulted from name
+    rules = result["smind"]["services"]["mqtt-automations"]["rules"]
+    # Rule identifier still derives from `name`, not groupName
+    assert "hallway-switch" in rules
+    assert rules["hallway-switch"]["target"] == "zigbee2mqtt/hue-lz-hallway/set"
+
+
+def test_devices_string_shorthand_for_switch() -> None:
+    """A bare string in `room.devices` is shorthand for the
+    `{ device = "..."; }` attrset. Saves typing for zero-parameter
+    devices (switches and motion sensors)."""
+    result = _eval_rooms_list(
+        """[
+      {
+        name = "hall";
+        id = 1;
+        members = [ "hue-l-a/11" ];
+        devices = [ "hue-s-a" ];
+        scenes = defaultDayScenes;
+      }
+    ]""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "switch", "name": "hue-s-a"},
+        },
+    )
+    rules = result["smind"]["services"]["mqtt-automations"]["rules"]
+    assert "hall-switch" in rules
+    # Same source topic / target as the attrset form would produce.
+    assert rules["hall-switch"]["source"] == "zigbee2mqtt/hue-s-a/action"
+
+
+def test_devices_string_shorthand_for_motion_sensor() -> None:
+    """The string shorthand also works for motion sensors —
+    they're zero-parameter from the room's perspective (settings
+    live on the catalog entry)."""
+    result = _eval_rooms_list(
+        """[
+      {
+        name = "hall";
+        id = 1;
+        members = [ "hue-l-a/11" ];
+        devices = [ "hue-ms-a" ];
+        scenes = defaultDayScenes;
+      }
+    ]""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "motion-sensor", "name": "hue-ms-a"},
+        },
+    )
+    rules = result["smind"]["services"]["mqtt-automations"]["rules"]
+    assert "hall-motion-hue_ms_a" in rules
+
+
+def test_devices_string_shorthand_rejected_for_tap() -> None:
+    """A tap referenced via string shorthand is invalid because the
+    button number can't be expressed — taps still need the attrset
+    form `{ device = "..."; button = N; }`."""
+    err = _expect_rooms_list_error(
+        """[
+      {
+        name = "kitchen";
+        id = 1;
+        members = [ "hue-l-a/11" ];
+        devices = [ "hue-ts-a" ];  # missing button → fails
+        scenes = defaultDayScenes;
+      }
+    ]""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "tap", "name": "hue-ts-a"},
+        },
+    )
+    assert "must specify `button = N`" in err
+
+
+def test_devices_mixed_string_and_attrset_forms() -> None:
+    """A single `devices` list can mix shorthand strings and
+    attrset entries — useful when one room has a switch + motion
+    sensor (both shorthand) plus a tap binding (attrset)."""
+    result = _eval_rooms_list(
+        """[
+      {
+        name = "kitchen";
+        id = 1;
+        members = [ "hue-l-a/11" ];
+        devices = [
+          "hue-s-a"
+          "hue-ms-a"
+          { device = "hue-ts-a"; button = 1; }
+        ];
+        scenes = defaultDayScenes;
+      }
+    ]""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "switch", "name": "hue-s-a"},
+            "0xcccc": {"type": "motion-sensor", "name": "hue-ms-a"},
+            "0xdddd": {"type": "tap", "name": "hue-ts-a"},
+        },
+    )
+    rules = result["smind"]["services"]["mqtt-automations"]["rules"]
+    assert "kitchen-switch" in rules
+    assert "kitchen-motion-hue_ms_a" in rules
+    assert "kitchen-tap-hue_ts_a-1" in rules
+
+
+def test_rooms_list_rejects_attrset_shape() -> None:
+    """Passing the legacy attrset form to `rooms` fails with a
+    clear message pointing at the new list shape."""
+    err = _expect_rooms_list_error(
+        """{
+      hall = {
+        id = 1;
+        members = [ "hue-l-a/11" ];
+        devices = [ "hue-s-a" ];
+        scenes = defaultDayScenes;
+      };
+    }""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "switch", "name": "hue-s-a"},
+        },
+    )
+    assert "must be a list" in err
+
+
+def test_rooms_list_rejects_entry_without_name() -> None:
+    """Each entry must have a `name` field. Without it, the rule
+    identifier and groupName default both have nothing to derive
+    from."""
+    err = _expect_rooms_list_error(
+        """[
+      {
+        # name deliberately omitted
+        id = 1;
+        members = [ "hue-l-a/11" ];
+        devices = [ "hue-s-a" ];
+        scenes = defaultDayScenes;
+      }
+    ]""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "switch", "name": "hue-s-a"},
+        },
+    )
+    assert "missing required `name`" in err
+
+
+def test_rooms_list_rejects_duplicate_names() -> None:
+    """Two entries with the same `name` collide on the rule
+    identifier — caught up front instead of producing a confusing
+    downstream error."""
+    err = _expect_rooms_list_error(
+        """[
+      {
+        name = "hall";
+        id = 1; members = [ "hue-l-a/11" ];
+        devices = [ "hue-s-a" ]; scenes = defaultDayScenes;
+      }
+      {
+        name = "hall";
+        id = 2; members = [ "hue-l-b/11" ];
+        devices = [ "hue-s-b" ]; scenes = defaultDayScenes;
+      }
+    ]""",
+        devices_by_address={
+            "0xaaaa": {"type": "light", "name": "hue-l-a"},
+            "0xbbbb": {"type": "light", "name": "hue-l-b"},
+            "0xcccc": {"type": "switch", "name": "hue-s-a"},
+            "0xdddd": {"type": "switch", "name": "hue-s-b"},
+        },
+    )
+    assert "duplicate rooms entry name" in err
+    assert "hall" in err
 
 
