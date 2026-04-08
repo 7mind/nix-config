@@ -101,6 +101,24 @@ use crate::domain::state::ZoneState;
 use crate::time::Clock;
 use crate::topology::{RoomName, Topology};
 
+// ## Why wall switch on and tap press take different code paths
+//
+// Wall switches have a dedicated `off_press_release` button. The
+// `on_press_release` button is then a pure "scene cycle" button: every
+// press advances the active slot's cycle by one, indefinitely, with no
+// time component at all. The cycle index only resets when the lights
+// physically go off (via the dedicated off button, an external action,
+// or `cycle_idx = 0` reseed in `handle_group_state`).
+//
+// Tap remotes only have four buttons total — burning one per room for
+// "off" would waste the device. So the same tap button does triple
+// duty: fresh-on when off, cycle-next within a window, expire-to-off
+// after the window. The window matters because it's the only way the
+// device can distinguish "I want the next scene" from "I want it off".
+//
+// Both kinds share `defaults.cycle_window_seconds`, but that knob is
+// only meaningful for taps. For wall switches it's ignored.
+
 #[derive(Debug)]
 pub struct Controller {
     topology: Arc<Topology>,
@@ -195,7 +213,7 @@ impl Controller {
 
         match action {
             SwitchAction::OnPressRelease => {
-                self.cycle_button_press(room_name, ts, out);
+                self.wall_switch_on_press(room_name, ts, out);
             }
             SwitchAction::OffPressRelease => {
                 self.publish_off(room_name, &group_name, off_transition, ts, out);
@@ -232,60 +250,111 @@ impl Controller {
             return Vec::new();
         };
         let mut out = Vec::new();
-        self.cycle_button_press(&room_name, ts, &mut out);
+        self.tap_press(&room_name, ts, &mut out);
         out
     }
 
-    /// The unified cycle button handler — used by both wall switch
-    /// `on_press_release` and tap buttons. The state-machine semantics:
+    /// Wall switch `on_press_release` handler. Pure scene cycle — no
+    /// time component, no cycle window. Every press advances by one,
+    /// indefinitely. The cycle index only resets when the lights
+    /// physically go off (via the dedicated off button or an external
+    /// state echo via [`Controller::handle_group_state`]).
     ///
-    ///   - lights physically off → fresh on (first scene)
-    ///   - lights on, within cycle window → next scene
-    ///   - lights on, past cycle window → expire (turn off)
+    /// State machine:
+    ///   * `!physically_on` → publish first scene of the active slot,
+    ///     `cycle_idx = 0`
+    ///   * `physically_on`  → publish `scene_ids[(cycle_idx + 1) % N]`,
+    ///     `cycle_idx = next_idx`
+    fn wall_switch_on_press(&mut self, room_name: &str, ts: Instant, out: &mut Vec<Action>) {
+        let (group_name, scenes_for_now) = {
+            let Some(room) = self.topology.room_by_name(room_name) else {
+                return;
+            };
+            let hour = self.clock.local_hour();
+            (
+                room.group_name.clone(),
+                active_slot_scene_ids(&room.scenes, hour),
+            )
+        };
+        if scenes_for_now.is_empty() {
+            return;
+        }
+        let n = scenes_for_now.len();
+
+        let state_snapshot = self.states.get(room_name).cloned().unwrap_or_default();
+        let next_idx = if state_snapshot.physically_on {
+            // Advance the cycle.
+            (state_snapshot.cycle_idx + 1) % n
+        } else {
+            // Off → fresh on at the first scene.
+            0
+        };
+        let next_scene = scenes_for_now[next_idx];
+        out.push(Action::new(
+            group_name.clone(),
+            Payload::scene_recall(next_scene),
+        ));
+        self.write_after_on(room_name, ts, next_idx);
+        self.propagate_to_descendants(room_name, true);
+    }
+
+    /// Tap button handler. Three-branch state machine — same shape as
+    /// the bento `mkTapButtonRule`, just in Rust. The cycle window
+    /// (`defaults.cycle_window_seconds`) is the only thing that lets a
+    /// tap button distinguish "next scene" from "turn off", so we keep
+    /// that logic here.
     ///
-    /// `out` collects the [`Action`]s to publish.
-    fn cycle_button_press(&mut self, room_name: &str, ts: Instant, out: &mut Vec<Action>) {
-        // Re-snapshot the immutable bits we need; the mutable state
-        // borrow comes after.
+    /// State machine:
+    ///   1. `!physically_on` → publish first scene of the active slot,
+    ///      `cycle_idx = 0`
+    ///   2. `physically_on` AND `now - last_press < cycle_window` →
+    ///      publish `scene_ids[(cycle_idx + 1) % N]`
+    ///   3. `physically_on` AND `now - last_press >= cycle_window` →
+    ///      publish state OFF
+    fn tap_press(&mut self, room_name: &str, ts: Instant, out: &mut Vec<Action>) {
         let (group_name, scenes_for_now, off_transition) = {
             let Some(room) = self.topology.room_by_name(room_name) else {
                 return;
             };
             let hour = self.clock.local_hour();
-            let scene_ids = active_slot_scene_ids(&room.scenes, hour);
             (
                 room.group_name.clone(),
-                scene_ids,
+                active_slot_scene_ids(&room.scenes, hour),
                 room.off_transition_seconds,
             )
         };
+        if scenes_for_now.is_empty() {
+            return;
+        }
         let cycle_window = Duration::from_secs_f64(self.defaults.cycle_window_seconds);
 
         let state_snapshot = self.states.get(room_name).cloned().unwrap_or_default();
+        let within_window = state_snapshot
+            .last_press_at
+            .is_some_and(|last| ts.duration_since(last) < cycle_window);
 
         if !state_snapshot.physically_on {
-            // Fresh on → first scene of the active slot.
-            let Some(&first) = scenes_for_now.first() else {
-                return;
-            };
-            out.push(Action::new(group_name.clone(), Payload::scene_recall(first)));
-            self.write_after_on(room_name, ts, /* cycle_idx_after = */ 0);
+            // Branch 1: fresh on → first scene.
+            let first = scenes_for_now[0];
+            out.push(Action::new(
+                group_name.clone(),
+                Payload::scene_recall(first),
+            ));
+            self.write_after_on(room_name, ts, 0);
             self.propagate_to_descendants(room_name, true);
-        } else if let Some(last) = state_snapshot.last_press_at
-            && ts.duration_since(last) < cycle_window
-        {
-            // Cycle: advance to next scene mod N.
+        } else if within_window {
+            // Branch 2: cycle to next scene mod N.
             let n = scenes_for_now.len();
-            if n == 0 {
-                return;
-            }
             let next_idx = (state_snapshot.cycle_idx + 1) % n;
             let next_scene = scenes_for_now[next_idx];
-            out.push(Action::new(group_name.clone(), Payload::scene_recall(next_scene)));
+            out.push(Action::new(
+                group_name.clone(),
+                Payload::scene_recall(next_scene),
+            ));
             self.write_after_on(room_name, ts, next_idx);
             self.propagate_to_descendants(room_name, true);
         } else {
-            // Expire: turn off.
+            // Branch 3: window expired → toggle off.
             self.publish_off(room_name, &group_name, off_transition, ts, out);
         }
     }
@@ -1035,6 +1104,174 @@ mod tests {
                 Payload::scene_recall(1)
             )]
         );
+    }
+
+    // ---- wall switch on button: cycle / restart-cycle semantics --------
+    //
+    // Wall switches have a dedicated `off_press_release` button, so the
+    // `on_press_release` button is pure "cycle scenes": within the
+    // window it advances, outside the window it RESTARTS the cycle from
+    // scene 1 (NOT toggles off — that's a tap-only behaviour).
+
+    #[test]
+    fn wall_switch_on_press_from_off_publishes_first_scene() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+
+        let actions = c.handle_event(Event::SwitchAction {
+            device: "hue-s-study".into(),
+            action: SwitchAction::OnPressRelease,
+            ts: clk.now(),
+        });
+        // Day cycle starts at scene 1.
+        assert_eq!(
+            actions,
+            vec![Action::new("hue-lz-study", Payload::scene_recall(1))]
+        );
+        let s = c.state_for("study").unwrap();
+        assert!(s.physically_on);
+        assert_eq!(s.cycle_idx, 0);
+    }
+
+    #[test]
+    fn wall_switch_on_press_within_window_cycles_scene() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+
+        // press 1: scene 1
+        c.handle_event(Event::SwitchAction {
+            device: "hue-s-study".into(),
+            action: SwitchAction::OnPressRelease,
+            ts: clk.now(),
+        });
+        clk.advance(Duration::from_millis(200));
+        // press 2 within the window: scene 2
+        let actions = c.handle_event(Event::SwitchAction {
+            device: "hue-s-study".into(),
+            action: SwitchAction::OnPressRelease,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            actions,
+            vec![Action::new("hue-lz-study", Payload::scene_recall(2))]
+        );
+        assert_eq!(c.state_for("study").unwrap().cycle_idx, 1);
+    }
+
+    #[test]
+    fn wall_switch_on_press_advances_cycle_with_no_time_component() {
+        // Wall switches don't have a cycle window — every press just
+        // advances by one. This regression test ensures we never
+        // accidentally re-introduce a time-based reset on the wall
+        // switch path. The user reported this exact bug after the
+        // first "unification" attempt.
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+
+        // press 1: scene 1
+        let a1 = c.handle_event(Event::SwitchAction {
+            device: "hue-s-study".into(),
+            action: SwitchAction::OnPressRelease,
+            ts: clk.now(),
+        });
+        assert_eq!(a1, vec![Action::new("hue-lz-study", Payload::scene_recall(1))]);
+        // wait FAR past any plausible cycle window
+        clk.advance(Duration::from_secs(60));
+
+        // press 2: should still advance to scene 2, NOT restart, NOT toggle off
+        let a2 = c.handle_event(Event::SwitchAction {
+            device: "hue-s-study".into(),
+            action: SwitchAction::OnPressRelease,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            a2,
+            vec![Action::new("hue-lz-study", Payload::scene_recall(2))],
+            "wall switch press should always advance the cycle, regardless of \
+             how long ago the previous press was"
+        );
+        // wait again
+        clk.advance(Duration::from_secs(300));
+
+        // press 3: should advance to scene 3
+        let a3 = c.handle_event(Event::SwitchAction {
+            device: "hue-s-study".into(),
+            action: SwitchAction::OnPressRelease,
+            ts: clk.now(),
+        });
+        assert_eq!(a3, vec![Action::new("hue-lz-study", Payload::scene_recall(3))]);
+
+        // press 4: should wrap to scene 1
+        clk.advance(Duration::from_secs(10));
+        let a4 = c.handle_event(Event::SwitchAction {
+            device: "hue-s-study".into(),
+            action: SwitchAction::OnPressRelease,
+            ts: clk.now(),
+        });
+        assert_eq!(a4, vec![Action::new("hue-lz-study", Payload::scene_recall(1))]);
+    }
+
+    #[test]
+    fn wall_switch_off_press_resets_cycle_index() {
+        // After the dedicated off button, the next on press should
+        // start from scene 1 again — not from wherever the cycle was.
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+
+        // Walk through scenes 1 → 2 → 3.
+        for _ in 0..3 {
+            c.handle_event(Event::SwitchAction {
+                device: "hue-s-study".into(),
+                action: SwitchAction::OnPressRelease,
+                ts: clk.now(),
+            });
+            clk.advance(Duration::from_millis(100));
+        }
+        assert_eq!(c.state_for("study").unwrap().cycle_idx, 2);
+
+        // Off press.
+        c.handle_event(Event::SwitchAction {
+            device: "hue-s-study".into(),
+            action: SwitchAction::OffPressRelease,
+            ts: clk.now(),
+        });
+        assert!(!c.state_for("study").unwrap().physically_on);
+
+        // Next on press → fresh scene 1.
+        let actions = c.handle_event(Event::SwitchAction {
+            device: "hue-s-study".into(),
+            action: SwitchAction::OnPressRelease,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            actions,
+            vec![Action::new("hue-lz-study", Payload::scene_recall(1))]
+        );
+    }
+
+    #[test]
+    fn wall_switch_full_cycle_walks_all_scenes_then_wraps() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+
+        // Press 4 times within the window — should walk
+        // scene 1 → 2 → 3 → 1 (wraps mod 3).
+        let mut emitted: Vec<u8> = Vec::new();
+        for _ in 0..4 {
+            let actions = c.handle_event(Event::SwitchAction {
+                device: "hue-s-study".into(),
+                action: SwitchAction::OnPressRelease,
+                ts: clk.now(),
+            });
+            assert_eq!(actions.len(), 1);
+            if let Payload::SceneRecall { scene_recall } = actions[0].payload {
+                emitted.push(scene_recall);
+            } else {
+                panic!("expected SceneRecall, got {:?}", actions[0].payload);
+            }
+            clk.advance(Duration::from_millis(200));
+        }
+        assert_eq!(emitted, vec![1, 2, 3, 1]);
     }
 
     // ---- wall switch off button + brightness ----------------------------
