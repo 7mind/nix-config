@@ -303,6 +303,21 @@ class FakeZ2m:
             data={"id": target},
         )
 
+    def _resolve_to_ieee_locked_unsafe(self, device: str) -> str:
+        """Mirror z2m's behavior of accepting either ieee_address or
+        friendly_name in API calls. If `device` is a known ieee, use
+        it; if it matches a known device's friendly_name, return that
+        device's ieee. Otherwise return the input unchanged so tests
+        that don't pre-register devices keep working — bridge/groups
+        will then store whatever string they passed in, which is the
+        legacy behavior the original tests rely on."""
+        if device in self._devices:
+            return device
+        for ieee, info in self._devices.items():
+            if info["friendly_name"] == device:
+                return ieee
+        return device
+
     def _handle_members_add(self, payload: dict[str, Any]) -> None:
         group_name = payload["group"]
         device = payload["device"]
@@ -317,7 +332,8 @@ class FakeZ2m:
                     error=f"group {group_name} does not exist",
                 )
                 return
-            entry = {"ieee_address": device, "endpoint": endpoint}
+            ieee = self._resolve_to_ieee_locked_unsafe(device)
+            entry = {"ieee_address": ieee, "endpoint": endpoint}
             if entry not in group["members"]:
                 group["members"].append(entry)
                 self._publish_groups_locked_unsafe()
@@ -341,7 +357,8 @@ class FakeZ2m:
                     error=f"group {group_name} does not exist",
                 )
                 return
-            entry = {"ieee_address": device, "endpoint": endpoint}
+            ieee = self._resolve_to_ieee_locked_unsafe(device)
+            entry = {"ieee_address": ieee, "endpoint": endpoint}
             if entry in group["members"]:
                 group["members"].remove(entry)
                 self._publish_groups_locked_unsafe()

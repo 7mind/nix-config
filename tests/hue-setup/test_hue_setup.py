@@ -208,6 +208,109 @@ def test_prune_removes_stale_group(
     assert names == {"study"}
 
 
+# ---------- member key normalization (friendly vs ieee diff bug) ----------
+
+
+def test_member_diff_uses_name_by_address_to_normalize(
+    mosquitto: tuple[str, int], fake_z2m: FakeZ2m
+) -> None:
+    """Regression: when the config has members in friendly form
+    (because defineRooms translated them at build time) but z2m's
+    bridge/groups reports them in ieee form (it always does), the
+    member diff must normalize through name_by_address before
+    comparing — otherwise every member looks both missing and extra
+    on every reconcile, and we permanently churn add/remove calls.
+
+    This is the exact scenario the user hit running hue-apply on
+    raspi5m: every existing group reported "add member <friendly>"
+    plus "[skip] member <ieee> ... not in config" on every run.
+    """
+    fake_z2m.add_existing_device("0xaaaa", "lamp-a")
+    fake_z2m.add_existing_device("0xbbbb", "lamp-b")
+    fake_z2m.add_existing_group(
+        "study", 50, members=[("0xaaaa", 11), ("0xbbbb", 11)]
+    )
+    config = hue_setup.Config.model_validate(
+        {
+            "name_by_address": {
+                "0xaaaa": "lamp-a",
+                "0xbbbb": "lamp-b",
+            },
+            "groups": {
+                "study": {
+                    "id": 50,
+                    "members": ["lamp-a/11", "lamp-b/11"],
+                },
+            },
+        }
+    )
+    client = _client(mosquitto)
+    try:
+        touched, _skipped = _reconcile(client, config, prune=True)
+    finally:
+        client.close()
+    # No add/remove on either side — the diff should be empty.
+    assert touched == 0, (
+        "diff was not normalized: hue-setup tried to mutate group "
+        "membership when both sides describe the same physical bulbs"
+    )
+    # Inventory unchanged — exactly the two original members, still
+    # reported in ieee form (z2m never rewrites these to friendly).
+    members = {
+        (m["ieee_address"], m["endpoint"])
+        for m in fake_z2m.snapshot()[0]["members"]
+    }
+    assert members == {("0xaaaa", 11), ("0xbbbb", 11)}
+
+
+def test_member_diff_falls_back_to_ieee_when_unmapped(
+    mosquitto: tuple[str, int], fake_z2m: FakeZ2m
+) -> None:
+    """A device whose ieee isn't in name_by_address falls back to
+    its bare ieee in the normalized form on both sides. The config
+    can reference the bare ieee and the diff still works."""
+    fake_z2m.add_existing_group(
+        "study", 50, members=[("0x99999", 11)]
+    )
+    config = hue_setup.Config.model_validate(
+        {
+            # name_by_address intentionally empty
+            "groups": {
+                "study": {"id": 50, "members": ["0x99999/11"]},
+            },
+        }
+    )
+    client = _client(mosquitto)
+    try:
+        touched, _skipped = _reconcile(client, config)
+    finally:
+        client.close()
+    assert touched == 0
+
+
+def test_normalize_member_key_unit() -> None:
+    """Direct unit checks on the helper, since the integration tests
+    above only cover the happy path through the broker."""
+    # Friendly name with mapping → translated
+    assert hue_setup.normalize_member_key(
+        "0xaaaa/11", {"0xaaaa": "lamp-a"}
+    ) == "lamp-a/11"
+    # ieee not in mapping → unchanged
+    assert hue_setup.normalize_member_key("0xunknown/11", {}) == "0xunknown/11"
+    # Already a friendly name → unchanged regardless of mapping
+    assert hue_setup.normalize_member_key(
+        "lamp-a/11", {"0xaaaa": "lamp-a"}
+    ) == "lamp-a/11"
+    # Empty mapping → unchanged
+    assert hue_setup.normalize_member_key("0xaaaa/11", {}) == "0xaaaa/11"
+    # Multi-slash friendly name with endpoint → split on LAST slash
+    assert hue_setup.normalize_member_key(
+        "weird/name/11", {}
+    ) == "weird/name/11"
+    # Malformed (no '/') → returned as-is so parse_member_key can raise
+    assert hue_setup.normalize_member_key("malformed", {}) == "malformed"
+
+
 def test_prune_clears_ghost_id_before_recreate(
     mosquitto: tuple[str, int], fake_z2m: FakeZ2m
 ) -> None:

@@ -207,6 +207,38 @@ def parse_member_key(member: str) -> tuple[str, int]:
     return device, endpoint
 
 
+def normalize_member_key(member: str, name_by_address: dict[str, str]) -> str:
+    """Canonicalize a 'device/endpoint' key by translating any
+    `0x...` device part to its friendly_name when an entry exists in
+    name_by_address.
+
+    Used by `reconcile_groups` to bring both sides of the member set
+    diff into the same form before comparison. z2m's bridge/groups
+    always returns members as ieee_address; the rendered hue-setup
+    config (from `defineRooms`) always uses friendly names. Without
+    this normalization the diff considers every member missing on
+    one side and extra on the other, leading to redundant add/remove
+    on every reconcile pass — and a permanent churn loop, since the
+    next bridge/groups fetch would still report the ieee form.
+
+    Falls back to the input string when:
+      * the device part isn't in `0x` form (already canonical)
+      * the device part is in `0x` form but not in name_by_address
+        (the user knows about the device but hasn't named it; treat
+        the bare ieee as the canonical form for this run)
+
+    Malformed inputs (no '/') are returned unchanged so that
+    downstream `parse_member_key` raises the precise error rather
+    than this helper swallowing it.
+    """
+    if "/" not in member:
+        return member
+    device, _, endpoint = member.rpartition("/")
+    if device.startswith("0x") and device in name_by_address:
+        device = name_by_address[device]
+    return f"{device}/{endpoint}"
+
+
 # ---------- MQTT client ----------
 
 
@@ -741,8 +773,19 @@ def reconcile_groups(
                 )
             continue
 
-        desired_keys: set[str] = set(group_spec.members)
-        current_keys: set[str] = {m.as_key() for m in existing_group.members}
+        # Normalize both sides through name_by_address before diffing,
+        # so a config that uses friendly names compares correctly
+        # against z2m's bridge/groups which always reports ieee. See
+        # `normalize_member_key` for the exact semantics; the call is
+        # a no-op when name_by_address is empty.
+        desired_keys: set[str] = {
+            normalize_member_key(m, config.name_by_address)
+            for m in group_spec.members
+        }
+        current_keys: set[str] = {
+            normalize_member_key(m.as_key(), config.name_by_address)
+            for m in existing_group.members
+        }
 
         missing = sorted(desired_keys - current_keys)
         extra = sorted(current_keys - desired_keys)
