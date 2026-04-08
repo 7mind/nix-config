@@ -905,7 +905,7 @@ def test_motion_cooldown_does_not_block_after_user_on_then_off(
     ]
 
 
-# ---------- tap toggle tests ----------
+# ---------- tap toggle tests (per-binding rules with sourceFilter) ----------
 
 
 TAP_SOURCE = "test/tap/action"
@@ -913,82 +913,56 @@ TAP_TARGET_A = "test/room-a/set"
 TAP_TARGET_B = "test/room-b/set"
 
 
-def _tap_toggle_config() -> str:
-    """Bento config for a Hue Tap-style rule with two buttons binding
-    two different rooms via per-handler `meta out_topic` overrides.
+def _tap_per_binding_config() -> str:
+    """Bento config for two per-binding tap rules sharing a source
+    topic via disjoint `sourceFilter` checks.
 
-    Mirrors the production `mkTapRule` shape: a single rule with
-    `cacheLabel = tap_<name>`, `cacheReads` listing per-room state
-    keys, and on/off handler pairs whose `publishMapping` sets both
-    `meta out_topic` and the payload in one shot. The rule-level
-    target is set to one of the rooms as a placeholder; every
-    handler overrides it.
+    Mirrors the production `mkTapButtonRule` shape: each rule has
+    its own `cacheLabel = room_<roomName>`, `sourceFilter` gating
+    the outer dispatch on `(topic, content)`, and a simple `on`/`off`
+    handler pair against the room's `lights_state` flag.
 
     The point of this test is to verify that:
-      * bento accepts a publishMapping that sets metadata AND root
-        in the same mapping
-      * the dynamic out_topic interpolation in the output stage picks
-        up the per-handler override
-      * the cache-based toggle correctly alternates between on (with
-        scene recall) and off paths on repeated presses of the same
-        physical button
-      * different buttons in the same rule correctly target different
-        rooms (no cross-talk through the shared cache resource)
+      * bento accepts the `sourceFilter` override (top-level switch
+        case check is the user-supplied expression instead of a plain
+        topic equality)
+      * two rules sharing one MQTT source don't collide — bento
+        dispatches each press to exactly one rule based on the
+        action content
+      * the cache-based toggle alternates correctly per room
+      * different rooms have completely independent state (separate
+        `room_<name>` cache resources)
+      * the input dedup (one MQTT subscription per unique source)
+        doesn't cause messages to be dropped
     """
-    rules = {
-        "test-tap": {
+    def per_binding_rule(button: int, room_label: str, target: str) -> dict:
+        return {
             "source": TAP_SOURCE,
-            "target": TAP_TARGET_A,  # placeholder, overridden per handler
+            "sourceFilter": (
+                f'meta("mqtt_topic") == "{TAP_SOURCE}"'
+                f' && content().string() == "press_{button}"'
+            ),
+            "target": target,
             "format": "action",
-            "cacheLabel": "tap_test",
-            "cacheReads": ["state_room_a", "state_room_b"],
+            "cacheLabel": f"room_{room_label}",
+            "cacheReads": ["lights_state"],
             "handlers": {
-                "btn_1_on": {
-                    "check": (
-                        'content().string() == "press_1" '
-                        '&& (meta("state_room_a").or("")) == ""'
-                    ),
-                    "publishMapping": (
-                        f'meta out_topic = "{TAP_TARGET_A}"\n'
-                        'root = {"scene_recall": 1}'
-                    ),
-                    "cacheWrites": {"state_room_a": "user"},
+                "on": {
+                    "check": '(meta("lights_state").or("")) == ""',
+                    "publish": {"scene_recall": 1},
+                    "cacheWrites": {"lights_state": "user"},
                 },
-                "btn_1_off": {
-                    "check": (
-                        'content().string() == "press_1" '
-                        '&& (meta("state_room_a").or("")) != ""'
-                    ),
-                    "publishMapping": (
-                        f'meta out_topic = "{TAP_TARGET_A}"\n'
-                        'root = {"state": "OFF"}'
-                    ),
-                    "cacheWrites": {"state_room_a": ""},
-                },
-                "btn_2_on": {
-                    "check": (
-                        'content().string() == "press_2" '
-                        '&& (meta("state_room_b").or("")) == ""'
-                    ),
-                    "publishMapping": (
-                        f'meta out_topic = "{TAP_TARGET_B}"\n'
-                        'root = {"scene_recall": 1}'
-                    ),
-                    "cacheWrites": {"state_room_b": "user"},
-                },
-                "btn_2_off": {
-                    "check": (
-                        'content().string() == "press_2" '
-                        '&& (meta("state_room_b").or("")) != ""'
-                    ),
-                    "publishMapping": (
-                        f'meta out_topic = "{TAP_TARGET_B}"\n'
-                        'root = {"state": "OFF"}'
-                    ),
-                    "cacheWrites": {"state_room_b": ""},
+                "off": {
+                    "check": '(meta("lights_state").or("")) != ""',
+                    "publish": {"state": "OFF"},
+                    "cacheWrites": {"lights_state": ""},
                 },
             },
-        },
+        }
+
+    rules = {
+        "binding-room-a-1": per_binding_rule(1, "a", TAP_TARGET_A),
+        "binding-room-b-2": per_binding_rule(2, "b", TAP_TARGET_B),
     }
     return _render_bento_config(rules)
 
@@ -999,10 +973,10 @@ def test_tap_button_toggles_room_on_then_off(
 ) -> None:
     """First press of button 1 turns room A on (scene_recall:1).
     Second press of the same button turns room A off (state:OFF).
-    Verifies that the cache-based toggle and the per-handler
-    out_topic override both work end-to-end through bento + mosquitto."""
+    Verifies the per-binding rule + sourceFilter dispatch + cache
+    toggle work end-to-end through bento + mosquitto."""
     client, inbox = mqtt_client
-    bento_runner(_tap_toggle_config())
+    bento_runner(_tap_per_binding_config())
     _subscribe(client, TAP_TARGET_A)
 
     _publish(client, TAP_SOURCE, "press_1")
@@ -1021,12 +995,13 @@ def test_tap_buttons_target_different_rooms_independently(
     bento_runner: BentoRunner,
     mqtt_client: tuple[mqtt.Client, MqttInbox],
 ) -> None:
-    """Button 1 → room A, button 2 → room B. Pressing one button
-    must NOT affect the other room's state, even though they share
-    a cache resource: each button's handlers reference its own state
-    key."""
+    """Button 1 → room A, button 2 → room B. Each room has its OWN
+    cache resource (`room_a`, `room_b`), so pressing one button
+    cannot affect the other room's state — and bento's outer switch
+    routes each press to exactly one binding rule based on the
+    sourceFilter content match."""
     client, inbox = mqtt_client
-    bento_runner(_tap_toggle_config())
+    bento_runner(_tap_per_binding_config())
     _subscribe(client, TAP_TARGET_A)
     _subscribe(client, TAP_TARGET_B)
 
@@ -1052,7 +1027,7 @@ def test_tap_button_off_press_then_on_press_works(
     room state correctly. Catches a class of state-machine bugs
     where the off path forgets to clear its flag."""
     client, inbox = mqtt_client
-    bento_runner(_tap_toggle_config())
+    bento_runner(_tap_per_binding_config())
     _subscribe(client, TAP_TARGET_A)
 
     for _ in range(4):
@@ -1067,3 +1042,140 @@ def test_tap_button_off_press_then_on_press_works(
         {"scene_recall": 1},
         {"state": "OFF"},
     ]
+
+
+def test_tap_button_coordinates_with_motion_via_room_cache(
+    bento_runner: BentoRunner,
+    mqtt_client: tuple[mqtt.Client, MqttInbox],
+) -> None:
+    """The whole point of switching to per-binding tap rules: the
+    tap and a motion sensor in the same room share the room's
+    `lights_state` flag. After the user presses the tap to turn
+    lights on, a subsequent motion-off MUST NOT turn the lights
+    off — `lights_state == "user"` blocks it.
+
+    Pre-Option-B (when tap state lived in a tap-private cache),
+    this scenario silently failed: the motion sensor saw a stale
+    `lights_state == ""` and fired its OFF path."""
+    client, inbox = mqtt_client
+
+    # Tap rule (binding-room-a-1) AND a motion rule for the same room.
+    # Both use cacheLabel = "room_a" so they share lights_state.
+    cache_label = "room_a"
+    motion_topic = "test/motion-sensor"
+    rules = {
+        "tap-binding": {
+            "source": TAP_SOURCE,
+            "sourceFilter": (
+                f'meta("mqtt_topic") == "{TAP_SOURCE}"'
+                ' && content().string() == "press_1"'
+            ),
+            "target": TAP_TARGET_A,
+            "format": "action",
+            "cacheLabel": cache_label,
+            "cacheReads": ["lights_state"],
+            "handlers": {
+                "on": {
+                    "check": '(meta("lights_state").or("")) == ""',
+                    "publish": {"scene_recall": 1},
+                    "cacheWrites": {"lights_state": "user"},
+                },
+                "off": {
+                    "check": '(meta("lights_state").or("")) != ""',
+                    "publish": {"state": "OFF"},
+                    "cacheWrites": {"lights_state": ""},
+                },
+            },
+        },
+        "motion": {
+            "source": motion_topic,
+            "target": TAP_TARGET_A,
+            "format": "json",
+            "cacheLabel": cache_label,
+            "cacheReads": ["lights_state"],
+            "handlers": {
+                "motion-on": {
+                    "check": (
+                        'this.occupancy == true '
+                        '&& (meta("lights_state").or("")) == ""'
+                    ),
+                    "publish": {"scene_recall": 1},
+                    "cacheWrites": {"lights_state": "motion"},
+                },
+                "motion-off": {
+                    "check": (
+                        'this.occupancy == false '
+                        '&& (meta("lights_state").or("")) == "motion"'
+                    ),
+                    "publish": {"state": "OFF"},
+                    "cacheWrites": {"lights_state": ""},
+                },
+            },
+        },
+    }
+    bento_runner(_render_bento_config(rules))
+    _subscribe(client, TAP_TARGET_A)
+
+    # User presses tap → lights_state becomes "user"
+    _publish(client, TAP_SOURCE, "press_1")
+    time.sleep(0.2)
+    # Motion sensor reports occupancy=false → would normally turn off
+    # if lights_state were "motion", but the user owns the lights now.
+    _publish(client, motion_topic, json.dumps({"occupancy": False}))
+    time.sleep(0.2)
+
+    payloads = [json.loads(p) for p in inbox.payloads_on(TAP_TARGET_A)]
+    assert payloads == [
+        {"scene_recall": 1},  # tap on press only
+        # NO state:OFF — the motion-off check failed because
+        # lights_state == "user", not "motion"
+    ], f"motion-off should have been suppressed but got {payloads}"
+
+
+def test_input_dedup_collapses_shared_source_topic_to_one_subscription() -> None:
+    """Two rules with the same `source` topic must produce exactly
+    one MQTT input subscription, not two — otherwise mosquitto
+    delivers each message twice and the pipeline does N-1 wasted
+    dispatch passes per press.
+
+    This is the input-dedup that lets per-binding tap rules share
+    one tap source topic without N-fold message amplification."""
+    rules = {
+        "binding-1": {
+            "source": "zigbee2mqtt/tap/action",
+            "sourceFilter": (
+                'meta("mqtt_topic") == "zigbee2mqtt/tap/action"'
+                ' && content().string() == "press_1"'
+            ),
+            "target": "test/room-a/set",
+            "format": "action",
+            "handlers": {
+                "fire": {
+                    "check": "true",
+                    "publish": {"scene_recall": 1},
+                },
+            },
+        },
+        "binding-2": {
+            "source": "zigbee2mqtt/tap/action",
+            "sourceFilter": (
+                'meta("mqtt_topic") == "zigbee2mqtt/tap/action"'
+                ' && content().string() == "press_2"'
+            ),
+            "target": "test/room-b/set",
+            "format": "action",
+            "handlers": {
+                "fire": {
+                    "check": "true",
+                    "publish": {"scene_recall": 1},
+                },
+            },
+        },
+    }
+    rendered = json.loads(_render_bento_config(rules))
+    inputs = rendered["input"]["broker"]["inputs"]
+    assert len(inputs) == 1, (
+        f"expected exactly one input for two rules sharing a source, "
+        f"got {len(inputs)}: {inputs}"
+    )
+    assert inputs[0]["mqtt"]["topics"] == ["zigbee2mqtt/tap/action"]

@@ -292,6 +292,15 @@ let
     (lib.mapAttrsToList mkCase rule.handlers) ++ [ defaultCase ];
 
   # Build the rule-level switch case dispatching on the source MQTT topic.
+  #
+  # By default the case fires on every message whose `mqtt_topic`
+  # metadata matches `rule.source`. When `rule.sourceFilter` is set,
+  # the case uses that expression verbatim instead — letting two rules
+  # share a `source` topic without colliding. Bento's switch processor
+  # stops at the first matching case (no fall-through), so without
+  # disjoint outer checks only the first rule on a shared topic would
+  # ever fire. The override is the way to make the dispatch select the
+  # right rule based on additional message context (e.g. action content).
   mkRuleCase = ruleName: rule:
     let
       cacheLabel = ruleCacheLabel ruleName rule;
@@ -329,9 +338,13 @@ let
           };
         })
         rule.cacheReads;
+
+      defaultCheck = ''meta("mqtt_topic") == "${rule.source}"'';
     in
     {
-      check = ''meta("mqtt_topic") == "${rule.source}"'';
+      check =
+        if rule.sourceFilter != null then rule.sourceFilter
+        else defaultCheck;
       processors =
         parseJsonProcessors
         ++ [
@@ -366,18 +379,35 @@ let
       (lib.unique (lib.mapAttrsToList ruleCacheLabel cfg.rules));
 
     input = {
+      # Dedupe MQTT inputs by source topic. Two rules can legitimately
+      # share a `source` (e.g. multiple per-button rules splitting one
+      # tap action stream via `sourceFilter`); without dedup the broker
+      # would deliver the same message N times — once per subscribing
+      # input — and the pipeline would dispatch each copy through the
+      # outer switch, doing N-1 wasted runs that all hit the default
+      # `root = deleted()` case. Collapsing to one input per unique
+      # topic gives every rule a single copy and keeps the renderer
+      # behavior identical for non-shared topics.
       broker = {
-        inputs = lib.mapAttrsToList
-          (name: rule: {
+        inputs = let
+          # Sanitise a topic into a stable bento client_id segment.
+          # `+` and `#` are MQTT wildcards that we currently don't use,
+          # but rendering them defensively keeps the helper safe.
+          sanitizeTopic = lib.replaceStrings [ "/" "-" "+" "#" ] [ "_" "_" "p" "h" ];
+          uniqueSources = lib.unique
+            (lib.mapAttrsToList (_name: rule: rule.source) cfg.rules);
+        in
+        lib.map
+          (src: {
             mqtt = {
               urls = [ mqttUrl ];
-              topics = [ rule.source ];
-              client_id = "bento_${sanitize name}_in";
+              topics = [ src ];
+              client_id = "bento_in_${sanitizeTopic src}";
               user = cfg.mqtt.user;
               password = "\${MQTT_PASSWORD}";
             };
           })
-          cfg.rules;
+          uniqueSources;
       };
     };
 
@@ -472,6 +502,25 @@ in
             type = lib.types.str;
             example = "zigbee2mqtt/mid-bedroom-switch/action";
             description = "MQTT topic to subscribe to.";
+          };
+          sourceFilter = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            example = ''meta("mqtt_topic") == "zigbee2mqtt/tap/action" && content().string() == "press_1"'';
+            description = ''
+              Override for the outer-switch case check that decides
+              whether this rule's processors run for an incoming
+              message. When null (default), the rule fires on any
+              message whose `mqtt_topic` metadata matches `source`.
+
+              Setting an explicit filter is the supported way for two
+              rules to share a `source` topic without colliding —
+              bento's switch processor doesn't fall through, so
+              without disjoint outer checks only the first rule on a
+              shared topic would ever fire. Used by per-button tap
+              rules to dispatch by `(topic, action)` so each button
+              gets its own bento rule with its own room cache.
+            '';
           };
           target = lib.mkOption {
             type = lib.types.str;
