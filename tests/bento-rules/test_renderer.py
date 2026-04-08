@@ -55,12 +55,27 @@ TEST_SCENES_NIX = """
 # without overriding `defaults_nix` lands these values. Tests that
 # specifically exercise the defaults system pass their own block.
 DEFAULT_TEST_DEFAULTS_NIX = """{
-  room = { motionOffCooldownSeconds = 30; };
+  room = {
+    motionOffCooldownSeconds = 30;
+    offTransitionSeconds = 0.8;
+  };
   "motion-sensor" = {
     occupancyTimeoutSeconds = 60;
     sensitivity = "medium";
     ledIndication = true;
     maxIlluminance = 50;
+  };
+  "wall-switch" = {
+    cycleDebounceSeconds = 0.6;
+    brightnessStep = 25;
+    brightnessStepTransitionSeconds = 0.2;
+    brightnessMoveRate = 40;
+  };
+  "tap-switch" = {
+    cyclePauseSeconds = 1;
+  };
+  scene = {
+    transitionSeconds = 0.5;
   };
 }"""
 
@@ -1155,15 +1170,23 @@ def test_tap_button_binding_generates_per_binding_rule() -> None:
         'meta("mqtt_topic") == "zigbee2mqtt/hue-ts-kitchen/action"'
         ' && content().string() == "press_1"'
     )
-    assert rule["cacheReads"] == ["lights_state"]
-    # Two handlers per binding: on (lights_state empty) / off (set).
-    assert set(rule["handlers"]) == {"on", "off"}
+    # Cycle state lives in the room cache alongside lights_state.
+    assert set(rule["cacheReads"]) >= {
+        "lights_state", "tap_cycle_idx", "tap_last_press_ms",
+    }
+    # Three handlers (one per state-machine branch). Static
+    # cacheWrites for each so the empty-string `lights_state`
+    # write in the OFF handler is a literal, not an interpolation.
+    assert set(rule["handlers"]) == {
+        "lights_off_press", "cycle_press", "expire_press",
+    }
 
 
-def test_tap_button_handlers_dispatch_on_lights_state() -> None:
-    """The outer sourceFilter has already gated on the action; the
-    inner handler checks just look at the room's `lights_state` to
-    decide whether the press should turn on or off."""
+def test_tap_button_handlers_implement_cycle_state_machine() -> None:
+    """Each of the three handlers covers one state-machine branch:
+    lights-off, cycle-advance-within-window, expire-after-window.
+    Their checks gate on the room's `lights_state` and the elapsed
+    delta against the cyclePauseSeconds threshold."""
     result = _eval_define_rooms(
         """{
       kitchen-all = {
@@ -1179,28 +1202,108 @@ def test_tap_button_handlers_dispatch_on_lights_state() -> None:
     rule = result["smind"]["services"]["mqtt-automations"]["rules"][
         "kitchen-all-tap-hue_ts_kitchen-1"
     ]
-    on = rule["handlers"]["on"]
-    off = rule["handlers"]["off"]
+    handlers = rule["handlers"]
 
-    # No content() check in the inner handlers — that's already
-    # enforced by sourceFilter.
-    assert "content()" not in on["check"]
-    assert "content()" not in off["check"]
-    assert '(meta("lights_state").or("")) == ""' == on["check"]
-    assert '(meta("lights_state").or("")) != ""' == off["check"]
+    # Lights-off path: gated only on `lights_state == ""`.
+    off = handlers["lights_off_press"]
+    assert '(meta("lights_state").or("")) == ""' == off["check"]
+    # Static cacheWrites — no interpolation — so lights_state="user"
+    # is reliable on first press.
+    assert off["cacheWrites"]["lights_state"] == "user"
+    assert off["cacheWrites"]["tap_cycle_idx"] == "0"
 
-    # On uses publishMapping (slot-aware first-scene picker); since
-    # this room has no motion sensor, no `meta out_topic` override is
-    # needed — the rule-level target handles publishing.
-    assert "out_topic" not in on["publishMapping"]
-    assert '"scene_recall": 1' in on["publishMapping"]
+    # Cycle-advance path: lights on AND delta < threshold (1000ms).
+    cycle = handlers["cycle_press"]
+    assert '(meta("lights_state").or("")) != ""' in cycle["check"]
+    assert "< 1000" in cycle["check"]
+    # The bloblang computes next index from current and stashes
+    # in meta for the cacheWrite to pick up.
+    assert "($cur_idx + 1) % $n" in cycle["publishMapping"]
+    assert "meta tap_cycle_idx_next" in cycle["publishMapping"]
+    assert cycle["cacheWrites"]["lights_state"] == "user"
+    assert cycle["cacheWrites"]["tap_cycle_idx"] == '${! meta("tap_cycle_idx_next") }'
 
-    # Off uses static publish (state OFF) — no time-of-day logic.
-    assert off["publish"] == {"state": "OFF", "transition": 0.8}
+    # Expire path: lights on AND delta >= threshold. Static OFF
+    # publish, static empty `lights_state` cacheWrite (key fix —
+    # interpolating an empty string here failed silently and left
+    # the cycle stuck).
+    expire = handlers["expire_press"]
+    assert '(meta("lights_state").or("")) != ""' in expire["check"]
+    assert ">= 1000" in expire["check"]
+    assert expire["publish"]["state"] == "OFF"
+    assert expire["cacheWrites"]["lights_state"] == ""
+    assert expire["cacheWrites"]["tap_cycle_idx"] == "0"
 
-    # Cache writes maintain the shared `lights_state` flag.
-    assert on["cacheWrites"] == {"lights_state": "user"}
-    assert off["cacheWrites"] == {"lights_state": ""}
+
+def test_tap_cycle_pause_seconds_default_flows_through() -> None:
+    """The cyclePauseSeconds default flows into the cycle/expire
+    handler checks as a millisecond comparison. Override 0.5s →
+    500ms."""
+    result = _eval_define_rooms(
+        """{
+      hall = {
+        groupName = "hall"; id = 1;
+        members = [ "0x1/11" ];
+        devices = [ { device = "hue-ts-foo"; button = 1; } ];
+        scenes = defaultDayScenes;
+      };
+    }""",
+        defaults_nix=_full_defaults(tap_cycle_pause=0.5),
+    )
+    rule = result["smind"]["services"]["mqtt-automations"]["rules"][
+        "hall-tap-hue_ts_foo-1"
+    ]
+    cycle_check = rule["handlers"]["cycle_press"]["check"]
+    expire_check = rule["handlers"]["expire_press"]["check"]
+    assert "< 500" in cycle_check and "< 1000" not in cycle_check
+    assert ">= 500" in expire_check and ">= 1000" not in expire_check
+
+
+def test_scene_transition_default_applied_when_not_set_per_scene() -> None:
+    """`defaults.scene.transitionSeconds` flows into every scene that
+    doesn't carry its own `transition` field. Per-scene overrides
+    win when set explicitly."""
+    result = _eval_define_rooms(
+        """{
+      hall = {
+        groupName = "hall"; id = 1; members = [ "0x1/11" ];
+        devices = [ "hue-s-a" ];
+        scenes = [
+          # First scene relies on the default — no transition field.
+          { id = 1; name = "default-fade"; state = "ON"; brightness = 254; color_temp = 250; }
+          # Second scene overrides with its own transition.
+          { id = 2; name = "snap"; state = "ON"; brightness = 254; color_temp = 370; transition = 0.0; }
+        ];
+      };
+    }""",
+        defaults_nix=_full_defaults(scene_transition=2.5),
+    )
+    scenes = result["smind"]["services"]["hue-setup"]["config"]["groups"]["hall"]["scenes"]
+    by_id = {s["id"]: s for s in scenes}
+    # Default applied: scene id=1 picks up 2.5 from defaults
+    assert by_id[1]["transition"] == 2.5
+    # Override wins: scene id=2 keeps its own 0.0
+    assert by_id[2]["transition"] == 0.0
+
+
+def test_tap_off_transition_uses_room_default() -> None:
+    """The expire handler's OFF payload uses
+    `defaults.room.offTransitionSeconds`."""
+    result = _eval_define_rooms(
+        """{
+      hall = {
+        groupName = "hall"; id = 1;
+        members = [ "0x1/11" ];
+        devices = [ { device = "hue-ts-foo"; button = 1; } ];
+        scenes = defaultDayScenes;
+      };
+    }""",
+        defaults_nix=_full_defaults(off_transition=2.5),
+    )
+    expire = result["smind"]["services"]["mqtt-automations"]["rules"][
+        "hall-tap-hue_ts_foo-1"
+    ]["handlers"]["expire_press"]
+    assert expire["publish"] == {"state": "OFF", "transition": 2.5}
 
 
 def test_one_tap_with_multiple_rooms_generates_per_binding_rules() -> None:
@@ -1422,10 +1525,9 @@ def test_validation_motion_sensor_entry_rejects_button() -> None:
 
 
 def test_tap_button_with_slotted_scenes_picks_active_slot() -> None:
-    """For slotted scenes the on handler's publishMapping must contain
-    the if/else slot chain so it picks the right scene at press time
-    based on the current local hour. Same shape as the motion-on
-    payload mapping."""
+    """For slotted scenes both the lights-off handler (first scene)
+    and the cycle-advance handler (next scene of the active slot)
+    must be slot-aware."""
     result = _eval_define_rooms(
         """{
       kitchen-all = {
@@ -1436,16 +1538,23 @@ def test_tap_button_with_slotted_scenes_picks_active_slot() -> None:
       };
     }"""
     )
-    rule = result["smind"]["services"]["mqtt-automations"]["rules"][
+    handlers = result["smind"]["services"]["mqtt-automations"]["rules"][
         "kitchen-all-tap-hue_ts_kitchen-1"
-    ]
-    on_mapping = rule["handlers"]["on"]["publishMapping"]
-    # The slotted form has the bloblang time-of-day variable
-    assert "timestamp_unix()" in on_mapping
-    # And an if/else over the slot predicates
-    assert "if " in on_mapping and "else" in on_mapping
-    # Both day and night scene IDs are referenced
-    assert '"scene_recall"' in on_mapping
+    ]["handlers"]
+
+    # The lights_off handler picks the first scene of the active
+    # slot — same shape as the motion-on payload mapping.
+    off_mapping = handlers["lights_off_press"]["publishMapping"]
+    assert "timestamp_unix()" in off_mapping
+    assert '"scene_recall"' in off_mapping
+
+    # The cycle-advance handler computes the active slot's scene
+    # id list dynamically and indexes into it.
+    cycle_mapping = handlers["cycle_press"]["publishMapping"]
+    assert "timestamp_unix()" in cycle_mapping
+    assert "[1, 2, 3]" in cycle_mapping  # day scenes
+    assert "[3, 2, 1]" in cycle_mapping  # night scenes
+    assert "$scene_ids.index($next_idx)" in cycle_mapping
 
 
 # ---------- type-aware validation (devices catalog) ----------
@@ -1619,20 +1728,38 @@ def test_validation_dispatches_tap_vs_switch_by_resolved_type() -> None:
 # ---------- defineRooms.defaults ----------
 
 
-def _full_defaults(*, room_off_cooldown=30, occupancy=60, sensitivity="medium",
-                   led=True, max_lux=50) -> str:
+def _full_defaults(*, room_off_cooldown=30, off_transition=0.8,
+                   occupancy=60, sensitivity="medium", led=True, max_lux=50,
+                   wall_debounce=0.6, brightness_step=25,
+                   brightness_step_transition=0.2, brightness_move=40,
+                   tap_cycle_pause=1, scene_transition=0.5) -> str:
     """Render a complete `defaults` block with the given overrides.
     Every field is required by the validator, so tests that want to
     override ONE field still have to spell out the rest. This helper
     keeps the test bodies focused on the override that matters."""
     led_nix = "true" if led else "false"
     return f'''{{
-  room = {{ motionOffCooldownSeconds = {room_off_cooldown}; }};
+  room = {{
+    motionOffCooldownSeconds = {room_off_cooldown};
+    offTransitionSeconds = {off_transition};
+  }};
   "motion-sensor" = {{
     occupancyTimeoutSeconds = {occupancy};
     sensitivity = "{sensitivity}";
     ledIndication = {led_nix};
     maxIlluminance = {max_lux};
+  }};
+  "wall-switch" = {{
+    cycleDebounceSeconds = {wall_debounce};
+    brightnessStep = {brightness_step};
+    brightnessStepTransitionSeconds = {brightness_step_transition};
+    brightnessMoveRate = {brightness_move};
+  }};
+  "tap-switch" = {{
+    cyclePauseSeconds = {tap_cycle_pause};
+  }};
+  scene = {{
+    transitionSeconds = {scene_transition};
   }};
 }}'''
 

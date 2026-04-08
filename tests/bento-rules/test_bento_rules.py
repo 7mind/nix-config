@@ -1179,3 +1179,204 @@ def test_input_dedup_collapses_shared_source_topic_to_one_subscription() -> None
         f"got {len(inputs)}: {inputs}"
     )
     assert inputs[0]["mqtt"]["topics"] == ["zigbee2mqtt/tap/action"]
+
+
+# ---------- tap cycle behavior (the new mkTapButtonRule pattern) ----------
+
+
+def _tap_cycle_config(*, cycle_pause_ms: int = 1000) -> str:
+    """Bento config matching the production `mkTapButtonRule`'s
+    three-handler shape (lights_off / cycle_press / expire_press),
+    with static `cacheWrites` per handler.
+
+    Hardcoded scene id list `[1, 2, 3]` mirrors what the production
+    renderer would emit for a flat-scenes room with three scenes."""
+    delta_expr = (
+        '(timestamp_unix_milli() - '
+        'meta("tap_last_press_ms").or("0").number().or(0))'
+    )
+    lights_on_pred = '(meta("lights_state").or("")) != ""'
+
+    # Cycle-advance bloblang: read cur_idx, compute next, stash in
+    # meta for the cacheWrite to interpolate.
+    advance_mapping = (
+        'let scene_ids = [1, 2, 3]\n'
+        'let n = $scene_ids.length()\n'
+        'let cur_idx = (meta("tap_cycle_idx").or("0").number().or(0))\n'
+        'let next_idx = ($cur_idx + 1) % $n\n'
+        'meta tap_cycle_idx_next = $next_idx.string()\n'
+        'root = {"scene_recall": $scene_ids.index($next_idx)}\n'
+    )
+
+    rules = {
+        "tap-cycle": {
+            "source": TAP_SOURCE,
+            "sourceFilter": (
+                f'meta("mqtt_topic") == "{TAP_SOURCE}"'
+                ' && content().string() == "press_1"'
+            ),
+            "target": TAP_TARGET_A,
+            "format": "action",
+            "cacheLabel": "room_a",
+            "cacheReads": [
+                "lights_state", "tap_cycle_idx", "tap_last_press_ms",
+            ],
+            "handlers": {
+                "lights_off_press": {
+                    "check": '(meta("lights_state").or("")) == ""',
+                    # First scene = scene_recall: 1
+                    "publish": {"scene_recall": 1},
+                    "cacheWrites": {
+                        "lights_state": "user",
+                        "tap_cycle_idx": "0",
+                        "tap_last_press_ms": '${! timestamp_unix_milli() }',
+                    },
+                },
+                "cycle_press": {
+                    "check": (
+                        f'{lights_on_pred} && {delta_expr} < {cycle_pause_ms}'
+                    ),
+                    "publishMapping": advance_mapping,
+                    "cacheWrites": {
+                        "lights_state": "user",
+                        "tap_cycle_idx": '${! meta("tap_cycle_idx_next") }',
+                        "tap_last_press_ms": '${! timestamp_unix_milli() }',
+                    },
+                },
+                "expire_press": {
+                    "check": (
+                        f'{lights_on_pred} && {delta_expr} >= {cycle_pause_ms}'
+                    ),
+                    "publish": {"state": "OFF", "transition": 0.8},
+                    "cacheWrites": {
+                        "lights_state": "",
+                        "tap_cycle_idx": "0",
+                        "tap_last_press_ms": '${! timestamp_unix_milli() }',
+                    },
+                },
+            },
+        },
+    }
+    return _render_bento_config(rules)
+
+
+def test_tap_cycle_first_press_turns_on_with_first_scene(
+    bento_runner: BentoRunner,
+    mqtt_client: tuple[mqtt.Client, MqttInbox],
+) -> None:
+    """Lights off + press → first scene of the active list."""
+    client, inbox = mqtt_client
+    bento_runner(_tap_cycle_config())
+    _subscribe(client, TAP_TARGET_A)
+
+    _publish(client, TAP_SOURCE, "press_1")
+
+    inbox.wait_for_count(TAP_TARGET_A, 1)
+    payloads = [json.loads(p) for p in inbox.payloads_on(TAP_TARGET_A)]
+    assert payloads == [{"scene_recall": 1}]
+
+
+def test_tap_cycle_advances_within_pause_window(
+    bento_runner: BentoRunner,
+    mqtt_client: tuple[mqtt.Client, MqttInbox],
+) -> None:
+    """Three rapid presses (each within the pause window) walk
+    through scene 1 → scene 2 → scene 3."""
+    client, inbox = mqtt_client
+    bento_runner(_tap_cycle_config(cycle_pause_ms=1000))
+    _subscribe(client, TAP_TARGET_A)
+
+    for _ in range(3):
+        _publish(client, TAP_SOURCE, "press_1")
+        time.sleep(0.15)  # well under the 1s pause window
+
+    inbox.wait_for_count(TAP_TARGET_A, 3)
+    payloads = [json.loads(p) for p in inbox.payloads_on(TAP_TARGET_A)]
+    assert payloads == [
+        {"scene_recall": 1},
+        {"scene_recall": 2},
+        {"scene_recall": 3},
+    ]
+
+
+def test_tap_cycle_wraps_around_after_last_scene(
+    bento_runner: BentoRunner,
+    mqtt_client: tuple[mqtt.Client, MqttInbox],
+) -> None:
+    """Pressing past the last scene wraps back to the first
+    (modulo cycle), as long as the pause window keeps holding."""
+    client, inbox = mqtt_client
+    bento_runner(_tap_cycle_config(cycle_pause_ms=1000))
+    _subscribe(client, TAP_TARGET_A)
+
+    for _ in range(4):
+        _publish(client, TAP_SOURCE, "press_1")
+        time.sleep(0.15)
+
+    inbox.wait_for_count(TAP_TARGET_A, 4)
+    payloads = [json.loads(p) for p in inbox.payloads_on(TAP_TARGET_A)]
+    assert payloads == [
+        {"scene_recall": 1},
+        {"scene_recall": 2},
+        {"scene_recall": 3},
+        {"scene_recall": 1},  # wraparound
+    ]
+
+
+def test_tap_cycle_press_after_pause_turns_off(
+    bento_runner: BentoRunner,
+    mqtt_client: tuple[mqtt.Client, MqttInbox],
+) -> None:
+    """The user's exact request: lights on, press 1 → first scene,
+    press 2 within 1s → second scene, press 3 after 1s → off."""
+    client, inbox = mqtt_client
+    # Use a short pause so the test runs fast — 300ms threshold.
+    bento_runner(_tap_cycle_config(cycle_pause_ms=300))
+    _subscribe(client, TAP_TARGET_A)
+
+    _publish(client, TAP_SOURCE, "press_1")
+    time.sleep(0.1)  # within the 300ms window
+    _publish(client, TAP_SOURCE, "press_1")
+    time.sleep(0.5)  # well past the 300ms window
+    _publish(client, TAP_SOURCE, "press_1")
+
+    inbox.wait_for_count(TAP_TARGET_A, 3)
+    payloads = [json.loads(p) for p in inbox.payloads_on(TAP_TARGET_A)]
+    assert payloads == [
+        {"scene_recall": 1},
+        {"scene_recall": 2},
+        {"state": "OFF", "transition": 0.8},
+    ]
+
+
+def test_tap_cycle_after_off_starts_fresh_from_first_scene(
+    bento_runner: BentoRunner,
+    mqtt_client: tuple[mqtt.Client, MqttInbox],
+) -> None:
+    """After the cycle has reached the OFF state, the next press
+    starts a new cycle from scene 1 — the cycle index gets reset
+    on the OFF transition."""
+    client, inbox = mqtt_client
+    bento_runner(_tap_cycle_config(cycle_pause_ms=300))
+    _subscribe(client, TAP_TARGET_A)
+
+    # First press → on (scene 1)
+    _publish(client, TAP_SOURCE, "press_1")
+    time.sleep(0.1)
+    # Within window → advance (scene 2)
+    _publish(client, TAP_SOURCE, "press_1")
+    time.sleep(0.5)  # past window
+    # After window → off
+    _publish(client, TAP_SOURCE, "press_1")
+    time.sleep(0.1)
+    # Press after off → fresh cycle, scene 1 again
+    _publish(client, TAP_SOURCE, "press_1")
+
+    inbox.wait_for_count(TAP_TARGET_A, 4)
+    payloads = [json.loads(p) for p in inbox.payloads_on(TAP_TARGET_A)]
+    assert payloads == [
+        {"scene_recall": 1},
+        {"scene_recall": 2},
+        {"state": "OFF", "transition": 0.8},
+        {"scene_recall": 1},  # cycle reset
+    ]
