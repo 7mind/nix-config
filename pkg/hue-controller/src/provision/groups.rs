@@ -83,7 +83,7 @@ pub async fn reconcile_groups(
     if !rename_plan.is_empty() {
         if !options.dry_run {
             tokio::time::sleep(options.settle).await;
-            existing = client.fetch_groups().await?;
+            existing = client.fetch_groups_fresh().await?;
         } else {
             // In dry-run, patch the in-memory snapshot so subsequent
             // phases don't print misleading messages.
@@ -119,7 +119,7 @@ pub async fn reconcile_groups(
         }
         if state_changed && !options.dry_run {
             tokio::time::sleep(options.settle).await;
-            existing = client.fetch_groups().await?;
+            existing = client.fetch_groups_fresh().await?;
         }
     }
 

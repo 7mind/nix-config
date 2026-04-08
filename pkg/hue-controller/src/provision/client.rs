@@ -23,7 +23,7 @@ use rumqttc::{AsyncClient, EventLoop, MqttOptions, QoS};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
-use tokio::sync::{Mutex, oneshot};
+use tokio::sync::{Mutex, Notify, oneshot};
 
 use crate::config::scenes::Scene;
 use crate::mqtt::MqttConfig;
@@ -108,8 +108,20 @@ pub struct ExistingGroup {
 struct Shared {
     /// Pending request waiters keyed by transaction id.
     requests: Mutex<HashMap<String, oneshot::Sender<Z2mResponse>>>,
-    /// Pending retained-topic waiters keyed by topic name.
-    retained: Mutex<HashMap<String, oneshot::Sender<Vec<u8>>>>,
+
+    /// Latest payload received per topic, plus a Notify the event loop
+    /// fires whenever the payload changes. Lets `fetch_retained` either
+    /// pick up an already-arrived retained message immediately or wait
+    /// for the next delivery without races. Mirrors how the python
+    /// `Z2mClient` stored `_groups_payload` + `_groups_event`, but
+    /// generalized to any topic instead of two hardcoded ones.
+    topic_cache: Mutex<HashMap<String, TopicCacheEntry>>,
+}
+
+#[derive(Default)]
+struct TopicCacheEntry {
+    payload: Option<Vec<u8>>,
+    notify: Arc<Notify>,
 }
 
 /// MQTT request/response client used by the provisioner.
@@ -121,8 +133,17 @@ pub struct Z2mClient {
 }
 
 impl Z2mClient {
-    /// Connect, subscribe to `bridge/response/#`, and start the
-    /// event-loop task.
+    /// Connect, subscribe to the bridge topics we'll need, and start
+    /// the event-loop task.
+    ///
+    /// We eagerly subscribe to `bridge/groups`, `bridge/devices`, and
+    /// `bridge/response/#` here so the broker delivers any retained
+    /// messages right away — `fetch_groups` / `fetch_devices` then read
+    /// from the topic cache (or wait for the next delivery via the
+    /// per-topic Notify). Mirrors the python `_on_connect` shape; we
+    /// previously deferred subscribes until fetch time, which produced
+    /// a subtle race against rumqttc's outgoing-request queue and made
+    /// fetches time out against real mosquitto.
     pub async fn connect(config: MqttConfig, timeout: Duration) -> Result<Self, Z2mClientError> {
         let mut opts = MqttOptions::new(&config.client_id, &config.host, config.port);
         opts.set_credentials(&config.user, &config.password);
@@ -130,19 +151,28 @@ impl Z2mClient {
         opts.set_inflight(20);
 
         let (client, eventloop) = AsyncClient::new(opts, 100);
-        client
-            .subscribe(format!("{}#", bridge::RESPONSE_PREFIX), QoS::AtLeastOnce)
-            .await?;
 
         let shared = Arc::new(Shared {
             requests: Mutex::new(HashMap::new()),
-            retained: Mutex::new(HashMap::new()),
+            topic_cache: Mutex::new(HashMap::new()),
         });
+        // Pre-create the topic cache entries so the fetch path always
+        // finds an Arc<Notify> to wait on, even if the eventloop hasn't
+        // received any publishes yet.
+        {
+            let mut guard = shared.topic_cache.lock().await;
+            for topic in [bridge::GROUPS, bridge::DEVICES] {
+                guard.insert(topic.to_string(), TopicCacheEntry::default());
+            }
+        }
+
         let shared_for_loop = shared.clone();
 
-        // Spawn the event loop in its own task. The connect future
-        // resolves once the event loop has actually completed CONNACK,
-        // which we approximate by polling once before returning.
+        // Spawn the event loop FIRST, then queue subscribes. rumqttc's
+        // AsyncClient::subscribe just enqueues a request on the outgoing
+        // channel; the eventloop has to be polling to drain that channel
+        // and actually send the SUBSCRIBE packet. Spawning the loop
+        // first guarantees the queue gets drained as soon as we add to it.
         let connect_signal = Arc::new(tokio::sync::Notify::new());
         let connect_signal_for_loop = connect_signal.clone();
         tokio::spawn(run_event_loop(
@@ -151,11 +181,23 @@ impl Z2mClient {
             connect_signal_for_loop,
         ));
 
-        // Wait for CONNACK or timeout.
+        // Wait for CONNACK before issuing subscribes — until then,
+        // rumqttc holds back the outgoing queue.
         match tokio::time::timeout(timeout, connect_signal.notified()).await {
             Ok(()) => {}
             Err(_) => return Err(Z2mClientError::ConnectTimeout(timeout)),
         }
+
+        // Subscribe to all the bridge topics we care about. The broker
+        // delivers any retained messages right after the SUBACK; the
+        // eventloop's Publish handler drops them into `topic_cache`.
+        for topic in [bridge::GROUPS, bridge::DEVICES] {
+            tracing::debug!(topic, "z2m-client: subscribing");
+            client.subscribe(topic, QoS::AtLeastOnce).await?;
+        }
+        client
+            .subscribe(format!("{}#", bridge::RESPONSE_PREFIX), QoS::AtLeastOnce)
+            .await?;
 
         Ok(Self {
             client,
@@ -218,51 +260,113 @@ impl Z2mClient {
         Ok(resp)
     }
 
-    /// Subscribe to a retained topic, wait for the next published payload
-    /// (which the broker delivers immediately if a retained message
-    /// exists), then unsubscribe. Used by `fetch_groups` / `fetch_devices`.
-    async fn fetch_retained(&self, topic: &str) -> Result<Vec<u8>, Z2mClientError> {
-        let (tx, rx) = oneshot::channel();
-        self.shared
-            .retained
-            .lock()
-            .await
-            .insert(topic.to_string(), tx);
+    /// Read the latest payload received on `topic`. If a payload is
+    /// already cached (because the broker delivered the retained
+    /// message right after we subscribed at connect time), this
+    /// returns immediately. Otherwise we wait up to `self.timeout`
+    /// for the next delivery on the topic.
+    ///
+    /// `force_refresh` triggers an unsubscribe+subscribe cycle to make
+    /// the broker re-deliver the retained message. Used by
+    /// `fetch_*_fresh` after a mutation, when the cached copy is
+    /// known stale.
+    async fn fetch_retained(
+        &self,
+        topic: &str,
+        force_refresh: bool,
+    ) -> Result<Vec<u8>, Z2mClientError> {
+        // Snapshot the cache entry — get a Notify clone to wait on,
+        // and check whether a payload is already there.
+        let (notify, cached_now) = {
+            let mut guard = self.shared.topic_cache.lock().await;
+            let entry = guard
+                .entry(topic.to_string())
+                .or_insert_with(TopicCacheEntry::default);
+            let cached_now = if force_refresh {
+                entry.payload.take()
+            } else {
+                entry.payload.clone()
+            };
+            (entry.notify.clone(), cached_now)
+        };
 
-        // Re-subscribing is what forces mosquitto to redeliver the
-        // retained message. The python version does the same dance
-        // (unsubscribe + subscribe).
-        let _ = self.client.unsubscribe(topic).await;
-        self.client.subscribe(topic, QoS::AtLeastOnce).await?;
+        if let Some(payload) = cached_now {
+            tracing::debug!(topic, bytes = payload.len(), "z2m-client: cache hit");
+            return Ok(payload);
+        }
 
-        let payload = match tokio::time::timeout(self.timeout, rx).await {
-            Ok(Ok(payload)) => payload,
-            _ => {
-                self.shared.retained.lock().await.remove(topic);
-                let _ = self.client.unsubscribe(topic).await;
-                return Err(Z2mClientError::FetchTimeout {
+        // Set up the wait BEFORE we trigger the refresh. tokio::Notify
+        // stores up to one permit, so even if the broker delivers the
+        // retained message between this point and our await, we won't
+        // miss it.
+        let waiter = notify.notified();
+        tokio::pin!(waiter);
+
+        if force_refresh {
+            tracing::debug!(topic, "z2m-client: forcing refresh via unsubscribe+subscribe");
+            // Unsubscribe + subscribe forces mosquitto to re-deliver
+            // the retained message even if we were already subscribed.
+            let _ = self.client.unsubscribe(topic).await;
+            self.client.subscribe(topic, QoS::AtLeastOnce).await?;
+        }
+        tracing::debug!(topic, "z2m-client: waiting for delivery");
+
+        match tokio::time::timeout(self.timeout, waiter).await {
+            Ok(()) => {
+                // Notify fired — read the payload back out of the cache.
+                let guard = self.shared.topic_cache.lock().await;
+                if let Some(entry) = guard.get(topic)
+                    && let Some(payload) = &entry.payload
+                {
+                    tracing::debug!(
+                        topic,
+                        bytes = payload.len(),
+                        "z2m-client: delivery received"
+                    );
+                    return Ok(payload.clone());
+                }
+                // Notify fired but cache is empty — shouldn't happen, but
+                // surface it as a timeout so the retry loop kicks in.
+                Err(Z2mClientError::FetchTimeout {
                     topic: topic.to_string(),
                     timeout: self.timeout,
-                });
+                })
             }
-        };
-        let _ = self.client.unsubscribe(topic).await;
-        Ok(payload)
+            Err(_) => Err(Z2mClientError::FetchTimeout {
+                topic: topic.to_string(),
+                timeout: self.timeout,
+            }),
+        }
     }
 
+    /// Read the current group inventory. Uses the cached payload if
+    /// available; otherwise waits for the broker to deliver the
+    /// retained message after our connect-time subscribe.
     pub async fn fetch_groups(&self) -> Result<Vec<ExistingGroup>, Z2mClientError> {
-        let payload = self.fetch_retained(bridge::GROUPS).await?;
-        let parsed: Vec<ExistingGroup> = serde_json::from_slice(&payload).map_err(|e| {
-            Z2mClientError::BadPayload {
-                topic: bridge::GROUPS.into(),
-                detail: e.to_string(),
-            }
-        })?;
-        Ok(parsed)
+        self.fetch_groups_inner(false).await
     }
 
+    /// Force a fresh re-delivery of bridge/groups via unsubscribe+
+    /// subscribe. Used after a mutation that invalidates the cache
+    /// (group create/rename/remove).
+    pub async fn fetch_groups_fresh(&self) -> Result<Vec<ExistingGroup>, Z2mClientError> {
+        self.fetch_groups_inner(true).await
+    }
+
+    async fn fetch_groups_inner(
+        &self,
+        force_refresh: bool,
+    ) -> Result<Vec<ExistingGroup>, Z2mClientError> {
+        let payload = self.fetch_retained(bridge::GROUPS, force_refresh).await?;
+        serde_json::from_slice(&payload).map_err(|e| Z2mClientError::BadPayload {
+            topic: bridge::GROUPS.into(),
+            detail: e.to_string(),
+        })
+    }
+
+    /// Read the current device inventory.
     pub async fn fetch_devices(&self) -> Result<Vec<ExistingDevice>, Z2mClientError> {
-        let payload = self.fetch_retained(bridge::DEVICES).await?;
+        let payload = self.fetch_retained(bridge::DEVICES, false).await?;
         // z2m may include partial entries; tolerate them by filtering.
         let raw: Value = serde_json::from_slice(&payload).map_err(|e| {
             Z2mClientError::BadPayload {
@@ -395,12 +499,27 @@ impl Z2mClient {
     /// Read a device's current state via its retained
     /// `zigbee2mqtt/<friendly_name>` topic. Returns `None` if no retained
     /// state is available within the timeout.
+    ///
+    /// Unlike `bridge/devices` and `bridge/groups`, per-device state
+    /// topics aren't pre-subscribed at connect time (we don't know which
+    /// devices the caller will want until reconcile_devices runs). We
+    /// subscribe lazily here, then fall through to the same cache+notify
+    /// path as the bridge fetches.
     pub async fn fetch_device_state(
         &self,
         friendly_name: &str,
     ) -> Result<Option<Value>, Z2mClientError> {
         let topic = format!("zigbee2mqtt/{friendly_name}");
-        match self.fetch_retained(&topic).await {
+
+        // Subscribe so the broker delivers the retained payload (if any)
+        // and any subsequent updates flow into the cache. Idempotent:
+        // re-subscribing to an already-subscribed topic is fine and
+        // re-triggers retained delivery.
+        self.client
+            .subscribe(&topic, QoS::AtLeastOnce)
+            .await?;
+
+        match self.fetch_retained(&topic, false).await {
             Ok(payload) => {
                 let parsed = serde_json::from_slice(&payload).map_err(|e| {
                     Z2mClientError::BadPayload {
@@ -476,6 +595,12 @@ async fn run_event_loop(
             }
             Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(p))) => {
                 let topic = p.topic.clone();
+                tracing::debug!(
+                    topic = %topic,
+                    bytes = p.payload.len(),
+                    retain = p.retain,
+                    "z2m-client: received publish"
+                );
                 if topic.starts_with(bridge::RESPONSE_PREFIX) {
                     if let Ok(resp) = serde_json::from_slice::<Z2mResponse>(&p.payload) {
                         if let Some(txn) = &resp.transaction {
@@ -490,14 +615,18 @@ async fn run_event_loop(
                     }
                     continue;
                 }
-                // Retained-message dispatch.
-                let waiter = {
-                    let mut guard = shared.retained.lock().await;
-                    guard.remove(&topic)
+                // General topic-cache dispatch. Update the cache entry
+                // and fire its Notify so any pending fetch_retained
+                // wakes up.
+                let notify = {
+                    let mut guard = shared.topic_cache.lock().await;
+                    let entry = guard
+                        .entry(topic.clone())
+                        .or_insert_with(TopicCacheEntry::default);
+                    entry.payload = Some(p.payload.to_vec());
+                    entry.notify.clone()
                 };
-                if let Some(tx) = waiter {
-                    let _ = tx.send(p.payload.to_vec());
-                }
+                notify.notify_waiters();
             }
             Ok(_) => {}
             Err(e) => {

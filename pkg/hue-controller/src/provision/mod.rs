@@ -31,7 +31,7 @@
 //! separate programs that happen to live in one binary for deployment
 //! convenience.
 
-mod client;
+pub mod client;
 mod devices;
 mod groups;
 mod names;
@@ -156,10 +156,12 @@ pub async fn reconcile(
         groups::reconcile_groups(&client, config, existing_groups, &options).await?;
     summary += group_summary;
 
-    // Re-fetch groups for the scene phase if anything changed.
+    // Re-fetch groups for the scene phase. After a mutation we need
+    // fresh delivery (the cache still holds the pre-mutation copy);
+    // otherwise the cached payload is fine.
     let existing_groups_for_scenes = if state_changed && !options.dry_run {
         tokio::time::sleep(options.settle).await;
-        client.fetch_groups().await?
+        client.fetch_groups_fresh().await?
     } else {
         client.fetch_groups().await?
     };
