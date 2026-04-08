@@ -1387,15 +1387,19 @@ def test_tap_cycle_after_off_starts_fresh_from_first_scene(
 
 def _tap_parent_child_config() -> str:
     """Two per-binding tap rules sharing one source topic, with
-    parent → child invalidation: pressing button 1 (the parent)
-    clears the child's `lights_state` via `extraCacheWrites`.
+    parent → child invalidation that mirrors the production
+    `mkTapButtonRule` shape after the kitchen-all → kitchen-cooker
+    fix:
 
-    Mirrors the production `mkTapButtonRule` shape:
       * `child` rule: cacheLabel = "room_child", standard 3-handler
         state machine, no `extraCacheWrites`.
       * `parent` rule: cacheLabel = "room_parent", standard 3-handler
-        state machine, every handler ALSO writes
-        `lights_state = ""` to "room_child" via `extraCacheWrites`.
+        state machine. The on/cycle handlers ALSO write
+        `lights_state = "user"` and `tap_last_press_ms = "0"` to
+        "room_child" (descendant is now physically on, force its
+        next press into the toggle-off branch). The expire handler
+        writes `lights_state = ""` and `tap_last_press_ms = "0"`
+        (descendant is now physically off, fresh-on path).
     """
     delta_expr = (
         '(timestamp_unix_milli() - '
@@ -1411,7 +1415,7 @@ def _tap_parent_child_config() -> str:
         'root = {"scene_recall": $scene_ids.index($next_idx)}\n'
     )
 
-    def make_handlers(extra_writes):
+    def make_handlers(on_extras, off_extras):
         return {
             "lights_off_press": {
                 "check": '(meta("lights_state").or("")) == ""',
@@ -1421,7 +1425,7 @@ def _tap_parent_child_config() -> str:
                     "tap_cycle_idx": "0",
                     "tap_last_press_ms": '${! timestamp_unix_milli() }',
                 },
-                "extraCacheWrites": extra_writes,
+                "extraCacheWrites": on_extras,
             },
             "cycle_press": {
                 "check": f'{lights_on_pred} && {delta_expr} < 1000',
@@ -1431,7 +1435,7 @@ def _tap_parent_child_config() -> str:
                     "tap_cycle_idx": '${! meta("tap_cycle_idx_next") }',
                     "tap_last_press_ms": '${! timestamp_unix_milli() }',
                 },
-                "extraCacheWrites": extra_writes,
+                "extraCacheWrites": on_extras,
             },
             "expire_press": {
                 "check": f'{lights_on_pred} && {delta_expr} >= 1000',
@@ -1441,9 +1445,18 @@ def _tap_parent_child_config() -> str:
                     "tap_cycle_idx": "0",
                     "tap_last_press_ms": '${! timestamp_unix_milli() }',
                 },
-                "extraCacheWrites": extra_writes,
+                "extraCacheWrites": off_extras,
             },
         }
+
+    parent_on_invalidation_to_child = [
+        {"resource": "room_child", "key": "lights_state", "value": "user"},
+        {"resource": "room_child", "key": "tap_last_press_ms", "value": "0"},
+    ]
+    parent_off_invalidation_to_child = [
+        {"resource": "room_child", "key": "lights_state", "value": ""},
+        {"resource": "room_child", "key": "tap_last_press_ms", "value": "0"},
+    ]
 
     rules = {
         "child-binding": {
@@ -1458,7 +1471,7 @@ def _tap_parent_child_config() -> str:
             "cacheReads": [
                 "lights_state", "tap_cycle_idx", "tap_last_press_ms",
             ],
-            "handlers": make_handlers([]),
+            "handlers": make_handlers([], []),
         },
         "parent-binding": {
             "source": TAP_SOURCE,
@@ -1472,9 +1485,10 @@ def _tap_parent_child_config() -> str:
             "cacheReads": [
                 "lights_state", "tap_cycle_idx", "tap_last_press_ms",
             ],
-            "handlers": make_handlers([
-                {"resource": "room_child", "key": "lights_state", "value": ""},
-            ]),
+            "handlers": make_handlers(
+                parent_on_invalidation_to_child,
+                parent_off_invalidation_to_child,
+            ),
         },
     }
     return _render_bento_config(rules)
@@ -1484,11 +1498,21 @@ def test_parent_press_clears_child_state_no_double_press(
     bento_runner: BentoRunner,
     mqtt_client: tuple[mqtt.Client, MqttInbox],
 ) -> None:
-    """The user-reported bug: child→parent→parent off→child should
-    NOT require two presses on the child. Without parent→child
-    invalidation, the child's stale `lights_state="user"` from the
-    first press routes the next child press into the expire path
-    (off) instead of the lights_off path (on)."""
+    """The original user-reported bug: child→parent→parent_off→child
+    should NOT require two presses on the child to turn it back on.
+    Without parent→child invalidation, the child's stale
+    `lights_state="user"` from step 1 plus the timestamp would route
+    the next child press into the expire path (off) instead of the
+    lights_off path (on).
+
+    Trace with the new (on/off-aware) invalidation:
+      1. press child → child.lights_state="user"
+      2. press parent → parent on. Parent's on-invalidation writes
+         child.lights_state="user" (still on, because it physically is).
+      3. wait 1.5s, press parent → parent off (expire). Parent's
+         off-invalidation writes child.lights_state="" (now off).
+      4. press child → child.lights_state="" → lights_off_press →
+         child on with scene 1 on the FIRST press."""
     client, inbox = mqtt_client
     bento_runner(_tap_parent_child_config())
     _subscribe(client, TAP_TARGET_A)  # child target
@@ -1499,20 +1523,16 @@ def test_parent_press_clears_child_state_no_double_press(
     time.sleep(0.15)
 
     # 2. Press parent (button 1) → parent on, scene 1.
-    #    Parent's handler ALSO clears child's lights_state.
     _publish(client, TAP_SOURCE, "press_1")
     time.sleep(1.5)  # > cyclePauseMs so the next parent press is "expire"
 
     # 3. Press parent (button 1) → parent off (expire path).
-    #    Parent's expire handler again clears child's lights_state
-    #    (no-op since it was already cleared in step 2).
+    #    Parent's expire handler clears child's lights_state to "".
     _publish(client, TAP_SOURCE, "press_1")
     time.sleep(0.15)
 
     # 4. Press child (button 2) → child should turn ON (scene 1)
-    #    on the FIRST press, not the second. With invalidation
-    #    working, child.lights_state is "" so this hits the
-    #    lights_off_press path → scene_recall: 1.
+    #    on the FIRST press, not the second.
     _publish(client, TAP_SOURCE, "press_2")
     time.sleep(0.15)
 
@@ -1533,3 +1553,184 @@ def test_parent_press_clears_child_state_no_double_press(
         {"scene_recall": 1},  # step 2
         {"state": "OFF"},     # step 3
     ]
+
+
+def test_parent_on_then_child_press_toggles_child_off_immediate(
+    bento_runner: BentoRunner,
+    mqtt_client: tuple[mqtt.Client, MqttInbox],
+) -> None:
+    """User-reported bug round 2 (kitchen-all → kitchen-cooker):
+    after pressing the parent button to turn the whole zone on,
+    pressing a child button should toggle the child's sub-zone OFF
+    on the FIRST press — because the child's bulbs are physically
+    on (lit by the parent press), so the child button's job is to
+    toggle them off.
+
+    Trace:
+      1. press parent → parent on. ON-invalidation writes
+         child.lights_state="user", child.tap_last_press_ms="0".
+      2. press child IMMEDIATELY (well within cyclePauseMs from the
+         parent's last press, but child has its OWN tap_last_press_ms
+         which was just reset to 0 → delta is huge → expire path).
+         Child's lights_state="user" + huge delta → expire_press →
+         publishes state OFF.
+
+    Without the fix, child.lights_state would have been cleared to
+    "" by the parent's invalidation, so the child press would route
+    to lights_off_press and emit scene_recall:1 — visually a no-op
+    (lights stay on) instead of the user-expected toggle off."""
+    client, inbox = mqtt_client
+    bento_runner(_tap_parent_child_config())
+    _subscribe(client, TAP_TARGET_A)  # child target
+    _subscribe(client, TAP_TARGET_B)  # parent target
+
+    # 1. Press parent (button 1) → parent on.
+    _publish(client, TAP_SOURCE, "press_1")
+    time.sleep(0.15)
+
+    # 2. Press child (button 2) IMMEDIATELY → child should turn OFF.
+    _publish(client, TAP_SOURCE, "press_2")
+    time.sleep(0.15)
+
+    child_payloads = [json.loads(p) for p in inbox.payloads_on(TAP_TARGET_A)]
+    assert child_payloads == [{"state": "OFF"}], (
+        f"child press right after parent on should toggle child OFF, "
+        f"not turn it on again. got: {child_payloads}"
+    )
+
+    parent_payloads = [json.loads(p) for p in inbox.payloads_on(TAP_TARGET_B)]
+    assert parent_payloads == [{"scene_recall": 1}]
+
+
+def test_parent_on_then_delayed_child_press_toggles_child_off(
+    bento_runner: BentoRunner,
+    mqtt_client: tuple[mqtt.Client, MqttInbox],
+) -> None:
+    """Same as the previous test but with a delay between the parent
+    and child press. The child must still toggle off, regardless of
+    timing — the requirement is "each button works with its zone
+    regardless of parent/sibling state". Verifies the fix doesn't
+    rely on a specific timing window."""
+    client, inbox = mqtt_client
+    bento_runner(_tap_parent_child_config())
+    _subscribe(client, TAP_TARGET_A)
+    _subscribe(client, TAP_TARGET_B)
+
+    # 1. Press parent → parent on.
+    _publish(client, TAP_SOURCE, "press_1")
+    time.sleep(1.5)  # well past cyclePauseMs
+
+    # 2. Press child after a delay → child should turn OFF.
+    _publish(client, TAP_SOURCE, "press_2")
+    time.sleep(0.15)
+
+    child_payloads = [json.loads(p) for p in inbox.payloads_on(TAP_TARGET_A)]
+    assert child_payloads == [{"state": "OFF"}], (
+        f"delayed child press after parent on should toggle child OFF. "
+        f"got: {child_payloads}"
+    )
+
+
+def test_parent_on_then_child_off_then_child_on_fresh_cycle(
+    bento_runner: BentoRunner,
+    mqtt_client: tuple[mqtt.Client, MqttInbox],
+) -> None:
+    """After parent on → child off (which is the bug fix scenario),
+    pressing the child AGAIN should turn it back on (lights_off_press
+    path), because the previous expire_press cleared
+    child.lights_state to "". Verifies the toggle is fully reversible
+    and the child returns to a normal "fresh-on" state machine."""
+    client, inbox = mqtt_client
+    bento_runner(_tap_parent_child_config())
+    _subscribe(client, TAP_TARGET_A)
+    _subscribe(client, TAP_TARGET_B)
+
+    # 1. Press parent → parent on, child marked physically on.
+    _publish(client, TAP_SOURCE, "press_1")
+    time.sleep(0.15)
+
+    # 2. Press child → child off (the bug scenario, now fixed).
+    _publish(client, TAP_SOURCE, "press_2")
+    time.sleep(0.15)
+
+    # 3. Press child again → child on (fresh, scene 1).
+    _publish(client, TAP_SOURCE, "press_2")
+    time.sleep(0.15)
+
+    child_payloads = [json.loads(p) for p in inbox.payloads_on(TAP_TARGET_A)]
+    assert child_payloads == [
+        {"state": "OFF"},     # step 2 — toggle off (the fix)
+        {"scene_recall": 1},  # step 3 — fresh on, child fully reset
+    ], (
+        f"child should toggle off then back on cleanly. got: {child_payloads}"
+    )
+
+
+def test_child_press_does_not_alter_parent_state(
+    bento_runner: BentoRunner,
+    mqtt_client: tuple[mqtt.Client, MqttInbox],
+) -> None:
+    """The inverse direction: pressing a child must NOT modify the
+    parent's cache. The parent's button should still operate
+    independently. Verifies the requirement: "each button works with
+    its zone regardless of parent/sibling state" — including the
+    direction where the child fires first.
+
+    Trace:
+      1. press child → child.lights_state="user". Parent untouched.
+      2. press parent → parent.lights_state="" → lights_off_press →
+         scene_recall:1 (parent on, regardless of whether the child's
+         lights are also on)."""
+    client, inbox = mqtt_client
+    bento_runner(_tap_parent_child_config())
+    _subscribe(client, TAP_TARGET_A)
+    _subscribe(client, TAP_TARGET_B)
+
+    # 1. Press child (button 2) → child on.
+    _publish(client, TAP_SOURCE, "press_2")
+    time.sleep(0.15)
+
+    # 2. Press parent (button 1) → parent on, fresh start.
+    _publish(client, TAP_SOURCE, "press_1")
+    time.sleep(0.15)
+
+    parent_payloads = [json.loads(p) for p in inbox.payloads_on(TAP_TARGET_B)]
+    assert parent_payloads == [{"scene_recall": 1}], (
+        f"parent press after a child press should ignore the child's "
+        f"state and turn the parent zone on. got: {parent_payloads}"
+    )
+
+    child_payloads = [json.loads(p) for p in inbox.payloads_on(TAP_TARGET_A)]
+    assert child_payloads == [{"scene_recall": 1}]
+
+
+def test_parent_cycle_keeps_child_in_toggle_off_state(
+    bento_runner: BentoRunner,
+    mqtt_client: tuple[mqtt.Client, MqttInbox],
+) -> None:
+    """Cycling the parent (multiple presses within the cycle window)
+    must NOT lose the descendant invalidation — every cycle press
+    re-applies the on-invalidation, so the child's next press still
+    toggles off. Catches a regression where cycle_press has weaker
+    invalidation than lights_off_press."""
+    client, inbox = mqtt_client
+    bento_runner(_tap_parent_child_config())
+    _subscribe(client, TAP_TARGET_A)
+    _subscribe(client, TAP_TARGET_B)
+
+    # 1. Press parent → first scene
+    _publish(client, TAP_SOURCE, "press_1")
+    time.sleep(0.15)
+    # 2. Press parent again within cycle window → cycle_press path
+    _publish(client, TAP_SOURCE, "press_1")
+    time.sleep(0.15)
+    # 3. Press child → should still toggle off (cycle_press also
+    #    re-marked child as physically on).
+    _publish(client, TAP_SOURCE, "press_2")
+    time.sleep(0.15)
+
+    child_payloads = [json.loads(p) for p in inbox.payloads_on(TAP_TARGET_A)]
+    assert child_payloads == [{"state": "OFF"}], (
+        f"after parent cycles, child press should still toggle off. "
+        f"got: {child_payloads}"
+    )

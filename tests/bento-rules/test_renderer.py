@@ -1561,11 +1561,19 @@ def test_tap_button_with_slotted_scenes_picks_active_slot() -> None:
 
 
 def test_parent_room_handlers_emit_child_lights_state_invalidation() -> None:
-    """When a parent room's handler fires (tap on/cycle/expire),
-    every child's `lights_state` is cleared via `extraCacheWrites`.
-    Without this, pressing a child after a parent press leaves the
-    child's stale `lights_state="user"` in place and the next press
-    routes to the wrong handler."""
+    """When a parent room's handler fires, every descendant's cache
+    is synchronized to match the new physical state of the lights:
+      * lights_off_press → ON: child's lights_state="user" (it's
+        physically on now), tap_last_press_ms="0" (so the next press
+        of the child takes the toggle-off path).
+      * cycle_press → still ON: same shape.
+      * expire_press → OFF: child's lights_state="" (physically off),
+        tap_last_press_ms="0".
+    Without this two-state invalidation, pressing a child after a
+    parent press routes to the wrong handler — either restoring
+    "user" stale (child cycles instead of fresh-on) or clearing to
+    "off" while the lights are physically on (child blindly turns on
+    instead of toggling off, the kitchen-all → kitchen-cooker bug)."""
     result = _eval_rooms_list(
         """[
       {
@@ -1593,14 +1601,33 @@ def test_parent_room_handlers_emit_child_lights_state_invalidation() -> None:
     rules = result["smind"]["services"]["mqtt-automations"]["rules"]
     parent_handlers = rules["kitchen-all-tap-hue_ts_foo-1"]["handlers"]
 
-    expected_invalidation = [{
-        "resource": "room_kitchen_cooker",
-        "key": "lights_state",
-        "value": "",
-    }]
-    assert parent_handlers["lights_off_press"]["extraCacheWrites"] == expected_invalidation
-    assert parent_handlers["cycle_press"]["extraCacheWrites"] == expected_invalidation
-    assert parent_handlers["expire_press"]["extraCacheWrites"] == expected_invalidation
+    on_invalidation = [
+        {
+            "resource": "room_kitchen_cooker",
+            "key": "lights_state",
+            "value": "user",
+        },
+        {
+            "resource": "room_kitchen_cooker",
+            "key": "tap_last_press_ms",
+            "value": "0",
+        },
+    ]
+    off_invalidation = [
+        {
+            "resource": "room_kitchen_cooker",
+            "key": "lights_state",
+            "value": "",
+        },
+        {
+            "resource": "room_kitchen_cooker",
+            "key": "tap_last_press_ms",
+            "value": "0",
+        },
+    ]
+    assert parent_handlers["lights_off_press"]["extraCacheWrites"] == on_invalidation
+    assert parent_handlers["cycle_press"]["extraCacheWrites"] == on_invalidation
+    assert parent_handlers["expire_press"]["extraCacheWrites"] == off_invalidation
 
 
 def test_child_room_handlers_have_no_invalidation() -> None:
@@ -1703,12 +1730,16 @@ def test_motion_handlers_also_invalidate_children() -> None:
     motion_handlers = result["smind"]["services"]["mqtt-automations"]["rules"][
         "all-motion-hue_ms_a"
     ]["handlers"]
-    assert motion_handlers["motion-on"]["extraCacheWrites"] == [{
-        "resource": "room_sub", "key": "lights_state", "value": "",
-    }]
-    assert motion_handlers["motion-off"]["extraCacheWrites"] == [{
-        "resource": "room_sub", "key": "lights_state", "value": "",
-    }]
+    # motion-on → child is physically on (lights_state="user").
+    assert motion_handlers["motion-on"]["extraCacheWrites"] == [
+        {"resource": "room_sub", "key": "lights_state", "value": "user"},
+        {"resource": "room_sub", "key": "tap_last_press_ms", "value": "0"},
+    ]
+    # motion-off → child is physically off (lights_state="").
+    assert motion_handlers["motion-off"]["extraCacheWrites"] == [
+        {"resource": "room_sub", "key": "lights_state", "value": ""},
+        {"resource": "room_sub", "key": "tap_last_press_ms", "value": "0"},
+    ]
 
 
 def test_validation_rejects_self_parent() -> None:
@@ -1877,10 +1908,12 @@ def test_child_press_does_not_affect_parent_state() -> None:
     child_off = rules["child-switch"]["handlers"]["off_press_release"]["extraCacheWrites"]
     assert child_off == []
     # Parent has one descendant (the child) — invalidates child only.
+    # Off path → child marked physically off.
     parent_off = rules["parent-switch"]["handlers"]["off_press_release"]["extraCacheWrites"]
-    assert parent_off == [{
-        "resource": "room_child", "key": "lights_state", "value": "",
-    }]
+    assert parent_off == [
+        {"resource": "room_child", "key": "lights_state", "value": ""},
+        {"resource": "room_child", "key": "tap_last_press_ms", "value": "0"},
+    ]
 
 
 # ---------- type-aware validation (devices catalog) ----------
