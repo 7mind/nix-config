@@ -29,8 +29,10 @@ DO_REFRESH=false
 DO_SWITCH=false
 DO_REKEY=false
 DO_GIT=true
+DO_PUSH=true
 DO_LIST=false
 DO_ALLOW_SHORT_HOST=false
+DO_OFFLINE=false
 MESSAGE=""
 VERBOSE=false
 
@@ -50,10 +52,12 @@ Options:
   -k, --rekey       Rekey age secrets for the specified hosts before building
   -r, --refresh     Update flake inputs before building
   -n, --no-git      Skip git commit and push
+  -np, --no-push    Commit locally but skip git push
   -m, --message=MSG Custom git commit message (default: "autosave (<host> / <os>)")
   -l, --list        List known hosts and exit
   --allow-short-host
                     Allow using short host name for remote switch when FQDN is missing
+  --offline         Pass --offline to nix build (no network fetches)
   -v, --verbose     Enable verbose output (set -x)
   -h, --help        Show this help message
 
@@ -208,6 +212,10 @@ parse_args() {
                 DO_GIT=false
                 shift
                 ;;
+            -np|--no-push)
+                DO_PUSH=false
+                shift
+                ;;
             -m|--message)
                 MESSAGE="$2"
                 shift 2
@@ -226,6 +234,10 @@ parse_args() {
                 ;;
             --allow-short-host)
                 DO_ALLOW_SHORT_HOST=true
+                shift
+                ;;
+            --offline)
+                DO_OFFLINE=true
                 shift
                 ;;
             -v|--verbose)
@@ -277,7 +289,9 @@ commit_and_push() {
     if [[ "$DO_GIT" == "true" ]]; then
         git submodule foreach "git diff-index --quiet HEAD || (git add -A && git commit -m \"${MESSAGE}\")"
         git diff-index --quiet HEAD || (git add -A && git commit -m "${MESSAGE}")
-        git push --recurse-submodules=on-demand
+        if [[ "$DO_PUSH" == "true" ]]; then
+            git push --recurse-submodules=on-demand
+        fi
     fi
 }
 
@@ -389,6 +403,11 @@ do_build() {
     add_all
     mkdir -p "$ROOTS"
 
+    local -a build_args=()
+    if [[ "$DO_OFFLINE" == "true" ]]; then
+        build_args+=(--offline)
+    fi
+
     for host in "${HOSTS[@]}"; do
         local platform
         platform=$(get_host_attr "$host" "platform")
@@ -397,11 +416,13 @@ do_build() {
         case "$platform" in
             darwin)
                 nix build ".?submodules=1#darwinConfigurations.${host}.system" \
-                    --out-link "${ROOTS}/${host}"
+                    --out-link "${ROOTS}/${host}" \
+                    "${build_args[@]}"
                 ;;
             linux)
                 nix build ".?submodules=1#nixosConfigurations.${host}.config.system.build.toplevel" \
-                    --out-link "${ROOTS}/${host}"
+                    --out-link "${ROOTS}/${host}" \
+                    "${build_args[@]}"
                 ;;
             *)
                 echo "Error: Unknown platform '$platform' for host '$host'" >&2
