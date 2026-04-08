@@ -190,7 +190,7 @@ impl Controller {
         }
         let mut out = Vec::new();
         for room_name in &rooms {
-            self.dispatch_switch(room_name, action, ts, &mut out);
+            self.dispatch_switch(room_name, device, action, ts, &mut out);
         }
         out
     }
@@ -198,6 +198,7 @@ impl Controller {
     fn dispatch_switch(
         &mut self,
         room_name: &str,
+        device: &str,
         action: SwitchAction,
         ts: Instant,
         out: &mut Vec<Action>,
@@ -213,19 +214,42 @@ impl Controller {
 
         match action {
             SwitchAction::OnPressRelease => {
-                self.wall_switch_on_press(room_name, ts, out);
+                self.wall_switch_on_press(room_name, device, ts, out);
             }
             SwitchAction::OffPressRelease => {
+                tracing::info!(
+                    device,
+                    room = room_name,
+                    group = %group_name,
+                    transition = off_transition,
+                    "wall switch off → publish state OFF (dedicated off button)"
+                );
                 self.publish_off(room_name, &group_name, off_transition, ts, out);
             }
             SwitchAction::UpPressRelease => {
                 let step = self.defaults.wall_switch.brightness_step;
                 let trans = self.defaults.wall_switch.brightness_step_transition_seconds;
+                tracing::info!(
+                    device,
+                    room = room_name,
+                    group = %group_name,
+                    step,
+                    transition = trans,
+                    "wall switch up press → brightness step +"
+                );
                 out.push(Action::new(group_name, Payload::brightness_step(step, trans)));
             }
             SwitchAction::DownPressRelease => {
                 let step = self.defaults.wall_switch.brightness_step;
                 let trans = self.defaults.wall_switch.brightness_step_transition_seconds;
+                tracing::info!(
+                    device,
+                    room = room_name,
+                    group = %group_name,
+                    step = -step,
+                    transition = trans,
+                    "wall switch down press → brightness step -"
+                );
                 out.push(Action::new(
                     group_name,
                     Payload::brightness_step(-step, trans),
@@ -233,13 +257,33 @@ impl Controller {
             }
             SwitchAction::UpHold => {
                 let rate = self.defaults.wall_switch.brightness_move_rate;
+                tracing::info!(
+                    device,
+                    room = room_name,
+                    group = %group_name,
+                    rate,
+                    "wall switch up hold → brightness move + (continuous)"
+                );
                 out.push(Action::new(group_name, Payload::brightness_move(rate)));
             }
             SwitchAction::DownHold => {
                 let rate = self.defaults.wall_switch.brightness_move_rate;
+                tracing::info!(
+                    device,
+                    room = room_name,
+                    group = %group_name,
+                    rate = -rate,
+                    "wall switch down hold → brightness move - (continuous)"
+                );
                 out.push(Action::new(group_name, Payload::brightness_move(-rate)));
             }
             SwitchAction::UpHoldRelease | SwitchAction::DownHoldRelease => {
+                tracing::info!(
+                    device,
+                    room = room_name,
+                    group = %group_name,
+                    "wall switch hold release → brightness move stop"
+                );
                 out.push(Action::new(group_name, Payload::brightness_move(0)));
             }
         }
@@ -250,7 +294,7 @@ impl Controller {
             return Vec::new();
         };
         let mut out = Vec::new();
-        self.tap_press(&room_name, ts, &mut out);
+        self.tap_press(&room_name, device, button, ts, &mut out);
         out
     }
 
@@ -265,7 +309,13 @@ impl Controller {
     ///     `cycle_idx = 0`
     ///   * `physically_on`  → publish `scene_ids[(cycle_idx + 1) % N]`,
     ///     `cycle_idx = next_idx`
-    fn wall_switch_on_press(&mut self, room_name: &str, ts: Instant, out: &mut Vec<Action>) {
+    fn wall_switch_on_press(
+        &mut self,
+        room_name: &str,
+        device: &str,
+        ts: Instant,
+        out: &mut Vec<Action>,
+    ) {
         let (group_name, scenes_for_now) = {
             let Some(room) = self.topology.room_by_name(room_name) else {
                 return;
@@ -282,14 +332,25 @@ impl Controller {
         let n = scenes_for_now.len();
 
         let state_snapshot = self.states.get(room_name).cloned().unwrap_or_default();
-        let next_idx = if state_snapshot.physically_on {
+        let (next_idx, branch) = if state_snapshot.physically_on {
             // Advance the cycle.
-            (state_snapshot.cycle_idx + 1) % n
+            ((state_snapshot.cycle_idx + 1) % n, "cycle advance")
         } else {
             // Off → fresh on at the first scene.
-            0
+            (0, "fresh on (was physically off)")
         };
         let next_scene = scenes_for_now[next_idx];
+        tracing::info!(
+            device,
+            room = room_name,
+            group = %group_name,
+            scene = next_scene,
+            cycle_idx_from = state_snapshot.cycle_idx,
+            cycle_idx_to = next_idx,
+            cycle_len = n,
+            branch,
+            "wall switch on → scene_recall"
+        );
         out.push(Action::new(
             group_name.clone(),
             Payload::scene_recall(next_scene),
@@ -311,7 +372,14 @@ impl Controller {
     ///      publish `scene_ids[(cycle_idx + 1) % N]`
     ///   3. `physically_on` AND `now - last_press >= cycle_window` →
     ///      publish state OFF
-    fn tap_press(&mut self, room_name: &str, ts: Instant, out: &mut Vec<Action>) {
+    fn tap_press(
+        &mut self,
+        room_name: &str,
+        device: &str,
+        button: u8,
+        ts: Instant,
+        out: &mut Vec<Action>,
+    ) {
         let (group_name, scenes_for_now, off_transition) = {
             let Some(room) = self.topology.room_by_name(room_name) else {
                 return;
@@ -329,13 +397,24 @@ impl Controller {
         let cycle_window = Duration::from_secs_f64(self.defaults.cycle_window_seconds);
 
         let state_snapshot = self.states.get(room_name).cloned().unwrap_or_default();
-        let within_window = state_snapshot
+        let elapsed_since_last = state_snapshot
             .last_press_at
-            .is_some_and(|last| ts.duration_since(last) < cycle_window);
+            .map(|last| ts.duration_since(last));
+        let within_window = elapsed_since_last.is_some_and(|d| d < cycle_window);
 
         if !state_snapshot.physically_on {
             // Branch 1: fresh on → first scene.
             let first = scenes_for_now[0];
+            tracing::info!(
+                device,
+                button,
+                room = room_name,
+                group = %group_name,
+                scene = first,
+                cycle_idx_to = 0,
+                branch = "fresh on (was physically off)",
+                "tap press → scene_recall"
+            );
             out.push(Action::new(
                 group_name.clone(),
                 Payload::scene_recall(first),
@@ -347,6 +426,22 @@ impl Controller {
             let n = scenes_for_now.len();
             let next_idx = (state_snapshot.cycle_idx + 1) % n;
             let next_scene = scenes_for_now[next_idx];
+            let elapsed_ms = elapsed_since_last
+                .map(|d| d.as_millis())
+                .unwrap_or(0);
+            tracing::info!(
+                device,
+                button,
+                room = room_name,
+                group = %group_name,
+                scene = next_scene,
+                cycle_idx_from = state_snapshot.cycle_idx,
+                cycle_idx_to = next_idx,
+                cycle_len = n,
+                elapsed_ms,
+                branch = "cycle advance (within window)",
+                "tap press → scene_recall"
+            );
             out.push(Action::new(
                 group_name.clone(),
                 Payload::scene_recall(next_scene),
@@ -355,6 +450,19 @@ impl Controller {
             self.propagate_to_descendants(room_name, true);
         } else {
             // Branch 3: window expired → toggle off.
+            let elapsed_ms = elapsed_since_last
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or(-1);
+            tracing::info!(
+                device,
+                button,
+                room = room_name,
+                group = %group_name,
+                transition = off_transition,
+                elapsed_ms,
+                branch = "expire (cycle window passed)",
+                "tap press → state OFF"
+            );
             self.publish_off(room_name, &group_name, off_transition, ts, out);
         }
     }
@@ -440,22 +548,50 @@ impl Controller {
             //   - illuminance < max (or no gate)
             //   - cooldown expired
             if state_snapshot.physically_on {
+                tracing::info!(
+                    sensor,
+                    room = room_name,
+                    "motion-on suppressed: lights already physically on"
+                );
                 return;
             }
             if let (Some(max), Some(actual)) = (max_lux, illuminance)
                 && actual >= max
             {
+                tracing::info!(
+                    sensor,
+                    room = room_name,
+                    illuminance = actual,
+                    max_illuminance = max,
+                    "motion-on suppressed: room is bright enough (luminance gate)"
+                );
                 return;
             }
             if cooldown_ms > 0
                 && let Some(last_off) = state_snapshot.last_off_at
                 && ts.duration_since(last_off) < Duration::from_millis(cooldown_ms as u64)
             {
+                let elapsed_ms = ts.duration_since(last_off).as_millis();
+                tracing::info!(
+                    sensor,
+                    room = room_name,
+                    cooldown_ms,
+                    elapsed_ms,
+                    "motion-on suppressed: cooldown after recent OFF still active"
+                );
                 return;
             }
             let Some(&first) = scenes_for_now.first() else {
                 return;
             };
+            tracing::info!(
+                sensor,
+                room = room_name,
+                group = %group_name,
+                scene = first,
+                illuminance = ?illuminance,
+                "motion-on → scene_recall (room was off, gates passed)"
+            );
             out.push(Action::new(group_name, Payload::scene_recall(first)));
             // Mark as motion-owned so motion-off can later run.
             let state = self.states.entry(room_name.to_string()).or_default();
@@ -470,14 +606,36 @@ impl Controller {
             //   - all other sensors in this room are also inactive
             //   - lights are physically still on
             if !state_snapshot.motion_owned {
+                tracing::info!(
+                    sensor,
+                    room = room_name,
+                    "motion-off suppressed: lights are user-owned, not motion-owned"
+                );
                 return;
             }
             if !state_snapshot.physically_on {
+                tracing::info!(
+                    sensor,
+                    room = room_name,
+                    "motion-off suppressed: lights already physically off"
+                );
                 return;
             }
             if !state_snapshot.all_other_sensors_inactive(sensor) {
+                tracing::info!(
+                    sensor,
+                    room = room_name,
+                    "motion-off suppressed: another sensor in this room still reports active"
+                );
                 return;
             }
+            tracing::info!(
+                sensor,
+                room = room_name,
+                group = %group_name,
+                transition = off_transition,
+                "motion-off → state OFF (motion-owned, all sensors clear)"
+            );
             out.push(Action::new(group_name, Payload::state_off(off_transition)));
             let state = self.states.entry(room_name.to_string()).or_default();
             state.physically_on = false;
@@ -493,7 +651,7 @@ impl Controller {
             return Vec::new();
         };
         let room_name = room.name.clone();
-        let state = self.states.entry(room_name).or_default();
+        let state = self.states.entry(room_name.clone()).or_default();
         let was_on = state.physically_on;
         state.physically_on = on;
         // External state change → clear motion ownership. We're either
@@ -504,6 +662,20 @@ impl Controller {
             if !on {
                 state.cycle_idx = 0;
             }
+            tracing::info!(
+                group = group_name,
+                room = %room_name,
+                from = was_on,
+                to = on,
+                "group state echo → physically_on transition (motion ownership cleared)"
+            );
+        } else {
+            tracing::debug!(
+                group = group_name,
+                room = %room_name,
+                state = on,
+                "group state echo → no transition"
+            );
         }
         Vec::new()
     }
@@ -534,6 +706,16 @@ impl Controller {
     /// correct state immediately instead of racing the broker round-trip.
     fn propagate_to_descendants(&mut self, ancestor: &str, on: bool) {
         let descendants: Vec<RoomName> = self.topology.descendants_of(ancestor).to_vec();
+        if descendants.is_empty() {
+            return;
+        }
+        tracing::info!(
+            ancestor,
+            descendants = ?descendants,
+            physically_on = on,
+            "propagating physical state to descendants (next press takes \
+             toggle-off branch instead of fresh-on)"
+        );
         for desc in descendants {
             let state = self.states.entry(desc).or_default();
             state.physically_on = on;

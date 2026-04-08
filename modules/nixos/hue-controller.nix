@@ -131,6 +131,10 @@ in
     let
       configFile = yaml.generate "hue-controller.json" cfg.config;
 
+      # The `--verbose` flag is the global one (clap `global = true`), so it
+      # has to come BEFORE the subcommand on the command line. The provision
+      # subcommand inherits it for free since clap parses globals at any
+      # depth.
       commonArgs = lib.concatStringsSep " " [
         "--config ${configFile}"
         "--mqtt-host ${cfg.mqtt.host}"
@@ -152,7 +156,7 @@ in
         restartTriggers = [ configFile ];
         before = [ "hue-controller.service" ];
         script = ''
-          exec ${cfg.package}/bin/hue-controller provision ${commonArgs}
+          exec ${cfg.package}/bin/hue-controller --verbose provision ${commonArgs}
         '';
         serviceConfig = {
           Type = "oneshot";
@@ -179,10 +183,14 @@ in
         restartTriggers = [ configFile ];
         environment = {
           TZ = cfg.timezone;
-          RUST_LOG = "hue_controller=info";
         };
+        # `--verbose` is on by default for now: every command the
+        # daemon publishes is logged in human-readable form with the
+        # state-machine branch that produced it. Drop the flag here
+        # once the runtime is stable to quiet the logs back down to
+        # warnings/errors only.
         script = ''
-          exec ${cfg.package}/bin/hue-controller daemon ${commonArgs} --timezone ${cfg.timezone}
+          exec ${cfg.package}/bin/hue-controller --verbose daemon ${commonArgs} --timezone ${cfg.timezone}
         '';
         serviceConfig = {
           Type = "simple";

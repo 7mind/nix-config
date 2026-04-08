@@ -24,6 +24,17 @@ use hue_controller::time::SystemClock;
     about = "Unified zigbee2mqtt provisioner and runtime controller"
 )]
 struct Cli {
+    /// Verbose action logging. When set, every command the daemon
+    /// publishes to MQTT (and every state-machine branch that decides
+    /// to publish one) is logged at info level with a human-readable
+    /// reason. Without this flag the daemon only emits
+    /// warnings and errors.
+    ///
+    /// Equivalent to setting `RUST_LOG=hue_controller=info`. The env
+    /// var still wins if set explicitly.
+    #[arg(long, short = 'v', global = true)]
+    verbose: bool,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -107,15 +118,26 @@ struct DaemonArgs {
     timezone: Option<String>,
 }
 
-fn init_tracing() {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("hue_controller=info,info"));
+/// Initialize the tracing subscriber.
+///
+/// Precedence (highest first):
+///   1. `RUST_LOG` env var (always wins if set)
+///   2. `--verbose` CLI flag → `hue_controller=info` (action logging on)
+///   3. default → `hue_controller=warn` (only warnings + errors)
+fn init_tracing(verbose: bool) {
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        if verbose {
+            EnvFilter::new("hue_controller=info")
+        } else {
+            EnvFilter::new("hue_controller=warn")
+        }
+    });
     tracing_subscriber::fmt().with_env_filter(filter).init();
 }
 
 fn main() -> Result<()> {
-    init_tracing();
     let cli = Cli::parse();
+    init_tracing(cli.verbose);
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
