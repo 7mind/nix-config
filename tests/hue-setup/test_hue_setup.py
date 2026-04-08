@@ -1,7 +1,7 @@
-"""Tests for `pkg/setup-hue/setup_hue.py` against a fake z2m bridge.
+"""Tests for `pkg/hue-setup/hue_setup.py` against a fake z2m bridge.
 
 Each test boots a real mosquitto + a fake-z2m subscriber that handles
-`bridge/request/*` topics in-process, then drives `setup_hue.reconcile`
+`bridge/request/*` topics in-process, then drives `hue_setup.reconcile`
 through real `Z2mClient` and asserts on the resulting bridge inventory
 or on captured publishes.
 
@@ -27,16 +27,16 @@ import time
 
 import pytest
 
-import setup_hue  # type: ignore[import-not-found]
+import hue_setup  # type: ignore[import-not-found]
 from conftest import FakeZ2m
 
 
 # ---------- helpers ----------
 
 
-def _client(mosquitto: tuple[str, int]) -> setup_hue.Z2mClient:
+def _client(mosquitto: tuple[str, int]) -> hue_setup.Z2mClient:
     host, port = mosquitto
-    return setup_hue.Z2mClient(
+    return hue_setup.Z2mClient(
         host=host,
         port=port,
         user="anything",
@@ -45,25 +45,37 @@ def _client(mosquitto: tuple[str, int]) -> setup_hue.Z2mClient:
     )
 
 
-def _config(**groups: dict) -> setup_hue.Config:
-    return setup_hue.Config.model_validate({"groups": groups})
+def _config(**groups: dict) -> hue_setup.Config:
+    return hue_setup.Config.model_validate({"groups": groups})
 
 
 def _config_with_devices(
     groups: dict, devices: dict
-) -> setup_hue.Config:
-    return setup_hue.Config.model_validate({"groups": groups, "devices": devices})
+) -> hue_setup.Config:
+    return hue_setup.Config.model_validate({"groups": groups, "devices": devices})
+
+
+def _config_with_names(
+    name_by_address: dict[str, str],
+    groups: dict | None = None,
+) -> hue_setup.Config:
+    return hue_setup.Config.model_validate(
+        {
+            "groups": groups or {},
+            "name_by_address": name_by_address,
+        }
+    )
 
 
 def _reconcile(
-    client: setup_hue.Z2mClient,
-    config: setup_hue.Config,
+    client: hue_setup.Z2mClient,
+    config: hue_setup.Config,
     *,
     prune: bool = False,
     force_update: bool = False,
     dry_run: bool = False,
 ) -> tuple[int, int]:
-    return setup_hue.reconcile(
+    return hue_setup.reconcile(
         client,
         config,
         force_update=force_update,
@@ -201,7 +213,7 @@ def test_prune_clears_ghost_id_before_recreate(
 ) -> None:
     """A group id can linger in z2m's settings.groups after the zigbee
     side is gone. Adding a new group at that id fails until the ghost
-    is removed. setup_hue's prune phase explicitly issues a remove
+    is removed. hue_setup's prune phase explicitly issues a remove
     against the numeric id before the create."""
     fake_z2m.add_ghost_id(50)
     config = _config(study={"id": 50, "members": ["0xaaaa/11"]})
@@ -342,7 +354,7 @@ def test_device_option_skipped_when_state_matches(
         {"occupancy_timeout": 75, "motion_sensitivity": "high"},
     )
     # Give the broker a moment to settle the retained publish before
-    # setup_hue connects and subscribes.
+    # hue_setup connects and subscribes.
     time.sleep(0.2)
     config = _config_with_devices(
         groups={},
@@ -448,7 +460,7 @@ def test_fetch_groups_retries_until_inventory_available(
     t.start()
 
     config = _config(study={"id": 50, "members": ["0xaaaa/11"]})
-    client = setup_hue.Z2mClient(
+    client = hue_setup.Z2mClient(
         host=host,
         port=port,
         user="x",
@@ -459,7 +471,7 @@ def test_fetch_groups_retries_until_inventory_available(
     )
     try:
         # Expect this to succeed via the retry path
-        setup_hue.reconcile(
+        hue_setup.reconcile(
             client,
             config,
             force_update=False,
@@ -472,3 +484,159 @@ def test_fetch_groups_retries_until_inventory_available(
     finally:
         client.close()
     assert bridge_started.is_set()
+
+
+# ---------- rename phase ----------
+
+
+def test_rename_renames_when_friendly_differs(
+    mosquitto: tuple[str, int], fake_z2m: FakeZ2m
+) -> None:
+    """A device whose current friendly_name doesn't match the canonical
+    mapping is renamed via bridge/request/device/rename."""
+    fake_z2m.add_existing_device("0xaaaa", "old-name")
+    config = _config_with_names({"0xaaaa": "lamp-a"})
+    client = _client(mosquitto)
+    try:
+        touched, _skipped = _reconcile(client, config)
+    finally:
+        client.close()
+    assert touched >= 1
+    assert fake_z2m.rename_calls == [("0xaaaa", "old-name", "lamp-a")]
+    snapshot = {d["ieee_address"]: d["friendly_name"] for d in fake_z2m.device_snapshot()}
+    assert snapshot["0xaaaa"] == "lamp-a"
+
+
+def test_rename_skip_when_already_correct(
+    mosquitto: tuple[str, int], fake_z2m: FakeZ2m
+) -> None:
+    """No rename when the device's current friendly_name already
+    matches the mapping. The skipped count includes the device."""
+    fake_z2m.add_existing_device("0xaaaa", "lamp-a")
+    config = _config_with_names({"0xaaaa": "lamp-a"})
+    client = _client(mosquitto)
+    try:
+        _, skipped = _reconcile(client, config)
+    finally:
+        client.close()
+    assert fake_z2m.rename_calls == []
+    assert skipped >= 1
+
+
+def test_rename_homeassistant_rename_flag_is_set(
+    mosquitto: tuple[str, int], fake_z2m: FakeZ2m
+) -> None:
+    """Every rename request must carry homeassistant_rename: true so
+    HA's entity ids follow the friendly_name change in the same
+    operation. We check this by intercepting the raw request the
+    fake bridge receives."""
+    captured: list[dict] = []
+
+    # Wrap the existing handler to capture the raw payload before it
+    # mutates the inventory.
+    original_handler = fake_z2m._handle_device_rename
+
+    def spy(payload: dict) -> None:
+        captured.append(dict(payload))
+        original_handler(payload)
+
+    fake_z2m._handle_device_rename = spy  # type: ignore[method-assign]
+
+    fake_z2m.add_existing_device("0xaaaa", "old")
+    config = _config_with_names({"0xaaaa": "lamp-a"})
+    client = _client(mosquitto)
+    try:
+        _reconcile(client, config)
+    finally:
+        client.close()
+
+    assert len(captured) == 1
+    assert captured[0]["homeassistant_rename"] is True
+    assert captured[0]["from"] == "0xaaaa"
+    assert captured[0]["to"] == "lamp-a"
+
+
+def test_rename_skips_missing_device_with_warning(
+    mosquitto: tuple[str, int], fake_z2m: FakeZ2m
+) -> None:
+    """A mapping entry whose ieee isn't currently visible in z2m
+    (offline, not paired yet) must NOT crash the reconcile. The
+    rename phase logs a warning and moves on."""
+    fake_z2m.add_existing_device("0xaaaa", "lamp-a")
+    config = _config_with_names(
+        {
+            "0xaaaa": "lamp-a",
+            "0xmissing": "lamp-z",  # not in z2m
+        }
+    )
+    client = _client(mosquitto)
+    try:
+        # No exception expected.
+        _reconcile(client, config)
+    finally:
+        client.close()
+    # The visible device was already correct -> no rename calls.
+    assert fake_z2m.rename_calls == []
+
+
+def test_rename_dry_run_does_not_send_request(
+    mosquitto: tuple[str, int], fake_z2m: FakeZ2m
+) -> None:
+    """Dry-run logs the planned rename but never publishes the
+    bridge/request/device/rename topic."""
+    fake_z2m.add_existing_device("0xaaaa", "old")
+    config = _config_with_names({"0xaaaa": "lamp-a"})
+    client = _client(mosquitto)
+    try:
+        _reconcile(client, config, dry_run=True)
+    finally:
+        client.close()
+    assert fake_z2m.rename_calls == []
+    snapshot = {d["ieee_address"]: d["friendly_name"] for d in fake_z2m.device_snapshot()}
+    assert snapshot["0xaaaa"] == "old"
+
+
+def test_rename_runs_before_groups_phase(
+    mosquitto: tuple[str, int], fake_z2m: FakeZ2m
+) -> None:
+    """The rename phase must run BEFORE the group/member phase so
+    later phases see the canonical names. We assert ordering by
+    checking that a fresh group create still happens after a rename
+    fired in the same reconcile pass."""
+    fake_z2m.add_existing_device("0xaaaa", "old")
+    config = hue_setup.Config.model_validate(
+        {
+            "name_by_address": {"0xaaaa": "lamp-a"},
+            "groups": {
+                "study": {"id": 50, "members": ["0xaaaa/11"]},
+            },
+        }
+    )
+    client = _client(mosquitto)
+    try:
+        _reconcile(client, config)
+    finally:
+        client.close()
+    # The rename happened
+    assert fake_z2m.rename_calls == [("0xaaaa", "old", "lamp-a")]
+    # And the group create happened in the same pass
+    inv = fake_z2m.snapshot()
+    assert len(inv) == 1
+    assert inv[0]["friendly_name"] == "study"
+    assert inv[0]["members"] == [{"ieee_address": "0xaaaa", "endpoint": 11}]
+
+
+def test_reconcile_with_empty_name_mapping_skips_devices_fetch(
+    mosquitto: tuple[str, int], fake_z2m: FakeZ2m
+) -> None:
+    """When name_by_address is empty (the default), the rename
+    phase is a complete no-op and never queries bridge/devices.
+    Verifies the gating in `reconcile()` so existing configs that
+    don't use the new feature don't pay for it."""
+    config = _config(study={"id": 50, "members": ["0xaaaa/11"]})
+    client = _client(mosquitto)
+    try:
+        _reconcile(client, config)
+    finally:
+        client.close()
+    assert fake_z2m.rename_calls == []

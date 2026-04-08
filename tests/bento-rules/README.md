@@ -87,8 +87,8 @@ strings as plain UTC.
 | `test_multi_sensor_generates_rule_per_sensor` | `motionSensor.names = [...]` produces one rule per sensor, all sharing one cache label |
 | `test_multi_sensor_motion_off_checks_other_sensors` | Each sensor's `motion-off` references the *other* sensors' flags but never its own |
 | `test_multi_sensor_pre_dispatch_updates_own_flag` | Every motion rule's `preDispatch` writes its own `motion_<self>` regardless of dispatch outcome |
-| `test_setup_hue_groups_contain_members_and_scenes` | `setup-hue.config.groups` is populated from `members` and `scenes` |
-| `test_setup_hue_devices_emits_motion_sensor_options` | Each motion sensor gets `occupancy_timeout` / `motion_sensitivity` / `led_indication` |
+| `test_hue_setup_groups_contain_members_and_scenes` | `hue-setup.config.groups` is populated from `members` and `scenes` |
+| `test_hue_setup_devices_emits_motion_sensor_options` | Each motion sensor gets `occupancy_timeout` / `motion_sensitivity` / `led_indication` |
 | `test_validation_duplicate_group_id` | Duplicate group ids fail evaluation with `duplicate group id` |
 | `test_validation_requires_control_source` | A room with neither `switch` nor `motionSensor` fails with the documented message |
 | `test_validation_catches_shared_bulb_scene_conflict` | Two rooms claiming the same bulb with conflicting scene definitions fail with `per-bulb scene conflicts` |

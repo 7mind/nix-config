@@ -15,8 +15,8 @@ let
   ]);
 in
 stdenvNoCC.mkDerivation {
-  name = "setup-hue";
-  src = ./setup_hue.py;
+  name = "hue-setup";
+  src = ./hue_setup.py;
 
   nativeBuildInputs = [ makeWrapper ];
 
@@ -32,9 +32,9 @@ stdenvNoCC.mkDerivation {
   installPhase = ''
     runHook preInstall
     mkdir -p $out/bin
-    cp $src $out/bin/setup-hue
-    chmod +x $out/bin/setup-hue
-    wrapProgram $out/bin/setup-hue \
+    cp $src $out/bin/hue-setup
+    chmod +x $out/bin/hue-setup
+    wrapProgram $out/bin/hue-setup \
       --set PYTHONPATH "${pythonEnv}/${pythonEnv.sitePackages}" \
       --prefix PATH : ${lib.makeBinPath [ pythonEnv ]}
     runHook postInstall
@@ -44,7 +44,7 @@ stdenvNoCC.mkDerivation {
     description = "Declarative zigbee2mqtt group and scene setup over MQTT";
     license = licenses.mit;
     maintainers = with maintainers; [ pshirshov ];
-    mainProgram = "setup-hue";
+    mainProgram = "hue-setup";
     platforms = platforms.all;
   };
 }

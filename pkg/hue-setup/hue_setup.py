@@ -23,15 +23,16 @@ import sys
 import time
 from pathlib import Path
 from threading import Event, Lock
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 import paho.mqtt.client as mqtt
 from paho.mqtt.enums import CallbackAPIVersion
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-logger = logging.getLogger("setup-hue")
+logger = logging.getLogger("hue-setup")
 
 BRIDGE_GROUPS_TOPIC = "zigbee2mqtt/bridge/groups"
+BRIDGE_DEVICES_TOPIC = "zigbee2mqtt/bridge/devices"
 BRIDGE_RESPONSE_PREFIX = "zigbee2mqtt/bridge/response/"
 
 DEFAULT_SETTLE_SECONDS = 0.4
@@ -119,6 +120,15 @@ class Config(BaseModel):
 
     groups: dict[str, GroupSpec]
     devices: dict[str, DeviceSpec] = Field(default_factory=dict)
+    # Canonical mapping ieee_address → friendly_name. When non-empty,
+    # the reconcile pass starts with a `reconcile_names` phase that
+    # renames any z2m device whose current friendly_name doesn't match
+    # this mapping (via `bridge/request/device/rename` with
+    # `homeassistant_rename: true` so HA's entity ids follow). The
+    # mapping is the source of truth for device naming across this
+    # whole stack — Nix uses the same data to validate room references
+    # and to render the bento source/target topics.
+    name_by_address: dict[str, str] = Field(default_factory=dict)
 
 
 # ---------- Existing-state models (parsed from bridge/groups) ----------
@@ -148,6 +158,20 @@ class ExistingGroup(BaseModel):
     friendly_name: str
     members: list[ExistingMember] = []
     scenes: list[ExistingScene] = []
+
+
+class ExistingDevice(BaseModel):
+    """One entry from `zigbee2mqtt/bridge/devices`.
+
+    z2m publishes a list of all paired devices on this retained topic;
+    we only consume two fields, but extra="ignore" lets us tolerate
+    schema additions without forcing a code update.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    ieee_address: str
+    friendly_name: str
 
 
 # ---------- Response envelope ----------
@@ -206,13 +230,15 @@ class Z2mClient:
         self._timeout_s = timeout_s
         self._client = mqtt.Client(
             CallbackAPIVersion.VERSION2,
-            client_id="setup-hue",
+            client_id="hue-setup",
         )
         self._client.username_pw_set(user, password)
 
         self._connected = Event()
         self._groups_event = Event()
         self._groups_payload: bytes | None = None
+        self._devices_event = Event()
+        self._devices_payload: bytes | None = None
 
         self._response_lock = Lock()
         self._response_events: dict[str, Event] = {}
@@ -250,6 +276,7 @@ class Z2mClient:
             return
         logger.debug("MQTT connected")
         client.subscribe(BRIDGE_GROUPS_TOPIC, qos=1)
+        client.subscribe(BRIDGE_DEVICES_TOPIC, qos=1)
         client.subscribe(f"{BRIDGE_RESPONSE_PREFIX}#", qos=1)
         self._connected.set()
 
@@ -262,6 +289,10 @@ class Z2mClient:
         if message.topic == BRIDGE_GROUPS_TOPIC:
             self._groups_payload = message.payload
             self._groups_event.set()
+            return
+        if message.topic == BRIDGE_DEVICES_TOPIC:
+            self._devices_payload = message.payload
+            self._devices_event.set()
             return
         if message.topic.startswith(BRIDGE_RESPONSE_PREFIX):
             try:
@@ -285,7 +316,7 @@ class Z2mClient:
 
     def _next_transaction(self) -> str:
         with self._txn_lock:
-            return f"setup-hue-{next(self._txn_counter)}"
+            return f"hue-setup-{next(self._txn_counter)}"
 
     def _request(self, topic: str, payload: dict[str, Any]) -> Z2mResponse:
         """Publish a request with a fresh transaction id, wait for the
@@ -338,6 +369,59 @@ class Z2mClient:
                 f"unexpected payload shape on {BRIDGE_GROUPS_TOPIC}: {type(raw).__name__}"
             )
         return [ExistingGroup.model_validate(g) for g in raw]
+
+    def fetch_devices(self) -> list[ExistingDevice]:
+        """Re-trigger a retained-message delivery on bridge/devices and parse.
+
+        Skips entries that don't have both `ieee_address` and
+        `friendly_name` (e.g. half-interviewed devices, the
+        coordinator entry under some z2m versions). The reconcile
+        phase only cares about devices we can address by ieee, so
+        silently dropping the rest is fine.
+        """
+        self._devices_event.clear()
+        self._devices_payload = None
+        # Re-subscribing forces z2m/mosquitto to resend the retained message.
+        self._client.unsubscribe(BRIDGE_DEVICES_TOPIC)
+        self._client.subscribe(BRIDGE_DEVICES_TOPIC, qos=1)
+        if not self._devices_event.wait(self._timeout_s):
+            raise TimeoutError(
+                f"no message on {BRIDGE_DEVICES_TOPIC} within {self._timeout_s}s "
+                "(is zigbee2mqtt running?)"
+            )
+        assert self._devices_payload is not None
+        raw = json.loads(self._devices_payload)
+        if not isinstance(raw, list):
+            raise ValueError(
+                f"unexpected payload shape on {BRIDGE_DEVICES_TOPIC}: {type(raw).__name__}"
+            )
+        result: list[ExistingDevice] = []
+        for entry in raw:
+            if not isinstance(entry, dict):
+                continue
+            if "ieee_address" not in entry or "friendly_name" not in entry:
+                continue
+            result.append(ExistingDevice.model_validate(entry))
+        return result
+
+    def rename_device(self, current_name: str, new_name: str) -> None:
+        """Rename a z2m device. `current_name` may be either the
+        ieee_address or the current friendly_name; we always pass
+        the ieee_address from the caller for unambiguity.
+
+        `homeassistant_rename: true` triggers Home Assistant's
+        entity-id rename machinery in the same request, so HA's
+        entity ids follow the z2m friendly_name change without a
+        separate API call.
+        """
+        self._request(
+            "zigbee2mqtt/bridge/request/device/rename",
+            {
+                "from": current_name,
+                "to": new_name,
+                "homeassistant_rename": True,
+            },
+        )
 
     def add_group(self, friendly_name: str, group_id: int | None) -> None:
         payload: dict[str, Any] = {"friendly_name": friendly_name}
@@ -433,17 +517,30 @@ class Z2mClient:
 # ---------- Reconcile phases ----------
 
 
+T = TypeVar("T")
+
+
 def _fetch_with_retry(
-    client: Z2mClient, fetch_attempts: int, fetch_retry_seconds: float
-) -> list[ExistingGroup]:
+    label: str,
+    fetcher: Callable[[], T],
+    fetch_attempts: int,
+    fetch_retry_seconds: float,
+) -> T:
+    """Generic retry loop for the retained-topic fetchers.
+
+    Used by both `fetch_groups` and `fetch_devices`. The retry path
+    exists for early-boot races where z2m is up but hasn't yet
+    published the retained inventory we want.
+    """
     last_err: Exception | None = None
     for attempt in range(1, fetch_attempts + 1):
         try:
-            return client.fetch_groups()
+            return fetcher()
         except (TimeoutError, ValueError) as e:
             last_err = e
             logger.info(
-                "fetch_groups attempt %d/%d failed (%s); retrying in %.1fs",
+                "%s attempt %d/%d failed (%s); retrying in %.1fs",
+                label,
                 attempt,
                 fetch_attempts,
                 e,
@@ -452,8 +549,74 @@ def _fetch_with_retry(
             time.sleep(fetch_retry_seconds)
     assert last_err is not None
     raise RuntimeError(
-        f"could not fetch zigbee2mqtt/bridge/groups after {fetch_attempts} attempts: {last_err}"
+        f"could not {label} after {fetch_attempts} attempts: {last_err}"
     )
+
+
+def reconcile_names(
+    client: Z2mClient,
+    config: Config,
+    existing_devices: list[ExistingDevice],
+    *,
+    dry_run: bool,
+    settle_seconds: float,
+) -> tuple[int, int]:
+    """Rename z2m devices so their friendly_name matches the canonical
+    `name_by_address` mapping. Runs FIRST in `reconcile()` so all
+    subsequent phases see the corrected names.
+
+    For each (ieee, desired_friendly) in the mapping:
+      * if no z2m device exists with that ieee → warn (device offline,
+        not yet paired, or just plain missing); skip without failing
+      * if current friendly == desired → skip
+      * else → issue `bridge/request/device/rename` with
+        `homeassistant_rename: true` so HA's entity ids follow
+
+    Returns (touched, skipped). The mapping is treated as the source
+    of truth: a device whose ieee is not in the mapping is left
+    completely alone, even if its friendly_name might collide with
+    something the user later wants. The user owns the mapping; we
+    don't try to be cleverer than them.
+    """
+    if not config.name_by_address:
+        return 0, 0
+
+    by_address = {d.ieee_address: d for d in existing_devices}
+    touched = 0
+    skipped = 0
+
+    for ieee, desired_name in config.name_by_address.items():
+        existing = by_address.get(ieee)
+        if existing is None:
+            logger.warning(
+                "rename: %s (%s) not present in z2m bridge/devices "
+                "(offline or not paired); skipping",
+                ieee,
+                desired_name,
+            )
+            continue
+        if existing.friendly_name == desired_name:
+            logger.info(
+                "[skip] %s already named %r",
+                ieee,
+                desired_name,
+            )
+            skipped += 1
+            continue
+        verb = "[dry-run] would rename" if dry_run else "rename"
+        logger.info(
+            "%s %s: %r -> %r",
+            verb,
+            ieee,
+            existing.friendly_name,
+            desired_name,
+        )
+        if not dry_run:
+            client.rename_device(ieee, desired_name)
+            time.sleep(settle_seconds)
+            touched += 1
+
+    return touched, skipped
 
 
 def reconcile_groups(
@@ -767,12 +930,38 @@ def reconcile(
     fetch_attempts: int,
     fetch_retry_seconds: float,
 ) -> tuple[int, int]:
-    """End-to-end reconcile: groups+members, then scenes, then
-    per-device option writes.
+    """End-to-end reconcile: device renames, then groups+members,
+    then scenes, then per-device option writes.
 
     Returns (touched, skipped).
     """
-    existing = _fetch_with_retry(client, fetch_attempts, fetch_retry_seconds)
+    name_touched = 0
+    name_skipped = 0
+    if config.name_by_address:
+        existing_devices = _fetch_with_retry(
+            "fetch zigbee2mqtt/bridge/devices",
+            client.fetch_devices,
+            fetch_attempts,
+            fetch_retry_seconds,
+        )
+        name_touched, name_skipped = reconcile_names(
+            client,
+            config,
+            existing_devices,
+            dry_run=dry_run,
+            settle_seconds=settle_seconds,
+        )
+        # If we renamed anything, settle so the rest of the pipeline
+        # sees the new names in any retained topics it relies on.
+        if name_touched > 0 and not dry_run:
+            time.sleep(settle_seconds)
+
+    existing = _fetch_with_retry(
+        "fetch zigbee2mqtt/bridge/groups",
+        client.fetch_groups,
+        fetch_attempts,
+        fetch_retry_seconds,
+    )
 
     group_touched, group_skipped, state_changed = reconcile_groups(
         client,
@@ -804,8 +993,8 @@ def reconcile(
     )
 
     return (
-        group_touched + scene_touched + device_touched,
-        group_skipped + scene_skipped + device_skipped,
+        name_touched + group_touched + scene_touched + device_touched,
+        name_skipped + group_skipped + scene_skipped + device_skipped,
     )
 
 

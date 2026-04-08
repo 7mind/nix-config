@@ -94,7 +94,9 @@
 
         music-meta-fix = pkgs.callPackage "${cfg-meta.paths.pkg}/music-meta-fix/default.nix" { };
 
-        setup-hue = pkgs.callPackage "${cfg-meta.paths.pkg}/setup-hue/default.nix" { };
+        hue-setup = pkgs.callPackage "${cfg-meta.paths.pkg}/hue-setup/default.nix" { };
+
+        zigbee-mqtt-import = pkgs.callPackage "${cfg-meta.paths.pkg}/zigbee-mqtt-import/default.nix" { };
 
         fractal = cfg-flakes.fractal.fractal-tray.overrideAttrs (old: {
           cargoDeps = pkgs.rustPlatform.fetchCargoVendor {

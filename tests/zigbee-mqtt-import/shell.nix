@@ -4,17 +4,16 @@ let
     pytest
     pytest-xdist
     paho-mqtt
-    pydantic
   ]);
 in
 pkgs.mkShellNoCC {
-  name = "setup-hue-tests";
+  name = "zigbee-mqtt-import-tests";
   packages = [
     pkgs.mosquitto
     pythonEnv
   ];
   shellHook = ''
-    echo "setup-hue test shell ready"
+    echo "zigbee-mqtt-import test shell ready"
     echo "  mosquitto: $(mosquitto -h 2>&1 | head -1)"
     echo "  python:    $(python3 --version)"
     echo "  pytest:    $(pytest --version 2>&1 | head -1)"

@@ -1,6 +1,6 @@
-"""Fixtures for setup_hue.py end-to-end tests.
+"""Fixtures for hue_setup.py end-to-end tests.
 
-These tests run the real `setup_hue` module against:
+These tests run the real `hue_setup` module against:
   * a real mosquitto broker on an ephemeral port (`mosquitto` fixture)
   * a fake zigbee2mqtt bridge that handles `bridge/request/*` topics
     in-process (`fake_z2m` fixture)
@@ -8,7 +8,7 @@ These tests run the real `setup_hue` module against:
 Nothing is mocked at the MQTT layer — paho-mqtt talks to a real broker
 talking to a real (in-process) handler. The handler maintains a tiny
 inventory of groups, members, and scenes, mirroring the parts of z2m's
-behavior that setup_hue actually relies on.
+behavior that hue_setup actually relies on.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from threading import Lock
+from threading import Event, Lock
 from typing import Any, Iterator
 
 import paho.mqtt.client as mqtt
@@ -30,12 +30,12 @@ import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SETUP_HUE_DIR = REPO_ROOT / "pkg/setup-hue"
+HUE_SETUP_DIR = REPO_ROOT / "pkg/hue-setup"
 
-# Make `import setup_hue` work without relying on the wrapped binary.
+# Make `import hue_setup` work without relying on the wrapped binary.
 # The directory is a hyphenated path so we cannot do a normal package
 # import — we add it to sys.path and import the bare module.
-sys.path.insert(0, str(SETUP_HUE_DIR))
+sys.path.insert(0, str(HUE_SETUP_DIR))
 
 
 # ---------- mosquitto (copy of bento-rules conftest, kept independent
@@ -94,7 +94,7 @@ def mosquitto() -> Iterator[tuple[str, int]]:
 class FakeZ2m:
     """Minimal in-memory zigbee2mqtt simulator.
 
-    Handles only what setup_hue talks to:
+    Handles only what hue_setup talks to:
       * `bridge/request/group/add`
       * `bridge/request/group/remove`
       * `bridge/request/group/members/add`
@@ -102,7 +102,7 @@ class FakeZ2m:
       * `zigbee2mqtt/<group_or_device>/set` (scene_add and option writes)
 
     Republishes `bridge/groups` (retained) whenever inventory changes,
-    so a `setup_hue.Z2mClient.fetch_groups` call sees a fresh snapshot
+    so a `hue_setup.Z2mClient.fetch_groups` call sees a fresh snapshot
     after each mutation.
     """
 
@@ -116,15 +116,28 @@ class FakeZ2m:
         # in use"; a `remove_group` request that targets the numeric
         # id clears the ghost so a subsequent add succeeds.
         self._ghost_ids: set[int] = set()
+        # Devices keyed by ieee_address. Each value mirrors the
+        # subset of `bridge/devices` that hue_setup.fetch_devices
+        # consumes (ieee_address, friendly_name, type).
+        self._devices: dict[str, dict[str, Any]] = {}
         # Captured device-set publishes for assertions
         self.device_sets: list[tuple[str, dict[str, Any]]] = []
         # Captured raw scene_add JSON strings (so tests can verify
         # transition is encoded as a float, not an int)
         self.scene_add_raw: list[str] = []
+        # Captured rename calls (ieee, from, to) for assertions on
+        # the rename phase.
+        self.rename_calls: list[tuple[str, str, str]] = []
         # Pre-seeded retained device states for option dedup tests:
         # tests put values here, the bridge republishes them as
         # retained on subscribe via mosquitto.
         self.device_state: dict[str, dict[str, Any]] = {}
+
+        # Connection-ready barrier. on_connect sets the event after
+        # the subscribes + initial retained publishes are queued, so
+        # tests that race against the bridge subscribe wait here
+        # rather than busy-polling a flag.
+        self._subscribed_event = Event()
 
         self._client = mqtt.Client(
             CallbackAPIVersion.VERSION2,
@@ -132,22 +145,15 @@ class FakeZ2m:
         )
         self._client.on_connect = self._on_connect
         self._client.on_message = self._on_message
-        self._client.connect(host, port)
+        # connect_async + loop_start is more reliable under heavy
+        # parallelism than the sync connect path: the network thread
+        # owns both the TCP handshake and the CONNACK read, so we
+        # can't get into a state where the main thread completed
+        # connect() but the loop thread is starved before delivering
+        # the callback.
+        self._client.connect_async(host, port)
         self._client.loop_start()
-        # Wait for the SUBACK to land before tests start publishing.
-        # Without this the first request can race ahead of our
-        # subscriptions and the bridge silently drops it.
-        self._subscribed = False
-        # Generous timeout: when pytest runs the suite under -n auto with
-        # 24 workers all spinning up their own mosquitto + subscribing
-        # paho clients in lockstep — especially with the bento-rules
-        # suite still cooling down on neighbouring cores — the connect
-        # callback can lag many seconds behind. The probe is cheap so
-        # a long ceiling is fine.
-        deadline = time.time() + 30.0
-        while time.time() < deadline and not self._subscribed:
-            time.sleep(0.01)
-        if not self._subscribed:
+        if not self._subscribed_event.wait(timeout=30.0):
             raise TimeoutError("fake z2m bridge failed to subscribe in time")
 
     def _on_connect(
@@ -161,9 +167,10 @@ class FakeZ2m:
         client.subscribe("zigbee2mqtt/bridge/request/#", qos=1)
         client.subscribe("zigbee2mqtt/+/set", qos=1)
         # Publish initial (empty) inventory and any pre-seeded device
-        # state retained, so subsequent re-subscribes from setup_hue
+        # state retained, so subsequent re-subscribes from hue_setup
         # see the snapshot.
         self._publish_groups_locked_unsafe()
+        self._publish_devices_locked_unsafe()
         for name, state in self.device_state.items():
             client.publish(
                 f"zigbee2mqtt/{name}",
@@ -171,7 +178,7 @@ class FakeZ2m:
                 qos=1,
                 retain=True,
             )
-        self._subscribed = True
+        self._subscribed_event.set()
 
     # ---- inventory mutation helpers (must be called under self._lock) ----
 
@@ -179,6 +186,15 @@ class FakeZ2m:
         snapshot = list(self._groups.values())
         self._client.publish(
             "zigbee2mqtt/bridge/groups",
+            json.dumps(snapshot),
+            qos=1,
+            retain=True,
+        )
+
+    def _publish_devices_locked_unsafe(self) -> None:
+        snapshot = list(self._devices.values())
+        self._client.publish(
+            "zigbee2mqtt/bridge/devices",
             json.dumps(snapshot),
             qos=1,
             retain=True,
@@ -353,6 +369,47 @@ class FakeZ2m:
                 existing["name"] = scene["name"]
             self._publish_groups_locked_unsafe()
 
+    def _handle_device_rename(self, payload: dict[str, Any]) -> None:
+        """Handle `bridge/request/device/rename`.
+
+        z2m accepts both ieee_address and current friendly_name in
+        `from`; we support both. The rename mutates `_devices`
+        in-place and republishes `bridge/devices` retained so a
+        subsequent `fetch_devices` sees the new name.
+        """
+        from_value = payload["from"]
+        to_value = payload["to"]
+        with self._lock:
+            target_ieee: str | None = None
+            if from_value in self._devices:
+                target_ieee = from_value
+            else:
+                for ieee, dev in self._devices.items():
+                    if dev["friendly_name"] == from_value:
+                        target_ieee = ieee
+                        break
+            if target_ieee is None:
+                self._respond(
+                    "zigbee2mqtt/bridge/request/device/rename",
+                    payload,
+                    status="error",
+                    error=f"device {from_value} does not exist",
+                )
+                return
+            previous_name = self._devices[target_ieee]["friendly_name"]
+            self._devices[target_ieee]["friendly_name"] = to_value
+            self.rename_calls.append((target_ieee, previous_name, to_value))
+            self._publish_devices_locked_unsafe()
+        self._respond(
+            "zigbee2mqtt/bridge/request/device/rename",
+            payload,
+            data={
+                "from": from_value,
+                "to": to_value,
+                "homeassistant_rename": payload.get("homeassistant_rename", False),
+            },
+        )
+
     def _next_auto_id(self) -> int:
         with self._lock:
             used = {g["id"] for g in self._groups.values()} | self._ghost_ids
@@ -389,6 +446,8 @@ class FakeZ2m:
             self._handle_members_add(payload)
         elif topic == "zigbee2mqtt/bridge/request/group/members/remove":
             self._handle_members_remove(payload)
+        elif topic == "zigbee2mqtt/bridge/request/device/rename":
+            self._handle_device_rename(payload)
         elif topic.startswith("zigbee2mqtt/") and topic.endswith("/set"):
             target = topic[len("zigbee2mqtt/") : -len("/set")]
             if "scene_add" in payload:
@@ -419,6 +478,27 @@ class FakeZ2m:
                 ],
             }
             self._publish_groups_locked_unsafe()
+
+    def add_existing_device(
+        self,
+        ieee_address: str,
+        friendly_name: str,
+        device_type: str = "Router",
+    ) -> None:
+        """Seed a device into the fake bridge's `bridge/devices`
+        inventory. Used by rename-phase tests to model the live z2m
+        state the reconciler observes."""
+        with self._lock:
+            self._devices[ieee_address] = {
+                "ieee_address": ieee_address,
+                "friendly_name": friendly_name,
+                "type": device_type,
+            }
+            self._publish_devices_locked_unsafe()
+
+    def device_snapshot(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return [dict(d) for d in self._devices.values()]
 
     def add_ghost_id(self, group_id: int) -> None:
         """Mark a group id as occupied in z2m's settings without

@@ -1,21 +1,21 @@
-# setup-hue tests
+# hue-setup tests
 
-End-to-end tests for `pkg/setup-hue/setup_hue.py` against a fake
+End-to-end tests for `pkg/hue-setup/hue_setup.py` against a fake
 zigbee2mqtt bridge.
 
 Each test boots a private mosquitto on an ephemeral port and a
 `FakeZ2m` handler that subscribes to `zigbee2mqtt/bridge/request/#` and
-`zigbee2mqtt/+/set`, then drives `setup_hue.reconcile` through a real
+`zigbee2mqtt/+/set`, then drives `hue_setup.reconcile` through a real
 `Z2mClient`. The handler maintains an in-memory inventory of groups,
 members, and scenes, mirrors only the parts of z2m's behavior that
-setup_hue actually relies on, and republishes `bridge/groups`
+hue_setup actually relies on, and republishes `bridge/groups`
 (retained) on every mutation so the next `fetch_groups` call sees a
 fresh snapshot.
 
 ## Running
 
 ```
-cd tests/setup-hue
+cd tests/hue-setup
 nix-shell --run pytest
 ```
 

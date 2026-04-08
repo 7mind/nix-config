@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -31,9 +32,72 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 TOOLS_PATH = REPO_ROOT / "private/hosts/raspi5m/hue-lights-tools.nix"
 
 
-def _eval_define_rooms(rooms_nix: str) -> dict[str, Any]:
-    """Evaluate `defineRooms { ... }` with the given rooms snippet
-    and return the JSON-decoded result."""
+def _auto_address_by_name(rooms_nix: str) -> dict[str, str]:
+    """Synthesize an addressByName mapping that covers every device
+    reference present in the given rooms snippet.
+
+    `defineRooms` now requires every reference (in `members`,
+    `switch`, `motionSensor.name(s)`) to resolve through an explicit
+    mapping. Auto-generating one from the snippet keeps the test
+    suite ergonomic — each test config still reads as a free-form
+    Nix expression, no boilerplate mapping per test.
+
+    Walks the snippet for tokens that look like device references in
+    the relevant positions. For each unique friendly name, assigns a
+    unique synthetic ieee. For each unique 0x... reference, assigns
+    a unique synthetic friendly name keyed in the output mapping.
+    """
+    member_re = re.compile(r'"([^"\s/]+)/\d+"')
+    name_assign_re = re.compile(r'(?:switch|name)\s*=\s*"([^"]+)"')
+    names_list_re = re.compile(r'names\s*=\s*\[\s*((?:"[^"]+"\s*)+)\]')
+
+    refs: set[str] = set()
+    refs.update(member_re.findall(rooms_nix))
+    refs.update(name_assign_re.findall(rooms_nix))
+    for names_block in names_list_re.findall(rooms_nix):
+        refs.update(re.findall(r'"([^"]+)"', names_block))
+
+    mapping: dict[str, str] = {}
+    synth_friendly_counter = 0
+    synth_ieee_counter = 0
+    for ref in sorted(refs):
+        if ref.startswith("0x"):
+            synth_name = f"_synth_bulb_{synth_friendly_counter}"
+            synth_friendly_counter += 1
+            mapping[synth_name] = ref
+        else:
+            synth_addr = f"0xfe00000000{synth_ieee_counter:06x}"
+            synth_ieee_counter += 1
+            mapping[ref] = synth_addr
+    return mapping
+
+
+def _render_address_by_name_nix(address_by_name: dict[str, str]) -> str:
+    """Render a Python dict as a Nix attrset literal. Both keys and
+    values are device-id strings, which never contain quotes — a
+    naive renderer is sufficient and avoids pulling in a Nix encoder."""
+    entries = " ".join(
+        f'"{name}" = "{addr}";' for name, addr in sorted(address_by_name.items())
+    )
+    return "{ " + entries + " }"
+
+
+def _eval_define_rooms(
+    rooms_nix: str,
+    *,
+    address_by_name: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Evaluate `defineRooms { addressByName = ...; rooms = ...; }` with
+    the given rooms snippet and return the JSON-decoded result.
+
+    `address_by_name` defaults to an auto-extracted mapping covering
+    every device reference in `rooms_nix`. Tests that want to verify
+    a specific mapping (or trigger a missing-reference error) pass
+    their own.
+    """
+    if address_by_name is None:
+        address_by_name = _auto_address_by_name(rooms_nix)
+    addr_nix = _render_address_by_name_nix(address_by_name)
     expr = f"""
 let
   pkgs = import <nixpkgs> {{ }};
@@ -41,7 +105,10 @@ let
   tools = import {TOOLS_PATH} {{ inherit lib; }};
   inherit (tools) defaultScheduledScenes defaultDayScenes;
 in
-tools.defineRooms {rooms_nix}
+tools.defineRooms {{
+  addressByName = {addr_nix};
+  rooms = {rooms_nix};
+}}
 """
     result = subprocess.run(
         ["nix", "eval", "--impure", "--json", "--expr", expr],
@@ -321,33 +388,41 @@ def test_multi_sensor_pre_dispatch_updates_own_flag() -> None:
         assert cache_set["cache"]["key"] == expected_key
 
 
-# ---------- setup-hue ----------
+# ---------- hue-setup ----------
 
 
-def test_setup_hue_groups_contain_members_and_scenes() -> None:
+def test_hue_setup_groups_contain_members_and_scenes() -> None:
+    """Members written as friendly names round-trip into the rendered
+    hue-setup config unchanged. The mapping is supplied explicitly so
+    the assertion can compare exact strings."""
     result = _eval_define_rooms(
         """{
       study = {
         groupName = "study";
         id = 60;
-        members = [ "0x4444/11" "0x5555/11" ];
+        members = [ "lamp-study-1/11" "lamp-study-2/11" ];
         switch = "hue-s-study";
         scenes = defaultDayScenes;
       };
-    }"""
+    }""",
+        address_by_name={
+            "lamp-study-1": "0x4444",
+            "lamp-study-2": "0x5555",
+            "hue-s-study": "0xff01",
+        },
     )
-    groups = result["smind"]["services"]["setup-hue"]["config"]["groups"]
+    groups = result["smind"]["services"]["hue-setup"]["config"]["groups"]
     assert "study" in groups
     study = groups["study"]
     assert study["id"] == 60
-    assert study["members"] == ["0x4444/11", "0x5555/11"]
+    assert study["members"] == ["lamp-study-1/11", "lamp-study-2/11"]
     # Three default scenes
     assert len(study["scenes"]) == 3
     scene_ids = sorted(s["id"] for s in study["scenes"])
     assert scene_ids == [1, 2, 3]
 
 
-def test_setup_hue_devices_emits_motion_sensor_options() -> None:
+def test_hue_setup_devices_emits_motion_sensor_options() -> None:
     """Every motion sensor gets a devices entry with the canonical
     three options: occupancy_timeout, motion_sensitivity, led_indication.
     Multi-sensor rooms emit one entry per sensor with identical values."""
@@ -367,7 +442,7 @@ def test_setup_hue_devices_emits_motion_sensor_options() -> None:
       };
     }"""
     )
-    devices = result["smind"]["services"]["setup-hue"]["config"]["devices"]
+    devices = result["smind"]["services"]["hue-setup"]["config"]["devices"]
     assert set(devices) == {"hue-ms-hall-a", "hue-ms-hall-b"}
     for name in ["hue-ms-hall-a", "hue-ms-hall-b"]:
         assert devices[name]["options"] == {
@@ -380,9 +455,16 @@ def test_setup_hue_devices_emits_motion_sensor_options() -> None:
 # ---------- validation errors ----------
 
 
-def _eval_expect_error(rooms_nix: str) -> str:
+def _eval_expect_error(
+    rooms_nix: str,
+    *,
+    address_by_name: dict[str, str] | None = None,
+) -> str:
     """Evaluate the given rooms block and expect nix eval to fail.
     Returns the stderr text for assertions."""
+    if address_by_name is None:
+        address_by_name = _auto_address_by_name(rooms_nix)
+    addr_nix = _render_address_by_name_nix(address_by_name)
     expr = f"""
 let
   pkgs = import <nixpkgs> {{ }};
@@ -390,7 +472,10 @@ let
   tools = import {TOOLS_PATH} {{ inherit lib; }};
   inherit (tools) defaultDayScenes;
 in
-tools.defineRooms {rooms_nix}
+tools.defineRooms {{
+  addressByName = {addr_nix};
+  rooms = {rooms_nix};
+}}
 """
     result = subprocess.run(
         ["nix", "eval", "--impure", "--json", "--expr", expr],
@@ -436,14 +521,14 @@ def test_validation_catches_shared_bulb_scene_conflict() -> None:
     err = _eval_expect_error(
         """{
       room-a = {
-        groupName = "room-a"; id = 1; members = [ "0xshared/11" ];
+        groupName = "room-a"; id = 1; members = [ "shared-bulb/11" ];
         switch = "hue-s-a";
         scenes = [
           { id = 1; name = "bright"; state = "ON"; brightness = 254; color_temp = 250; transition = 0.5; }
         ];
       };
       room-b = {
-        groupName = "room-b"; id = 2; members = [ "0xshared/11" ];
+        groupName = "room-b"; id = 2; members = [ "shared-bulb/11" ];
         switch = "hue-s-b";
         scenes = [
           { id = 1; name = "dim"; state = "ON"; brightness = 100; color_temp = 400; transition = 0.5; }
@@ -452,4 +537,148 @@ def test_validation_catches_shared_bulb_scene_conflict() -> None:
     }"""
     )
     assert "per-bulb scene conflicts" in err
-    assert "0xshared/11" in err
+    assert "shared-bulb/11" in err
+
+
+# ---------- addressByName / device reference resolution ----------
+
+
+def test_address_by_name_translates_hardware_id_to_friendly() -> None:
+    """A room that references a bulb by its `0x...` hardware id has
+    that reference rewritten to the canonical friendly name in the
+    rendered hue-setup config. The bento source/target topics are
+    derived from the friendly form too."""
+    result = _eval_define_rooms(
+        """{
+      study = {
+        groupName = "study";
+        id = 60;
+        members = [ "0x1234abcd/11" ];
+        switch = "0xff00aabb";
+        scenes = defaultDayScenes;
+      };
+    }""",
+        address_by_name={
+            "lamp-study": "0x1234abcd",
+            "hue-s-study": "0xff00aabb",
+        },
+    )
+    study = result["smind"]["services"]["hue-setup"]["config"]["groups"]["study"]
+    assert study["members"] == ["lamp-study/11"]
+    rule = result["smind"]["services"]["mqtt-automations"]["rules"]["study-switch"]
+    # The bento source topic uses the friendly name, not the 0x form,
+    # because z2m only publishes /action under the friendly_name path.
+    assert rule["source"] == "zigbee2mqtt/hue-s-study/action"
+
+
+def test_address_by_name_inverse_threaded_into_hue_setup_config() -> None:
+    """The inverse mapping (ieee → friendly) is rendered into
+    `hue-setup.config.name_by_address` so the runtime rename phase
+    has the same source of truth that drove the build-time
+    translation."""
+    result = _eval_define_rooms(
+        """{
+      study = {
+        groupName = "study";
+        id = 60;
+        members = [ "lamp-a/11" ];
+        switch = "hue-s-study";
+        scenes = defaultDayScenes;
+      };
+    }""",
+        address_by_name={
+            "lamp-a": "0x0000000000000aaa",
+            "hue-s-study": "0x0000000000000bbb",
+        },
+    )
+    name_by_address = result["smind"]["services"]["hue-setup"]["config"]["name_by_address"]
+    assert name_by_address == {
+        "0x0000000000000aaa": "lamp-a",
+        "0x0000000000000bbb": "hue-s-study",
+    }
+
+
+def test_validation_unknown_friendly_name_in_members() -> None:
+    """A friendly name in `members` that isn't in `addressByName`
+    fails the build with a precise error message."""
+    err = _eval_expect_error(
+        """{
+      study = {
+        groupName = "study"; id = 1; members = [ "lamp-mystery/11" ];
+        switch = "hue-s-study"; scenes = defaultDayScenes;
+      };
+    }""",
+        address_by_name={
+            "hue-s-study": "0xff01",
+            # lamp-mystery deliberately omitted
+        },
+    )
+    assert "lamp-mystery" in err
+    assert "addressByName" in err
+
+
+def test_validation_unknown_hardware_id_in_members() -> None:
+    """A `0x...` hardware id in `members` that isn't in `addressByName`
+    fails the build with a precise error message."""
+    err = _eval_expect_error(
+        """{
+      study = {
+        groupName = "study"; id = 1; members = [ "0xdeadbeef/11" ];
+        switch = "hue-s-study"; scenes = defaultDayScenes;
+      };
+    }""",
+        address_by_name={
+            "hue-s-study": "0xff01",
+            # 0xdeadbeef deliberately omitted
+        },
+    )
+    assert "0xdeadbeef" in err
+    assert "addressByName" in err
+
+
+def test_validation_unknown_switch_friendly_name() -> None:
+    """A switch reference that isn't in addressByName also fails."""
+    err = _eval_expect_error(
+        """{
+      study = {
+        groupName = "study"; id = 1; members = [ "lamp-a/11" ];
+        switch = "hue-s-mystery"; scenes = defaultDayScenes;
+      };
+    }""",
+        address_by_name={"lamp-a": "0xaaaa"},
+    )
+    assert "hue-s-mystery" in err
+
+
+def test_validation_unknown_motion_sensor_name() -> None:
+    """A motionSensor.name that isn't in addressByName also fails."""
+    err = _eval_expect_error(
+        """{
+      study = {
+        groupName = "study"; id = 1; members = [ "lamp-a/11" ];
+        motionSensor = { name = "hue-ms-mystery"; };
+        scenes = defaultDayScenes;
+      };
+    }""",
+        address_by_name={"lamp-a": "0xaaaa"},
+    )
+    assert "hue-ms-mystery" in err
+
+
+def test_validation_duplicate_address_in_address_by_name() -> None:
+    """Two friendly names mapping to the same hardware id is a
+    typo/paste-error signal — surfaced as a build error."""
+    err = _eval_expect_error(
+        """{
+      study = {
+        groupName = "study"; id = 1; members = [ "lamp-a/11" ];
+        switch = "hue-s-study"; scenes = defaultDayScenes;
+      };
+    }""",
+        address_by_name={
+            "lamp-a": "0xaaaa",
+            "lamp-b": "0xaaaa",  # duplicate ieee
+            "hue-s-study": "0xff01",
+        },
+    )
+    assert "must be unique per device" in err
