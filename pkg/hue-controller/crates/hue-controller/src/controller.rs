@@ -612,11 +612,15 @@ impl Controller {
             let Some(room) = self.topology.room_by_name(room_name) else {
                 return;
             };
+            // Use the highest max_illuminance across all motion sensors
+            // in the room. When multiple sensors have different thresholds,
+            // the most permissive one wins — if any sensor considers the
+            // room dark enough, motion-on should fire.
             let max_lux = room
                 .bound_motion
                 .iter()
-                .find(|m| m.sensor == sensor)
-                .and_then(|m| m.max_illuminance);
+                .filter_map(|m| m.max_illuminance)
+                .max();
             let cooldown_ms = room.motion_off_cooldown_seconds * 1000;
             let hour = self.clock.local_hour();
             let scenes = active_slot_scene_ids(&room.scenes, hour);
