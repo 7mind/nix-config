@@ -6,8 +6,11 @@
 //!   * **Validation:** every `parent` reference resolves; the parent
 //!     graph is acyclic; every device referenced by a room exists in the
 //!     catalog and has a compatible kind; group ids and friendly_names
-//!     are unique; member references point at known lights; tap button
-//!     bindings are unique per (tap, button) pair.
+//!     are unique; member references point at known lights. A (tap,
+//!     button) pair MAY be claimed by more than one room — the runtime
+//!     dispatches the press to every claiming room in turn — but a
+//!     warning is logged so an accidentally-shared button is still
+//!     visible at startup.
 //!   * **Indexing:** fast lookups for the runtime hot path:
 //!       - room lookup by name
 //!       - room lookup by group friendly_name (incoming z2m group state)
@@ -78,17 +81,6 @@ pub enum TopologyError {
         room: RoomName,
         device: FriendlyName,
         kind: &'static str,
-    },
-
-    #[error(
-        "tap binding ({device:?}, button {button}) is claimed by both rooms {first:?} \
-         and {second:?}"
-    )]
-    DuplicateTapBinding {
-        device: FriendlyName,
-        button: u8,
-        first: RoomName,
-        second: RoomName,
     },
 
     #[error("room {room:?} declares tap device {device:?} without a button number")]
@@ -207,9 +199,12 @@ pub struct Topology {
     /// though in production each switch is bound to exactly one.
     switch_index: BTreeMap<FriendlyName, Vec<RoomName>>,
 
-    /// (tap_friendly_name, button) → room name. Each (tap, button) pair
-    /// is unique by validation.
-    tap_index: BTreeMap<(FriendlyName, u8), RoomName>,
+    /// (tap_friendly_name, button) → list of rooms it drives. The
+    /// runtime dispatches each press to every room in the list, in the
+    /// order they appear in the config. A list with more than one entry
+    /// is allowed but unusual; the topology builder logs a warning so
+    /// an accidental shared binding is visible at startup.
+    tap_index: BTreeMap<(FriendlyName, u8), Vec<RoomName>>,
 
     /// Motion sensor friendly_name → list of rooms it drives. Same shape
     /// as `switch_index`; production has each sensor in one room.
@@ -330,8 +325,10 @@ impl Topology {
         }
 
         // 6. Device bindings: catalog membership, kind matching, button
-        //    presence/absence, tap binding uniqueness across rooms.
-        let mut tap_binding_owner: BTreeMap<(FriendlyName, u8), RoomName> = BTreeMap::new();
+        //    presence/absence. Tap (device, button) pairs MAY be shared
+        //    across rooms — we collect every claimant and warn (not
+        //    fail) if a pair has more than one.
+        let mut tap_binding_owners: BTreeMap<(FriendlyName, u8), Vec<RoomName>> = BTreeMap::new();
         let mut switch_index: BTreeMap<FriendlyName, Vec<RoomName>> = BTreeMap::new();
         let mut motion_index: BTreeMap<FriendlyName, Vec<RoomName>> = BTreeMap::new();
         let mut bound_per_room: BTreeMap<
@@ -381,14 +378,10 @@ impl Topology {
                             }
                         })?;
                         let key = (binding.device.clone(), button);
-                        if let Some(prev) = tap_binding_owner.insert(key, room.name.clone()) {
-                            return Err(TopologyError::DuplicateTapBinding {
-                                device: binding.device.clone(),
-                                button,
-                                first: prev,
-                                second: room.name.clone(),
-                            });
-                        }
+                        tap_binding_owners
+                            .entry(key)
+                            .or_default()
+                            .push(room.name.clone());
                         entry.1.push(TapButtonBinding {
                             device: binding.device.clone(),
                             button,
@@ -425,14 +418,10 @@ impl Topology {
         // 7. Build resolved rooms now that all per-room data has been
         //    validated and split.
         let mut rooms: BTreeMap<RoomName, ResolvedRoom> = BTreeMap::new();
-        let mut tap_index: BTreeMap<(FriendlyName, u8), RoomName> = BTreeMap::new();
         for room in &config.rooms {
             let (bound_switches, bound_taps, bound_motion) = bound_per_room
                 .remove(&room.name)
                 .unwrap_or_else(|| (Vec::new(), Vec::new(), Vec::new()));
-            for tap in &bound_taps {
-                tap_index.insert((tap.device.clone(), tap.button), room.name.clone());
-            }
             rooms.insert(
                 room.name.clone(),
                 ResolvedRoom {
@@ -456,6 +445,24 @@ impl Topology {
             .values()
             .map(|r| (r.group_name.clone(), r.name.clone()))
             .collect();
+
+        // 8b. Tap binding index. Each (tap, button) pair maps to one or
+        //     more rooms; multi-room bindings get a startup warning so
+        //     accidentally-shared buttons are visible without failing
+        //     the build (the user might genuinely want one tap to drive
+        //     several zones with a single press).
+        let tap_index: BTreeMap<(FriendlyName, u8), Vec<RoomName>> = tap_binding_owners;
+        for ((device, button), claiming_rooms) in &tap_index {
+            if claiming_rooms.len() > 1 {
+                tracing::warn!(
+                    device = %device,
+                    button,
+                    rooms = ?claiming_rooms,
+                    "tap (device, button) pair claimed by multiple rooms; \
+                     each press will dispatch to every room in turn"
+                );
+            }
+        }
 
         // 9. Transitive descendants. Walk each room and gather every
         //    room reachable via the *inverse* of the parent edge.
@@ -532,9 +539,14 @@ impl Topology {
             .unwrap_or(&[])
     }
 
-    /// The single room (if any) bound to a (tap, button) pair.
-    pub fn room_for_tap_button(&self, tap: &str, button: u8) -> Option<&RoomName> {
-        self.tap_index.get(&(tap.to_string(), button))
+    /// Rooms bound to a (tap, button) pair. Empty if the pair is
+    /// unclaimed; almost always a single-element slice; longer when
+    /// the user has intentionally bound one button to several zones.
+    pub fn rooms_for_tap_button(&self, tap: &str, button: u8) -> &[RoomName] {
+        self.tap_index
+            .get(&(tap.to_string(), button))
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
     }
 
     /// Rooms driven by a motion sensor friendly_name.
@@ -760,14 +772,14 @@ mod tests {
         let topo = Topology::build(&cfg).unwrap();
 
         assert_eq!(
-            topo.room_for_tap_button("hue-ts-foo", 1),
-            Some(&"kitchen-all".to_string())
+            topo.rooms_for_tap_button("hue-ts-foo", 1),
+            &["kitchen-all".to_string()]
         );
         assert_eq!(
-            topo.room_for_tap_button("hue-ts-foo", 2),
-            Some(&"kitchen-cooker".to_string())
+            topo.rooms_for_tap_button("hue-ts-foo", 2),
+            &["kitchen-cooker".to_string()]
         );
-        assert_eq!(topo.room_for_tap_button("hue-ts-foo", 3), None);
+        assert!(topo.rooms_for_tap_button("hue-ts-foo", 3).is_empty());
     }
 
     #[test]
@@ -914,7 +926,10 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_tap_binding_rejected() {
+    fn shared_tap_binding_routes_to_every_claiming_room() {
+        // Same (tap, button) pair claimed by two rooms — used to be a
+        // hard error, now allowed (with a startup warning emitted via
+        // tracing). The runtime dispatches each press to every room.
         let cfg = config(
             vec![
                 ("hue-l-a", light("0xa")),
@@ -926,11 +941,11 @@ mod tests {
                 room("b", 2, vec!["hue-l-b/11"], vec![binding("hue-ts-foo", Some(1))], None),
             ],
         );
-        let err = Topology::build(&cfg).unwrap_err();
-        assert!(matches!(
-            err,
-            TopologyError::DuplicateTapBinding { button: 1, .. }
-        ));
+        let topo = Topology::build(&cfg).unwrap();
+        assert_eq!(
+            topo.rooms_for_tap_button("hue-ts-foo", 1),
+            &["a".to_string(), "b".to_string()]
+        );
     }
 
     #[test]

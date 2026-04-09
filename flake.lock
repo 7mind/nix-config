@@ -1161,11 +1161,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1772913788,
-        "narHash": "sha256-RRxeyOTuAvMrljbkpYZOdSIkPn3nGMAYOjrnx1fC1Pw=",
+        "lastModified": 1775694762,
+        "narHash": "sha256-0JYG81uZr59dlBO3W6uMzlbURVJT683baMU1xBN4/TE=",
         "owner": "pshirshov",
         "repo": "qendercore-adapter",
-        "rev": "dc0bfa24a7c9423bf1dda945e458756b078ba34f",
+        "rev": "03a78a30962bc12eca920d79a38b672c4c9e48e6",
         "type": "github"
       },
       "original": {

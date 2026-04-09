@@ -321,11 +321,17 @@ impl Controller {
     }
 
     fn handle_tap_action(&mut self, device: &str, button: u8, ts: Instant) -> Vec<Action> {
-        let Some(room_name) = self.topology.room_for_tap_button(device, button).cloned() else {
+        let rooms: Vec<RoomName> = self
+            .topology
+            .rooms_for_tap_button(device, button)
+            .to_vec();
+        if rooms.is_empty() {
             return Vec::new();
-        };
+        }
         let mut out = Vec::new();
-        self.tap_press(&room_name, device, button, ts, &mut out);
+        for room_name in &rooms {
+            self.tap_press(room_name, device, button, ts, &mut out);
+        }
         out
     }
 
