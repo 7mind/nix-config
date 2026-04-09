@@ -40,10 +40,14 @@ pub struct ActionRule {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Trigger {
-    /// A Hue Tap button was pressed.
+    /// A tap button was pressed (Hue Tap or Sonoff orb switch).
     Tap {
         device: String,
         button: u8,
+        /// `None` matches press/single taps. `Some("double")` matches
+        /// double-taps only. Omit in config for standard single-tap.
+        #[serde(default)]
+        action: Option<String>,
     },
 
     /// A Hue dimmer wall switch "on" button was pressed.

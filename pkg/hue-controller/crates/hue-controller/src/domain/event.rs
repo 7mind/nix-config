@@ -17,10 +17,12 @@ pub enum Event {
         ts: Instant,
     },
 
-    /// A Hue Tap button was pressed (each button is a distinct event).
+    /// A tap button was pressed (Hue Tap or Sonoff orb switch).
     TapAction {
         device: String,
         button: u8,
+        /// `None` for press/single, `Some("double")` for double-tap.
+        action: Option<String>,
         ts: Instant,
     },
 
@@ -96,10 +98,38 @@ impl SwitchAction {
     }
 }
 
-/// Parse a tap action payload (`"press_1".."press_4"`) into a button
-/// number. Returns `None` for anything else.
-pub fn parse_tap_action(s: &str) -> Option<u8> {
-    s.strip_prefix("press_").and_then(|n| n.parse::<u8>().ok())
+/// Parsed tap action: button number + optional action qualifier.
+///
+/// Hue taps send `press_N`, Sonoff orb switches send `single_button_N`
+/// and `double_button_N`. The action qualifier distinguishes tap types:
+///   - `None` = standard press / single tap (the default)
+///   - `Some("double")` = double tap
+pub struct TapActionParsed {
+    pub button: u8,
+    /// `None` for `press_N` and `single_button_N`; `Some("double")` for
+    /// `double_button_N`. Extensible for future tap types (long press, etc.).
+    pub action: Option<String>,
+}
+
+/// Parse a tap action payload into a button number + action qualifier.
+/// Returns `None` for unrecognized payloads.
+pub fn parse_tap_action(s: &str) -> Option<TapActionParsed> {
+    // Hue Tap: "press_1" .. "press_4"
+    if let Some(n) = s.strip_prefix("press_") {
+        return n.parse::<u8>().ok().map(|button| TapActionParsed { button, action: None });
+    }
+    // Sonoff single: "single_button_1" .. "single_button_4"
+    if let Some(n) = s.strip_prefix("single_button_") {
+        return n.parse::<u8>().ok().map(|button| TapActionParsed { button, action: None });
+    }
+    // Sonoff double: "double_button_1" .. "double_button_4"
+    if let Some(n) = s.strip_prefix("double_button_") {
+        return n.parse::<u8>().ok().map(|button| TapActionParsed {
+            button,
+            action: Some("double".to_string()),
+        });
+    }
+    None
 }
 
 #[cfg(test)]
@@ -125,11 +155,34 @@ mod tests {
     }
 
     #[test]
-    fn tap_action_parse() {
-        assert_eq!(parse_tap_action("press_1"), Some(1));
-        assert_eq!(parse_tap_action("press_4"), Some(4));
-        assert_eq!(parse_tap_action("press_42"), Some(42));
-        assert_eq!(parse_tap_action("press_x"), None);
-        assert_eq!(parse_tap_action("hold_1"), None);
+    fn tap_action_parse_hue_press() {
+        let p = parse_tap_action("press_1").unwrap();
+        assert_eq!(p.button, 1);
+        assert!(p.action.is_none());
+
+        let p = parse_tap_action("press_4").unwrap();
+        assert_eq!(p.button, 4);
+        assert!(p.action.is_none());
+    }
+
+    #[test]
+    fn tap_action_parse_sonoff_single() {
+        let p = parse_tap_action("single_button_1").unwrap();
+        assert_eq!(p.button, 1);
+        assert!(p.action.is_none());
+    }
+
+    #[test]
+    fn tap_action_parse_sonoff_double() {
+        let p = parse_tap_action("double_button_2").unwrap();
+        assert_eq!(p.button, 2);
+        assert_eq!(p.action.as_deref(), Some("double"));
+    }
+
+    #[test]
+    fn tap_action_parse_unknown_returns_none() {
+        assert!(parse_tap_action("hold_1").is_none());
+        assert!(parse_tap_action("press_x").is_none());
+        assert!(parse_tap_action("triple_button_1").is_none());
     }
 }

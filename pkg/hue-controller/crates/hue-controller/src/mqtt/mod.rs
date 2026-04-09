@@ -253,10 +253,11 @@ fn parse_event(topology: &Topology, p: &Publish) -> Option<Event> {
             });
         }
         if topology.all_tap_names().contains(name) {
-            let button = parse_tap_action(payload_text)?;
+            let parsed = parse_tap_action(payload_text)?;
             return Some(Event::TapAction {
                 device: name.to_string(),
-                button,
+                button: parsed.button,
+                action: parsed.action,
                 ts: now,
             });
         }

@@ -272,8 +272,9 @@ pub struct Topology {
     action_switch_on_index: BTreeMap<FriendlyName, Vec<usize>>,
     action_switch_off_index: BTreeMap<FriendlyName, Vec<usize>>,
 
-    /// Tap action → action rule indexes. Keyed by (tap, button).
-    action_tap_index: BTreeMap<(FriendlyName, u8), Vec<usize>>,
+    /// Tap action → action rule indexes. Keyed by (tap, button, action).
+    /// `action` is `None` for single/press, `Some("double")` for double-tap.
+    action_tap_index: BTreeMap<(FriendlyName, u8, Option<String>), Vec<usize>>,
 
     /// PowerBelow action rule indexes, keyed by plug device name.
     action_power_below_index: BTreeMap<FriendlyName, Vec<usize>>,
@@ -590,7 +591,7 @@ impl Topology {
         let mut actions: Vec<ResolvedAction> = Vec::new();
         let mut action_switch_on_index: BTreeMap<FriendlyName, Vec<usize>> = BTreeMap::new();
         let mut action_switch_off_index: BTreeMap<FriendlyName, Vec<usize>> = BTreeMap::new();
-        let mut action_tap_index: BTreeMap<(FriendlyName, u8), Vec<usize>> = BTreeMap::new();
+        let mut action_tap_index: BTreeMap<(FriendlyName, u8, Option<String>), Vec<usize>> = BTreeMap::new();
         let mut action_power_below_index: BTreeMap<FriendlyName, Vec<usize>> = BTreeMap::new();
 
         for rule in &config.actions {
@@ -609,7 +610,7 @@ impl Topology {
             })?;
 
             match &rule.trigger {
-                Trigger::Tap { device, button } => {
+                Trigger::Tap { device, button, action } => {
                     if !trigger_entry.is_tap() {
                         return Err(TopologyError::ActionTriggerWrongDeviceKind {
                             rule: rule.name.clone(),
@@ -621,7 +622,7 @@ impl Topology {
                     }
                     let idx = actions.len();
                     action_tap_index
-                        .entry((device.clone(), *button))
+                        .entry((device.clone(), *button, action.clone()))
                         .or_default()
                         .push(idx);
                 }
@@ -790,9 +791,12 @@ impl Topology {
         self.switch_index.keys().map(String::as_str).collect()
     }
 
-    /// All distinct tap friendly names.
+    /// All distinct tap friendly names (from both room bindings and
+    /// action rules).
     pub fn all_tap_names(&self) -> BTreeSet<&str> {
-        self.tap_index.keys().map(|(d, _)| d.as_str()).collect()
+        let mut names: BTreeSet<&str> = self.tap_index.keys().map(|(d, _)| d.as_str()).collect();
+        names.extend(self.action_tap_index.keys().map(|(d, _, _)| d.as_str()));
+        names
     }
 
     /// All distinct motion sensor friendly names.
@@ -831,10 +835,12 @@ impl Topology {
             .unwrap_or(&[])
     }
 
-    /// Action rule indexes triggered by a tap button press.
-    pub fn actions_for_tap(&self, tap: &str, button: u8) -> &[usize] {
+    /// Action rule indexes triggered by a tap button press with a
+    /// specific action qualifier (None = single/press, Some("double") =
+    /// double-tap).
+    pub fn actions_for_tap(&self, tap: &str, button: u8, action: Option<&str>) -> &[usize] {
         self.action_tap_index
-            .get(&(tap.to_string(), button))
+            .get(&(tap.to_string(), button, action.map(String::from)))
             .map(Vec::as_slice)
             .unwrap_or(&[])
     }
@@ -1334,14 +1340,14 @@ mod tests {
             vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
             vec![ActionRule {
                 name: "printer-toggle".into(),
-                trigger: Trigger::Tap { device: "hue-ts-foo".into(), button: 3 },
+                trigger: Trigger::Tap { action: None, device: "hue-ts-foo".into(), button: 3 },
                 effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-printer".into() },
             }],
         );
         let topo = Topology::build(&cfg).unwrap();
         assert_eq!(topo.actions().len(), 1);
-        assert_eq!(topo.actions_for_tap("hue-ts-foo", 3), &[0]);
-        assert!(topo.actions_for_tap("hue-ts-foo", 1).is_empty());
+        assert_eq!(topo.actions_for_tap("hue-ts-foo", 3, None), &[0]);
+        assert!(topo.actions_for_tap("hue-ts-foo", 1, None).is_empty());
         assert!(topo.is_plug("z2m-p-printer"));
         assert!(!topo.is_plug("hue-l-a"));
     }
@@ -1429,7 +1435,7 @@ mod tests {
             vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
             vec![ActionRule {
                 name: "bad".into(),
-                trigger: Trigger::Tap { device: "hue-s-foo".into(), button: 1 },
+                trigger: Trigger::Tap { action: None, device: "hue-s-foo".into(), button: 1 },
                 effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-printer".into() },
             }],
         );
@@ -1447,7 +1453,7 @@ mod tests {
             vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
             vec![ActionRule {
                 name: "bad".into(),
-                trigger: Trigger::Tap { device: "hue-ts-foo".into(), button: 1 },
+                trigger: Trigger::Tap { action: None, device: "hue-ts-foo".into(), button: 1 },
                 effect: Effect::Toggle { confirm_off_seconds: None, target: "hue-l-a".into() },
             }],
         );
@@ -1467,12 +1473,12 @@ mod tests {
             vec![
                 ActionRule {
                     name: "dupe".into(),
-                    trigger: Trigger::Tap { device: "hue-ts-foo".into(), button: 1 },
+                    trigger: Trigger::Tap { action: None, device: "hue-ts-foo".into(), button: 1 },
                     effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-a".into() },
                 },
                 ActionRule {
                     name: "dupe".into(),
-                    trigger: Trigger::Tap { device: "hue-ts-foo".into(), button: 2 },
+                    trigger: Trigger::Tap { action: None, device: "hue-ts-foo".into(), button: 2 },
                     effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-a".into() },
                 },
             ],
@@ -1491,7 +1497,7 @@ mod tests {
             vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
             vec![ActionRule {
                 name: "bad".into(),
-                trigger: Trigger::Tap { device: "ghost".into(), button: 1 },
+                trigger: Trigger::Tap { action: None, device: "ghost".into(), button: 1 },
                 effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-a".into() },
             }],
         );
@@ -1509,7 +1515,7 @@ mod tests {
             vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
             vec![ActionRule {
                 name: "bad".into(),
-                trigger: Trigger::Tap { device: "hue-ts-foo".into(), button: 1 },
+                trigger: Trigger::Tap { action: None, device: "hue-ts-foo".into(), button: 1 },
                 effect: Effect::Toggle { confirm_off_seconds: None, target: "ghost".into() },
             }],
         );

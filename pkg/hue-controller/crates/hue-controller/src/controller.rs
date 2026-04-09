@@ -168,10 +168,16 @@ impl Controller {
             Event::TapAction {
                 ref device,
                 button,
+                ref action,
                 ts,
             } => {
-                let mut out = self.handle_tap_action(device, button, ts);
-                out.extend(self.dispatch_tap_actions(device, button, ts));
+                // Room scene cycling only fires on single/press taps.
+                let mut out = if action.is_none() {
+                    self.handle_tap_action(device, button, ts)
+                } else {
+                    Vec::new()
+                };
+                out.extend(self.dispatch_tap_actions(device, button, action.as_deref(), ts));
                 out
             }
             Event::Occupancy {
@@ -825,8 +831,8 @@ impl Controller {
     }
 
     /// Execute action rules triggered by a tap button press.
-    fn dispatch_tap_actions(&mut self, device: &str, button: u8, ts: Instant) -> Vec<Action> {
-        let indexes = self.topology.actions_for_tap(device, button).to_vec();
+    fn dispatch_tap_actions(&mut self, device: &str, button: u8, action: Option<&str>, ts: Instant) -> Vec<Action> {
+        let indexes = self.topology.actions_for_tap(device, button, action).to_vec();
         self.execute_action_rules(&indexes, ts)
     }
 
@@ -1345,6 +1351,7 @@ mod tests {
         let mut c = kitchen_controller(clk.clone());
 
         let actions = c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 2,
             ts: clk.now(),
@@ -1368,6 +1375,7 @@ mod tests {
         let mut c = kitchen_controller(clk.clone());
 
         c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 2,
             ts: clk.now(),
@@ -1375,6 +1383,7 @@ mod tests {
         clk.advance(Duration::from_millis(200));
 
         let actions = c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 2,
             ts: clk.now(),
@@ -1395,6 +1404,7 @@ mod tests {
         let mut c = kitchen_controller(clk.clone());
 
         c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 2,
             ts: clk.now(),
@@ -1403,6 +1413,7 @@ mod tests {
         clk.advance(Duration::from_millis(1500));
 
         let actions = c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 2,
             ts: clk.now(),
@@ -1424,6 +1435,7 @@ mod tests {
 
         // press 1: scene 1
         c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 2,
             ts: clk.now(),
@@ -1431,6 +1443,7 @@ mod tests {
         clk.advance(Duration::from_millis(100));
         // press 2: scene 2
         c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 2,
             ts: clk.now(),
@@ -1438,6 +1451,7 @@ mod tests {
         clk.advance(Duration::from_millis(100));
         // press 3: scene 3
         c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 2,
             ts: clk.now(),
@@ -1445,6 +1459,7 @@ mod tests {
         clk.advance(Duration::from_millis(100));
         // press 4: wraps to scene 1
         let actions = c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 2,
             ts: clk.now(),
@@ -1471,6 +1486,7 @@ mod tests {
 
         // 1. press button 1 (parent kitchen-all) → fresh on
         let p = c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 1,
             ts: clk.now(),
@@ -1490,6 +1506,7 @@ mod tests {
 
         // 2. press button 2 (child kitchen-cooker) → expire path → OFF
         let actions = c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 2,
             ts: clk.now(),
@@ -1510,6 +1527,7 @@ mod tests {
         let mut c = kitchen_controller(clk.clone());
 
         c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 1,
             ts: clk.now(),
@@ -1517,6 +1535,7 @@ mod tests {
         clk.advance(Duration::from_millis(2500)); // well past the cycle window
 
         let actions = c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 2,
             ts: clk.now(),
@@ -1537,6 +1556,7 @@ mod tests {
 
         // parent on
         c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 1,
             ts: clk.now(),
@@ -1544,6 +1564,7 @@ mod tests {
         clk.advance(Duration::from_millis(100));
         // child off (the bug-fix path)
         c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 2,
             ts: clk.now(),
@@ -1551,6 +1572,7 @@ mod tests {
         clk.advance(Duration::from_millis(100));
         // child on (fresh — scene 1)
         let actions = c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 2,
             ts: clk.now(),
@@ -1571,6 +1593,7 @@ mod tests {
 
         // child on
         c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 2,
             ts: clk.now(),
@@ -1578,6 +1601,7 @@ mod tests {
         clk.advance(Duration::from_millis(100));
         // parent press → parent's own cache says off → fresh on
         let actions = c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 1,
             ts: clk.now(),
@@ -1597,6 +1621,7 @@ mod tests {
         let mut c = kitchen_controller(clk.clone());
 
         c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 1,
             ts: clk.now(),
@@ -1604,6 +1629,7 @@ mod tests {
         clk.advance(Duration::from_millis(200));
         // Cycle the parent.
         c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 1,
             ts: clk.now(),
@@ -1611,6 +1637,7 @@ mod tests {
         clk.advance(Duration::from_millis(200));
         // Child press should still toggle off.
         let actions = c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 2,
             ts: clk.now(),
@@ -1631,6 +1658,7 @@ mod tests {
 
         // cooker on
         c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 2,
             ts: clk.now(),
@@ -1638,6 +1666,7 @@ mod tests {
         clk.advance(Duration::from_millis(100));
         // dining on (independent — its own state was off)
         let actions = c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-foo".into(),
             button: 3,
             ts: clk.now(),
@@ -2550,6 +2579,7 @@ mod tests {
             vec![ActionRule {
                 name: "printer-toggle".into(),
                 trigger: Trigger::Tap {
+                    action: None,
                     device: "hue-ts-office".into(),
                     button: 3,
                 },
@@ -2562,6 +2592,7 @@ mod tests {
 
         // Plug starts off. Tap button 3 → toggle ON.
         let actions = c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-office".into(),
             button: 3,
             ts: clk.now(),
@@ -2574,6 +2605,7 @@ mod tests {
         // Tap again → toggle OFF.
         clk.advance(Duration::from_secs(2));
         let actions = c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-office".into(),
             button: 3,
             ts: clk.now(),
@@ -2754,6 +2786,7 @@ mod tests {
                 ActionRule {
                     name: "printer-toggle".into(),
                     trigger: Trigger::Tap {
+                    action: None,
                         device: "hue-ts-office".into(),
                         button: 3,
                     },
@@ -2778,6 +2811,7 @@ mod tests {
 
         // Turn on via tap.
         let _ = c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-office".into(),
             button: 3,
             ts: clk.now(),
@@ -2805,6 +2839,7 @@ mod tests {
         // Re-arm: tap turns it back on.
         clk.advance(Duration::from_secs(1));
         let actions = c.handle_event(Event::TapAction {
+            action: None,
             device: "hue-ts-office".into(),
             button: 3,
             ts: clk.now(),

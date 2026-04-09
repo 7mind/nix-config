@@ -181,8 +181,11 @@ pub fn summarize_event(event: &crate::domain::event::Event) -> String {
             device, action, ..
         } => format!("switch {action:?} on {device}"),
         crate::domain::event::Event::TapAction {
-            device, button, ..
-        } => format!("tap press_{button} on {device}"),
+            device, button, action, ..
+        } => {
+            let kind = action.as_deref().unwrap_or("press");
+            format!("tap {kind}_{button} on {device}")
+        }
         crate::domain::event::Event::Occupancy {
             sensor,
             occupied,
