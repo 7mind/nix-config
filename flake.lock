@@ -1088,11 +1088,11 @@
         "uv2nix": "uv2nix"
       },
       "locked": {
-        "lastModified": 1775687379,
-        "narHash": "sha256-RW8olIK79b8Nu9Wrsiw0daLiKJIcgJvV5sGie7JjHYc=",
+        "lastModified": 1775692848,
+        "narHash": "sha256-9/ErQ/gme551OYr6mPlv5HsVGZKu2CZ2V9kHCPg9eug=",
         "owner": "pshirshov",
         "repo": "python-pylontech",
-        "rev": "e23adecbec34adde2f40e515b5ba7862bb20d5d5",
+        "rev": "b7647afb108a14dfde2b654c718805de28a9c9ec",
         "type": "github"
       },
       "original": {

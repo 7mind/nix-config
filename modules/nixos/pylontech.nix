@@ -1,12 +1,12 @@
-{ config, lib, pkgs, cfg-flakes, cfg-meta, ... }:
+{ config, lib, cfg-flakes, cfg-meta, ... }:
 
 # Pylontech battery poller. Two implementations live side by side:
 #
 #   * `python` — the original Python `poller` from the upstream
 #     `python-pylontech` flake (`cfg-flakes.pylontech.default`).
 #   * `rust`   — the standalone Rust `pylontech-mqtt-adapter` crate
-#     shipped in the same upstream repo under `rust-mqtt-adapter/` and
-#     packaged via the overlay (`pkgs.pylontech-mqtt-adapter`).
+#     shipped in the same upstream flake as a separate package
+#     (`cfg-flakes.pylontech.pylontech-mqtt-adapter`).
 #
 # Selected via `smind.services.pylontech.implementation`. The host
 # config picks one; the other branch is dead code at evaluation time.
@@ -106,7 +106,7 @@ in
         wants = [ "network-online.target" "mosquitto.service" ];
         wantedBy = [ "multi-user.target" ];
         script = ''
-          exec ${pkgs.pylontech-mqtt-adapter}/bin/pylontech-mqtt-adapter \
+          exec ${cfg-flakes.pylontech.pylontech-mqtt-adapter}/bin/pylontech-mqtt-adapter \
             ${cfg.rs485Host} \
             --source-port ${toString cfg.rs485Port} \
             --interval-millis ${toString cfg.pollInterval} \

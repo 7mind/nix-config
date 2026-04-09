@@ -2,7 +2,6 @@
   pkgs,
   cfg-meta,
   cfg-flakes,
-  inputs,
   ...
 }:
 
@@ -96,27 +95,6 @@
         music-meta-fix = pkgs.callPackage "${cfg-meta.paths.pkg}/music-meta-fix/default.nix" { };
 
         hue-controller = pkgs.callPackage "${cfg-meta.paths.pkg}/hue-controller/default.nix" { };
-
-        # Standalone Rust MQTT adapter for Pylontech batteries.
-        # Lives in the upstream `python-pylontech` repo under
-        # `rust-mqtt-adapter/`. We don't depend on a flake-exposed package
-        # (the upstream flake only ships the Python poller), instead we
-        # build the crate directly from the input source.
-        pylontech-mqtt-adapter = pkgs.rustPlatform.buildRustPackage {
-          pname = "pylontech-mqtt-adapter";
-          version = "0.1.0";
-          src = inputs.pylontech + "/rust-mqtt-adapter";
-          cargoLock = {
-            lockFile = inputs.pylontech + "/rust-mqtt-adapter/Cargo.lock";
-          };
-          doCheck = true;
-          meta = {
-            description = "Standalone Rust MQTT adapter for Pylontech batteries";
-            license = pkgs.lib.licenses.mit;
-            mainProgram = "pylontech-mqtt-adapter";
-            platforms = pkgs.lib.platforms.linux;
-          };
-        };
 
         zigbee-mqtt-import = pkgs.callPackage "${cfg-meta.paths.pkg}/zigbee-mqtt-import/default.nix" { };
         linux-3-finger-drag = pkgs.callPackage "${cfg-meta.paths.pkg}/linux-3-finger-drag/default.nix" { };
