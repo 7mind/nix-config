@@ -83,8 +83,8 @@ pub struct CommonFields {
     pub ieee_address: IeeeAddress,
 
     /// Optional human-readable description (currently used for taps with
-    /// physical labels like "label:1"). Provisioning ignores this; only
-    /// kept around for diagnostics and Nix-side display.
+    /// physical labels like "label:1"). Written to z2m via
+    /// `bridge/request/device/options` during provisioning.
     #[serde(default)]
     pub description: Option<String>,
 
@@ -110,6 +110,10 @@ impl DeviceCatalogEntry {
 
     pub fn ieee_address(&self) -> &IeeeAddress {
         &self.common().ieee_address
+    }
+
+    pub fn description(&self) -> Option<&str> {
+        self.common().description.as_deref()
     }
 
     pub fn options(&self) -> &BTreeMap<String, serde_json::Value> {

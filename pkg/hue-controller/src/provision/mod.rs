@@ -9,6 +9,11 @@
 //!      with `homeassistant_rename: true` so HA's entity ids follow.
 //!      Runs FIRST so all subsequent phases see the corrected names.
 //!
+//!   1b. **Descriptions.** Reconcile each device's z2m description against
+//!       the Nix config. Uses `bridge/request/device/options` to set
+//!       the `description` field. Only devices with an explicit
+//!       `description` in the catalog are touched.
+//!
 //!   2. **Groups.** Rename groups whose id is already in z2m but whose
 //!      friendly_name has drifted. Then (optionally) prune groups not in
 //!      the config. Then create missing groups. Then reconcile member
@@ -32,6 +37,7 @@
 //! convenience.
 
 pub mod client;
+mod descriptions;
 mod devices;
 mod groups;
 mod names;
@@ -128,16 +134,30 @@ pub async fn reconcile(
 
     let mut summary = ReconcileSummary::default();
 
+    // Fetch the device inventory once — used by both the names phase
+    // and the descriptions phase.
+    let existing_devices = retry_fetch(
+        "fetch zigbee2mqtt/bridge/devices",
+        options.fetch_attempts,
+        options.fetch_retry,
+        || client.fetch_devices(),
+    )
+    .await?;
+
     // Phase 1: device renames (only if name_by_address is non-empty).
     if !config.name_by_address.is_empty() {
-        let existing_devices = retry_fetch(
-            "fetch zigbee2mqtt/bridge/devices",
-            options.fetch_attempts,
-            options.fetch_retry,
-            || client.fetch_devices(),
-        )
-        .await?;
         let s = names::reconcile_names(&client, config, &existing_devices, &options).await?;
+        summary += s;
+        if s.touched > 0 && !options.dry_run {
+            tokio::time::sleep(options.settle).await;
+        }
+    }
+
+    // Phase 1b: device descriptions.
+    {
+        let s =
+            descriptions::reconcile_descriptions(&client, config, &existing_devices, &options)
+                .await?;
         summary += s;
         if s.touched > 0 && !options.dry_run {
             tokio::time::sleep(options.settle).await;

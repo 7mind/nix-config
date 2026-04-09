@@ -35,7 +35,7 @@
     };
 
     pylontech = {
-      url = "github:pshirshov/python-pylontech";
+      url = "github:pshirshov/mqtt-pylontech";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
     };

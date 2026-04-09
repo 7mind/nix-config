@@ -74,6 +74,9 @@ struct Z2mResponse {
 pub struct ExistingDevice {
     pub ieee_address: String,
     pub friendly_name: String,
+    /// Device description from z2m configuration. Empty string when
+    /// absent or explicitly blank.
+    pub description: String,
 }
 
 /// One member entry inside an existing group.
@@ -401,9 +404,15 @@ impl Z2mClient {
             ) else {
                 continue;
             };
+            let description = obj
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             out.push(ExistingDevice {
                 ieee_address: ieee.to_string(),
                 friendly_name: name.to_string(),
+                description,
             });
         }
         Ok(out)
@@ -544,6 +553,26 @@ impl Z2mClient {
             Err(Z2mClientError::FetchTimeout { .. }) => Ok(None),
             Err(e) => Err(e),
         }
+    }
+
+    /// Set device-level configuration via `bridge/request/device/options`.
+    /// This is the bridge API endpoint for device metadata like
+    /// `description`, `retain`, etc. — distinct from `set_device_options`
+    /// which writes to the device's `/set` topic for runtime options.
+    pub async fn set_device_bridge_options(
+        &self,
+        id: &str,
+        options: &Value,
+    ) -> Result<(), Z2mClientError> {
+        self.request(
+            "zigbee2mqtt/bridge/request/device/options",
+            serde_json::json!({
+                "id": id,
+                "options": options,
+            }),
+        )
+        .await?;
+        Ok(())
     }
 
     /// Write a single set of options to a device's `/set` topic. Same
