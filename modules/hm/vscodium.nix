@@ -27,9 +27,13 @@ in
     ];
 
     # sometimes vscodium borks extensions.json so it's better to make sure there is nothing before deployment
+    # when extensions dir is a nix store symlink (mutableExtensionsDir=false) the rm is a no-op
     home.activation.vscode-cleanup = lib.mkIf (!config.smind.hm.vscodium.mutableConfig)
       (config.lib.dag.entryBefore [ "writeBoundary" ] ''
-        rm -f "${config.home.homeDirectory}/.vscode-oss/extensions/extensions.json"
+        extJson="${config.home.homeDirectory}/.vscode-oss/extensions/extensions.json"
+        if [ -w "$extJson" ]; then
+          rm -f "$extJson"
+        fi
       '');
 
     # force overwrite all HM-managed VSCodium config files to prevent "would be clobbered" errors
