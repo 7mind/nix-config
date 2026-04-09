@@ -70,6 +70,24 @@ pub enum DeviceCatalogEntry {
         #[serde(default)]
         max_illuminance: Option<u32>,
     },
+
+    /// Zigbee smart plug (e.g. Sonoff, IKEA, Tuya). Controlled via
+    /// action rules rather than room scene cycling. The `variant` tag
+    /// identifies the hardware model, and `capabilities` lists what
+    /// z2m exposes the plug supports (derived from the variant on the
+    /// Nix side).
+    Plug {
+        #[serde(flatten)]
+        common: CommonFields,
+        /// Hardware variant identifier (e.g. "sonoff-power", "ikea-outlet").
+        /// Used for documentation and to gate capability-dependent action
+        /// triggers at config validation time.
+        variant: String,
+        /// Capabilities this plug exposes, derived from `variant` on the
+        /// Nix side. The Rust topology validator uses this to reject
+        /// `power_below` triggers on plugs that lack `"power"`.
+        capabilities: Vec<String>,
+    },
 }
 
 /// Fields every device catalog entry carries, regardless of kind. Lifted
@@ -104,7 +122,7 @@ impl DeviceCatalogEntry {
     pub fn common(&self) -> &CommonFields {
         match self {
             Self::Light(c) | Self::Switch(c) | Self::Tap(c) => c,
-            Self::MotionSensor { common, .. } => common,
+            Self::MotionSensor { common, .. } | Self::Plug { common, .. } => common,
         }
     }
 
@@ -121,10 +139,10 @@ impl DeviceCatalogEntry {
     }
 
     /// True for the kinds that can be put in a room's `devices` list as a
-    /// runtime input (i.e. anything except plain `Light`). Useful for
-    /// topology validation.
+    /// runtime input (i.e. switches, taps, and motion sensors — not lights
+    /// or plugs). Useful for topology validation.
     pub fn is_runtime_input(&self) -> bool {
-        !matches!(self, Self::Light(_))
+        !matches!(self, Self::Light(_) | Self::Plug { .. })
     }
 
     /// True if this kind is a Hue Tap.
@@ -140,6 +158,20 @@ impl DeviceCatalogEntry {
     /// True if this kind is a motion sensor.
     pub fn is_motion_sensor(&self) -> bool {
         matches!(self, Self::MotionSensor { .. })
+    }
+
+    /// True if this kind is a smart plug.
+    pub fn is_plug(&self) -> bool {
+        matches!(self, Self::Plug { .. })
+    }
+
+    /// True if this plug has the named capability (e.g. "power").
+    /// Returns false for non-plug devices.
+    pub fn has_capability(&self, cap: &str) -> bool {
+        match self {
+            Self::Plug { capabilities, .. } => capabilities.iter().any(|c| c == cap),
+            _ => false,
+        }
     }
 }
 
@@ -245,6 +277,54 @@ mod tests {
             result.is_err(),
             "deny_unknown_fields should reject ghost_field"
         );
+    }
+
+    #[test]
+    fn deserialize_plug_with_capabilities() {
+        let json = r#"{
+            "kind": "plug",
+            "ieee_address": "0xbb",
+            "variant": "sonoff-power",
+            "capabilities": ["on-off", "power", "energy"]
+        }"#;
+        let entry: DeviceCatalogEntry = serde_json::from_str(json).unwrap();
+        assert!(entry.is_plug());
+        assert!(entry.has_capability("power"));
+        assert!(entry.has_capability("on-off"));
+        assert!(!entry.has_capability("voltage"));
+        match entry {
+            DeviceCatalogEntry::Plug { variant, capabilities, .. } => {
+                assert_eq!(variant, "sonoff-power");
+                assert_eq!(capabilities, vec!["on-off", "power", "energy"]);
+            }
+            other => panic!("expected Plug, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn deserialize_plug_basic_no_power() {
+        let json = r#"{
+            "kind": "plug",
+            "ieee_address": "0xcc",
+            "variant": "sonoff-basic",
+            "capabilities": ["on-off"]
+        }"#;
+        let entry: DeviceCatalogEntry = serde_json::from_str(json).unwrap();
+        assert!(entry.is_plug());
+        assert!(!entry.has_capability("power"));
+    }
+
+    #[test]
+    fn plug_is_not_runtime_input() {
+        let json = r#"{
+            "kind": "plug",
+            "ieee_address": "0xdd",
+            "variant": "sonoff-power",
+            "capabilities": ["on-off", "power"]
+        }"#;
+        let entry: DeviceCatalogEntry = serde_json::from_str(json).unwrap();
+        // Plugs are not room input devices — they're action targets.
+        assert!(!entry.is_runtime_input());
     }
 
     #[test]

@@ -28,7 +28,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use thiserror::Error;
 
-use crate::config::{Config, DeviceCatalogEntry, Room};
+use crate::config::{Config, DeviceCatalogEntry, Room, Trigger};
 
 /// Stable name → resolved room data. Built from the raw `Config::rooms`
 /// after validation; the controller indexes everything by room name.
@@ -122,6 +122,47 @@ pub enum TopologyError {
         #[source]
         source: crate::config::scenes::SceneScheduleError,
     },
+
+    #[error("duplicate action rule name {0:?}")]
+    DuplicateActionName(String),
+
+    #[error(
+        "action rule {rule:?} trigger references device {device:?} which is not in the catalog"
+    )]
+    ActionTriggerUnknownDevice { rule: String, device: String },
+
+    #[error(
+        "action rule {rule:?} trigger kind {trigger_kind} requires a {expected_kind} device \
+         but {device:?} is a {actual_kind}"
+    )]
+    ActionTriggerWrongDeviceKind {
+        rule: String,
+        device: String,
+        trigger_kind: &'static str,
+        expected_kind: &'static str,
+        actual_kind: &'static str,
+    },
+
+    #[error(
+        "action rule {rule:?} effect targets device {device:?} which is not in the catalog"
+    )]
+    ActionEffectUnknownDevice { rule: String, device: String },
+
+    #[error(
+        "action rule {rule:?} effect targets device {device:?} which is a {kind} \
+         (only plugs can be action targets)"
+    )]
+    ActionEffectNotPlug { rule: String, device: String, kind: &'static str },
+
+    #[error(
+        "action rule {rule:?} uses power_below trigger on device {device:?} which \
+         lacks the \"power\" capability (variant: {variant})"
+    )]
+    ActionPowerBelowWithoutCapability {
+        rule: String,
+        device: String,
+        variant: String,
+    },
 }
 
 /// One tap button → room binding. The catalog lookup of the tap device
@@ -185,6 +226,14 @@ impl ResolvedRoom {
     }
 }
 
+/// One resolved action rule, ready for runtime dispatch.
+#[derive(Debug, Clone)]
+pub struct ResolvedAction {
+    pub name: String,
+    pub trigger: Trigger,
+    pub effect: crate::config::Effect,
+}
+
 /// The validated topology. Owned as `Arc<Topology>` by the daemon.
 #[derive(Debug)]
 pub struct Topology {
@@ -214,6 +263,23 @@ pub struct Topology {
     /// have rules — rule-less rooms have no per-zone state, so propagating
     /// "physically_on" to them would be pointless.
     descendants_by_room: BTreeMap<RoomName, Vec<RoomName>>,
+
+    /// Validated action rules, in config order.
+    actions: Vec<ResolvedAction>,
+
+    /// Switch action → action rule indexes. Keyed by switch
+    /// friendly_name; value is a list of indexes into `actions`.
+    action_switch_on_index: BTreeMap<FriendlyName, Vec<usize>>,
+    action_switch_off_index: BTreeMap<FriendlyName, Vec<usize>>,
+
+    /// Tap action → action rule indexes. Keyed by (tap, button).
+    action_tap_index: BTreeMap<(FriendlyName, u8), Vec<usize>>,
+
+    /// PowerBelow action rule indexes, keyed by plug device name.
+    action_power_below_index: BTreeMap<FriendlyName, Vec<usize>>,
+
+    /// All plug friendly_names from the device catalog.
+    plug_names: BTreeSet<FriendlyName>,
 }
 
 impl Topology {
@@ -354,6 +420,13 @@ impl Topology {
                             room: room.name.clone(),
                             device: binding.device.clone(),
                             kind: "light",
+                        });
+                    }
+                    DeviceCatalogEntry::Plug { .. } => {
+                        return Err(TopologyError::WrongDeviceKind {
+                            room: room.name.clone(),
+                            device: binding.device.clone(),
+                            kind: "plug",
                         });
                     }
                     DeviceCatalogEntry::Switch(_) => {
@@ -504,6 +577,138 @@ impl Topology {
             })
             .collect();
 
+        // 10. Collect all plug names from the catalog.
+        let plug_names: BTreeSet<FriendlyName> = config
+            .devices
+            .iter()
+            .filter(|(_, entry)| entry.is_plug())
+            .map(|(name, _)| name.clone())
+            .collect();
+
+        // 11. Validate action rules and build dispatch indexes.
+        let mut action_names: BTreeSet<String> = BTreeSet::new();
+        let mut actions: Vec<ResolvedAction> = Vec::new();
+        let mut action_switch_on_index: BTreeMap<FriendlyName, Vec<usize>> = BTreeMap::new();
+        let mut action_switch_off_index: BTreeMap<FriendlyName, Vec<usize>> = BTreeMap::new();
+        let mut action_tap_index: BTreeMap<(FriendlyName, u8), Vec<usize>> = BTreeMap::new();
+        let mut action_power_below_index: BTreeMap<FriendlyName, Vec<usize>> = BTreeMap::new();
+
+        for rule in &config.actions {
+            // Name uniqueness.
+            if !action_names.insert(rule.name.clone()) {
+                return Err(TopologyError::DuplicateActionName(rule.name.clone()));
+            }
+
+            // Validate trigger device.
+            let trigger_device = rule.trigger.device();
+            let trigger_entry = config.devices.get(trigger_device).ok_or_else(|| {
+                TopologyError::ActionTriggerUnknownDevice {
+                    rule: rule.name.clone(),
+                    device: trigger_device.to_string(),
+                }
+            })?;
+
+            match &rule.trigger {
+                Trigger::Tap { device, button } => {
+                    if !trigger_entry.is_tap() {
+                        return Err(TopologyError::ActionTriggerWrongDeviceKind {
+                            rule: rule.name.clone(),
+                            device: device.clone(),
+                            trigger_kind: "tap",
+                            expected_kind: "tap",
+                            actual_kind: kind_label(trigger_entry),
+                        });
+                    }
+                    let idx = actions.len();
+                    action_tap_index
+                        .entry((device.clone(), *button))
+                        .or_default()
+                        .push(idx);
+                }
+                Trigger::SwitchOn { device } => {
+                    if !trigger_entry.is_switch() {
+                        return Err(TopologyError::ActionTriggerWrongDeviceKind {
+                            rule: rule.name.clone(),
+                            device: device.clone(),
+                            trigger_kind: "switch_on",
+                            expected_kind: "switch",
+                            actual_kind: kind_label(trigger_entry),
+                        });
+                    }
+                    let idx = actions.len();
+                    action_switch_on_index
+                        .entry(device.clone())
+                        .or_default()
+                        .push(idx);
+                }
+                Trigger::SwitchOff { device } => {
+                    if !trigger_entry.is_switch() {
+                        return Err(TopologyError::ActionTriggerWrongDeviceKind {
+                            rule: rule.name.clone(),
+                            device: device.clone(),
+                            trigger_kind: "switch_off",
+                            expected_kind: "switch",
+                            actual_kind: kind_label(trigger_entry),
+                        });
+                    }
+                    let idx = actions.len();
+                    action_switch_off_index
+                        .entry(device.clone())
+                        .or_default()
+                        .push(idx);
+                }
+                Trigger::PowerBelow { device, .. } => {
+                    if !trigger_entry.is_plug() {
+                        return Err(TopologyError::ActionTriggerWrongDeviceKind {
+                            rule: rule.name.clone(),
+                            device: device.clone(),
+                            trigger_kind: "power_below",
+                            expected_kind: "plug",
+                            actual_kind: kind_label(trigger_entry),
+                        });
+                    }
+                    if !trigger_entry.has_capability("power") {
+                        let variant = match trigger_entry {
+                            DeviceCatalogEntry::Plug { variant, .. } => variant.clone(),
+                            _ => "unknown".into(),
+                        };
+                        return Err(TopologyError::ActionPowerBelowWithoutCapability {
+                            rule: rule.name.clone(),
+                            device: device.clone(),
+                            variant,
+                        });
+                    }
+                    let idx = actions.len();
+                    action_power_below_index
+                        .entry(device.clone())
+                        .or_default()
+                        .push(idx);
+                }
+            }
+
+            // Validate effect target — must be a plug.
+            let effect_target = rule.effect.target();
+            let effect_entry = config.devices.get(effect_target).ok_or_else(|| {
+                TopologyError::ActionEffectUnknownDevice {
+                    rule: rule.name.clone(),
+                    device: effect_target.to_string(),
+                }
+            })?;
+            if !effect_entry.is_plug() {
+                return Err(TopologyError::ActionEffectNotPlug {
+                    rule: rule.name.clone(),
+                    device: effect_target.to_string(),
+                    kind: kind_label(effect_entry),
+                });
+            }
+
+            actions.push(ResolvedAction {
+                name: rule.name.clone(),
+                trigger: rule.trigger.clone(),
+                effect: rule.effect.clone(),
+            });
+        }
+
         Ok(Self {
             rooms,
             by_group_name,
@@ -511,6 +716,12 @@ impl Topology {
             tap_index,
             motion_index,
             descendants_by_room,
+            actions,
+            action_switch_on_index,
+            action_switch_off_index,
+            action_tap_index,
+            action_power_below_index,
+            plug_names,
         })
     }
 
@@ -588,6 +799,53 @@ impl Topology {
     pub fn all_motion_sensor_names(&self) -> BTreeSet<&str> {
         self.motion_index.keys().map(String::as_str).collect()
     }
+
+    /// All plug device friendly names from the catalog.
+    pub fn all_plug_names(&self) -> &BTreeSet<FriendlyName> {
+        &self.plug_names
+    }
+
+    /// True if this device name is a known plug.
+    pub fn is_plug(&self, device: &str) -> bool {
+        self.plug_names.contains(device)
+    }
+
+    /// All resolved action rules.
+    pub fn actions(&self) -> &[ResolvedAction] {
+        &self.actions
+    }
+
+    /// Action rule indexes triggered by a switch "on" press.
+    pub fn actions_for_switch_on(&self, switch: &str) -> &[usize] {
+        self.action_switch_on_index
+            .get(switch)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
+    /// Action rule indexes triggered by a switch "off" press.
+    pub fn actions_for_switch_off(&self, switch: &str) -> &[usize] {
+        self.action_switch_off_index
+            .get(switch)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
+    /// Action rule indexes triggered by a tap button press.
+    pub fn actions_for_tap(&self, tap: &str, button: u8) -> &[usize] {
+        self.action_tap_index
+            .get(&(tap.to_string(), button))
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
+    /// Action rule indexes with PowerBelow triggers for a plug device.
+    pub fn actions_for_power_below(&self, plug: &str) -> &[usize] {
+        self.action_power_below_index
+            .get(plug)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
 }
 
 /// Split a `"friendly_name/endpoint"` member key into its parts. Returns
@@ -605,13 +863,14 @@ fn kind_label(entry: &DeviceCatalogEntry) -> &'static str {
         DeviceCatalogEntry::Switch(_) => "switch",
         DeviceCatalogEntry::Tap(_) => "tap",
         DeviceCatalogEntry::MotionSensor { .. } => "motion-sensor",
+        DeviceCatalogEntry::Plug { .. } => "plug",
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{CommonFields, DeviceCatalogEntry, Room};
+    use crate::config::{ActionRule, CommonFields, DeviceCatalogEntry, Effect, Room, Trigger};
     use crate::config::scenes::{Scene, SceneSchedule, Slot};
     use std::collections::BTreeMap;
 
@@ -698,7 +957,27 @@ mod tests {
         }
     }
 
+    fn plug_dev(ieee: &str, variant: &str, caps: &[&str]) -> DeviceCatalogEntry {
+        DeviceCatalogEntry::Plug {
+            common: CommonFields {
+                ieee_address: ieee.into(),
+                description: None,
+                options: BTreeMap::new(),
+            },
+            variant: variant.into(),
+            capabilities: caps.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
     fn config(devices: Vec<(&str, DeviceCatalogEntry)>, rooms: Vec<Room>) -> Config {
+        config_with_actions(devices, rooms, vec![])
+    }
+
+    fn config_with_actions(
+        devices: Vec<(&str, DeviceCatalogEntry)>,
+        rooms: Vec<Room>,
+        actions: Vec<ActionRule>,
+    ) -> Config {
         let devices = devices
             .into_iter()
             .map(|(n, e)| (n.to_string(), e))
@@ -707,6 +986,7 @@ mod tests {
             name_by_address: BTreeMap::new(),
             devices,
             rooms,
+            actions,
             defaults: Default::default(),
         }
     }
@@ -1022,6 +1302,219 @@ mod tests {
         );
         let err = Topology::build(&cfg).unwrap_err();
         assert!(matches!(err, TopologyError::MalformedMember { .. }));
+    }
+
+    #[test]
+    fn plug_in_room_devices_rejected() {
+        let cfg = config(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("z2m-p-foo", plug_dev("0xf", "sonoff-power", &["on-off", "power"])),
+            ],
+            vec![room(
+                "a",
+                1,
+                vec!["hue-l-a/11"],
+                vec![binding("z2m-p-foo", None)],
+                None,
+            )],
+        );
+        let err = Topology::build(&cfg).unwrap_err();
+        assert!(matches!(err, TopologyError::WrongDeviceKind { kind: "plug", .. }));
+    }
+
+    #[test]
+    fn action_tap_toggle_builds_and_indexes() {
+        let cfg = config_with_actions(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("hue-ts-foo", tap_dev("0x1")),
+                ("z2m-p-printer", plug_dev("0xf", "sonoff-power", &["on-off", "power"])),
+            ],
+            vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+            vec![ActionRule {
+                name: "printer-toggle".into(),
+                trigger: Trigger::Tap { device: "hue-ts-foo".into(), button: 3 },
+                effect: Effect::Toggle { target: "z2m-p-printer".into() },
+            }],
+        );
+        let topo = Topology::build(&cfg).unwrap();
+        assert_eq!(topo.actions().len(), 1);
+        assert_eq!(topo.actions_for_tap("hue-ts-foo", 3), &[0]);
+        assert!(topo.actions_for_tap("hue-ts-foo", 1).is_empty());
+        assert!(topo.is_plug("z2m-p-printer"));
+        assert!(!topo.is_plug("hue-l-a"));
+    }
+
+    #[test]
+    fn action_switch_on_off_builds_and_indexes() {
+        let cfg = config_with_actions(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("hue-s-office", switch_dev("0x1")),
+                ("z2m-p-lamp", plug_dev("0xf", "sonoff-basic", &["on-off"])),
+            ],
+            vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+            vec![
+                ActionRule {
+                    name: "lamp-on".into(),
+                    trigger: Trigger::SwitchOn { device: "hue-s-office".into() },
+                    effect: Effect::TurnOn { target: "z2m-p-lamp".into() },
+                },
+                ActionRule {
+                    name: "lamp-off".into(),
+                    trigger: Trigger::SwitchOff { device: "hue-s-office".into() },
+                    effect: Effect::TurnOff { target: "z2m-p-lamp".into() },
+                },
+            ],
+        );
+        let topo = Topology::build(&cfg).unwrap();
+        assert_eq!(topo.actions().len(), 2);
+        assert_eq!(topo.actions_for_switch_on("hue-s-office"), &[0]);
+        assert_eq!(topo.actions_for_switch_off("hue-s-office"), &[1]);
+    }
+
+    #[test]
+    fn action_power_below_builds_and_indexes() {
+        let cfg = config_with_actions(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("z2m-p-printer", plug_dev("0xf", "sonoff-power", &["on-off", "power"])),
+            ],
+            vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+            vec![ActionRule {
+                name: "printer-kill".into(),
+                trigger: Trigger::PowerBelow {
+                    device: "z2m-p-printer".into(),
+                    watts: 5.0,
+                    for_seconds: 300,
+                },
+                effect: Effect::TurnOff { target: "z2m-p-printer".into() },
+            }],
+        );
+        let topo = Topology::build(&cfg).unwrap();
+        assert_eq!(topo.actions_for_power_below("z2m-p-printer"), &[0]);
+    }
+
+    #[test]
+    fn action_power_below_without_capability_rejected() {
+        let cfg = config_with_actions(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("z2m-p-basic", plug_dev("0xf", "sonoff-basic", &["on-off"])),
+            ],
+            vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+            vec![ActionRule {
+                name: "kill".into(),
+                trigger: Trigger::PowerBelow {
+                    device: "z2m-p-basic".into(),
+                    watts: 5.0,
+                    for_seconds: 300,
+                },
+                effect: Effect::TurnOff { target: "z2m-p-basic".into() },
+            }],
+        );
+        let err = Topology::build(&cfg).unwrap_err();
+        assert!(matches!(err, TopologyError::ActionPowerBelowWithoutCapability { .. }));
+    }
+
+    #[test]
+    fn action_trigger_wrong_device_kind_rejected() {
+        let cfg = config_with_actions(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("hue-s-foo", switch_dev("0x1")),
+                ("z2m-p-printer", plug_dev("0xf", "sonoff-power", &["on-off", "power"])),
+            ],
+            vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+            vec![ActionRule {
+                name: "bad".into(),
+                trigger: Trigger::Tap { device: "hue-s-foo".into(), button: 1 },
+                effect: Effect::Toggle { target: "z2m-p-printer".into() },
+            }],
+        );
+        let err = Topology::build(&cfg).unwrap_err();
+        assert!(matches!(err, TopologyError::ActionTriggerWrongDeviceKind { .. }));
+    }
+
+    #[test]
+    fn action_effect_not_plug_rejected() {
+        let cfg = config_with_actions(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("hue-ts-foo", tap_dev("0x1")),
+            ],
+            vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+            vec![ActionRule {
+                name: "bad".into(),
+                trigger: Trigger::Tap { device: "hue-ts-foo".into(), button: 1 },
+                effect: Effect::Toggle { target: "hue-l-a".into() },
+            }],
+        );
+        let err = Topology::build(&cfg).unwrap_err();
+        assert!(matches!(err, TopologyError::ActionEffectNotPlug { .. }));
+    }
+
+    #[test]
+    fn duplicate_action_name_rejected() {
+        let cfg = config_with_actions(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("hue-ts-foo", tap_dev("0x1")),
+                ("z2m-p-a", plug_dev("0xf", "sonoff-basic", &["on-off"])),
+            ],
+            vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+            vec![
+                ActionRule {
+                    name: "dupe".into(),
+                    trigger: Trigger::Tap { device: "hue-ts-foo".into(), button: 1 },
+                    effect: Effect::Toggle { target: "z2m-p-a".into() },
+                },
+                ActionRule {
+                    name: "dupe".into(),
+                    trigger: Trigger::Tap { device: "hue-ts-foo".into(), button: 2 },
+                    effect: Effect::Toggle { target: "z2m-p-a".into() },
+                },
+            ],
+        );
+        let err = Topology::build(&cfg).unwrap_err();
+        assert!(matches!(err, TopologyError::DuplicateActionName(_)));
+    }
+
+    #[test]
+    fn action_trigger_unknown_device_rejected() {
+        let cfg = config_with_actions(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("z2m-p-a", plug_dev("0xf", "sonoff-basic", &["on-off"])),
+            ],
+            vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+            vec![ActionRule {
+                name: "bad".into(),
+                trigger: Trigger::Tap { device: "ghost".into(), button: 1 },
+                effect: Effect::Toggle { target: "z2m-p-a".into() },
+            }],
+        );
+        let err = Topology::build(&cfg).unwrap_err();
+        assert!(matches!(err, TopologyError::ActionTriggerUnknownDevice { .. }));
+    }
+
+    #[test]
+    fn action_effect_unknown_device_rejected() {
+        let cfg = config_with_actions(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("hue-ts-foo", tap_dev("0x1")),
+            ],
+            vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+            vec![ActionRule {
+                name: "bad".into(),
+                trigger: Trigger::Tap { device: "hue-ts-foo".into(), button: 1 },
+                effect: Effect::Toggle { target: "ghost".into() },
+            }],
+        );
+        let err = Topology::build(&cfg).unwrap_err();
+        assert!(matches!(err, TopologyError::ActionEffectUnknownDevice { .. }));
     }
 
     #[test]

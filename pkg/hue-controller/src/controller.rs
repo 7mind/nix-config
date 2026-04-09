@@ -94,10 +94,10 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::config::{Defaults, Slot};
+use crate::config::{Defaults, Effect, Slot, Trigger};
 use crate::domain::action::{Action, Payload};
 use crate::domain::event::{Event, SwitchAction};
-use crate::domain::state::ZoneState;
+use crate::domain::state::{PlugRuntimeState, ZoneState};
 use crate::time::Clock;
 use crate::topology::{RoomName, Topology};
 
@@ -131,6 +131,9 @@ pub struct Controller {
     /// the first event arrives. Tests can pre-populate via
     /// [`Controller::set_physical_state_for_test`].
     states: BTreeMap<RoomName, ZoneState>,
+
+    /// Per-plug runtime state, keyed by plug friendly_name.
+    plug_states: BTreeMap<String, PlugRuntimeState>,
 }
 
 impl Controller {
@@ -140,16 +143,31 @@ impl Controller {
             clock,
             defaults,
             states: BTreeMap::new(),
+            plug_states: BTreeMap::new(),
         }
     }
 
     /// Single entry point for the daemon's event loop.
     pub fn handle_event(&mut self, event: Event) -> Vec<Action> {
         match event {
-            Event::SwitchAction { device, action, ts } => {
-                self.handle_switch_action(&device, action, ts)
+            Event::SwitchAction {
+                ref device,
+                action,
+                ts,
+            } => {
+                let mut out = self.handle_switch_action(device, action, ts);
+                out.extend(self.dispatch_switch_actions(device, action));
+                out
             }
-            Event::TapAction { device, button, ts } => self.handle_tap_action(&device, button, ts),
+            Event::TapAction {
+                ref device,
+                button,
+                ts,
+            } => {
+                let mut out = self.handle_tap_action(device, button, ts);
+                out.extend(self.dispatch_tap_actions(device, button));
+                out
+            }
             Event::Occupancy {
                 sensor,
                 occupied,
@@ -157,6 +175,13 @@ impl Controller {
                 ts,
             } => self.handle_occupancy(&sensor, occupied, illuminance, ts),
             Event::GroupState { group, on, ts: _ } => self.handle_group_state(&group, on),
+            Event::PlugState {
+                device,
+                on,
+                power,
+                ts,
+            } => self.handle_plug_state(&device, on, power, ts),
+            Event::Tick { ts } => self.handle_tick(ts),
         }
     }
 
@@ -742,6 +767,218 @@ impl Controller {
         Vec::new()
     }
 
+    /// Read-only peek at a plug's state.
+    pub fn plug_state_for(&self, device: &str) -> Option<&PlugRuntimeState> {
+        self.plug_states.get(device)
+    }
+
+    /// Set the physical-on flag for a plug directly. Used by the
+    /// startup state-refresh routine.
+    pub fn set_plug_state(&mut self, device: &str, on: bool) {
+        let state = self.plug_states.entry(device.to_string()).or_default();
+        state.on = on;
+    }
+
+    // ----- action rule dispatch ------------------------------------------
+
+    /// Execute action rules triggered by a switch press.
+    fn dispatch_switch_actions(&mut self, device: &str, action: SwitchAction) -> Vec<Action> {
+        let indexes = match action {
+            SwitchAction::OnPressRelease => {
+                self.topology.actions_for_switch_on(device).to_vec()
+            }
+            SwitchAction::OffPressRelease => {
+                self.topology.actions_for_switch_off(device).to_vec()
+            }
+            _ => return Vec::new(),
+        };
+        self.execute_action_rules(&indexes)
+    }
+
+    /// Execute action rules triggered by a tap button press.
+    fn dispatch_tap_actions(&mut self, device: &str, button: u8) -> Vec<Action> {
+        let indexes = self.topology.actions_for_tap(device, button).to_vec();
+        self.execute_action_rules(&indexes)
+    }
+
+    /// Execute a list of action rules by index.
+    fn execute_action_rules(&mut self, indexes: &[usize]) -> Vec<Action> {
+        // Collect rule data before mutating self.
+        let rules: Vec<(String, Effect)> = indexes
+            .iter()
+            .map(|&idx| {
+                let resolved = &self.topology.actions()[idx];
+                (resolved.name.clone(), resolved.effect.clone())
+            })
+            .collect();
+        let mut out = Vec::new();
+        for (name, effect) in &rules {
+            out.push(self.execute_effect(name, effect));
+        }
+        out
+    }
+
+    /// Translate an [`Effect`] into an MQTT [`Action`], updating plug
+    /// state accordingly.
+    fn execute_effect(&mut self, rule_name: &str, effect: &Effect) -> Action {
+        let target = effect.target();
+        let plug_state = self.plug_states.entry(target.to_string()).or_default();
+
+        match effect {
+            Effect::Toggle { .. } => {
+                let new_on = !plug_state.on;
+                let payload = if new_on {
+                    Payload::device_on()
+                } else {
+                    Payload::device_off()
+                };
+                tracing::info!(
+                    rule = rule_name,
+                    target,
+                    from = plug_state.on,
+                    to = new_on,
+                    "action rule → toggle plug"
+                );
+                plug_state.on = new_on;
+                // Clear idle tracker on any state change — kill switch
+                // rearms from scratch.
+                plug_state.idle_since = None;
+                Action::for_device(target, payload)
+            }
+            Effect::TurnOn { .. } => {
+                tracing::info!(rule = rule_name, target, "action rule → turn on plug");
+                plug_state.on = true;
+                plug_state.idle_since = None;
+                Action::for_device(target, Payload::device_on())
+            }
+            Effect::TurnOff { .. } => {
+                tracing::info!(rule = rule_name, target, "action rule → turn off plug");
+                plug_state.on = false;
+                plug_state.idle_since = None;
+                Action::for_device(target, Payload::device_off())
+            }
+        }
+    }
+
+    // ----- plug state & kill switch -------------------------------------
+
+    fn handle_plug_state(
+        &mut self,
+        device: &str,
+        on: bool,
+        power: Option<f64>,
+        ts: Instant,
+    ) -> Vec<Action> {
+        let plug = self.plug_states.entry(device.to_string()).or_default();
+        plug.on = on;
+
+        if !on {
+            plug.idle_since = None;
+            return Vec::new();
+        }
+
+        // Evaluate kill-switch triggers for this plug.
+        let rule_indexes = self.topology.actions_for_power_below(device).to_vec();
+        if rule_indexes.is_empty() {
+            return Vec::new();
+        }
+
+        let mut out = Vec::new();
+        for &idx in &rule_indexes {
+            let resolved = &self.topology.actions()[idx];
+            let (threshold_watts, holdoff_secs) = match &resolved.trigger {
+                Trigger::PowerBelow { watts, for_seconds, .. } => (*watts, *for_seconds),
+                _ => continue,
+            };
+
+            let plug = self.plug_states.entry(device.to_string()).or_default();
+            if let Some(current_power) = power {
+                if current_power < threshold_watts {
+                    // Power is below threshold — start or continue tracking.
+                    if plug.idle_since.is_none() {
+                        tracing::info!(
+                            device,
+                            rule = %resolved.name,
+                            power = current_power,
+                            threshold = threshold_watts,
+                            "kill switch: power dropped below threshold, starting holdoff"
+                        );
+                        plug.idle_since = Some(ts);
+                    }
+                    // Check if holdoff has elapsed.
+                    if let Some(idle_start) = plug.idle_since {
+                        if ts.duration_since(idle_start) >= Duration::from_secs(holdoff_secs) {
+                            tracing::info!(
+                                device,
+                                rule = %resolved.name,
+                                holdoff_secs,
+                                "kill switch: holdoff elapsed, turning off plug"
+                            );
+                            plug.on = false;
+                            plug.idle_since = None;
+                            out.push(Action::for_device(
+                                resolved.effect.target(),
+                                Payload::device_off(),
+                            ));
+                        }
+                    }
+                } else {
+                    // Power is above threshold — clear idle tracking.
+                    if plug.idle_since.is_some() {
+                        tracing::info!(
+                            device,
+                            rule = %resolved.name,
+                            power = current_power,
+                            threshold = threshold_watts,
+                            "kill switch: power recovered above threshold, resetting holdoff"
+                        );
+                        plug.idle_since = None;
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// Periodic tick: evaluate all pending kill-switch deadlines.
+    fn handle_tick(&mut self, ts: Instant) -> Vec<Action> {
+        let mut out = Vec::new();
+        // Iterate over all power_below action rules and check deadlines.
+        let actions = self.topology.actions().to_vec();
+        for resolved in &actions {
+            let (device, threshold_watts, holdoff_secs) = match &resolved.trigger {
+                Trigger::PowerBelow { device, watts, for_seconds } => {
+                    (device.as_str(), *watts, *for_seconds)
+                }
+                _ => continue,
+            };
+            let plug = match self.plug_states.get(device) {
+                Some(p) if p.on && p.idle_since.is_some() => p,
+                _ => continue,
+            };
+            let idle_start = plug.idle_since.unwrap();
+            if ts.duration_since(idle_start) >= Duration::from_secs(holdoff_secs) {
+                tracing::info!(
+                    device,
+                    rule = %resolved.name,
+                    holdoff_secs,
+                    "tick: kill switch holdoff elapsed, turning off plug"
+                );
+                let plug = self.plug_states.get_mut(device).unwrap();
+                plug.on = false;
+                plug.idle_since = None;
+                out.push(Action::for_device(
+                    resolved.effect.target(),
+                    Payload::device_off(),
+                ));
+            }
+            // Note: we don't re-check threshold here — that happens on
+            // PlugState events. Tick only fires the deadline.
+            let _ = threshold_watts; // used by PlugState handler
+        }
+        out
+    }
+
     // ----- internal helpers ----------------------------------------------
 
     fn write_after_on(&mut self, room_name: &str, ts: Instant, cycle_idx_after: usize) {
@@ -1002,6 +1239,7 @@ mod tests {
                     motion_off_cooldown_seconds: 0,
                 },
             ],
+            actions: vec![],
             defaults: Defaults::default(),
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
@@ -1030,6 +1268,7 @@ mod tests {
                 off_transition_seconds: 0.8,
                 motion_off_cooldown_seconds: 30,
             }],
+            actions: vec![],
             defaults: Defaults::default(),
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
@@ -1780,6 +2019,7 @@ mod tests {
                 off_transition_seconds: 0.8,
                 motion_off_cooldown_seconds: 0,
             }],
+            actions: vec![],
             defaults: Defaults::default(),
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
@@ -1803,6 +2043,84 @@ mod tests {
             dim,
             vec![Action::new("hue-lz-study", Payload::scene_recall(1))]
         );
+    }
+
+    #[test]
+    fn motion_off_fires_regardless_of_high_illuminance() {
+        // Scenario: motion turned lights on when it was dark. While
+        // lights are on, sun comes out and illuminance rises above the
+        // threshold. When the sensor later reports unoccupied, motion-off
+        // must still fire — the illuminance gate only applies to
+        // motion-on, never to motion-off.
+        let clk = Arc::new(FakeClock::new(12));
+        let cfg = Config {
+            name_by_address: BTreeMap::new(),
+            devices: BTreeMap::from([
+                ("hue-l-a".into(), light("0xa")),
+                (
+                    "hue-ms-study".into(),
+                    DeviceCatalogEntry::MotionSensor {
+                        common: CommonFields {
+                            ieee_address: "0x2".into(),
+                            description: None,
+                            options: BTreeMap::new(),
+                        },
+                        occupancy_timeout_seconds: 60,
+                        max_illuminance: Some(25),
+                    },
+                ),
+            ]),
+            rooms: vec![Room {
+                name: "study".into(),
+                group_name: "hue-lz-study".into(),
+                id: 1,
+                members: vec!["hue-l-a/11".into()],
+                parent: None,
+                devices: vec![binding("hue-ms-study", None)],
+                scenes: day_scenes(vec![1]),
+                off_transition_seconds: 0.8,
+                motion_off_cooldown_seconds: 0,
+            }],
+            actions: vec![],
+            defaults: Defaults::default(),
+        };
+        let topo = Arc::new(Topology::build(&cfg).unwrap());
+        let mut c = Controller::new(topo, clk.clone(), cfg.defaults);
+
+        // Motion-on at low lux → lights turn on.
+        let on = c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: true,
+            illuminance: Some(10),
+            ts: clk.now(),
+        });
+        assert_eq!(on, vec![Action::new("hue-lz-study", Payload::scene_recall(1))]);
+        assert!(c.state_for("study").unwrap().motion_owned);
+
+        // Sun comes out: sensor reports occupied again with high lux.
+        // No action (lights already on), but the sensor flag stays set.
+        clk.advance(Duration::from_secs(30));
+        let bright_occupied = c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: true,
+            illuminance: Some(100),
+            ts: clk.now(),
+        });
+        assert!(bright_occupied.is_empty());
+
+        // Sensor reports unoccupied with high lux. motion-off MUST fire
+        // despite illuminance being well above the threshold — the gate
+        // is motion-on-only.
+        clk.advance(Duration::from_secs(10));
+        let off = c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: false,
+            illuminance: Some(100),
+            ts: clk.now(),
+        });
+        assert_eq!(off, vec![Action::new("hue-lz-study", Payload::state_off(0.8))]);
+        assert!(!c.state_for("study").unwrap().motion_owned);
+        assert!(!c.state_for("study").unwrap().physically_on);
     }
 
     // ---- multi-sensor coordination --------------------------------------
@@ -1830,6 +2148,7 @@ mod tests {
                 off_transition_seconds: 0.8,
                 motion_off_cooldown_seconds: 0,
             }],
+            actions: vec![],
             defaults: Defaults::default(),
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
@@ -2108,5 +2427,433 @@ mod tests {
             night_press,
             vec![Action::new("hue-lz-study", Payload::scene_recall(3))]
         );
+    }
+
+    // ---- plug / action rule tests --------------------------------------
+
+    fn plug_dev(ieee: &str, variant: &str, caps: &[&str]) -> DeviceCatalogEntry {
+        DeviceCatalogEntry::Plug {
+            common: CommonFields {
+                ieee_address: ieee.into(),
+                description: None,
+                options: BTreeMap::new(),
+            },
+            variant: variant.into(),
+            capabilities: caps.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    use crate::config::{ActionRule, Effect, Trigger};
+
+    /// Build a controller with a plug and action rules.
+    fn plug_controller(clock: Arc<FakeClock>, actions: Vec<ActionRule>) -> Controller {
+        let cfg = Config {
+            name_by_address: BTreeMap::new(),
+            devices: BTreeMap::from([
+                ("hue-l-a".into(), light("0xa")),
+                ("hue-ts-office".into(), tap_dev("0x1")),
+                ("hue-s-office".into(), switch_dev("0x2")),
+                (
+                    "z2m-p-printer".into(),
+                    plug_dev("0xf", "sonoff-power", &["on-off", "power"]),
+                ),
+                (
+                    "z2m-p-lamp".into(),
+                    plug_dev("0xe", "sonoff-basic", &["on-off"]),
+                ),
+            ]),
+            rooms: vec![Room {
+                name: "office".into(),
+                group_name: "hue-lz-office".into(),
+                id: 1,
+                members: vec!["hue-l-a/11".into()],
+                parent: None,
+                devices: vec![],
+                scenes: day_scenes(vec![1, 2]),
+                off_transition_seconds: 0.8,
+                motion_off_cooldown_seconds: 0,
+            }],
+            actions,
+            defaults: Defaults::default(),
+        };
+        let topo = Arc::new(Topology::build(&cfg).unwrap());
+        Controller::new(topo, clock, cfg.defaults)
+    }
+
+    #[test]
+    fn tap_toggle_action_toggles_plug() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = plug_controller(
+            clk.clone(),
+            vec![ActionRule {
+                name: "printer-toggle".into(),
+                trigger: Trigger::Tap {
+                    device: "hue-ts-office".into(),
+                    button: 3,
+                },
+                effect: Effect::Toggle {
+                    target: "z2m-p-printer".into(),
+                },
+            }],
+        );
+
+        // Plug starts off. Tap button 3 → toggle ON.
+        let actions = c.handle_event(Event::TapAction {
+            device: "hue-ts-office".into(),
+            button: 3,
+            ts: clk.now(),
+        });
+        assert!(actions
+            .iter()
+            .any(|a| *a == Action::for_device("z2m-p-printer", Payload::device_on())));
+        assert!(c.plug_state_for("z2m-p-printer").unwrap().on);
+
+        // Tap again → toggle OFF.
+        clk.advance(Duration::from_secs(2));
+        let actions = c.handle_event(Event::TapAction {
+            device: "hue-ts-office".into(),
+            button: 3,
+            ts: clk.now(),
+        });
+        assert!(actions
+            .iter()
+            .any(|a| *a == Action::for_device("z2m-p-printer", Payload::device_off())));
+        assert!(!c.plug_state_for("z2m-p-printer").unwrap().on);
+    }
+
+    #[test]
+    fn switch_on_off_actions() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = plug_controller(
+            clk.clone(),
+            vec![
+                ActionRule {
+                    name: "lamp-on".into(),
+                    trigger: Trigger::SwitchOn {
+                        device: "hue-s-office".into(),
+                    },
+                    effect: Effect::TurnOn {
+                        target: "z2m-p-lamp".into(),
+                    },
+                },
+                ActionRule {
+                    name: "lamp-off".into(),
+                    trigger: Trigger::SwitchOff {
+                        device: "hue-s-office".into(),
+                    },
+                    effect: Effect::TurnOff {
+                        target: "z2m-p-lamp".into(),
+                    },
+                },
+            ],
+        );
+
+        // Switch on → lamp on.
+        let actions = c.handle_event(Event::SwitchAction {
+            device: "hue-s-office".into(),
+            action: SwitchAction::OnPressRelease,
+            ts: clk.now(),
+        });
+        assert!(actions
+            .iter()
+            .any(|a| *a == Action::for_device("z2m-p-lamp", Payload::device_on())));
+        assert!(c.plug_state_for("z2m-p-lamp").unwrap().on);
+
+        // Switch off → lamp off.
+        let actions = c.handle_event(Event::SwitchAction {
+            device: "hue-s-office".into(),
+            action: SwitchAction::OffPressRelease,
+            ts: clk.now(),
+        });
+        assert!(actions
+            .iter()
+            .any(|a| *a == Action::for_device("z2m-p-lamp", Payload::device_off())));
+        assert!(!c.plug_state_for("z2m-p-lamp").unwrap().on);
+    }
+
+    #[test]
+    fn kill_switch_fires_after_holdoff() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = plug_controller(
+            clk.clone(),
+            vec![ActionRule {
+                name: "printer-kill".into(),
+                trigger: Trigger::PowerBelow {
+                    device: "z2m-p-printer".into(),
+                    watts: 5.0,
+                    for_seconds: 60,
+                },
+                effect: Effect::TurnOff {
+                    target: "z2m-p-printer".into(),
+                },
+            }],
+        );
+
+        // Plug is on, power is above threshold — no action.
+        c.set_plug_state("z2m-p-printer", true);
+        let actions = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: Some(100.0),
+            ts: clk.now(),
+        });
+        assert!(actions.is_empty());
+        assert!(c.plug_state_for("z2m-p-printer").unwrap().idle_since.is_none());
+
+        // Power drops below threshold — holdoff starts.
+        clk.advance(Duration::from_secs(10));
+        let actions = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: Some(2.0),
+            ts: clk.now(),
+        });
+        assert!(actions.is_empty());
+        assert!(c.plug_state_for("z2m-p-printer").unwrap().idle_since.is_some());
+
+        // 30 seconds later — still below, holdoff not elapsed yet.
+        clk.advance(Duration::from_secs(30));
+        let actions = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: Some(2.0),
+            ts: clk.now(),
+        });
+        assert!(actions.is_empty());
+
+        // 31 more seconds (total 61) — holdoff elapsed, kill switch fires.
+        clk.advance(Duration::from_secs(31));
+        let actions = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: Some(2.0),
+            ts: clk.now(),
+        });
+        assert_eq!(
+            actions,
+            vec![Action::for_device("z2m-p-printer", Payload::device_off())]
+        );
+        assert!(!c.plug_state_for("z2m-p-printer").unwrap().on);
+    }
+
+    #[test]
+    fn kill_switch_resets_on_power_recovery() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = plug_controller(
+            clk.clone(),
+            vec![ActionRule {
+                name: "printer-kill".into(),
+                trigger: Trigger::PowerBelow {
+                    device: "z2m-p-printer".into(),
+                    watts: 5.0,
+                    for_seconds: 60,
+                },
+                effect: Effect::TurnOff {
+                    target: "z2m-p-printer".into(),
+                },
+            }],
+        );
+
+        c.set_plug_state("z2m-p-printer", true);
+
+        // Power drops.
+        let _ = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: Some(2.0),
+            ts: clk.now(),
+        });
+        assert!(c.plug_state_for("z2m-p-printer").unwrap().idle_since.is_some());
+
+        // Power recovers before holdoff.
+        clk.advance(Duration::from_secs(30));
+        let actions = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: Some(100.0),
+            ts: clk.now(),
+        });
+        assert!(actions.is_empty());
+        assert!(c.plug_state_for("z2m-p-printer").unwrap().idle_since.is_none());
+
+        // Wait another 60 seconds — no kill because holdoff was reset.
+        clk.advance(Duration::from_secs(60));
+        let actions = c.handle_event(Event::Tick { ts: clk.now() });
+        assert!(actions.is_empty());
+    }
+
+    #[test]
+    fn kill_switch_rearms_after_manual_on() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = plug_controller(
+            clk.clone(),
+            vec![
+                ActionRule {
+                    name: "printer-toggle".into(),
+                    trigger: Trigger::Tap {
+                        device: "hue-ts-office".into(),
+                        button: 3,
+                    },
+                    effect: Effect::Toggle {
+                        target: "z2m-p-printer".into(),
+                    },
+                },
+                ActionRule {
+                    name: "printer-kill".into(),
+                    trigger: Trigger::PowerBelow {
+                        device: "z2m-p-printer".into(),
+                        watts: 5.0,
+                        for_seconds: 10,
+                    },
+                    effect: Effect::TurnOff {
+                        target: "z2m-p-printer".into(),
+                    },
+                },
+            ],
+        );
+
+        // Turn on via tap.
+        let _ = c.handle_event(Event::TapAction {
+            device: "hue-ts-office".into(),
+            button: 3,
+            ts: clk.now(),
+        });
+        assert!(c.plug_state_for("z2m-p-printer").unwrap().on);
+
+        // Power drops, holdoff starts.
+        clk.advance(Duration::from_secs(1));
+        let _ = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: Some(1.0),
+            ts: clk.now(),
+        });
+
+        // Kill fires via tick.
+        clk.advance(Duration::from_secs(11));
+        let actions = c.handle_event(Event::Tick { ts: clk.now() });
+        assert_eq!(
+            actions,
+            vec![Action::for_device("z2m-p-printer", Payload::device_off())]
+        );
+        assert!(!c.plug_state_for("z2m-p-printer").unwrap().on);
+
+        // Re-arm: tap turns it back on.
+        clk.advance(Duration::from_secs(1));
+        let actions = c.handle_event(Event::TapAction {
+            device: "hue-ts-office".into(),
+            button: 3,
+            ts: clk.now(),
+        });
+        assert!(actions
+            .iter()
+            .any(|a| *a == Action::for_device("z2m-p-printer", Payload::device_on())));
+        assert!(c.plug_state_for("z2m-p-printer").unwrap().on);
+        // idle_since is cleared on toggle.
+        assert!(c.plug_state_for("z2m-p-printer").unwrap().idle_since.is_none());
+    }
+
+    #[test]
+    fn tick_fires_kill_switch_without_plug_state_event() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = plug_controller(
+            clk.clone(),
+            vec![ActionRule {
+                name: "printer-kill".into(),
+                trigger: Trigger::PowerBelow {
+                    device: "z2m-p-printer".into(),
+                    watts: 5.0,
+                    for_seconds: 10,
+                },
+                effect: Effect::TurnOff {
+                    target: "z2m-p-printer".into(),
+                },
+            }],
+        );
+
+        c.set_plug_state("z2m-p-printer", true);
+
+        // Power drops — sets idle_since.
+        let _ = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: Some(1.0),
+            ts: clk.now(),
+        });
+
+        // No further PlugState events, but tick fires after holdoff.
+        clk.advance(Duration::from_secs(11));
+        let actions = c.handle_event(Event::Tick { ts: clk.now() });
+        assert_eq!(
+            actions,
+            vec![Action::for_device("z2m-p-printer", Payload::device_off())]
+        );
+    }
+
+    #[test]
+    fn plug_state_off_clears_idle() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = plug_controller(
+            clk.clone(),
+            vec![ActionRule {
+                name: "printer-kill".into(),
+                trigger: Trigger::PowerBelow {
+                    device: "z2m-p-printer".into(),
+                    watts: 5.0,
+                    for_seconds: 10,
+                },
+                effect: Effect::TurnOff {
+                    target: "z2m-p-printer".into(),
+                },
+            }],
+        );
+
+        c.set_plug_state("z2m-p-printer", true);
+
+        // Power drops.
+        let _ = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: Some(1.0),
+            ts: clk.now(),
+        });
+        assert!(c.plug_state_for("z2m-p-printer").unwrap().idle_since.is_some());
+
+        // Plug turned off externally.
+        let _ = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: false,
+            power: Some(0.0),
+            ts: clk.now(),
+        });
+        assert!(c.plug_state_for("z2m-p-printer").unwrap().idle_since.is_none());
+    }
+
+    #[test]
+    fn unrelated_switch_action_does_not_trigger_plug() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = plug_controller(
+            clk.clone(),
+            vec![ActionRule {
+                name: "lamp-on".into(),
+                trigger: Trigger::SwitchOn {
+                    device: "hue-s-office".into(),
+                },
+                effect: Effect::TurnOn {
+                    target: "z2m-p-lamp".into(),
+                },
+            }],
+        );
+
+        // Brightness up should NOT trigger the switch_on action.
+        let actions = c.handle_event(Event::SwitchAction {
+            device: "hue-s-office".into(),
+            action: SwitchAction::UpPressRelease,
+            ts: clk.now(),
+        });
+        // Should not contain any device action.
+        assert!(!actions
+            .iter()
+            .any(|a| matches!(a.target, crate::domain::action::ActionTarget::Device(_))));
     }
 }

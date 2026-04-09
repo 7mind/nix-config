@@ -5,21 +5,45 @@
 
 use serde::Serialize;
 
+/// Where to publish an action: a z2m group or a specific device.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ActionTarget {
+    /// Publish to `zigbee2mqtt/<group_name>/set`.
+    Group(String),
+    /// Publish to `zigbee2mqtt/<device_name>/set`.
+    Device(String),
+}
+
 /// One thing the controller wants to publish to MQTT.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Action {
-    /// z2m group friendly_name. The MQTT bridge maps this to
-    /// `zigbee2mqtt/<group_name>/set`.
-    pub group_name: String,
-
+    pub target: ActionTarget,
     pub payload: Payload,
 }
 
 impl Action {
+    /// Construct a group-targeted action (the common case for room
+    /// scene cycling).
     pub fn new(group_name: impl Into<String>, payload: Payload) -> Self {
         Self {
-            group_name: group_name.into(),
+            target: ActionTarget::Group(group_name.into()),
             payload,
+        }
+    }
+
+    /// Construct a device-targeted action (for smart plugs).
+    pub fn for_device(device_name: impl Into<String>, payload: Payload) -> Self {
+        Self {
+            target: ActionTarget::Device(device_name.into()),
+            payload,
+        }
+    }
+
+    /// The friendly_name to publish to, regardless of target kind.
+    /// Used by the MQTT bridge to build the topic.
+    pub fn target_name(&self) -> &str {
+        match &self.target {
+            ActionTarget::Group(name) | ActionTarget::Device(name) => name,
         }
     }
 }
@@ -50,6 +74,10 @@ pub enum Payload {
     /// `{"brightness_move": ±rate}` — continuous brightness adjust
     /// (issued on up/down hold). `0` stops the move.
     BrightnessMove { brightness_move: i16 },
+
+    /// `{"state": "ON"}` or `{"state": "OFF"}` — simple on/off for
+    /// smart plugs. Unlike `StateOff` this has no transition field.
+    DeviceStateSet { state: &'static str },
 }
 
 impl Payload {
@@ -75,6 +103,14 @@ impl Payload {
         Self::BrightnessMove {
             brightness_move: rate,
         }
+    }
+
+    pub fn device_on() -> Self {
+        Self::DeviceStateSet { state: "ON" }
+    }
+
+    pub fn device_off() -> Self {
+        Self::DeviceStateSet { state: "OFF" }
     }
 }
 
@@ -109,5 +145,33 @@ mod tests {
         let p = Payload::brightness_move(0);
         let json = serde_json::to_string(&p).unwrap();
         assert_eq!(json, r#"{"brightness_move":0}"#);
+    }
+
+    #[test]
+    fn device_state_on_serializes() {
+        let p = Payload::device_on();
+        let json = serde_json::to_string(&p).unwrap();
+        assert_eq!(json, r#"{"state":"ON"}"#);
+    }
+
+    #[test]
+    fn device_state_off_serializes() {
+        let p = Payload::device_off();
+        let json = serde_json::to_string(&p).unwrap();
+        assert_eq!(json, r#"{"state":"OFF"}"#);
+    }
+
+    #[test]
+    fn action_target_name_group() {
+        let a = Action::new("hue-lz-kitchen", Payload::scene_recall(1));
+        assert_eq!(a.target_name(), "hue-lz-kitchen");
+        assert!(matches!(a.target, ActionTarget::Group(_)));
+    }
+
+    #[test]
+    fn action_target_name_device() {
+        let a = Action::for_device("z2m-p-printer", Payload::device_on());
+        assert_eq!(a.target_name(), "z2m-p-printer");
+        assert!(matches!(a.target, ActionTarget::Device(_)));
     }
 }

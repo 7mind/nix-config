@@ -40,6 +40,25 @@ pub enum Event {
         on: bool,
         ts: Instant,
     },
+
+    /// z2m published a state update for a smart plug we subscribe to.
+    /// Carries the on/off state and, if the plug supports power
+    /// monitoring, the real-time power reading in watts.
+    PlugState {
+        device: String,
+        on: bool,
+        /// Real-time power in watts. `None` if the plug doesn't expose
+        /// power monitoring or the field was absent from the payload.
+        power: Option<f64>,
+        ts: Instant,
+    },
+
+    /// Periodic tick event fired by the daemon's timer. The controller
+    /// uses this to evaluate time-dependent action triggers (kill
+    /// switch holdoff deadlines).
+    Tick {
+        ts: Instant,
+    },
 }
 
 /// One of the action codes a Hue dimmer publishes on

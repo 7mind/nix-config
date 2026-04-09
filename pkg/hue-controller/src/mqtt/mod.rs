@@ -167,12 +167,18 @@ impl MqttBridge {
                 .subscribe(topics::state_topic(group), QoS::AtLeastOnce)
                 .await?;
         }
+        // Plugs: state topic (for on/off + power monitoring)
+        for plug in topology.all_plug_names() {
+            client
+                .subscribe(topics::state_topic(plug), QoS::AtLeastOnce)
+                .await?;
+        }
         Ok(())
     }
 
-    /// Publish an [`Action`] to the corresponding `<group>/set` topic.
+    /// Publish an [`Action`] to the corresponding `/set` topic.
     pub async fn publish_action(&self, action: &Action) -> Result<(), MqttError> {
-        let topic = topics::set_topic(&action.group_name);
+        let topic = topics::set_topic(action.target_name());
         let payload = serde_json::to_vec(&action.payload)?;
         self.client
             .publish(topic, QoS::AtLeastOnce, false, payload)
@@ -274,6 +280,22 @@ fn parse_event(topology: &Topology, p: &Publish) -> Option<Event> {
         });
     }
 
+    if topology.is_plug(name) {
+        // Plug state. z2m publishes state + optional power reading.
+        let value: serde_json::Value = serde_json::from_slice(&p.payload).ok()?;
+        let state_str = value.get("state")?.as_str()?;
+        let on = state_str.eq_ignore_ascii_case("ON");
+        let power = value
+            .get("power")
+            .and_then(|v| v.as_f64());
+        return Some(Event::PlugState {
+            device: name.to_string(),
+            on,
+            power,
+            ts: now,
+        });
+    }
+
     if !topology.rooms_for_motion(name).is_empty() {
         let value: serde_json::Value = serde_json::from_slice(&p.payload).ok()?;
         let occupied = value.get("occupancy")?.as_bool()?;
@@ -300,7 +322,8 @@ mod tests {
     use super::*;
     use crate::config::scenes::{Scene, SceneSchedule, Slot};
     use crate::config::{
-        CommonFields, Config, DeviceBinding, DeviceCatalogEntry, Defaults, Room,
+        ActionRule, CommonFields, Config, DeviceBinding, DeviceCatalogEntry, Defaults,
+        Effect, Room, Trigger,
     };
     use std::collections::BTreeMap;
 
@@ -365,6 +388,18 @@ mod tests {
                         max_illuminance: None,
                     },
                 ),
+                (
+                    "z2m-p-printer".into(),
+                    DeviceCatalogEntry::Plug {
+                        common: CommonFields {
+                            ieee_address: "0xf".into(),
+                            description: None,
+                            options: BTreeMap::new(),
+                        },
+                        variant: "sonoff-power".into(),
+                        capabilities: vec!["on-off".into(), "power".into()],
+                    },
+                ),
             ]),
             rooms: vec![Room {
                 name: "study".into(),
@@ -389,6 +424,17 @@ mod tests {
                 scenes: day_scenes(),
                 off_transition_seconds: 0.8,
                 motion_off_cooldown_seconds: 0,
+            }],
+            actions: vec![ActionRule {
+                name: "printer-kill".into(),
+                trigger: Trigger::PowerBelow {
+                    device: "z2m-p-printer".into(),
+                    watts: 5.0,
+                    for_seconds: 300,
+                },
+                effect: Effect::TurnOff {
+                    target: "z2m-p-printer".into(),
+                },
             }],
             defaults: Defaults::default(),
         };
@@ -513,5 +559,64 @@ mod tests {
         let topo = small_topology();
         let p = publish("zigbee2mqtt/hue-s-study/action", "long_press");
         assert!(parse_event(&topo, &p).is_none());
+    }
+
+    #[test]
+    fn parse_plug_state_on_with_power() {
+        let topo = small_topology();
+        let p = publish(
+            "zigbee2mqtt/z2m-p-printer",
+            r#"{"state":"ON","power":120.5,"energy":42.1}"#,
+        );
+        let event = parse_event(&topo, &p).unwrap();
+        match event {
+            Event::PlugState {
+                device,
+                on,
+                power,
+                ..
+            } => {
+                assert_eq!(device, "z2m-p-printer");
+                assert!(on);
+                assert!((power.unwrap() - 120.5).abs() < f64::EPSILON);
+            }
+            other => panic!("expected PlugState, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_plug_state_off_no_power() {
+        let topo = small_topology();
+        let p = publish(
+            "zigbee2mqtt/z2m-p-printer",
+            r#"{"state":"OFF"}"#,
+        );
+        let event = parse_event(&topo, &p).unwrap();
+        match event {
+            Event::PlugState {
+                on,
+                power,
+                ..
+            } => {
+                assert!(!on);
+                assert!(power.is_none());
+            }
+            other => panic!("expected PlugState off, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn plug_state_takes_priority_over_unknown() {
+        let topo = small_topology();
+        // Even though z2m-p-printer is not a group or sensor, it should
+        // parse as PlugState, not return None.
+        let p = publish(
+            "zigbee2mqtt/z2m-p-printer",
+            r#"{"state":"ON","power":0.5}"#,
+        );
+        assert!(matches!(
+            parse_event(&topo, &p),
+            Some(Event::PlugState { .. })
+        ));
     }
 }

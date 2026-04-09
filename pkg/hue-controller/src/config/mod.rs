@@ -58,11 +58,13 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+pub mod actions;
 pub mod catalog;
 pub mod defaults;
 pub mod room;
 pub mod scenes;
 
+pub use actions::{ActionRule, Effect, Trigger};
 pub use catalog::{CommonFields, DeviceCatalogEntry, IeeeAddress};
 pub use defaults::Defaults;
 pub use room::{DeviceBinding, Room};
@@ -87,6 +89,12 @@ pub struct Config {
     /// Ordered room list. Order matters for stable diff output and
     /// for the `lib.elem` parent-resolution semantics on the Nix side.
     pub rooms: Vec<Room>,
+
+    /// Declarative action rules. Each rule pairs a trigger (event
+    /// condition) with an effect (command). Actions are the primary
+    /// control mechanism for smart plugs.
+    #[serde(default)]
+    pub actions: Vec<ActionRule>,
 
     /// Behavioural defaults (cycle windows, brightness step, etc).
     #[serde(default)]

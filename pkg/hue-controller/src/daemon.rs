@@ -76,6 +76,8 @@ pub async fn run(
         taps = topology.all_tap_names().len(),
         motion_sensors = topology.all_motion_sensor_names().len(),
         groups = topology.all_group_names().len(),
+        plugs = topology.all_plug_names().len(),
+        actions = topology.actions().len(),
         "topology built"
     );
 
@@ -220,15 +222,35 @@ async fn drain_until(
     }
 }
 
+/// Tick interval for evaluating kill-switch deadlines.
+const TICK_INTERVAL: Duration = Duration::from_secs(5);
+
 /// Main event loop. Reads events forever, dispatches them to the
-/// controller, publishes any returned actions. Returns when the channel
-/// closes (shutdown signal handling lives one level up).
+/// controller, publishes any returned actions. Injects periodic
+/// `Tick` events for kill-switch holdoff evaluation. Returns when the
+/// channel closes (shutdown signal handling lives one level up).
 async fn run_event_loop(
     controller: &mut Controller,
     bridge: &MqttBridge,
     event_rx: &mut mpsc::Receiver<Event>,
 ) -> anyhow::Result<()> {
-    while let Some(event) = event_rx.recv().await {
+    let mut tick = tokio::time::interval(TICK_INTERVAL);
+    // The first tick fires immediately; skip it so we don't waste a
+    // handle_event call right after startup.
+    tick.tick().await;
+
+    loop {
+        let event = tokio::select! {
+            msg = event_rx.recv() => {
+                match msg {
+                    Some(event) => event,
+                    None => break, // channel closed
+                }
+            }
+            _ = tick.tick() => {
+                Event::Tick { ts: Instant::now() }
+            }
+        };
         let actions = controller.handle_event(event);
         for action in actions {
             if let Err(e) = bridge.publish_action(&action).await {

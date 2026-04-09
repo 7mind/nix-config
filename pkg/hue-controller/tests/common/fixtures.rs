@@ -116,6 +116,7 @@ pub fn kitchen_config() -> Config {
                 motion_off_cooldown_seconds: 0,
             },
         ],
+        actions: vec![],
         defaults: Defaults::default(),
     }
 }
@@ -140,6 +141,7 @@ pub fn study_switch_config() -> Config {
             off_transition_seconds: 0.8,
             motion_off_cooldown_seconds: 0,
         }],
+        actions: vec![],
         defaults: Defaults::default(),
     }
 }

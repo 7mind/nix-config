@@ -68,6 +68,20 @@ impl ZoneState {
     }
 }
 
+/// Runtime state for one smart plug. Tracked per plug device name in
+/// the controller's plug state map.
+#[derive(Debug, Clone, Default)]
+pub struct PlugRuntimeState {
+    /// Current physical on/off state from the plug's retained MQTT
+    /// state topic.
+    pub on: bool,
+
+    /// Monotonic timestamp when the plug's power reading first dropped
+    /// below the kill-switch threshold. `None` when power is above
+    /// threshold, the plug is off, or no kill switch is configured.
+    pub idle_since: Option<Instant>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
