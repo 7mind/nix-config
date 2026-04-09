@@ -41,7 +41,7 @@
     };
 
     qendercore-adapter = {
-      url = "github:pshirshov/qendercore-adapter";
+      url = "github:pshirshov/mqtt-qendercore";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
     };
