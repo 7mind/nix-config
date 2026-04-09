@@ -125,6 +125,22 @@ in
         (day/night scene cycles). Should match the host's local time.
       '';
     };
+
+    web = {
+      enable = lib.mkEnableOption "Web dashboard for the hue-controller daemon";
+
+      port = lib.mkOption {
+        type = lib.types.port;
+        default = 8780;
+        description = "Port for the web dashboard HTTP/WebSocket server.";
+      };
+
+      openFirewall = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Whether to open the web dashboard port in the firewall.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable (
@@ -145,6 +161,9 @@ in
     in
     {
       environment.systemPackages = [ cfg.package ];
+
+      networking.firewall.allowedTCPPorts =
+        lib.optionals (cfg.web.enable && cfg.web.openFirewall) [ cfg.web.port ];
 
       # Provisioner: oneshot, runs after z2m is up. Re-runs whenever the
       # rendered JSON changes (via restartTriggers on the config file).
@@ -190,7 +209,9 @@ in
         # once the runtime is stable to quiet the logs back down to
         # warnings/errors only.
         script = ''
-          exec ${cfg.package}/bin/hue-controller --verbose daemon ${commonArgs} --timezone ${cfg.timezone}
+          exec ${cfg.package}/bin/hue-controller --verbose daemon ${commonArgs} --timezone ${cfg.timezone} \
+            ${lib.optionalString cfg.web.enable
+              "--web-port ${toString cfg.web.port} --web-assets-dir ${cfg.package}/share/hue-controller/web"}
         '';
         serviceConfig = {
           Type = "simple";

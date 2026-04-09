@@ -10,12 +10,15 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Layer};
 
 use hue_controller::config::Config;
 use hue_controller::mqtt::MqttConfig;
 use hue_controller::provision::{ProvisionOptions, reconcile};
 use hue_controller::time::SystemClock;
+use hue_controller::web::decision_capture::DecisionCaptureLayer;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -116,6 +119,16 @@ struct DaemonArgs {
     /// variable, falling back to UTC.
     #[arg(long)]
     timezone: Option<String>,
+
+    /// Port for the web dashboard HTTP/WebSocket server. If omitted, no
+    /// web server starts and the daemon runs MQTT-only as before.
+    #[arg(long)]
+    web_port: Option<u16>,
+
+    /// Directory containing the pre-built WASM frontend assets
+    /// (index.html + *.wasm + *.js). Required when --web-port is set.
+    #[arg(long)]
+    web_assets_dir: Option<PathBuf>,
 }
 
 /// Initialize the tracing subscriber.
@@ -124,7 +137,11 @@ struct DaemonArgs {
 ///   1. `RUST_LOG` env var (always wins if set)
 ///   2. `--verbose` CLI flag → `hue_controller=info` (action logging on)
 ///   3. default → `hue_controller=warn` (only warnings + errors)
-fn init_tracing(verbose: bool) {
+///
+/// When `web_enabled` is true, installs a [`DecisionCaptureLayer`]
+/// alongside the fmt layer so that `start_capture()`/`drain_capture()`
+/// can collect decision tracing during `handle_event`.
+fn init_tracing(verbose: bool, web_enabled: bool) {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         if verbose {
             EnvFilter::new("hue_controller=info")
@@ -132,12 +149,24 @@ fn init_tracing(verbose: bool) {
             EnvFilter::new("hue_controller=warn")
         }
     });
-    tracing_subscriber::fmt().with_env_filter(filter).init();
+    let fmt_layer = tracing_subscriber::fmt::layer().with_filter(filter);
+
+    if web_enabled {
+        tracing_subscriber::registry()
+            .with(fmt_layer)
+            .with(DecisionCaptureLayer)
+            .init();
+    } else {
+        tracing_subscriber::registry()
+            .with(fmt_layer)
+            .init();
+    }
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    init_tracing(cli.verbose);
+    let web_enabled = matches!(&cli.command, Command::Daemon(d) if d.web_port.is_some());
+    init_tracing(cli.verbose, web_enabled);
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -216,7 +245,36 @@ async fn run_daemon(args: DaemonArgs) -> Result<()> {
     let clock = Arc::new(SystemClock::new(timezone));
     let mqtt = build_mqtt_config(&args.mqtt, "daemon")?;
 
-    hue_controller::daemon::run(config, mqtt, clock).await
+    let web = if let Some(port) = args.web_port {
+        let assets_dir = args
+            .web_assets_dir
+            .context("--web-assets-dir is required when --web-port is set")?;
+        anyhow::ensure!(
+            assets_dir.is_dir(),
+            "--web-assets-dir {}: not a directory",
+            assets_dir.display()
+        );
+
+        let (ws_cmd_tx, ws_cmd_rx) = tokio::sync::mpsc::channel(64);
+        let (broadcast_tx, _) = tokio::sync::broadcast::channel(256);
+
+        let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
+        hue_controller::web::start_web_server(
+            addr,
+            ws_cmd_tx,
+            broadcast_tx.clone(),
+            assets_dir,
+        );
+
+        Some(hue_controller::web::WebHandle {
+            ws_cmd_rx,
+            broadcast_tx,
+        })
+    } else {
+        None
+    };
+
+    hue_controller::daemon::run(config, mqtt, clock, web).await
 }
 
 fn resolve_timezone(explicit: Option<&str>) -> Result<chrono_tz::Tz> {

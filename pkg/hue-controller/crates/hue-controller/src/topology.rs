@@ -1335,7 +1335,7 @@ mod tests {
             vec![ActionRule {
                 name: "printer-toggle".into(),
                 trigger: Trigger::Tap { device: "hue-ts-foo".into(), button: 3 },
-                effect: Effect::Toggle { target: "z2m-p-printer".into() },
+                effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-printer".into() },
             }],
         );
         let topo = Topology::build(&cfg).unwrap();
@@ -1430,7 +1430,7 @@ mod tests {
             vec![ActionRule {
                 name: "bad".into(),
                 trigger: Trigger::Tap { device: "hue-s-foo".into(), button: 1 },
-                effect: Effect::Toggle { target: "z2m-p-printer".into() },
+                effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-printer".into() },
             }],
         );
         let err = Topology::build(&cfg).unwrap_err();
@@ -1448,7 +1448,7 @@ mod tests {
             vec![ActionRule {
                 name: "bad".into(),
                 trigger: Trigger::Tap { device: "hue-ts-foo".into(), button: 1 },
-                effect: Effect::Toggle { target: "hue-l-a".into() },
+                effect: Effect::Toggle { confirm_off_seconds: None, target: "hue-l-a".into() },
             }],
         );
         let err = Topology::build(&cfg).unwrap_err();
@@ -1468,12 +1468,12 @@ mod tests {
                 ActionRule {
                     name: "dupe".into(),
                     trigger: Trigger::Tap { device: "hue-ts-foo".into(), button: 1 },
-                    effect: Effect::Toggle { target: "z2m-p-a".into() },
+                    effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-a".into() },
                 },
                 ActionRule {
                     name: "dupe".into(),
                     trigger: Trigger::Tap { device: "hue-ts-foo".into(), button: 2 },
-                    effect: Effect::Toggle { target: "z2m-p-a".into() },
+                    effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-a".into() },
                 },
             ],
         );
@@ -1492,7 +1492,7 @@ mod tests {
             vec![ActionRule {
                 name: "bad".into(),
                 trigger: Trigger::Tap { device: "ghost".into(), button: 1 },
-                effect: Effect::Toggle { target: "z2m-p-a".into() },
+                effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-a".into() },
             }],
         );
         let err = Topology::build(&cfg).unwrap_err();
@@ -1510,7 +1510,7 @@ mod tests {
             vec![ActionRule {
                 name: "bad".into(),
                 trigger: Trigger::Tap { device: "hue-ts-foo".into(), button: 1 },
-                effect: Effect::Toggle { target: "ghost".into() },
+                effect: Effect::Toggle { confirm_off_seconds: None, target: "ghost".into() },
             }],
         );
         let err = Topology::build(&cfg).unwrap_err();

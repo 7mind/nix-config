@@ -259,7 +259,7 @@ pub fn spawn_daemon(
         format!("hue-controller-test-{}", uuid::Uuid::new_v4()),
     );
     tokio::spawn(async move {
-        let daemon_fut = hue_controller::daemon::run(config, mqtt, clock);
+        let daemon_fut = hue_controller::daemon::run(config, mqtt, clock, None);
         tokio::select! {
             res = daemon_fut => {
                 if let Err(e) = res {

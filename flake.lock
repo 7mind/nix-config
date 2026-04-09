@@ -129,6 +129,21 @@
     },
     "crane": {
       "locked": {
+        "lastModified": 1775236976,
+        "narHash": "sha256-gCgX+AXN7K1gAIEqcLcZHxmC+QoZcwn9m6Z9r2Az+N8=",
+        "owner": "ipetkov",
+        "repo": "crane",
+        "rev": "6c23998526351a53ce734f0ac84940da988ccef1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ipetkov",
+        "repo": "crane",
+        "type": "github"
+      }
+    },
+    "crane_2": {
+      "locked": {
         "lastModified": 1768319649,
         "narHash": "sha256-VFkNyxHxkqGp8gf8kfFMW1j6XeBy609kv6TE9uF/0Js=",
         "owner": "ipetkov",
@@ -142,7 +157,7 @@
         "type": "github"
       }
     },
-    "crane_2": {
+    "crane_3": {
       "locked": {
         "lastModified": 1773189535,
         "narHash": "sha256-E1G/Or6MWeP+L6mpQ0iTFLpzSzlpGrITfU2220Gq47g=",
@@ -597,7 +612,7 @@
     },
     "kanata-switcher": {
       "inputs": {
-        "crane": "crane",
+        "crane": "crane_2",
         "flake-utils": "flake-utils_3",
         "nixpkgs": [
           "nixpkgs"
@@ -621,7 +636,7 @@
     },
     "lanzaboote": {
       "inputs": {
-        "crane": "crane_2",
+        "crane": "crane_3",
         "nixpkgs": [
           "nixpkgs"
         ],
@@ -1127,6 +1142,7 @@
         "agenix-rekey": "agenix-rekey",
         "browservice": "browservice",
         "claude-code-sandbox": "claude-code-sandbox",
+        "crane": "crane",
         "darwin": "darwin",
         "determinate": "determinate",
         "flake-utils": "flake-utils_2",
@@ -1144,6 +1160,7 @@
         "plasma-manager": "plasma-manager",
         "pylontech": "pylontech",
         "qendercore-adapter": "qendercore-adapter",
+        "rust-overlay": "rust-overlay_3",
         "smind": "smind",
         "vicinae-extensions": "vicinae-extensions"
       }
@@ -1182,6 +1199,26 @@
         "owner": "oxalica",
         "repo": "rust-overlay",
         "rev": "4f977d776793c8bfbfdd7eca7835847ccc48874e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "type": "github"
+      }
+    },
+    "rust-overlay_3": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1775704356,
+        "narHash": "sha256-A9JX65WofIF8OKrkMsjznSYNj/A4hfJfEGonsEQ9kxA=",
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "rev": "55660228072f38c64c4d2fd227944334dc3f4326",
         "type": "github"
       },
       "original": {

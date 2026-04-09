@@ -134,6 +134,11 @@ pub struct Controller {
 
     /// Per-plug runtime state, keyed by plug friendly_name.
     plug_states: BTreeMap<String, PlugRuntimeState>,
+
+    /// Pending confirm-off timestamps, keyed by action rule name.
+    /// Set on the first tap when a toggle-off requires confirmation;
+    /// consumed by the second tap within the window.
+    confirm_off_pending: BTreeMap<String, Instant>,
 }
 
 impl Controller {
@@ -144,6 +149,7 @@ impl Controller {
             defaults,
             states: BTreeMap::new(),
             plug_states: BTreeMap::new(),
+            confirm_off_pending: BTreeMap::new(),
         }
     }
 
@@ -156,7 +162,7 @@ impl Controller {
                 ts,
             } => {
                 let mut out = self.handle_switch_action(device, action, ts);
-                out.extend(self.dispatch_switch_actions(device, action));
+                out.extend(self.dispatch_switch_actions(device, action, ts));
                 out
             }
             Event::TapAction {
@@ -165,7 +171,7 @@ impl Controller {
                 ts,
             } => {
                 let mut out = self.handle_tap_action(device, button, ts);
-                out.extend(self.dispatch_tap_actions(device, button));
+                out.extend(self.dispatch_tap_actions(device, button, ts));
                 out
             }
             Event::Occupancy {
@@ -230,6 +236,29 @@ impl Controller {
                 state.motion_owned = true;
             }
         }
+    }
+
+    /// Read-only access to every room's state. Used by the web layer to
+    /// build state snapshots for WebSocket clients.
+    pub fn all_room_states(&self) -> &BTreeMap<RoomName, ZoneState> {
+        &self.states
+    }
+
+    /// Read-only access to every plug's runtime state. Used by the web
+    /// layer to build state snapshots for WebSocket clients.
+    pub fn all_plug_states(&self) -> &BTreeMap<String, PlugRuntimeState> {
+        &self.plug_states
+    }
+
+    /// Reference to the immutable topology. Useful for building topology
+    /// info responses from the web layer.
+    pub fn topology(&self) -> &Arc<Topology> {
+        &self.topology
+    }
+
+    /// Reference to the clock. Useful for snapshot timestamp conversion.
+    pub fn clock(&self) -> &Arc<dyn Clock> {
+        &self.clock
     }
 
     // ----- internal handlers ---------------------------------------------
@@ -782,7 +811,7 @@ impl Controller {
     // ----- action rule dispatch ------------------------------------------
 
     /// Execute action rules triggered by a switch press.
-    fn dispatch_switch_actions(&mut self, device: &str, action: SwitchAction) -> Vec<Action> {
+    fn dispatch_switch_actions(&mut self, device: &str, action: SwitchAction, ts: Instant) -> Vec<Action> {
         let indexes = match action {
             SwitchAction::OnPressRelease => {
                 self.topology.actions_for_switch_on(device).to_vec()
@@ -792,17 +821,17 @@ impl Controller {
             }
             _ => return Vec::new(),
         };
-        self.execute_action_rules(&indexes)
+        self.execute_action_rules(&indexes, ts)
     }
 
     /// Execute action rules triggered by a tap button press.
-    fn dispatch_tap_actions(&mut self, device: &str, button: u8) -> Vec<Action> {
+    fn dispatch_tap_actions(&mut self, device: &str, button: u8, ts: Instant) -> Vec<Action> {
         let indexes = self.topology.actions_for_tap(device, button).to_vec();
-        self.execute_action_rules(&indexes)
+        self.execute_action_rules(&indexes, ts)
     }
 
     /// Execute a list of action rules by index.
-    fn execute_action_rules(&mut self, indexes: &[usize]) -> Vec<Action> {
+    fn execute_action_rules(&mut self, indexes: &[usize], ts: Instant) -> Vec<Action> {
         // Collect rule data before mutating self.
         let rules: Vec<(String, Effect)> = indexes
             .iter()
@@ -813,19 +842,54 @@ impl Controller {
             .collect();
         let mut out = Vec::new();
         for (name, effect) in &rules {
-            out.push(self.execute_effect(name, effect));
+            if let Some(action) = self.execute_effect(name, effect, ts) {
+                out.push(action);
+            }
         }
         out
     }
 
     /// Translate an [`Effect`] into an MQTT [`Action`], updating plug
-    /// state accordingly.
-    fn execute_effect(&mut self, rule_name: &str, effect: &Effect) -> Action {
+    /// state accordingly. Returns `None` when a confirm-off toggle is
+    /// waiting for the second tap.
+    fn execute_effect(&mut self, rule_name: &str, effect: &Effect, ts: Instant) -> Option<Action> {
         let target = effect.target();
         let plug_state = self.plug_states.entry(target.to_string()).or_default();
 
         match effect {
-            Effect::Toggle { .. } => {
+            Effect::Toggle { confirm_off_seconds, .. } => {
+                if plug_state.on {
+                    // Turning OFF — check if confirmation is required.
+                    if let Some(window) = confirm_off_seconds {
+                        let window_dur = Duration::from_secs_f64(*window);
+                        if let Some(pending_ts) = self.confirm_off_pending.remove(rule_name) {
+                            if ts.duration_since(pending_ts) <= window_dur {
+                                // Second tap within window → confirm OFF.
+                                tracing::info!(
+                                    rule = rule_name,
+                                    target,
+                                    "action rule → confirm-off: second tap, turning off"
+                                );
+                                plug_state.on = false;
+                                plug_state.idle_since = None;
+                                return Some(Action::for_device(target, Payload::device_off()));
+                            }
+                            // Second tap but outside window → treat as new first tap.
+                        }
+                        // First tap (or expired window) → arm confirmation.
+                        tracing::info!(
+                            rule = rule_name,
+                            target,
+                            window_seconds = window,
+                            "action rule → confirm-off: armed, tap again to turn off"
+                        );
+                        self.confirm_off_pending.insert(rule_name.to_string(), ts);
+                        return None;
+                    }
+                }
+                // No confirmation needed (turning ON, or no confirm_off_seconds).
+                // Also clear any stale pending confirmation.
+                self.confirm_off_pending.remove(rule_name);
                 let new_on = !plug_state.on;
                 let payload = if new_on {
                     Payload::device_on()
@@ -840,22 +904,20 @@ impl Controller {
                     "action rule → toggle plug"
                 );
                 plug_state.on = new_on;
-                // Clear idle tracker on any state change — kill switch
-                // rearms from scratch.
                 plug_state.idle_since = None;
-                Action::for_device(target, payload)
+                Some(Action::for_device(target, payload))
             }
             Effect::TurnOn { .. } => {
                 tracing::info!(rule = rule_name, target, "action rule → turn on plug");
                 plug_state.on = true;
                 plug_state.idle_since = None;
-                Action::for_device(target, Payload::device_on())
+                Some(Action::for_device(target, Payload::device_on()))
             }
             Effect::TurnOff { .. } => {
                 tracing::info!(rule = rule_name, target, "action rule → turn off plug");
                 plug_state.on = false;
                 plug_state.idle_since = None;
-                Action::for_device(target, Payload::device_off())
+                Some(Action::for_device(target, Payload::device_off()))
             }
         }
     }
@@ -2492,6 +2554,7 @@ mod tests {
                     button: 3,
                 },
                 effect: Effect::Toggle {
+                    confirm_off_seconds: None,
                     target: "z2m-p-printer".into(),
                 },
             }],
@@ -2695,6 +2758,7 @@ mod tests {
                         button: 3,
                     },
                     effect: Effect::Toggle {
+                        confirm_off_seconds: None,
                         target: "z2m-p-printer".into(),
                     },
                 },

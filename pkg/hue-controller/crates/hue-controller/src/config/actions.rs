@@ -71,8 +71,15 @@ pub enum Trigger {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Effect {
     /// Toggle the target device: if ON → OFF, if OFF → ON.
+    ///
+    /// When `confirm_off_seconds` is set, turning OFF requires a
+    /// double-tap: the first tap while ON starts a confirmation
+    /// window, and only a second tap within that window actually
+    /// turns the device off. Turning ON is always immediate.
     Toggle {
         target: String,
+        #[serde(default)]
+        confirm_off_seconds: Option<f64>,
     },
 
     /// Turn the target device ON unconditionally.
@@ -102,9 +109,17 @@ impl Effect {
     /// The device friendly_name this effect targets.
     pub fn target(&self) -> &str {
         match self {
-            Self::Toggle { target }
+            Self::Toggle { target, .. }
             | Self::TurnOn { target }
             | Self::TurnOff { target } => target,
+        }
+    }
+
+    /// For `Toggle` with `confirm_off_seconds`, the confirmation window.
+    pub fn confirm_off_seconds(&self) -> Option<f64> {
+        match self {
+            Self::Toggle { confirm_off_seconds, .. } => *confirm_off_seconds,
+            _ => None,
         }
     }
 }
@@ -230,7 +245,29 @@ mod tests {
 
     #[test]
     fn effect_target_accessor() {
-        let e = Effect::Toggle { target: "z2m-p-bar".into() };
+        let e = Effect::Toggle { target: "z2m-p-bar".into(), confirm_off_seconds: None };
         assert_eq!(e.target(), "z2m-p-bar");
+    }
+
+    #[test]
+    fn deserialize_toggle_with_confirm_off() {
+        let json = r#"{
+            "name": "ws-toggle",
+            "trigger": { "kind": "tap", "device": "sonoff-ts-ws", "button": 1 },
+            "effect": { "kind": "toggle", "target": "sonoff-p-ws", "confirm_off_seconds": 1.0 }
+        }"#;
+        let rule: ActionRule = serde_json::from_str(json).unwrap();
+        assert_eq!(rule.effect.confirm_off_seconds(), Some(1.0));
+    }
+
+    #[test]
+    fn deserialize_toggle_without_confirm_off() {
+        let json = r#"{
+            "name": "printer-toggle",
+            "trigger": { "kind": "tap", "device": "hue-ts-office", "button": 3 },
+            "effect": { "kind": "toggle", "target": "z2m-p-printer" }
+        }"#;
+        let rule: ActionRule = serde_json::from_str(json).unwrap();
+        assert_eq!(rule.effect.confirm_off_seconds(), None);
     }
 }

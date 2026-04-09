@@ -38,14 +38,18 @@ use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use thiserror::Error;
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 
 use crate::config::{Config, Defaults};
 use crate::controller::Controller;
+use crate::domain::action::{Action, Payload};
 use crate::domain::event::Event;
 use crate::mqtt::{MqttBridge, MqttConfig, MqttError};
 use crate::time::Clock;
 use crate::topology::{Topology, TopologyError};
+use crate::web::decision_capture;
+use crate::web::server::{WebHandle, WsCommand};
+use crate::web::snapshot;
 
 /// Inter-publish gap when bursting `/get` queries to z2m during the
 /// startup state refresh. Each /get triggers a zigbee read, so flooding
@@ -62,10 +66,14 @@ pub enum DaemonError {
 }
 
 /// Build and run the daemon. Blocks until shutdown.
+///
+/// If `web` is `Some`, the event loop serves WebSocket commands and
+/// broadcasts state updates / decision logs to connected clients.
 pub async fn run(
     config: Config,
     mqtt: MqttConfig,
     clock: Arc<dyn Clock>,
+    web: Option<WebHandle>,
 ) -> anyhow::Result<()> {
     let topology = Arc::new(Topology::build(&config).context("topology validation")?);
     let defaults = config.defaults.clone();
@@ -103,7 +111,7 @@ pub async fn run(
 
     tracing::info!("startup state refresh complete; entering event loop");
 
-    run_event_loop(&mut controller, &bridge, &mut event_rx).await
+    run_event_loop(&mut controller, &bridge, &mut event_rx, web).await
 }
 
 /// Three-phase startup state refresh. See module docs.
@@ -229,29 +237,94 @@ const TICK_INTERVAL: Duration = Duration::from_secs(5);
 /// controller, publishes any returned actions. Injects periodic
 /// `Tick` events for kill-switch holdoff evaluation. Returns when the
 /// channel closes (shutdown signal handling lives one level up).
+///
+/// When `web` is `Some`, also handles WebSocket commands and broadcasts
+/// event/decision log entries and state updates.
 async fn run_event_loop(
     controller: &mut Controller,
     bridge: &MqttBridge,
     event_rx: &mut mpsc::Receiver<Event>,
+    web: Option<WebHandle>,
 ) -> anyhow::Result<()> {
     let mut tick = tokio::time::interval(TICK_INTERVAL);
     // The first tick fires immediately; skip it so we don't waste a
     // handle_event call right after startup.
     tick.tick().await;
 
+    let (mut ws_cmd_rx, broadcast_tx) = match web {
+        Some(wh) => (Some(wh.ws_cmd_rx), Some(wh.broadcast_tx)),
+        None => (None, None),
+    };
+    let has_web = broadcast_tx.is_some();
+    let mut event_seq: u64 = 0;
+
     loop {
+        // The select! macro requires all branches to be present at
+        // compile time. We use a helper future that never completes
+        // when web is disabled, so the branch is dead but compiles.
         let event = tokio::select! {
             msg = event_rx.recv() => {
                 match msg {
                     Some(event) => event,
-                    None => break, // channel closed
+                    None => break,
                 }
             }
             _ = tick.tick() => {
                 Event::Tick { ts: Instant::now() }
             }
+            cmd = recv_ws_cmd(&mut ws_cmd_rx) => {
+                match cmd {
+                    Some(cmd) => {
+                        handle_ws_command(
+                            cmd,
+                            controller,
+                            bridge,
+                            &broadcast_tx,
+                        ).await;
+                        continue;
+                    }
+                    None => continue,
+                }
+            }
         };
+
+        let now = Instant::now();
+
+        // Capture tracing decisions if web is enabled.
+        if has_web {
+            decision_capture::start_capture();
+        }
+
+        let event_summary = if has_web {
+            snapshot::summarize_event(&event)
+        } else {
+            String::new()
+        };
+
         let actions = controller.handle_event(event);
+
+        // Broadcast to WebSocket clients.
+        if let Some(tx) = &broadcast_tx {
+            let decisions = decision_capture::drain_capture();
+            if !event_summary.is_empty() || !actions.is_empty() || !decisions.is_empty() {
+                event_seq += 1;
+                let entry = hue_wire::DecisionLogEntry {
+                    seq: event_seq,
+                    timestamp_epoch_ms: snapshot::epoch_millis_now(),
+                    event_summary,
+                    decisions,
+                    actions_emitted: actions.iter().map(snapshot::action_to_dto).collect(),
+                };
+                let _ = tx.send(hue_wire::ServerMessage::EventLog(entry));
+            }
+
+            // Broadcast incremental state updates for any room/plug that
+            // may have changed. We broadcast all rooms — cheap since we
+            // typically have <20 rooms and JSON is small.
+            broadcast_state_updates(controller, tx, now);
+        }
+
+        // Publish actions to MQTT (the actual side effect).
         for action in actions {
             if let Err(e) = bridge.publish_action(&action).await {
                 tracing::error!(error = ?e, "failed to publish action");
@@ -260,6 +333,101 @@ async fn run_event_loop(
     }
     tracing::info!("event channel closed; daemon shutting down");
     Ok(())
+}
+
+/// Receive a command from the WebSocket channel if present. Returns
+/// `future::pending()` if there is no web handle, so the `select!`
+/// branch is effectively disabled.
+async fn recv_ws_cmd(
+    rx: &mut Option<mpsc::Receiver<WsCommand>>,
+) -> Option<WsCommand> {
+    match rx {
+        Some(rx) => rx.recv().await,
+        None => std::future::pending().await,
+    }
+}
+
+/// Handle a single WebSocket command. Runs synchronously on the event
+/// loop thread (no concurrent access to the controller).
+async fn handle_ws_command(
+    cmd: WsCommand,
+    controller: &mut Controller,
+    bridge: &MqttBridge,
+    broadcast_tx: &Option<broadcast::Sender<hue_wire::ServerMessage>>,
+) {
+    match cmd {
+        WsCommand::RequestSnapshot { reply } => {
+            let snap = snapshot::build_full_snapshot(controller, Instant::now());
+            let _ = reply.send(snap);
+        }
+        WsCommand::RequestTopology { reply } => {
+            let topo = snapshot::build_topology_info(controller.topology());
+            let _ = reply.send(topo);
+        }
+        WsCommand::RecallScene { room, scene_id } => {
+            if let Some(resolved) = controller.topology().room_by_name(&room) {
+                let action = Action::new(
+                    resolved.group_name.clone(),
+                    Payload::scene_recall(scene_id),
+                );
+                tracing::info!(room, scene_id, "web: recall scene");
+                if let Err(e) = bridge.publish_action(&action).await {
+                    tracing::error!(error = ?e, "web: failed to publish scene recall");
+                }
+            }
+        }
+        WsCommand::SetRoomOff { room } => {
+            if let Some(resolved) = controller.topology().room_by_name(&room) {
+                let action = Action::new(
+                    resolved.group_name.clone(),
+                    Payload::state_off(resolved.off_transition_seconds),
+                );
+                tracing::info!(room, "web: set room off");
+                if let Err(e) = bridge.publish_action(&action).await {
+                    tracing::error!(error = ?e, "web: failed to publish room off");
+                }
+            }
+        }
+        WsCommand::TogglePlug { device } => {
+            let is_on = controller
+                .plug_state_for(&device)
+                .map_or(false, |s| s.on);
+            let action = if is_on {
+                Action::for_device(device.clone(), Payload::device_off())
+            } else {
+                Action::for_device(device.clone(), Payload::device_on())
+            };
+            tracing::info!(device, target_state = !is_on, "web: toggle plug");
+            if let Err(e) = bridge.publish_action(&action).await {
+                tracing::error!(error = ?e, "web: failed to publish plug toggle");
+            }
+        }
+    }
+
+    // Broadcast a fresh snapshot after any command so clients see
+    // the effect immediately (before the z2m state callback arrives).
+    if let Some(tx) = &broadcast_tx {
+        broadcast_state_updates(controller, tx, Instant::now());
+    }
+}
+
+/// Broadcast current state of all rooms and plugs to WebSocket clients.
+fn broadcast_state_updates(
+    controller: &Controller,
+    tx: &broadcast::Sender<hue_wire::ServerMessage>,
+    now: Instant,
+) {
+    let topology = controller.topology();
+    for room in topology.rooms() {
+        if let Some(snap) = snapshot::build_room_snapshot(controller, &room.name, now) {
+            let _ = tx.send(hue_wire::ServerMessage::RoomUpdate(snap));
+        }
+    }
+    for plug_name in topology.all_plug_names() {
+        if let Some(snap) = snapshot::build_plug_snapshot(controller, plug_name, now) {
+            let _ = tx.send(hue_wire::ServerMessage::PlugUpdate(snap));
+        }
+    }
 }
 
 // `Defaults` is re-imported here so the doc comment at the top of this

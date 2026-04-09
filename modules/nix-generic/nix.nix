@@ -39,6 +39,8 @@ in
         connect-timeout = 5;
         keep-going = true;
         eval-cores = 0;
+        keep-outputs = true;
+        keep-derivations = true;
       };
 
       environment.systemPackages = [ pkgs.fh ];
@@ -57,6 +59,12 @@ in
           connect-timeout = 1;
           keep-going = true;
           use-xdg-base-directories = true;
+          # Preserve build outputs and derivations so remote-build
+          # artifacts (e.g. aarch64 packages built on o1/o2) survive GC.
+          # Without these, the GC severs the .drv → output chain and
+          # forces full rebuilds on the next deployment.
+          keep-outputs = true;
+          keep-derivations = true;
           # unsupported on Lix
           download-buffer-size = lib.mkIf (config.smind.nix.nix-impl != "lix") (1024 * 1024 * 1024); # 1 GiB;
         };

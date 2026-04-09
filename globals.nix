@@ -108,6 +108,7 @@ rec {
 
             { nixpkgs.overlays = [
                 inputs.nix-vscode-extensions.overlays.default
+                inputs.rust-overlay.overlays.default
                 (final: prev: {
                   claude-code = final.callPackage ./pkg/claude-code/package.nix { };
                   vscode-marketplace = prev.vscode-marketplace // {
@@ -142,6 +143,7 @@ rec {
             inputs.determinate.darwinModules.default
             { nixpkgs.overlays = [
                 inputs.nix-vscode-extensions.overlays.default
+                inputs.rust-overlay.overlays.default
                 (final: prev: {
                   claude-code = final.callPackage ./pkg/claude-code/package.nix { };
                   vscode-marketplace = prev.vscode-marketplace // {

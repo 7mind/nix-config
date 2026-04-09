@@ -11,6 +11,10 @@
     lanzaboote.url = "github:nix-community/lanzaboote"; # was v0.4.1, updated for newer rust/crane
     lanzaboote.inputs.nixpkgs.follows = "nixpkgs";
 
+    crane.url = "github:ipetkov/crane";
+    rust-overlay.url = "github:oxalica/rust-overlay";
+    rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
+
     home-manager.url = "github:nix-community/home-manager";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
 

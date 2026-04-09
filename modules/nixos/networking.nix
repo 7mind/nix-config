@@ -49,6 +49,46 @@ in
       description = "";
     };
 
+    smind.net.bridge.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Whether to create a bridge on top of the primary interface.
+        When true (default), a bridge is created and DHCP runs on it.
+        When false, DHCP runs directly on the primary interface.
+        Hosts with a single NIC and no need for L2 bridging (VMs,
+        containers) should set this to false.
+      '';
+    };
+
+    smind.net.vlans = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.submodule {
+        options = {
+          id = lib.mkOption {
+            type = lib.types.int;
+            description = "VLAN ID (802.1Q tag)";
+          };
+          dhcp = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Whether to use DHCP on this VLAN interface";
+          };
+        };
+      });
+      default = { };
+      description = ''
+        Additional VLANs to create on the primary network interface.
+        Each key is used as the VLAN interface name suffix
+        (e.g. key "iot-wifi" → interface "vlan-iot-wifi").
+      '';
+      example = lib.literalExpression ''
+        {
+          iot-wifi  = { id = 13; };
+          iot-wired = { id = 14; };
+        }
+      '';
+    };
+
   };
 
   config = lib.mkMerge [
@@ -56,17 +96,15 @@ in
       assertions =
         [
           ({
-            assertion =
-              (
-                config.smind.net.main-interface != "" &&
-                config.smind.net.main-bridge-macaddr != ""
-              )
-            ;
-            message = "set config.smind.net.main-interface";
+            assertion = config.smind.net.main-interface != "";
+            message = "smind.net.main-interface must be set for systemd-networkd mode";
+          })
+          ({
+            assertion = config.smind.net.bridge.enable -> config.smind.net.main-bridge-macaddr != "";
+            message = "smind.net.main-bridge-macaddr must be set when bridge is enabled";
           })
         ];
 
-      systemd.network.enable = true;
       services.networkd-dispatcher.enable = true;
 
       networking = {
@@ -131,81 +169,110 @@ in
       # };
 
 
-      systemd.network = {
-        links = lib.mkIf (config.smind.net.main-macaddr != "") {
-          "10-${config.smind.net.main-interface}.link" = {
-            matchConfig.PermanentMACAddress = config.smind.net.main-macaddr;
-            linkConfig.Name = config.smind.net.main-interface;
-          };
-        };
+      systemd.network =
+        let
+          cfg = config.smind.net;
+          iface = cfg.main-interface;
+          bridged = cfg.bridge.enable;
+          hostname =
+            if config.networking.domain != null
+            then "${config.networking.hostName}.${config.networking.domain}"
+            else config.networking.hostName;
+          hostname-v6 =
+            if config.networking.domain != null
+            then "${config.networking.hostName}-ipv6.${config.networking.domain}"
+            else "${config.networking.hostName}-ipv6";
 
-        netdevs = {
-          "10-${config.smind.net.main-bridge}" = {
-            netdevConfig = {
-              Kind = "bridge";
-              Name = config.smind.net.main-bridge;
-              MACAddress = config.smind.net.main-bridge-macaddr;
-            };
-          };
-        };
+          vlanNetdevs = lib.mapAttrs' (name: vlan:
+            lib.nameValuePair "30-vlan-${name}" {
+              netdevConfig = {
+                Kind = "vlan";
+                Name = "vlan-${name}";
+              };
+              vlanConfig.Id = vlan.id;
+            }
+          ) cfg.vlans;
 
-        networks = {
-          # Bridge slave: main-interface -> main-bridge
-          "10-${config.smind.net.main-interface}-bridge" = {
-            name = config.smind.net.main-interface;
-            bridge = [ config.smind.net.main-bridge ];
-            linkConfig = {
-              RequiredForOnline = "enslaved";
-            };
-          };
+          vlanNetworks = lib.mapAttrs' (name: vlan:
+            lib.nameValuePair "30-vlan-${name}" {
+              name = "vlan-${name}";
+              DHCP = if vlan.dhcp then "yes" else "no";
+              linkConfig.RequiredForOnline = "no";
+              networkConfig = {
+                IPv6AcceptRA = "yes";
+                LinkLocalAddressing = "yes";
+              };
+              dhcpV4Config = lib.mkIf vlan.dhcp {
+                SendHostname = true;
+                Hostname = hostname;
+                UseRoutes = false;
+              };
+            }
+          ) cfg.vlans;
 
-          "20-${config.smind.net.main-bridge}" = {
-            name = "${config.smind.net.main-bridge}";
+          vlanNames = lib.mapAttrsToList (name: _: "vlan-${name}") cfg.vlans;
+
+          dhcpNetworkConfig = {
             DHCP = "yes";
-
-            linkConfig = {
-              RequiredForOnline = "routable";
-            };
-
+            linkConfig.RequiredForOnline = "routable";
             networkConfig = {
               IPv6PrivacyExtensions = "no";
               DHCPPrefixDelegation = "yes";
               IPv6AcceptRA = "yes";
               LinkLocalAddressing = "yes";
             };
-
             dhcpV4Config = {
               SendHostname = true;
-              Hostname =
-                if config.networking.domain != null
-                then "${config.networking.hostName}.${config.networking.domain}"
-                else config.networking.hostName;
+              Hostname = hostname;
               UseDomains = true;
             };
-
             dhcpV6Config = {
               SendHostname = true;
-              Hostname =
-                if config.networking.domain != null
-                then "${config.networking.hostName}-ipv6.${config.networking.domain}"
-                else "${config.networking.hostName}-ipv6";
+              Hostname = hostname-v6;
               UseDomains = true;
             };
+          };
+        in
+        {
+          enable = true;
 
-            # routes = [{
-            #   Gateway = "192.168.10.1";
-            #   Destination = "0.0.0.0/0";
-            #   Metric = 500;
-            # }];
+          links = lib.mkIf (cfg.main-macaddr != "") {
+            "10-${iface}.link" = {
+              matchConfig.PermanentMACAddress = cfg.main-macaddr;
+              linkConfig.Name = iface;
+            };
+          };
+
+          netdevs = (lib.optionalAttrs bridged {
+            "10-${cfg.main-bridge}" = {
+              netdevConfig = {
+                Kind = "bridge";
+                Name = cfg.main-bridge;
+                MACAddress = cfg.main-bridge-macaddr;
+              };
+            };
+          }) // vlanNetdevs;
+
+          networks = (if bridged then {
+            # Bridged: main-interface is a bridge slave.
+            "10-${iface}" = {
+              name = iface;
+              bridge = [ cfg.main-bridge ];
+              vlan = vlanNames;
+              linkConfig.RequiredForOnline = "enslaved";
+            };
+            "20-${cfg.main-bridge}" = { name = cfg.main-bridge; } // dhcpNetworkConfig;
+          } else {
+            # Bridgeless: DHCP directly on main-interface.
+            "10-${iface}" = { name = iface; vlan = vlanNames; } // dhcpNetworkConfig;
+          }) // vlanNetworks;
+
+          wait-online = {
+            enable = false;
+            extraArgs =
+              [ "--interface=br-infra" ];
           };
         };
-      };
-
-      systemd.network.wait-online = {
-        enable = false;
-        extraArgs =
-          [ "--interface=br-infra" ];
-      };
     })
 
     (lib.mkIf (config.smind.net.mode == "networkmanager") {

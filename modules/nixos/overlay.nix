@@ -2,6 +2,7 @@
   pkgs,
   cfg-meta,
   cfg-flakes,
+  inputs,
   ...
 }:
 
@@ -94,7 +95,45 @@
 
         music-meta-fix = pkgs.callPackage "${cfg-meta.paths.pkg}/music-meta-fix/default.nix" { };
 
-        hue-controller = pkgs.callPackage "${cfg-meta.paths.pkg}/hue-controller/default.nix" { };
+        hue-frontend =
+          let
+            craneLib = (inputs.crane.mkLib pkgs).overrideToolchain (p:
+              p.rust-bin.stable.latest.default.override {
+                targets = [ "wasm32-unknown-unknown" ];
+              }
+            );
+            hue-controller-src = pkgs.lib.cleanSourceWith {
+              src = "${cfg-meta.paths.pkg}/hue-controller";
+              filter = name: type:
+                let baseName = baseNameOf (toString name); in
+                ! (type == "directory" && baseName == "target");
+            };
+          in
+          let
+            commonArgs = {
+              src = hue-controller-src;
+              cargoToml = "${hue-controller-src}/crates/hue-frontend/Cargo.toml";
+              cargoExtraArgs = "-p hue-frontend";
+            };
+            cargoArtifacts = craneLib.buildDepsOnly (commonArgs // {
+              CARGO_BUILD_TARGET = "wasm32-unknown-unknown";
+              doCheck = false;
+            });
+          in
+          craneLib.buildTrunkPackage (commonArgs // {
+            inherit cargoArtifacts;
+            wasm-bindgen-cli = pkgs.wasm-bindgen-cli;
+            # trunk must run from the frontend crate directory so it can
+            # find the [package] Cargo.toml. We cd there before trunk
+            # runs and adjust the install path accordingly.
+            preBuild = "cd crates/hue-frontend";
+            trunkIndexPath = "./index.html";
+            installPhaseCommand = "cp -r dist $out";
+          });
+
+        hue-controller = pkgs.callPackage "${cfg-meta.paths.pkg}/hue-controller/default.nix" {
+          hue-frontend = self.hue-frontend;
+        };
 
         zigbee-mqtt-import = pkgs.callPackage "${cfg-meta.paths.pkg}/zigbee-mqtt-import/default.nix" { };
         linux-3-finger-drag = pkgs.callPackage "${cfg-meta.paths.pkg}/linux-3-finger-drag/default.nix" { };

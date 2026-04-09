@@ -22,3 +22,4 @@ pub mod mqtt;
 pub mod provision;
 pub mod time;
 pub mod topology;
+pub mod web;
