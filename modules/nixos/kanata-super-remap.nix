@@ -120,6 +120,9 @@ in
           default = {
             configFile = ./kanata-super-remap.kbd;
             port = 22334;
+            "kanata-switcher" = {
+              enable = true;
+            };
           };
         };
         description = "Per-keyboard kanata service configuration";
