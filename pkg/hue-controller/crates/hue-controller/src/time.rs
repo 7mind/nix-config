@@ -29,6 +29,9 @@ pub trait Clock: std::fmt::Debug + Send + Sync {
     /// Local hour (0..=23) used for time-of-day slot dispatch. Returned
     /// as a `u8` because that's the type the slot ranges use.
     fn local_hour(&self) -> u8;
+
+    /// Local minute (0..=59) used for scheduled action triggers.
+    fn local_minute(&self) -> u8;
 }
 
 /// Production clock. Time-of-day comes from a configured IANA timezone so
@@ -53,6 +56,11 @@ impl Clock for SystemClock {
         let now = chrono::Utc::now().with_timezone(&self.timezone);
         now.hour() as u8
     }
+
+    fn local_minute(&self) -> u8 {
+        let now = chrono::Utc::now().with_timezone(&self.timezone);
+        now.minute() as u8
+    }
 }
 
 /// Test clock. The current `Instant` and local hour are both stored
@@ -67,6 +75,7 @@ pub struct FakeClock {
 struct FakeClockInner {
     now: Instant,
     hour: u8,
+    minute: u8,
 }
 
 impl FakeClock {
@@ -78,6 +87,7 @@ impl FakeClock {
             inner: std::sync::Mutex::new(FakeClockInner {
                 now: Instant::now(),
                 hour,
+                minute: 0,
             }),
         }
     }
@@ -95,6 +105,12 @@ impl FakeClock {
         let mut inner = self.inner.lock().expect("FakeClock mutex poisoned");
         inner.hour = hour;
     }
+
+    /// Set the local minute.
+    pub fn set_minute(&self, minute: u8) {
+        let mut inner = self.inner.lock().expect("FakeClock mutex poisoned");
+        inner.minute = minute;
+    }
 }
 
 impl Clock for FakeClock {
@@ -104,6 +120,10 @@ impl Clock for FakeClock {
 
     fn local_hour(&self) -> u8 {
         self.inner.lock().expect("FakeClock mutex poisoned").hour
+    }
+
+    fn local_minute(&self) -> u8 {
+        self.inner.lock().expect("FakeClock mutex poisoned").minute
     }
 }
 

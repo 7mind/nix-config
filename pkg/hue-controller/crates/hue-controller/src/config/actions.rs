@@ -68,6 +68,13 @@ pub enum Trigger {
         watts: f64,
         for_seconds: u64,
     },
+
+    /// Fires once per day at the specified local time (hour:minute).
+    /// Evaluated on every `Tick` event (~5 s resolution).
+    At {
+        hour: u8,
+        minute: u8,
+    },
 }
 
 /// Command to execute when a trigger fires.
@@ -95,27 +102,36 @@ pub enum Effect {
     TurnOff {
         target: String,
     },
+
+    /// Turn off every light zone (room group). Used for scheduled
+    /// "everything off" rules. The controller iterates all rooms and
+    /// publishes state OFF to each group.
+    TurnOffAllZones,
 }
 
 impl Trigger {
-    /// The device friendly_name this trigger watches.
-    pub fn device(&self) -> &str {
+    /// The device friendly_name this trigger watches, if any.
+    /// `At` triggers are time-based and have no device.
+    pub fn device(&self) -> Option<&str> {
         match self {
             Self::Tap { device, .. }
             | Self::SwitchOn { device }
             | Self::SwitchOff { device }
-            | Self::PowerBelow { device, .. } => device,
+            | Self::PowerBelow { device, .. } => Some(device),
+            Self::At { .. } => None,
         }
     }
 }
 
 impl Effect {
-    /// The device friendly_name this effect targets.
-    pub fn target(&self) -> &str {
+    /// The device friendly_name this effect targets, if any.
+    /// `TurnOffAllZones` has no single target.
+    pub fn target(&self) -> Option<&str> {
         match self {
             Self::Toggle { target, .. }
             | Self::TurnOn { target }
-            | Self::TurnOff { target } => target,
+            | Self::TurnOff { target } => Some(target),
+            Self::TurnOffAllZones => None,
         }
     }
 
@@ -141,8 +157,8 @@ mod tests {
         }"#;
         let rule: ActionRule = serde_json::from_str(json).unwrap();
         assert_eq!(rule.name, "printer-toggle");
-        assert_eq!(rule.trigger.device(), "hue-ts-office");
-        assert_eq!(rule.effect.target(), "z2m-p-printer");
+        assert_eq!(rule.trigger.device(), Some("hue-ts-office"));
+        assert_eq!(rule.effect.target(), Some("z2m-p-printer"));
         match &rule.trigger {
             Trigger::Tap { button, .. } => assert_eq!(*button, 3),
             other => panic!("expected Tap, got {other:?}"),
@@ -244,13 +260,15 @@ mod tests {
             watts: 1.0,
             for_seconds: 60,
         };
-        assert_eq!(t.device(), "z2m-p-foo");
+        assert_eq!(t.device(), Some("z2m-p-foo"));
     }
 
     #[test]
     fn effect_target_accessor() {
         let e = Effect::Toggle { target: "z2m-p-bar".into(), confirm_off_seconds: None };
-        assert_eq!(e.target(), "z2m-p-bar");
+        assert_eq!(e.target(), Some("z2m-p-bar"));
+
+        assert_eq!(Effect::TurnOffAllZones.target(), None);
     }
 
     #[test]

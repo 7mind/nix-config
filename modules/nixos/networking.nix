@@ -68,6 +68,11 @@ in
             type = lib.types.int;
             description = "VLAN ID (802.1Q tag)";
           };
+          macAddress = lib.mkOption {
+            type = lib.types.str;
+            default = "";
+            description = "MAC address for the VLAN interface. When empty, inherits from the parent interface.";
+          };
           dhcp = lib.mkOption {
             type = lib.types.bool;
             default = true;
@@ -188,6 +193,8 @@ in
               netdevConfig = {
                 Kind = "vlan";
                 Name = "vlan-${name}";
+              } // lib.optionalAttrs (vlan.macAddress != "") {
+                MACAddress = vlan.macAddress;
               };
               vlanConfig.Id = vlan.id;
             }

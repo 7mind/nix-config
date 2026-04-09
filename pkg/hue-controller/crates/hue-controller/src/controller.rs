@@ -139,6 +139,11 @@ pub struct Controller {
     /// Set on the first tap when a toggle-off requires confirmation;
     /// consumed by the second tap within the window.
     confirm_off_pending: BTreeMap<String, Instant>,
+
+    /// Last (hour, minute) at which each `At` trigger fired, keyed by
+    /// action rule name. Prevents re-firing on every 5-second tick
+    /// within the same minute.
+    at_last_fired: BTreeMap<String, (u8, u8)>,
 }
 
 impl Controller {
@@ -150,6 +155,7 @@ impl Controller {
             states: BTreeMap::new(),
             plug_states: BTreeMap::new(),
             confirm_off_pending: BTreeMap::new(),
+            at_last_fired: BTreeMap::new(),
         }
     }
 
@@ -852,82 +858,93 @@ impl Controller {
             .collect();
         let mut out = Vec::new();
         for (name, effect) in &rules {
-            if let Some(action) = self.execute_effect(name, effect, ts) {
-                out.push(action);
-            }
+            out.extend(self.execute_effect(name, effect, ts));
         }
         out
     }
 
-    /// Translate an [`Effect`] into an MQTT [`Action`], updating plug
-    /// state accordingly. Returns `None` when a confirm-off toggle is
+    /// Translate an [`Effect`] into MQTT [`Action`](s), updating state
+    /// accordingly. Returns empty vec when a confirm-off toggle is
     /// waiting for the second tap.
-    fn execute_effect(&mut self, rule_name: &str, effect: &Effect, ts: Instant) -> Option<Action> {
-        let target = effect.target();
-        let plug_state = self.plug_states.entry(target.to_string()).or_default();
-
+    fn execute_effect(&mut self, rule_name: &str, effect: &Effect, ts: Instant) -> Vec<Action> {
         match effect {
-            Effect::Toggle { confirm_off_seconds, .. } => {
+            Effect::Toggle { target, confirm_off_seconds } => {
+                let plug_state = self.plug_states.entry(target.to_string()).or_default();
                 if plug_state.on {
-                    // Turning OFF — check if confirmation is required.
                     if let Some(window) = confirm_off_seconds {
                         let window_dur = Duration::from_secs_f64(*window);
                         if let Some(pending_ts) = self.confirm_off_pending.remove(rule_name) {
                             if ts.duration_since(pending_ts) <= window_dur {
-                                // Second tap within window → confirm OFF.
                                 tracing::info!(
                                     rule = rule_name,
-                                    target,
+                                    target = target.as_str(),
                                     "action rule → confirm-off: second tap, turning off"
                                 );
                                 plug_state.on = false;
                                 plug_state.idle_since = None;
-                                return Some(Action::for_device(target, Payload::device_off()));
+                                return vec![Action::for_device(target, Payload::device_off())];
                             }
-                            // Second tap but outside window → treat as new first tap.
                         }
-                        // First tap (or expired window) → arm confirmation.
                         tracing::info!(
                             rule = rule_name,
-                            target,
+                            target = target.as_str(),
                             window_seconds = window,
                             "action rule → confirm-off: armed, tap again to turn off"
                         );
                         self.confirm_off_pending.insert(rule_name.to_string(), ts);
-                        return None;
+                        return Vec::new();
                     }
                 }
-                // No confirmation needed (turning ON, or no confirm_off_seconds).
-                // Also clear any stale pending confirmation.
                 self.confirm_off_pending.remove(rule_name);
                 let new_on = !plug_state.on;
-                let payload = if new_on {
-                    Payload::device_on()
-                } else {
-                    Payload::device_off()
-                };
+                let payload = if new_on { Payload::device_on() } else { Payload::device_off() };
                 tracing::info!(
                     rule = rule_name,
-                    target,
+                    target = target.as_str(),
                     from = plug_state.on,
                     to = new_on,
                     "action rule → toggle plug"
                 );
                 plug_state.on = new_on;
                 plug_state.idle_since = None;
-                Some(Action::for_device(target, payload))
+                vec![Action::for_device(target, payload)]
             }
-            Effect::TurnOn { .. } => {
-                tracing::info!(rule = rule_name, target, "action rule → turn on plug");
+            Effect::TurnOn { target } => {
+                let plug_state = self.plug_states.entry(target.to_string()).or_default();
+                tracing::info!(rule = rule_name, target = target.as_str(), "action rule → turn on plug");
                 plug_state.on = true;
                 plug_state.idle_since = None;
-                Some(Action::for_device(target, Payload::device_on()))
+                vec![Action::for_device(target, Payload::device_on())]
             }
-            Effect::TurnOff { .. } => {
-                tracing::info!(rule = rule_name, target, "action rule → turn off plug");
+            Effect::TurnOff { target } => {
+                let plug_state = self.plug_states.entry(target.to_string()).or_default();
+                tracing::info!(rule = rule_name, target = target.as_str(), "action rule → turn off plug");
                 plug_state.on = false;
                 plug_state.idle_since = None;
-                Some(Action::for_device(target, Payload::device_off()))
+                vec![Action::for_device(target, Payload::device_off())]
+            }
+            Effect::TurnOffAllZones => {
+                tracing::info!(rule = rule_name, "action rule → turn off all zones");
+                let mut out = Vec::new();
+                for room in self.topology.rooms() {
+                    let state = self.states.entry(room.name.clone()).or_default();
+                    if state.physically_on {
+                        tracing::info!(
+                            rule = rule_name,
+                            room = room.name.as_str(),
+                            group = room.group_name.as_str(),
+                            "turning off zone"
+                        );
+                        state.physically_on = false;
+                        state.motion_owned = false;
+                        state.cycle_idx = 0;
+                        out.push(Action::new(
+                            &room.group_name,
+                            Payload::state_off(room.off_transition_seconds),
+                        ));
+                    }
+                }
+                out
             }
         }
     }
@@ -988,10 +1005,12 @@ impl Controller {
                             );
                             plug.on = false;
                             plug.idle_since = None;
-                            out.push(Action::for_device(
-                                resolved.effect.target(),
-                                Payload::device_off(),
-                            ));
+                            if let Some(target) = resolved.effect.target() {
+                                out.push(Action::for_device(
+                                    target,
+                                    Payload::device_off(),
+                                ));
+                            }
                         }
                     }
                 } else {
@@ -1015,6 +1034,33 @@ impl Controller {
     /// Periodic tick: evaluate all pending kill-switch deadlines.
     fn handle_tick(&mut self, ts: Instant) -> Vec<Action> {
         let mut out = Vec::new();
+
+        // Evaluate scheduled At triggers.
+        let current_hour = self.clock.local_hour();
+        let current_minute = self.clock.local_minute();
+        let actions_snapshot = self.topology.actions().to_vec();
+        for resolved in &actions_snapshot {
+            let (target_hour, target_minute) = match &resolved.trigger {
+                Trigger::At { hour, minute } => (*hour, *minute),
+                _ => continue,
+            };
+            if current_hour == target_hour && current_minute == target_minute {
+                let last = self.at_last_fired.get(&resolved.name);
+                if last == Some(&(target_hour, target_minute)) {
+                    continue; // already fired this minute
+                }
+                tracing::info!(
+                    rule = resolved.name.as_str(),
+                    hour = target_hour,
+                    minute = target_minute,
+                    "scheduled trigger fired"
+                );
+                self.at_last_fired
+                    .insert(resolved.name.clone(), (target_hour, target_minute));
+                out.extend(self.execute_effect(&resolved.name, &resolved.effect, ts));
+            }
+        }
+
         // Iterate over all power_below action rules and check deadlines.
         let actions = self.topology.actions().to_vec();
         for resolved in &actions {
@@ -1039,10 +1085,12 @@ impl Controller {
                 let plug = self.plug_states.get_mut(device).unwrap();
                 plug.on = false;
                 plug.idle_since = None;
-                out.push(Action::for_device(
-                    resolved.effect.target(),
-                    Payload::device_off(),
-                ));
+                if let Some(target) = resolved.effect.target() {
+                    out.push(Action::for_device(
+                        target,
+                        Payload::device_off(),
+                    ));
+                }
             }
             // Note: we don't re-check threshold here — that happens on
             // PlugState events. Tick only fires the deadline.

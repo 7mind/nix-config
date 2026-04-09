@@ -600,17 +600,22 @@ impl Topology {
                 return Err(TopologyError::DuplicateActionName(rule.name.clone()));
             }
 
-            // Validate trigger device.
-            let trigger_device = rule.trigger.device();
-            let trigger_entry = config.devices.get(trigger_device).ok_or_else(|| {
-                TopologyError::ActionTriggerUnknownDevice {
-                    rule: rule.name.clone(),
-                    device: trigger_device.to_string(),
-                }
-            })?;
+            // Validate trigger device (if the trigger references one).
+            let trigger_entry = if let Some(trigger_device) = rule.trigger.device() {
+                let entry = config.devices.get(trigger_device).ok_or_else(|| {
+                    TopologyError::ActionTriggerUnknownDevice {
+                        rule: rule.name.clone(),
+                        device: trigger_device.to_string(),
+                    }
+                })?;
+                Some(entry)
+            } else {
+                None
+            };
 
             match &rule.trigger {
                 Trigger::Tap { device, button, action } => {
+                    let trigger_entry = trigger_entry.unwrap();
                     if !trigger_entry.is_tap() {
                         return Err(TopologyError::ActionTriggerWrongDeviceKind {
                             rule: rule.name.clone(),
@@ -627,6 +632,7 @@ impl Topology {
                         .push(idx);
                 }
                 Trigger::SwitchOn { device } => {
+                    let trigger_entry = trigger_entry.unwrap();
                     if !trigger_entry.is_switch() {
                         return Err(TopologyError::ActionTriggerWrongDeviceKind {
                             rule: rule.name.clone(),
@@ -643,6 +649,7 @@ impl Topology {
                         .push(idx);
                 }
                 Trigger::SwitchOff { device } => {
+                    let trigger_entry = trigger_entry.unwrap();
                     if !trigger_entry.is_switch() {
                         return Err(TopologyError::ActionTriggerWrongDeviceKind {
                             rule: rule.name.clone(),
@@ -659,6 +666,7 @@ impl Topology {
                         .push(idx);
                 }
                 Trigger::PowerBelow { device, .. } => {
+                    let trigger_entry = trigger_entry.unwrap();
                     if !trigger_entry.is_plug() {
                         return Err(TopologyError::ActionTriggerWrongDeviceKind {
                             rule: rule.name.clone(),
@@ -685,22 +693,27 @@ impl Topology {
                         .or_default()
                         .push(idx);
                 }
+                Trigger::At { .. } => {
+                    // No device to validate; time-based triggers are
+                    // evaluated in handle_tick.
+                }
             }
 
-            // Validate effect target — must be a plug.
-            let effect_target = rule.effect.target();
-            let effect_entry = config.devices.get(effect_target).ok_or_else(|| {
-                TopologyError::ActionEffectUnknownDevice {
-                    rule: rule.name.clone(),
-                    device: effect_target.to_string(),
+            // Validate effect target (if the effect has one — TurnOffAllZones doesn't).
+            if let Some(effect_target) = rule.effect.target() {
+                let effect_entry = config.devices.get(effect_target).ok_or_else(|| {
+                    TopologyError::ActionEffectUnknownDevice {
+                        rule: rule.name.clone(),
+                        device: effect_target.to_string(),
+                    }
+                })?;
+                if !effect_entry.is_plug() {
+                    return Err(TopologyError::ActionEffectNotPlug {
+                        rule: rule.name.clone(),
+                        device: effect_target.to_string(),
+                        kind: kind_label(effect_entry),
+                    });
                 }
-            })?;
-            if !effect_entry.is_plug() {
-                return Err(TopologyError::ActionEffectNotPlug {
-                    rule: rule.name.clone(),
-                    device: effect_target.to_string(),
-                    kind: kind_label(effect_entry),
-                });
             }
 
             actions.push(ResolvedAction {
