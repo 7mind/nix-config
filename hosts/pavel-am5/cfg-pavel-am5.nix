@@ -129,6 +129,8 @@
     desktop.gnome.gdm.monitors-xml = ./monitors.xml;
     desktop.gnome.switch-input-source-keybinding = [ "<Ctrl><Alt><Super>space" ];
 
+    keyboard.super-remap.kanata.keyboards.default.kanata-switcher.enable = true;
+
     dev.wireshark.users = [ "pavel" "test" ];
     dev.arduino = {
       ide.enable = true;

@@ -50,7 +50,7 @@ let
 
   kanataConfigDirs = lib.mapAttrs buildKanataConfig cfg.kanata.keyboards;
   switcherKeyboards = lib.filterAttrs (
-    _: keyboardCfg: keyboardCfg."kanata-switcher".enable && keyboardCfg.port != null
+    _: keyboardCfg: keyboardCfg.kanata-switcher.enable && keyboardCfg.port != null
   ) cfg.kanata.keyboards;
   switcherKeyboardNames = lib.attrNames switcherKeyboards;
   switcherServiceNames = map (
@@ -59,7 +59,7 @@ let
   switcherModuleKeyboards = lib.mapAttrs (
     keyboardName: keyboardCfg:
     let
-      switcherCfg = keyboardCfg."kanata-switcher";
+      switcherCfg = keyboardCfg.kanata-switcher;
     in
     {
       kanataPort = keyboardCfg.port;
@@ -79,7 +79,7 @@ in
             options = {
               port = lib.mkOption {
                 type = lib.types.nullOr lib.types.port;
-                default = null;
+                default = 22334;
                 description = "Port for the kanata TCP server";
               };
 
@@ -101,11 +101,16 @@ in
 
               configFile = lib.mkOption {
                 type = lib.types.path;
+                default = ./kanata-super-remap.kbd;
                 description = "Path to the kanata config file for this keyboard";
               };
 
-              "kanata-switcher" = {
-                enable = lib.mkEnableOption "kanata-switcher for automatic layer switching on this keyboard";
+              kanata-switcher = {
+                enable = lib.mkOption {
+                  type = lib.types.bool;
+                  default = true;
+                  description = "Enable kanata-switcher for automatic layer switching on this keyboard";
+                };
                 verbose = lib.mkEnableOption "disable --quiet-focus";
                 settings = lib.mkOption {
                   type = lib.types.listOf lib.types.attrs;
@@ -117,13 +122,7 @@ in
           }
         );
         default = {
-          default = {
-            configFile = ./kanata-super-remap.kbd;
-            port = 22334;
-            "kanata-switcher" = {
-              enable = true;
-            };
-          };
+          default = { };
         };
         description = "Per-keyboard kanata service configuration";
       };
@@ -143,7 +142,7 @@ in
         }
       ]
       ++ lib.mapAttrsToList (keyboardName: keyboardCfg: {
-        assertion = (!keyboardCfg."kanata-switcher".enable) || keyboardCfg.port != null;
+        assertion = (!keyboardCfg.kanata-switcher.enable) || keyboardCfg.port != null;
         message = "smind.keyboard.super-remap.kanata.keyboards.${keyboardName}.kanata-switcher requires a non-null port";
       }) cfg.kanata.keyboards;
 

@@ -113,6 +113,8 @@ in
     age.enable = true;
     roles.desktop.generic-gnome = true;
     isLaptop = true;
+
+    keyboard.super-remap.kanata.keyboards.default.kanata-switcher.enable = true;
     dev.wireshark.users = [ "pavel" ];
 
     power-management.enable = true;
