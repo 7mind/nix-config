@@ -6,11 +6,14 @@ let
   pushScript = pkgs.writeShellScript "attic-post-build-hook" ''
     set -f
     export IFS=' '
-    export ATTIC_CONFIG_DIR=$(mktemp -d)
-    trap 'rm -rf "$ATTIC_CONFIG_DIR"' EXIT
-    TOKEN=$(cat ${cfg.push.tokenFile}) || exit 0
-    ${pkgs.attic-client}/bin/attic login nas ${cfg.server-url} "$TOKEN" 2>/dev/null || exit 0
-    ${pkgs.attic-client}/bin/attic push nas:${cfg.cache-name} $OUT_PATHS 2>/dev/null || true
+    (
+      ATTIC_CONFIG_DIR=$(mktemp -d)
+      trap 'rm -rf "$ATTIC_CONFIG_DIR"' EXIT
+      TOKEN=$(cat ${cfg.push.tokenFile}) || exit 0
+      ${pkgs.attic-client}/bin/attic login nas ${cfg.server-url} "$TOKEN" 2>/dev/null || exit 0
+      ${pkgs.attic-client}/bin/attic push nas:${cfg.cache-name} $OUT_PATHS 2>/dev/null || true
+    ) &>/dev/null &
+    disown
   '';
 in
 {
@@ -42,6 +45,17 @@ in
         type = lib.types.path;
         description = "Path to a file containing the attic admin token (e.g. agenix secret path)";
       };
+
+      signingKeyFile = lib.mkOption {
+        type = lib.types.path;
+        description = "Path to the nix signing private key file. All locally-built paths will be signed with this key, enabling nix copy between hosts.";
+      };
+
+      signing-public-key = lib.mkOption {
+        type = lib.types.str;
+        default = "nix-local-1:Jbd41O4qAnV054TYjgERVAeu6Rh5R3F4RXyK6sQY5Uw=";
+        description = "Public key corresponding to signingKeyFile. Added to trusted-public-keys so other hosts accept signed paths.";
+      };
     };
   };
 
@@ -54,7 +68,11 @@ in
     }
 
     (lib.mkIf cfg.push.enable {
-      nix.settings.post-build-hook = pushScript;
+      nix.settings = {
+        post-build-hook = pushScript;
+        secret-key-files = [ cfg.push.signingKeyFile ];
+        trusted-public-keys = [ cfg.push.signing-public-key ];
+      };
     })
   ]);
 }
