@@ -231,6 +231,28 @@ impl MqttBridge {
         Ok(())
     }
 
+    /// Request a fresh value publish for a Z-Wave node's binary switch
+    /// state. Publishes a `writeValue` API call that reads (not writes)
+    /// the current value, causing Z-Wave JS UI to re-publish the
+    /// `currentValue` topic.
+    ///
+    /// Z-Wave JS UI doesn't support the zigbee2mqtt-style `<topic>/get`
+    /// pattern, so we use the MQTT API's `refreshValues` command instead.
+    pub async fn publish_zwave_refresh(
+        &self,
+        node_id: u16,
+    ) -> Result<(), MqttError> {
+        let topic = format!(
+            "{}refreshValues/set",
+            crate::mqtt::codec::zwave_api::GATEWAY_PREFIX,
+        );
+        let payload = serde_json::json!({"args": [node_id]});
+        self.client
+            .publish(topic, QoS::AtLeastOnce, false, serde_json::to_vec(&payload)?)
+            .await?;
+        Ok(())
+    }
+
     /// Borrow the topology — useful when the caller already has the
     /// bridge but needs to enumerate groups for the state-refresh logic.
     pub fn topology(&self) -> &Arc<Topology> {

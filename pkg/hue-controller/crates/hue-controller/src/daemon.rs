@@ -184,6 +184,40 @@ async fn refresh_state(
             "phase 3: groups still without state, defaulting to OFF"
         );
     }
+
+    // Phase 4: Z-Wave plug state refresh. With retain=false, the
+    // daemon has no idea whether Z-Wave plugs are on or off after a
+    // restart. Ask the Z-Wave JS UI gateway to re-poll each node's
+    // values; the resulting currentValue publishes arrive on the
+    // topics we already subscribe to and get processed as PlugState
+    // events during the drain window.
+    let zwave_map = topology.zwave_node_id_to_name();
+    if !zwave_map.is_empty() {
+        tracing::info!(
+            zwave_plugs = zwave_map.len(),
+            "phase 4: refreshing zwave plug states"
+        );
+        for (&node_id, name) in zwave_map {
+            tracing::info!(node_id, name = name.as_str(), "requesting zwave value refresh");
+            if let Err(e) = bridge.publish_zwave_refresh(node_id).await {
+                tracing::warn!(node_id, error = ?e, "failed to request zwave refresh");
+            }
+            tokio::time::sleep(GET_BURST_INTERPACKET_DELAY).await;
+        }
+        // Drain the Z-Wave responses.
+        let zwave_drain_window = Duration::from_secs(3);
+        let zwave_deadline = Instant::now() + zwave_drain_window;
+        drain_until(
+            controller,
+            bridge,
+            event_rx,
+            &mut seen_groups,
+            zwave_deadline,
+            all_groups.len(), // groups won't change, just draining zwave events
+        )
+        .await;
+    }
+
     Ok(())
 }
 
