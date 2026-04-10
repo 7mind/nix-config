@@ -64,6 +64,9 @@ in
       nix.settings = {
         substituters = [ "${cfg.server-url}/${cfg.cache-name}" ];
         trusted-public-keys = [ cfg.public-key ];
+        # Fall back to building locally when attic is unreachable
+        fallback = true;
+        connect-timeout = 3;
       };
     }
 

@@ -36,7 +36,7 @@ in
       nixpkgs.config.allowUnfree = true;
 
       nix.settings = {
-        connect-timeout = 5;
+        connect-timeout = 3;
         keep-going = true;
         eval-cores = 0;
         keep-outputs = true;
@@ -56,7 +56,7 @@ in
         '';
         optimise.automatic = true;
         settings = {
-          connect-timeout = 1;
+          connect-timeout = 3;
           keep-going = true;
           use-xdg-base-directories = true;
           # Preserve build outputs and derivations so remote-build
