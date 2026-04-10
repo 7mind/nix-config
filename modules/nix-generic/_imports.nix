@@ -1,5 +1,6 @@
 [
   ./age.nix
+  ./attic-cache.nix
   ./builders.nix
   ./env-settings.nix
   ./fonts.nix
