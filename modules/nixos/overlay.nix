@@ -87,7 +87,7 @@
 
         extract-initrd = pkgs.callPackage "${cfg-meta.paths.pkg}/extract-initrd/default.nix" { };
 
-        firejail-wrap = pkgs.callPackage "${cfg-meta.paths.pkg}/firejail-wrap/default.nix" { };
+        llm-sandbox = pkgs.callPackage "${cfg-meta.paths.pkg}/llm-sandbox/default.nix" { };
 
         netns-run = pkgs.callPackage "${cfg-meta.paths.pkg}/netns-run/default.nix" { };
 
@@ -137,6 +137,28 @@
 
         zigbee-mqtt-import = pkgs.callPackage "${cfg-meta.paths.pkg}/zigbee-mqtt-import/default.nix" { };
         linux-3-finger-drag = pkgs.callPackage "${cfg-meta.paths.pkg}/linux-3-finger-drag/default.nix" { };
+
+        # Workaround for NAS-WR01ZE bit-31 firmware bug (zwave-js/zwave-js#2692).
+        # The device randomly sets bit 31 in 4-byte meter report mantissa,
+        # causing values near -21,474,836 instead of small positive numbers.
+        # We mask off the MSB when the parsed meter value is implausibly negative.
+        zwave-js-ui =
+          let
+            bit31Fix = "if (value < -1e6) { const _p = data.subarray(offset + 1); const _prec = (_p[0] & 224) >>> 5; const _sz = _p[0] & 7; if (_sz === 4) value = (((_p[1] & 0x7F) << 24) | (_p[2] << 16) | (_p[3] << 8) | _p[4]) / Math.pow(10, _prec); }";
+            meterCCPath = "lib/node_modules/zwave-js-ui/node_modules/@zwave-js/cc/build";
+          in
+          super.zwave-js-ui.overrideAttrs (old: {
+            postInstall = (old.postInstall or "") + ''
+              substituteInPlace "$out/${meterCCPath}/cjs/cc/MeterCC.js" \
+                --replace-fail \
+                "const { scale: scale1Bits10, value, bytesRead } = (0, import_core.parseFloatWithScale)(data.subarray(offset + 1));" \
+                "let { scale: scale1Bits10, value, bytesRead } = (0, import_core.parseFloatWithScale)(data.subarray(offset + 1)); ${bit31Fix}"
+              substituteInPlace "$out/${meterCCPath}/esm/cc/MeterCC.js" \
+                --replace-fail \
+                "const { scale: scale1Bits10, value, bytesRead, } = parseFloatWithScale(data.subarray(offset + 1));" \
+                "let { scale: scale1Bits10, value, bytesRead, } = parseFloatWithScale(data.subarray(offset + 1)); ${bit31Fix}"
+            '';
+          });
 
       fractal = cfg-flakes.fractal.fractal-tray.overrideAttrs (old: {
               cargoDeps = pkgs.rustPlatform.fetchCargoVendor {

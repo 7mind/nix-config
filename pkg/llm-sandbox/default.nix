@@ -1,8 +1,8 @@
 { lib, pkgs, stdenvNoCC }:
 
 stdenvNoCC.mkDerivation {
-  name = "firejail-wrap";
-  src = ./firejail-wrap.sh;
+  name = "llm-sandbox";
+  src = ./llm-sandbox.sh;
 
   builder = pkgs.writeText "builder.sh" ''
     mkdir -p $out/bin

@@ -64,7 +64,7 @@ let
 
     ### Environment
 
-    - **Sandbox detection**: Check `$SMIND_SANDBOXED` in your environment. When set to `1`, you are running inside a bubblewrap sandbox via the `yolo-*` wrapper and the sandbox-specific guidance below applies. When unset, you are running unsandboxed with the user's normal filesystem permissions — ignore the sandbox-specific workflow and write wherever the task requires.
+    - **Sandbox detection**: Check `$SMIND_SANDBOXED` in your environment. When set to `1`, you are running inside a bubblewrap sandbox via the `yolo` wrapper and the sandbox-specific guidance below applies. When unset, you are running unsandboxed with the user's normal filesystem permissions — ignore the sandbox-specific workflow and write wherever the task requires.
     - **Sandbox layout** (when `SMIND_SANDBOXED=1`): The sandbox grants access to the project directory, `/nix`, and `/tmp/exchange`. Only writes to the project directory and `/tmp/exchange` persist — everything else is ephemeral and changes will be lost.
     - **Direct execution**: Always run project commands directly (compilation, tests, linting, git, formatting, etc.) — these work fine in or out of the sandbox. Only use the script workflow below for true sandbox escapes.
     - **For system interaction** (when `SMIND_SANDBOXED=1`): When you need to access `$HOME`, modify system configuration, or reach files outside the sandbox, use this workflow:
@@ -121,21 +121,6 @@ let
     trusted_folders = [ ];
   };
 
-  containerSocketForwardingSnippet = ''
-    SOCKET_ARGS=()
-    ${lib.optionalString rootlessPodmanEnabled ''
-      ROOTLESS_PODMAN_SOCKET_PATH=${lib.escapeShellArg rootlessPodmanSocketPath}
-      ROOTLESS_PODMAN_SOCKET_URI=${lib.escapeShellArg rootlessPodmanSocketUri}
-
-      if [[ -S "$ROOTLESS_PODMAN_SOCKET_PATH" ]]; then
-        SOCKET_ARGS+=(--rw "$ROOTLESS_PODMAN_SOCKET_PATH")
-        SOCKET_ARGS+=(--env "DOCKER_HOST=$ROOTLESS_PODMAN_SOCKET_URI")
-        SOCKET_ARGS+=(--env "CONTAINER_HOST=$ROOTLESS_PODMAN_SOCKET_URI")
-      else
-        echo "warning: podsvc-llm Podman socket not available, skipping bind: $ROOTLESS_PODMAN_SOCKET_PATH" >&2
-      fi
-    ''}
-  '';
 in
 {
   options = {
@@ -297,16 +282,6 @@ in
       home.file.".copilot-work/copilot-instructions.md".source =
         config.home.file.".copilot/copilot-instructions.md".source;
 
-      programs.zsh.shellAliases = lib.mkIf cfg-meta.isLinux {
-        copilot = "yolo-copilot";
-        copilot-work = "yolo-copilot-work";
-      };
-
-      programs.nushell.shellAliases = lib.mkIf cfg-meta.isLinux {
-        copilot = "yolo-copilot";
-        copilot-work = "yolo-copilot-work";
-      };
-
       home.file.".vibe/config.toml".source = tomlFormat.generate "vibe-config.toml" {
         system_prompt_id = "default_with_custom_instructions";
       };
@@ -370,7 +345,7 @@ in
         rules = claudeMemoryText;
       };
 
-      # Linux-only: bubblewrap sandbox and yolo-* wrapper scripts
+      # Linux-only: bubblewrap sandbox and yolo wrapper script
       home.packages = [
         pkgs.gh
         pkgs.github-copilot-cli
@@ -380,384 +355,21 @@ in
       ++ lib.optionals cfg-meta.isDarwin [
         inputs.claude-code-sandbox.packages."${pkgs.stdenv.hostPlatform.system}".default
       ]
-      ++ lib.optionals cfg-meta.isLinux (
-        let
-          firejail-wrap = pkgs.firejail-wrap;
-          nix-ld = pkgs.nix-ld;
-        in
-        [
-          # aichat
-          # aider-chat
-          # goose-cli
-          pkgs.bubblewrap
-          pkgs.reattach-llm
+      ++ lib.optionals cfg-meta.isLinux [
+        # aichat
+        # aider-chat
+        # goose-cli
+        pkgs.bubblewrap
+        pkgs.reattach-llm
 
-          (pkgs.writeShellScriptBin "yolo-claude" ''
-            ENV_ARGS=()
-            CMD_ARGS=()
-            while [[ $# -gt 0 ]]; do
-              case "$1" in
-                --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
-                *) CMD_ARGS+=("$1"); shift ;;
-              esac
-            done
-            ${containerSocketForwardingSnippet}
-            exec ${firejail-wrap}/bin/firejail-wrap \
-              --rw "''${PWD}" \
-              --rw "''${HOME}/.claude" \
-              --rw "''${HOME}/.claude.json" \
-              --rw "''${HOME}/.config/claude" \
-              --rw "''${HOME}/.codex" \
-              --rw "''${HOME}/.config/codex" \
-              --rw "''${HOME}/.cache" \
-              --rw "''${HOME}/.ivy2" \
-              "''${SOCKET_ARGS[@]}" \
-              --ro "''${HOME}/.config/git" \
-              --ro "''${HOME}/.config/direnv" \
-              --ro "''${HOME}/.local/share/direnv" \
-              --ro "''${HOME}/.direnvrc" \
-              --ro-bind "${nix-ld}/bin/nix-ld,/lib64/ld-linux-x86-64.so.2" \
-              --env SMIND_SANDBOXED=1 \
-              "''${ENV_ARGS[@]}" \
-              -- claude --permission-mode bypassPermissions "''${CMD_ARGS[@]}"
-          '')
-
-          (pkgs.writeShellScriptBin "yolo-claude-work" ''
-            ENV_ARGS=()
-            CMD_ARGS=()
-            while [[ $# -gt 0 ]]; do
-              case "$1" in
-                --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
-                *) CMD_ARGS+=("$1"); shift ;;
-              esac
-            done
-            mkdir -p "$HOME/.claude-work"
-            mkdir -p "$HOME/.claude-work-home"
-            mkdir -p "$HOME/.config/claude-work"
-            touch "$HOME/.claude-work-home/.claude.json"
-            ${containerSocketForwardingSnippet}
-            exec ${firejail-wrap}/bin/firejail-wrap \
-              --rw "''${PWD}" \
-              --bind "''${HOME}/.claude-work,''${HOME}/.claude" \
-              --bind "''${HOME}/.claude-work-home/.claude.json,''${HOME}/.claude.json" \
-              --bind "''${HOME}/.config/claude-work,''${HOME}/.config/claude" \
-              --rw "''${HOME}/.codex" \
-              --rw "''${HOME}/.config/codex" \
-              --rw "''${HOME}/.cache" \
-              --rw "''${HOME}/.ivy2" \
-              "''${SOCKET_ARGS[@]}" \
-              --ro "''${HOME}/.config/git" \
-              --ro "''${HOME}/.config/direnv" \
-              --ro "''${HOME}/.local/share/direnv" \
-              --ro "''${HOME}/.direnvrc" \
-              --ro-bind "${nix-ld}/bin/nix-ld,/lib64/ld-linux-x86-64.so.2" \
-              --env SMIND_SANDBOXED=1 \
-              "''${ENV_ARGS[@]}" \
-              -- claude --permission-mode bypassPermissions "''${CMD_ARGS[@]}"
-          '')
-
-          (pkgs.writeShellScriptBin "yolo-copilot" ''
-            ENV_ARGS=()
-            CMD_ARGS=()
-            COPILOT_CONFIG_DIR="$HOME/.copilot"
-            RAW_COPILOT="${pkgs.github-copilot-cli}/bin/copilot"
-            COPILOT_DEFAULT_CONFIG="${copilotConfig}"
-
-            ensure_copilot_config() {
-              local config_dir="$1"
-              local trusted_dir="$2"
-              local config_file="$config_dir/config.json"
-              local tmp_config
-
-              mkdir -p "$config_dir"
-              tmp_config="$(mktemp)"
-
-              if [[ -f "$config_file" ]]; then
-                ${pkgs.jq}/bin/jq \
-                  --slurpfile defaults "$COPILOT_DEFAULT_CONFIG" \
-                  --arg trusted_dir "$trusted_dir" \
-                  '
-                    ($defaults[0] + .)
-                    | .trusted_folders = (((.trusted_folders // []) + [$trusted_dir]) | unique)
-                  ' \
-                  "$config_file" > "$tmp_config"
-              else
-                ${pkgs.jq}/bin/jq \
-                  -n \
-                  --slurpfile defaults "$COPILOT_DEFAULT_CONFIG" \
-                  --arg trusted_dir "$trusted_dir" \
-                  '
-                    $defaults[0]
-                    | .trusted_folders = (((.trusted_folders // []) + [$trusted_dir]) | unique)
-                  ' > "$tmp_config"
-              fi
-
-              mv "$tmp_config" "$config_file"
-            }
-
-            copilot_args=(
-              --config-dir "$COPILOT_CONFIG_DIR"
-            )
-
-            while [[ $# -gt 0 ]]; do
-              case "$1" in
-                --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
-                *) CMD_ARGS+=("$1"); shift ;;
-              esac
-            done
-
-            ensure_copilot_config "$COPILOT_CONFIG_DIR" "$PWD"
-
-            case "''${CMD_ARGS[0]-}" in
-              help|init|login|plugin|update|version)
-                ;;
-              *)
-                copilot_args+=(
-                  --model gpt-5.4
-                  --reasoning-effort xhigh
-                  --autopilot
-                  --yolo
-                )
-                ;;
-            esac
-
-            ${containerSocketForwardingSnippet}
-            exec ${firejail-wrap}/bin/firejail-wrap \
-                --rw "''${PWD}" \
-                --rw "''${HOME}/.copilot" \
-                --rw "''${HOME}/.cache" \
-                --rw "''${HOME}/.ivy2" \
-                "''${SOCKET_ARGS[@]}" \
-                --ro "''${HOME}/.config/git" \
-              --ro "''${HOME}/.config/gh" \
-              --ro "''${HOME}/.config/direnv" \
-                --ro "''${HOME}/.local/share/direnv" \
-                --ro "''${HOME}/.direnvrc" \
-                --ro-bind "${nix-ld}/bin/nix-ld,/lib64/ld-linux-x86-64.so.2" \
-                --env SMIND_SANDBOXED=1 \
-                "''${ENV_ARGS[@]}" \
-                -- "$RAW_COPILOT" "''${copilot_args[@]}" "''${CMD_ARGS[@]}"
-          '')
-
-          (pkgs.writeShellScriptBin "yolo-copilot-work" ''
-            ENV_ARGS=()
-            CMD_ARGS=()
-            COPILOT_CONFIG_DIR="$HOME/.copilot-work"
-            RAW_COPILOT="${pkgs.github-copilot-cli}/bin/copilot"
-            COPILOT_DEFAULT_CONFIG="${copilotConfig}"
-
-            ensure_copilot_config() {
-              local config_dir="$1"
-              local trusted_dir="$2"
-              local config_file="$config_dir/config.json"
-              local tmp_config
-
-              mkdir -p "$config_dir"
-              tmp_config="$(mktemp)"
-
-              if [[ -f "$config_file" ]]; then
-                ${pkgs.jq}/bin/jq \
-                  --slurpfile defaults "$COPILOT_DEFAULT_CONFIG" \
-                  --arg trusted_dir "$trusted_dir" \
-                  '
-                    ($defaults[0] + .)
-                    | .trusted_folders = (((.trusted_folders // []) + [$trusted_dir]) | unique)
-                  ' \
-                  "$config_file" > "$tmp_config"
-              else
-                ${pkgs.jq}/bin/jq \
-                  -n \
-                  --slurpfile defaults "$COPILOT_DEFAULT_CONFIG" \
-                  --arg trusted_dir "$trusted_dir" \
-                  '
-                    $defaults[0]
-                    | .trusted_folders = (((.trusted_folders // []) + [$trusted_dir]) | unique)
-                  ' > "$tmp_config"
-              fi
-
-              mv "$tmp_config" "$config_file"
-            }
-
-            copilot_args=(
-              --config-dir "$COPILOT_CONFIG_DIR"
-            )
-
-            while [[ $# -gt 0 ]]; do
-              case "$1" in
-                --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
-                *) CMD_ARGS+=("$1"); shift ;;
-              esac
-            done
-
-            ensure_copilot_config "$COPILOT_CONFIG_DIR" "$PWD"
-
-            case "''${CMD_ARGS[0]-}" in
-              help|init|login|plugin|update|version)
-                ;;
-              *)
-                copilot_args+=(
-                  --model gpt-5.4
-                  --reasoning-effort xhigh
-                  --autopilot
-                  --yolo
-                )
-                ;;
-            esac
-
-            ${containerSocketForwardingSnippet}
-            exec ${firejail-wrap}/bin/firejail-wrap \
-                --rw "''${PWD}" \
-                --rw "''${HOME}/.copilot-work" \
-                --rw "''${HOME}/.cache" \
-                --rw "''${HOME}/.ivy2" \
-                "''${SOCKET_ARGS[@]}" \
-                --ro "''${HOME}/.config/git" \
-              --ro "''${HOME}/.config/gh" \
-              --ro "''${HOME}/.config/direnv" \
-                --ro "''${HOME}/.local/share/direnv" \
-                --ro "''${HOME}/.direnvrc" \
-                --ro-bind "${nix-ld}/bin/nix-ld,/lib64/ld-linux-x86-64.so.2" \
-                --env SMIND_SANDBOXED=1 \
-                "''${ENV_ARGS[@]}" \
-                -- "$RAW_COPILOT" "''${copilot_args[@]}" "''${CMD_ARGS[@]}"
-          '')
-
-          (pkgs.writeShellScriptBin "yolo-codex" ''
-            ENV_ARGS=()
-            CMD_ARGS=()
-            while [[ $# -gt 0 ]]; do
-              case "$1" in
-                --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
-                *) CMD_ARGS+=("$1"); shift ;;
-              esac
-            done
-            ${containerSocketForwardingSnippet}
-            exec ${firejail-wrap}/bin/firejail-wrap \
-              --rw "''${PWD}" \
-              --rw "''${HOME}/.codex" \
-              --rw "''${HOME}/.config/codex" \
-              --rw "''${HOME}/.cache" \
-              --rw "''${HOME}/.ivy2" \
-              "''${SOCKET_ARGS[@]}" \
-              --ro "''${HOME}/.config/git" \
-              --ro "''${HOME}/.config/direnv" \
-              --ro "''${HOME}/.local/share/direnv" \
-              --ro "''${HOME}/.direnvrc" \
-              --ro-bind "${nix-ld}/bin/nix-ld,/lib64/ld-linux-x86-64.so.2" \
-              --env SMIND_SANDBOXED=1 \
-              "''${ENV_ARGS[@]}" \
-              -- codex --dangerously-bypass-approvals-and-sandbox --search "''${CMD_ARGS[@]}"
-          '')
-
-          (pkgs.writeShellScriptBin "yolo-gemini" ''
-            ENV_ARGS=()
-            CMD_ARGS=()
-            while [[ $# -gt 0 ]]; do
-              case "$1" in
-                --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
-                *) CMD_ARGS+=("$1"); shift ;;
-              esac
-            done
-            ${containerSocketForwardingSnippet}
-            exec ${firejail-wrap}/bin/firejail-wrap \
-              --rw "''${PWD}" \
-              --rw "''${HOME}/.gemini" \
-              --rw "''${HOME}/.cache" \
-              --rw "''${HOME}/.ivy2" \
-              "''${SOCKET_ARGS[@]}" \
-              --ro "''${HOME}/.config/git" \
-              --ro "''${HOME}/.config/direnv" \
-              --ro "''${HOME}/.local/share/direnv" \
-              --ro "''${HOME}/.direnvrc" \
-              --ro-bind "${nix-ld}/bin/nix-ld,/lib64/ld-linux-x86-64.so.2" \
-              --env SMIND_SANDBOXED=1 \
-              "''${ENV_ARGS[@]}" \
-              -- gemini --yolo "''${CMD_ARGS[@]}"
-          '')
-
-          (pkgs.writeShellScriptBin "yolo-gemini-work" ''
-            ENV_ARGS=()
-            CMD_ARGS=()
-            while [[ $# -gt 0 ]]; do
-              case "$1" in
-                --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
-                *) CMD_ARGS+=("$1"); shift ;;
-              esac
-            done
-            ${containerSocketForwardingSnippet}
-            exec ${firejail-wrap}/bin/firejail-wrap \
-              --rw "''${PWD}" \
-              --bind "''${HOME}/.gemini-work,''${HOME}/.gemini" \
-              --rw "''${HOME}/.cache" \
-              --rw "''${HOME}/.ivy2" \
-              "''${SOCKET_ARGS[@]}" \
-              --ro "''${HOME}/.config/git" \
-              --ro "''${HOME}/.config/direnv" \
-              --ro "''${HOME}/.local/share/direnv" \
-              --ro "''${HOME}/.direnvrc" \
-              --ro-bind "${nix-ld}/bin/nix-ld,/lib64/ld-linux-x86-64.so.2" \
-              --env SMIND_SANDBOXED=1 \
-              "''${ENV_ARGS[@]}" \
-              -- gemini --yolo "''${CMD_ARGS[@]}"
-          '')
-
-          (pkgs.writeShellScriptBin "yolo-mistral-vibe" ''
-            ENV_ARGS=()
-            CMD_ARGS=()
-            while [[ $# -gt 0 ]]; do
-              case "$1" in
-                --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
-                *) CMD_ARGS+=("$1"); shift ;;
-              esac
-            done
-            mkdir -p "$HOME/.vibe"
-            mkdir -p "$HOME/.local/share/vibe"
-            ${containerSocketForwardingSnippet}
-            exec ${firejail-wrap}/bin/firejail-wrap \
-              --rw "''${PWD}" \
-              --rw "''${HOME}/.vibe" \
-              --rw "''${HOME}/.local/share/vibe" \
-              --rw "''${HOME}/.cache" \
-              --rw "''${HOME}/.ivy2" \
-              "''${SOCKET_ARGS[@]}" \
-              --ro "''${HOME}/.config/git" \
-              --ro "''${HOME}/.config/direnv" \
-              --ro "''${HOME}/.local/share/direnv" \
-              --ro "''${HOME}/.direnvrc" \
-              --ro-bind "${nix-ld}/bin/nix-ld,/lib64/ld-linux-x86-64.so.2" \
-              --env SMIND_SANDBOXED=1 \
-              "''${ENV_ARGS[@]}" \
-            -- vibe --agent auto-approve "''${CMD_ARGS[@]}"
-          '')
-
-          (pkgs.writeShellScriptBin "yolo-opencode" ''
-            ENV_ARGS=()
-            CMD_ARGS=()
-            while [[ $# -gt 0 ]]; do
-              case "$1" in
-                --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
-                *) CMD_ARGS+=("$1"); shift ;;
-              esac
-            done
-            ${containerSocketForwardingSnippet}
-            exec ${firejail-wrap}/bin/firejail-wrap \
-              --rw "''${PWD}" \
-              --rw "''${HOME}/.config/opencode" \
-              --rw "''${HOME}/.local/share/opencode" \
-              --rw "''${HOME}/.cache" \
-              --rw "''${HOME}/.ivy2" \
-              "''${SOCKET_ARGS[@]}" \
-              --ro "''${HOME}/.config/git" \
-              --ro "''${HOME}/.config/direnv" \
-              --ro "''${HOME}/.local/share/direnv" \
-              --ro "''${HOME}/.direnvrc" \
-              --ro-bind "${nix-ld}/bin/nix-ld,/lib64/ld-linux-x86-64.so.2" \
-              --env SMIND_SANDBOXED=1 \
-              "''${ENV_ARGS[@]}" \
-              -- opencode "''${CMD_ARGS[@]}"
-          '')
-        ]
-      );
+        (pkgs.callPackage "${cfg-meta.paths.pkg}/yolo/default.nix" {
+          inherit copilotConfig;
+          podmanSocketPath =
+            if rootlessPodmanEnabled then rootlessPodmanSocketPath else null;
+          podmanSocketUri =
+            if rootlessPodmanEnabled then rootlessPodmanSocketUri else null;
+        })
+      ];
     })
   ];
 }

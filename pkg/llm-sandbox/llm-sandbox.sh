@@ -9,7 +9,7 @@ ENVS=()
 
 show_help() {
   cat <<EOF
-Usage: firejail-wrap [OPTIONS] -- COMMAND [ARGS...]
+Usage: llm-sandbox [OPTIONS] -- COMMAND [ARGS...]
 
 Wrapper around bubblewrap with simplified path whitelisting.
 
@@ -22,7 +22,7 @@ Options:
   --help           Show this help
 
 Example:
-  firejail-wrap --rw "\$PWD" --env FOO=bar -- myapp --flag
+  llm-sandbox --rw "\$PWD" --env FOO=bar -- myapp --flag
 EOF
   exit 0
 }
