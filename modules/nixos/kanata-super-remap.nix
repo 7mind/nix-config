@@ -171,7 +171,7 @@ in
       ) kanataConfigDirs;
     })
 
-    (lib.mkIf (switcherKeyboardNames != [ ]) {
+    (lib.mkIf (cfg.enable && switcherKeyboardNames != [ ]) {
       services.kanata-switcher = {
         enable = true;
         gnomeExtension.enable = false; # managed in gnome-extensions.nix
