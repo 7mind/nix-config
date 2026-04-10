@@ -65,7 +65,7 @@ in
 
     public-key = lib.mkOption {
       type = lib.types.str;
-      default = "nas.home.7mind.io-1:0yzrMlTWAoq2aGTXCQ+jurDEB1r8X5phENygSRz7PwY=";
+      default = "main:EF5cnoxTpeY23deCWlU5ywj32Wf+nOL483aMq2OC14Q=";
       description = "Public signing key of the attic cache";
     };
 
