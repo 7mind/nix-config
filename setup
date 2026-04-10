@@ -30,6 +30,7 @@ DO_SWITCH=false
 DO_REKEY=false
 DO_GIT=true
 DO_PUSH=true
+DO_CACHE_PUSH=true
 DO_LIST=false
 DO_ALLOW_SHORT_HOST=false
 DO_OFFLINE=false
@@ -53,6 +54,7 @@ Options:
   -r, --refresh     Update flake inputs before building
   -n, --no-git      Skip git commit and push
   -np, --no-push    Commit locally but skip git push
+  -nc, --no-cache   Skip pushing closures to attic cache (still inhibits per-build hooks)
   -m, --message=MSG Custom git commit message (default: "autosave (<host> / <os>)")
   -l, --list        List known hosts and exit
   --allow-short-host
@@ -214,6 +216,10 @@ parse_args() {
                 ;;
             -np|--no-push)
                 DO_PUSH=false
+                shift
+                ;;
+            -nc|--no-cache)
+                DO_CACHE_PUSH=false
                 shift
                 ;;
             -m|--message)
@@ -404,9 +410,11 @@ attic_inhibit_start() {
     trap 'rm -f "$ATTIC_INHIBIT"' EXIT
 }
 
-attic_inhibit_stop_and_push() {
-    rm -f "$ATTIC_INHIBIT"
-    trap - EXIT
+attic_push_closures() {
+    if [[ "$DO_CACHE_PUSH" != "true" ]]; then
+        echo "==> Skipping attic cache push (-nc)"
+        return
+    fi
 
     if command -v attic-push-closure &>/dev/null; then
         local -a closures=()
@@ -418,6 +426,11 @@ attic_inhibit_stop_and_push() {
             attic-push-closure "${closures[@]}" || echo "    Warning: attic push failed (non-fatal)"
         fi
     fi
+}
+
+attic_inhibit_stop() {
+    rm -f "$ATTIC_INHIBIT"
+    trap - EXIT
 }
 
 do_build() {
@@ -532,8 +545,9 @@ main() {
     do_rekey
     attic_inhibit_start
     do_build
+    attic_push_closures
     do_switch
-    attic_inhibit_stop_and_push
+    attic_inhibit_stop
 
     echo "==> Done!"
 }
