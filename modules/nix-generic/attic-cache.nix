@@ -9,10 +9,19 @@ let
     set -f
     export IFS=' '
     (
-      ATTIC_CONFIG_DIR=$(mktemp -d)
-      trap 'rm -rf "$ATTIC_CONFIG_DIR"' EXIT
       TOKEN=$(cat ${cfg.push.tokenFile}) || { ${log} -p user.err "failed to read token"; exit 0; }
-      ${pkgs.attic-client}/bin/attic login nas ${cfg.server-url} "$TOKEN" 2>&1 || { ${log} -p user.err "login failed"; exit 0; }
+
+      # Write attic config directly instead of calling `attic login` (avoids an HTTP round-trip per build)
+      export ATTIC_CONFIG_DIR=$(mktemp -d)
+      trap 'rm -rf "$ATTIC_CONFIG_DIR"' EXIT
+      cat > "$ATTIC_CONFIG_DIR/config.toml" <<EOF
+    default-server = "nas"
+
+    [servers.nas]
+    endpoint = "${cfg.server-url}"
+    token = "$TOKEN"
+    EOF
+
       OUTPUT=$(${pkgs.attic-client}/bin/attic push nas:${cfg.cache-name} $OUT_PATHS 2>&1) || ${log} -p user.warning "push failed for $OUT_PATHS: $OUTPUT"
       ${log} -p user.info "$OUTPUT"
     ) &
