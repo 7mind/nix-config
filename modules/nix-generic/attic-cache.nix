@@ -1,16 +1,33 @@
-{ config, lib, ... }:
+{ config, lib, pkgs, ... }:
 
 let
   cfg = config.smind.infra.attic-cache;
+
+  pushScript = pkgs.writeShellScript "attic-post-build-hook" ''
+    set -eu
+    set -f
+    export IFS=' '
+    export ATTIC_CONFIG_DIR=$(mktemp -d)
+    trap 'rm -rf "$ATTIC_CONFIG_DIR"' EXIT
+    TOKEN=$(cat ${cfg.push.tokenFile})
+    ${pkgs.attic-client}/bin/attic login nas ${cfg.server-url} "$TOKEN" 2>/dev/null
+    ${pkgs.attic-client}/bin/attic push nas:${cfg.cache-name} $OUT_PATHS
+  '';
 in
 {
   options.smind.infra.attic-cache = {
     enable = lib.mkEnableOption "use attic binary cache on nas as a nix substituter";
 
-    url = lib.mkOption {
+    server-url = lib.mkOption {
       type = lib.types.str;
-      default = "http://nas.home.7mind.io:8080/main";
-      description = "URL of the attic cache (including cache name)";
+      default = "http://nas.home.7mind.io:8080";
+      description = "Base URL of the attic server";
+    };
+
+    cache-name = lib.mkOption {
+      type = lib.types.str;
+      default = "main";
+      description = "Name of the attic cache";
     };
 
     public-key = lib.mkOption {
@@ -18,12 +35,27 @@ in
       default = "nas.home.7mind.io-1:0yzrMlTWAoq2aGTXCQ+jurDEB1r8X5phENygSRz7PwY=";
       description = "Public signing key of the attic cache";
     };
-  };
 
-  config = lib.mkIf cfg.enable {
-    nix.settings = {
-      substituters = [ cfg.url ];
-      trusted-public-keys = [ cfg.public-key ];
+    push = {
+      enable = lib.mkEnableOption "automatic push to attic cache after every build";
+
+      tokenFile = lib.mkOption {
+        type = lib.types.path;
+        description = "Path to a file containing the attic admin token (e.g. agenix secret path)";
+      };
     };
   };
+
+  config = lib.mkIf cfg.enable (lib.mkMerge [
+    {
+      nix.settings = {
+        substituters = [ "${cfg.server-url}/${cfg.cache-name}" ];
+        trusted-public-keys = [ cfg.public-key ];
+      };
+    }
+
+    (lib.mkIf cfg.push.enable {
+      nix.settings.post-build-hook = pushScript;
+    })
+  ]);
 }

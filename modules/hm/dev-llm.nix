@@ -9,6 +9,13 @@
 let
   jsonFormat = pkgs.formats.json { };
   tomlFormat = pkgs.formats.toml { };
+
+  codexPluginCc = pkgs.fetchFromGitHub {
+    owner = "openai";
+    repo = "codex-plugin-cc";
+    rev = "6a5c2ba53b734f3cdd8daacbd49f68f3e6c8c167";
+    hash = "sha256-4kqtfdHlcg3YXWX1og9b5JuLgnB/3Nj5dFMe4Ryt7No=";
+  };
   rootlessPodmanEnabled =
     cfg-meta.isLinux && (outerConfig.smind.containers.docker.rootless.enable or false);
   rootlessPodmanSocketPathValue = outerConfig.smind.containers.docker.rootless.llmSocketPath or null;
@@ -182,6 +189,7 @@ in
 
       programs.claude-code = {
         enable = true;
+        plugins = [ "${codexPluginCc}/plugins/codex" ];
         settings = {
           alwaysThinkingEnabled = true;
           theme = "dark";

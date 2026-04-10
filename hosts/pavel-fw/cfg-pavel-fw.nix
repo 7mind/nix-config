@@ -178,6 +178,7 @@ in
 
     ssh.mode = "safe";
 
+    infra.attic-cache.enable = true;
     iperf.enable = true;
 
     isDesktop = true;
