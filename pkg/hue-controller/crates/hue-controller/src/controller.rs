@@ -84,11 +84,12 @@
 //!
 //! When `zigbee2mqtt/<group>` reports a state change, the controller
 //! reconciles `physically_on`. If the new state is OFF, also clears
-//! `motion_owned` (something else turned the lights off). If the new
-//! state is ON and we didn't initiate it, clears `motion_owned` too
-//! (the user used HA / the Hue app and we shouldn't motion-off that).
-//! `last_press_at` is NOT touched on external state changes — only on
-//! actual button presses.
+//! `motion_owned` and stamps `last_off_at` (cooldown protection against
+//! immediate motion re-trigger). If the new state is ON and we didn't
+//! initiate it, the room stays user-owned (`motion_owned = false`) —
+//! motion-off won't fire until a sensor goes through a full
+//! occupied→cleared cycle. `last_press_at` is NOT touched on external
+//! state changes — only on actual button presses.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -192,7 +193,7 @@ impl Controller {
                 illuminance,
                 ts,
             } => self.handle_occupancy(&sensor, occupied, illuminance, ts),
-            Event::GroupState { group, on, ts: _ } => self.handle_group_state(&group, on),
+            Event::GroupState { group, on, ts } => self.handle_group_state(&group, on, ts),
             Event::PlugState {
                 device,
                 on,
@@ -224,33 +225,28 @@ impl Controller {
         state.physically_on = on;
     }
 
-    /// Walk every room that the startup state refresh observed as
-    /// physically on, and mark it as motion-owned.
+    /// Log rooms that are physically on at startup but leave them
+    /// user-owned (motion_owned = false).
     ///
-    /// Motivation: `motion_owned` doesn't survive a daemon restart (it
-    /// only lives in the in-memory `ZoneState` map), so we have no way
-    /// to know on cold start whether the lights came on via a user
-    /// press, an HA call, or a motion sensor. The conservative default
-    /// would be "user-owned" (don't auto-off), but that means lights
-    /// that happened to be on at boot stay on indefinitely until the
-    /// user explicitly toggles them. The opposite default — assume
-    /// motion ownership — costs us at most one false auto-off after
-    /// reboot (only if the user genuinely had the lights on for a
-    /// non-motion reason), which is far less annoying than lights that
-    /// won't go off on their own.
+    /// Trade-off: rooms that were on at daemon startup won't auto-off
+    /// via motion sensors until a full occupied→cleared cycle fires.
+    /// The user must manually toggle them, or wait for a motion sensor
+    /// to go through a complete on→off cycle. This avoids the opposite
+    /// problem — a false auto-off right after restart when a sensor
+    /// timeout expires and turns off lights the user intentionally had
+    /// on. Verified by the TLA+ invariant `MotionOwnedImpliesSensorHistory`.
     ///
     /// Called by [`crate::daemon::run`] after the three-phase state
     /// refresh completes, before the event loop starts processing
     /// real-world events.
     pub fn seed_motion_ownership_for_lit_rooms(&mut self) {
         for (room_name, state) in self.states.iter_mut() {
-            if state.physically_on && !state.motion_owned {
+            if state.physically_on {
                 tracing::info!(
                     room = %room_name,
-                    "startup: seeding motion ownership (room is physically on; \
-                     defaulting to motion-owned so motion-off can clear it later)"
+                    "startup: room is physically on; leaving user-owned \
+                     (motion-off requires a full occupied→cleared cycle)"
                 );
-                state.motion_owned = true;
             }
         }
     }
@@ -464,7 +460,7 @@ impl Controller {
             Payload::scene_recall(next_scene),
         ));
         self.write_after_on(room_name, ts, next_idx);
-        self.propagate_to_descendants(room_name, true);
+        self.propagate_to_descendants(room_name, true, ts);
     }
 
     /// Tap button handler. Three-branch state machine — same shape as
@@ -528,7 +524,7 @@ impl Controller {
                 Payload::scene_recall(first),
             ));
             self.write_after_on(room_name, ts, 0);
-            self.propagate_to_descendants(room_name, true);
+            self.propagate_to_descendants(room_name, true, ts);
         } else if within_window {
             // Branch 2: cycle to next scene mod N.
             let n = scenes_for_now.len();
@@ -555,7 +551,7 @@ impl Controller {
                 Payload::scene_recall(next_scene),
             ));
             self.write_after_on(room_name, ts, next_idx);
-            self.propagate_to_descendants(room_name, true);
+            self.propagate_to_descendants(room_name, true, ts);
         } else {
             // Branch 3: window expired → toggle off.
             let elapsed_ms = elapsed_since_last
@@ -588,7 +584,7 @@ impl Controller {
             Payload::state_off(off_transition),
         ));
         self.write_after_off(room_name, ts);
-        self.propagate_to_descendants(room_name, false);
+        self.propagate_to_descendants(room_name, false, ts);
     }
 
     fn handle_occupancy(
@@ -711,7 +707,7 @@ impl Controller {
             state.motion_owned = true;
             state.cycle_idx = 0;
             // Don't touch last_press_at — this isn't a button press.
-            self.propagate_to_descendants(room_name, true);
+            self.propagate_to_descendants(room_name, true, ts);
         } else {
             // motion-off gates:
             //   - we own the lights (motion turned them on)
@@ -754,11 +750,11 @@ impl Controller {
             state.motion_owned = false;
             state.last_off_at = Some(ts);
             state.cycle_idx = 0;
-            self.propagate_to_descendants(room_name, false);
+            self.propagate_to_descendants(room_name, false, ts);
         }
     }
 
-    fn handle_group_state(&mut self, group_name: &str, on: bool) -> Vec<Action> {
+    fn handle_group_state(&mut self, group_name: &str, on: bool, ts: Instant) -> Vec<Action> {
         let Some(room) = self.topology.room_by_group_name(group_name) else {
             return Vec::new();
         };
@@ -781,23 +777,19 @@ impl Controller {
         // (button press handlers set physically_on synchronously, so
         // their own echoes hit the no-transition branch above).
         if on {
-            // off → on. We have no way to know whether the user pressed
-            // a switch, opened the Hue app, or a motion sensor we don't
-            // know about turned the lights on. Default to motion-owned
-            // so motion-off can later auto-clear the room. The cost of
-            // being wrong is at most one false auto-off; the cost of
-            // defaulting the OTHER way is lights stuck on indefinitely
-            // until the user manually toggles them. The same reasoning
-            // is applied at startup by `seed_motion_ownership_for_lit_rooms`,
-            // which still runs as defense in depth for rooms whose
-            // group-state event arrived during the refresh window.
-            state.motion_owned = true;
+            // off → on via external source (Hue app, HA, unknown).
+            // Leave user-owned: motion-off won't fire until a sensor
+            // goes through a full occupied→cleared cycle. Trade-off:
+            // the room won't auto-off on its own, but we avoid false
+            // auto-offs where a sensor timeout immediately undoes what
+            // the user just turned on. Verified by TLA+ invariant
+            // MotionOwnedImpliesSensorHistory.
             tracing::info!(
                 group = group_name,
                 room = %room_name,
                 from = was_on,
                 to = on,
-                "group state echo → off→on transition (defaulting to motion-owned)"
+                "group state echo → off→on transition (leaving user-owned)"
             );
         } else {
             // on → off. The lights are gone; reset cycle position so
@@ -806,6 +798,7 @@ impl Controller {
             // doesn't need ownership to do anything.
             state.motion_owned = false;
             state.cycle_idx = 0;
+            state.last_off_at = Some(ts);
             tracing::info!(
                 group = group_name,
                 room = %room_name,
@@ -943,6 +936,7 @@ impl Controller {
                         state.physically_on = false;
                         state.motion_owned = false;
                         state.cycle_idx = 0;
+                        state.last_off_at = Some(ts);
                         out.push(Action::new(
                             &room.group_name,
                             Payload::state_off(room.off_transition_seconds),
@@ -1133,7 +1127,7 @@ impl Controller {
     /// transitive descendant. Mirrors what z2m would tell us via group
     /// state events anyway, but lets the next button press see the
     /// correct state immediately instead of racing the broker round-trip.
-    fn propagate_to_descendants(&mut self, ancestor: &str, on: bool) {
+    fn propagate_to_descendants(&mut self, ancestor: &str, on: bool, ts: Instant) {
         let descendants: Vec<RoomName> = self.topology.descendants_of(ancestor).to_vec();
         if descendants.is_empty() {
             return;
@@ -1160,8 +1154,9 @@ impl Controller {
             // motion ownership.
             state.motion_owned = false;
             if !on {
-                // Mirror what an own-room OFF would do.
-                state.last_off_at = None; // reset cooldown for descendants too
+                // Stamp cooldown so descendants get the same protection
+                // as the ancestor room against immediate motion re-trigger.
+                state.last_off_at = Some(ts);
             }
         }
     }
@@ -2345,19 +2340,19 @@ mod tests {
     // ---- startup motion-ownership seed ----------------------------------
 
     #[test]
-    fn seed_motion_ownership_marks_lit_rooms_motion_owned() {
+    fn seed_does_not_assume_motion_ownership() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = study_with_motion_controller(clk.clone());
         // Pretend the daemon's startup state refresh saw the room
         // physically on (e.g. from a retained group-state message).
         c.set_physical_state("study", true);
-        assert!(!c.state_for("study").unwrap().motion_owned);
 
         c.seed_motion_ownership_for_lit_rooms();
 
         assert!(
-            c.state_for("study").unwrap().motion_owned,
-            "lit rooms should default to motion-owned at startup"
+            !c.state_for("study").unwrap().motion_owned,
+            "lit rooms must stay user-owned at startup (trade-off: \
+             no auto-off until a full motion cycle fires)"
         );
     }
 
@@ -2375,31 +2370,26 @@ mod tests {
     }
 
     #[test]
-    fn motion_off_fires_after_startup_seed() {
-        // Full path: room was physically on at startup → seed motion
-        // ownership → next motion-off event auto-clears the room.
-        // This is the regression scenario the user reported.
+    fn motion_off_suppressed_after_startup_seed() {
+        // After startup seed, rooms are user-owned. A sensor clearance
+        // should NOT auto-off — the user may have intentionally left
+        // the lights on. Only a full occupied→cleared cycle can claim
+        // motion ownership.
         let clk = Arc::new(FakeClock::new(12));
         let mut c = study_with_motion_controller(clk.clone());
 
-        // Simulate startup: retained group state showed lights on.
         c.set_physical_state("study", true);
         c.seed_motion_ownership_for_lit_rooms();
 
-        // Sensor stops reporting motion → should publish state OFF
-        // (without the seed, this would log "motion-off suppressed:
-        // lights are user-owned" and do nothing).
         let actions = c.handle_event(Event::Occupancy {
             sensor: "hue-ms-study".into(),
             occupied: false,
             illuminance: None,
             ts: clk.now(),
         });
-        assert_eq!(
-            actions,
-            vec![Action::new("hue-lz-study", Payload::state_off(0.8))],
-            "seeded motion ownership must let motion-off fire on the first \
-             clearance after startup"
+        assert!(
+            actions.is_empty(),
+            "motion-off must be suppressed after startup (user-owned)"
         );
     }
 
@@ -2457,22 +2447,16 @@ mod tests {
     }
 
     #[test]
-    fn external_off_to_on_transition_defaults_to_motion_owned() {
-        // Off→on transitions we didn't initiate ourselves (HA, the Hue
-        // app, manual press at the bulb, /get response after refresh
-        // window) default to motion-owned. This way the next motion-off
-        // can auto-clear the room. The cost of being wrong is at most
-        // one false auto-off; the cost of clearing was lights stuck on
-        // until the user manually intervened. The user explicitly
-        // requested this default after observing the latter.
+    fn external_off_to_on_transition_stays_user_owned() {
+        // Off→on transitions we didn't initiate (Hue app, HA) stay
+        // user-owned. Trade-off: the room won't auto-off, but we
+        // avoid false auto-offs. Verified by TLA+ invariant
+        // MotionOwnedImpliesSensorHistory.
         let clk = Arc::new(FakeClock::new(12));
         let mut c = study_with_motion_controller(clk.clone());
 
-        // Room is currently off.
         assert!(!c.state_for("study").map(|s| s.physically_on).unwrap_or(false));
 
-        // External transition to on (e.g. /get response arrives after
-        // the refresh window for a room the seed didn't catch).
         c.handle_event(Event::GroupState {
             group: "hue-lz-study".into(),
             on: true,
@@ -2482,8 +2466,8 @@ mod tests {
         let s = c.state_for("study").unwrap();
         assert!(s.physically_on);
         assert!(
-            s.motion_owned,
-            "external off→on transition must default to motion-owned"
+            !s.motion_owned,
+            "external off→on transition must stay user-owned"
         );
     }
 
@@ -2516,33 +2500,63 @@ mod tests {
     }
 
     #[test]
-    fn motion_off_fires_after_external_on_transition() {
-        // Full path of the user's bug report: lights came on via an
-        // external trigger (or a slow /get response after restart),
-        // then motion goes idle, motion-off should fire instead of
-        // suppressing.
+    fn motion_off_suppressed_after_external_on_without_prior_occupancy() {
+        // External on → sensor goes idle without ever reporting occupied.
+        // motion-off must be suppressed (room is user-owned).
         let clk = Arc::new(FakeClock::new(12));
         let mut c = study_with_motion_controller(clk.clone());
 
-        // External on (transition off→on, defaults to motion-owned).
         c.handle_event(Event::GroupState {
             group: "hue-lz-study".into(),
             on: true,
             ts: clk.now(),
         });
 
-        // Motion sensor goes idle.
         let actions = c.handle_event(Event::Occupancy {
             sensor: "hue-ms-study".into(),
             occupied: false,
             illuminance: None,
             ts: clk.now(),
         });
-        assert_eq!(
-            actions,
-            vec![Action::new("hue-lz-study", Payload::state_off(0.8))],
-            "motion-off should fire even on rooms whose physically_on \
-             came from an external transition"
+        assert!(
+            actions.is_empty(),
+            "motion-off must be suppressed after external on (user-owned)"
+        );
+    }
+
+    #[test]
+    fn external_on_then_full_motion_cycle_auto_offs() {
+        // External on → sensor reports occupied (suppressed, but flag
+        // recorded) → sensor clears → motion-off still suppressed
+        // because external-on didn't set motion_owned. The room stays
+        // user-owned until motion genuinely turns it on.
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+
+        // External on.
+        c.handle_event(Event::GroupState {
+            group: "hue-lz-study".into(),
+            on: true,
+            ts: clk.now(),
+        });
+        // Sensor reports occupied (suppressed — lights already on).
+        c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: true,
+            illuminance: None,
+            ts: clk.now(),
+        });
+        assert!(!c.state_for("study").unwrap().motion_owned);
+        // Sensor clears — but room is user-owned, so no off.
+        let actions = c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(),
+            occupied: false,
+            illuminance: None,
+            ts: clk.now(),
+        });
+        assert!(
+            actions.is_empty(),
+            "room is user-owned; motion-off must not fire"
         );
     }
 
