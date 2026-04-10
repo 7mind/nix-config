@@ -48,13 +48,18 @@ struct AppState {
     broadcast_tx: broadcast::Sender<ServerMessage>,
 }
 
-/// Start the web server. Returns a `JoinHandle` for the server task.
-pub fn start_web_server(
+/// Bind the TCP listener synchronously and spawn the web server.
+/// Returns the listener address (useful when port 0 is used in tests)
+/// and the server task handle.
+///
+/// Binding happens before the spawn so that port-in-use errors surface
+/// immediately to the caller rather than being silently swallowed.
+pub async fn bind_and_start_web_server(
     addr: SocketAddr,
     ws_cmd_tx: mpsc::Sender<WsCommand>,
     broadcast_tx: broadcast::Sender<ServerMessage>,
     assets_dir: PathBuf,
-) -> tokio::task::JoinHandle<anyhow::Result<()>> {
+) -> anyhow::Result<(SocketAddr, tokio::task::JoinHandle<anyhow::Result<()>>)> {
     let state = Arc::new(AppState {
         ws_cmd_tx,
         broadcast_tx,
@@ -65,12 +70,16 @@ pub fn start_web_server(
         .fallback_service(ServeDir::new(assets_dir))
         .with_state(state);
 
-    tokio::spawn(async move {
-        let listener = tokio::net::TcpListener::bind(addr).await?;
-        tracing::info!(%addr, "web server listening");
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let bound_addr = listener.local_addr()?;
+    tracing::info!(%bound_addr, "web server listening");
+
+    let handle = tokio::spawn(async move {
         axum::serve(listener, app).await?;
         Ok(())
-    })
+    });
+
+    Ok((bound_addr, handle))
 }
 
 async fn ws_handler(
@@ -84,6 +93,9 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
     let (mut ws_tx, mut ws_rx) = socket.split();
     let mut broadcast_rx = state.broadcast_tx.subscribe();
 
+    // Channel for direct replies to this connection (not broadcast).
+    let (direct_tx, mut direct_rx) = mpsc::channel::<ServerMessage>(16);
+
     // Send initial snapshot on connect.
     let snapshot = request_snapshot(&state.ws_cmd_tx).await;
     if let Some(snap) = snapshot {
@@ -93,19 +105,30 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
         }
     }
 
-    // Spawn writer task: forward broadcast messages to the WS client.
+    // Spawn writer task: merges broadcast messages and direct replies
+    // into the WebSocket send stream.
     let write_handle = tokio::spawn(async move {
         loop {
-            match broadcast_rx.recv().await {
-                Ok(msg) => {
-                    if send_json(&mut ws_tx, &msg).await.is_err() {
-                        break;
+            let msg = tokio::select! {
+                result = broadcast_rx.recv() => {
+                    match result {
+                        Ok(msg) => msg,
+                        Err(broadcast::error::RecvError::Lagged(n)) => {
+                            tracing::warn!(skipped = n, "ws client lagged, skipping messages");
+                            continue;
+                        }
+                        Err(broadcast::error::RecvError::Closed) => break,
                     }
                 }
-                Err(broadcast::error::RecvError::Lagged(n)) => {
-                    tracing::warn!(skipped = n, "ws client lagged, skipping messages");
+                result = direct_rx.recv() => {
+                    match result {
+                        Some(msg) => msg,
+                        None => break,
+                    }
                 }
-                Err(broadcast::error::RecvError::Closed) => break,
+            };
+            if send_json(&mut ws_tx, &msg).await.is_err() {
+                break;
             }
         }
     });
@@ -115,7 +138,7 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
         match msg {
             Message::Text(text) => {
                 if let Ok(client_msg) = serde_json::from_str::<ClientMessage>(&text) {
-                    handle_client_message(&state, client_msg).await;
+                    handle_client_message(&state, client_msg, &direct_tx).await;
                 }
             }
             Message::Close(_) => break,
@@ -126,13 +149,15 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
     write_handle.abort();
 }
 
-async fn handle_client_message(state: &AppState, msg: ClientMessage) {
+async fn handle_client_message(
+    state: &AppState,
+    msg: ClientMessage,
+    direct_tx: &mpsc::Sender<ServerMessage>,
+) {
     match msg {
         ClientMessage::GetState => {
             if let Some(snap) = request_snapshot(&state.ws_cmd_tx).await {
-                let _ = state
-                    .broadcast_tx
-                    .send(ServerMessage::StateSnapshot(snap));
+                let _ = direct_tx.send(ServerMessage::StateSnapshot(snap)).await;
             }
         }
         ClientMessage::GetTopology => {
@@ -142,7 +167,7 @@ async fn handle_client_message(state: &AppState, msg: ClientMessage) {
                 .send(WsCommand::RequestTopology { reply: tx })
                 .await;
             if let Ok(topo) = rx.await {
-                let _ = state.broadcast_tx.send(ServerMessage::Topology(topo));
+                let _ = direct_tx.send(ServerMessage::Topology(topo)).await;
             }
         }
         ClientMessage::RecallScene { room, scene_id } => {

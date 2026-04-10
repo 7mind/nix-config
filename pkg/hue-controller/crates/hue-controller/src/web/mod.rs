@@ -8,4 +8,4 @@ pub mod decision_capture;
 pub mod server;
 pub mod snapshot;
 
-pub use server::{WebHandle, WsCommand, start_web_server};
+pub use server::{WebHandle, WsCommand, bind_and_start_web_server};

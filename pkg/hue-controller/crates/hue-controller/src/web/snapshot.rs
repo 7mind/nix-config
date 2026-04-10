@@ -21,36 +21,7 @@ pub fn build_full_snapshot(controller: &Controller, now: Instant) -> FullStateSn
         .rooms()
         .map(|room| {
             let state = controller.state_for(&room.name);
-            let (active_slot, scene_ids) = room
-                .scenes
-                .slot_for_hour(hour)
-                .map(|(name, slot)| (Some(name.clone()), slot.scene_ids.clone()))
-                .unwrap_or((None, Vec::new()));
-
-            RoomSnapshot {
-                name: room.name.clone(),
-                group_name: room.group_name.clone(),
-                physically_on: state.map_or(false, |s| s.physically_on),
-                motion_owned: state.map_or(false, |s| s.motion_owned),
-                cycle_idx: state.map_or(0, |s| s.cycle_idx),
-                last_press_ago_ms: state
-                    .and_then(|s| s.last_press_at)
-                    .map(|t| ago_ms(now, t)),
-                last_off_ago_ms: state
-                    .and_then(|s| s.last_off_at)
-                    .map(|t| ago_ms(now, t)),
-                motion_active_sensors: state
-                    .map(|s| {
-                        s.motion_active_by_sensor
-                            .iter()
-                            .filter(|&(_, active)| *active)
-                            .map(|(name, _)| name.clone())
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                active_slot,
-                scene_ids,
-            }
+            room_snapshot_from(room, state, hour, now)
         })
         .collect();
 
@@ -59,12 +30,13 @@ pub fn build_full_snapshot(controller: &Controller, now: Instant) -> FullStateSn
         .iter()
         .map(|name| {
             let state = controller.plug_state_for(name);
+            let idle_since_ago_ms = controller
+                .earliest_kill_switch_idle(name)
+                .map(|t| ago_ms(now, t));
             PlugSnapshot {
                 device: name.clone(),
                 on: state.map_or(false, |s| s.on),
-                idle_since_ago_ms: state
-                    .and_then(|s| s.idle_since)
-                    .map(|t| ago_ms(now, t)),
+                idle_since_ago_ms,
                 power_watts: state.and_then(|s| s.last_power),
             }
         })
@@ -87,14 +59,22 @@ pub fn build_room_snapshot(
     let room = topology.room_by_name(room_name)?;
     let state = controller.state_for(room_name);
     let hour = controller.clock().local_hour();
+    Some(room_snapshot_from(room, state, hour, now))
+}
 
+fn room_snapshot_from(
+    room: &crate::topology::ResolvedRoom,
+    state: Option<&crate::domain::state::ZoneState>,
+    hour: u8,
+    now: Instant,
+) -> RoomSnapshot {
     let (active_slot, scene_ids) = room
         .scenes
         .slot_for_hour(hour)
         .map(|(name, slot)| (Some(name.clone()), slot.scene_ids.clone()))
         .unwrap_or((None, Vec::new()));
 
-    Some(RoomSnapshot {
+    RoomSnapshot {
         name: room.name.clone(),
         group_name: room.group_name.clone(),
         physically_on: state.map_or(false, |s| s.physically_on),
@@ -117,7 +97,7 @@ pub fn build_room_snapshot(
             .unwrap_or_default(),
         active_slot,
         scene_ids,
-    })
+    }
 }
 
 /// Build a single plug snapshot for incremental updates.
@@ -127,10 +107,13 @@ pub fn build_plug_snapshot(
     now: Instant,
 ) -> Option<PlugSnapshot> {
     let state = controller.plug_state_for(device)?;
+    let idle_since_ago_ms = controller
+        .earliest_kill_switch_idle(device)
+        .map(|t| ago_ms(now, t));
     Some(PlugSnapshot {
         device: device.to_string(),
         on: state.on,
-        idle_since_ago_ms: state.idle_since.map(|t| ago_ms(now, t)),
+        idle_since_ago_ms,
         power_watts: state.last_power,
     })
 }

@@ -91,11 +91,11 @@
 //! occupied→cleared cycle. `last_press_at` is NOT touched on external
 //! state changes — only on actual button presses.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::config::{Defaults, Effect, Slot, Trigger};
+use crate::config::{Defaults, Effect, Trigger};
 use crate::domain::action::{Action, Payload};
 use crate::domain::event::{Event, SwitchAction};
 use crate::domain::state::{PlugRuntimeState, ZoneState};
@@ -136,6 +136,28 @@ pub struct Controller {
     /// Per-plug runtime state, keyed by plug friendly_name.
     plug_states: BTreeMap<String, PlugRuntimeState>,
 
+    /// Per-rule kill-switch idle tracking. Keyed by action rule name.
+    /// Each entry records when power first dropped below the rule's
+    /// threshold. Separate from `PlugRuntimeState` so multiple
+    /// `PowerBelow` rules on the same plug don't interfere.
+    kill_switch_idle_since: BTreeMap<String, Instant>,
+
+    /// Per-rule kill-switch arming state. A rule is "armed" (eligible
+    /// to start idle tracking) only after power has been observed ABOVE
+    /// the rule's threshold at least once since the plug turned on.
+    /// This prevents immediate re-trip after a manual re-enable when
+    /// the device hasn't warmed up yet and power is still below
+    /// threshold.
+    kill_switch_armed: BTreeSet<String>,
+
+    /// Per-rule warmup suppression. Set for ALL rules on a plug when
+    /// any kill-switch fires. Cleared per-rule when that specific
+    /// rule sees an above-threshold reading. While a rule is in this
+    /// set, it requires an above-threshold reading to re-arm. This is
+    /// the ONLY source of warmup suppression — all other off→on
+    /// transitions auto-arm normally.
+    kill_switch_suppressed: BTreeSet<String>,
+
     /// Pending confirm-off timestamps, keyed by action rule name.
     /// Set on the first tap when a toggle-off requires confirmation;
     /// consumed by the second tap within the window.
@@ -155,6 +177,9 @@ impl Controller {
             defaults,
             states: BTreeMap::new(),
             plug_states: BTreeMap::new(),
+            kill_switch_idle_since: BTreeMap::new(),
+            kill_switch_armed: BTreeSet::new(),
+            kill_switch_suppressed: BTreeSet::new(),
             confirm_off_pending: BTreeMap::new(),
             at_last_fired: BTreeMap::new(),
         }
@@ -239,7 +264,7 @@ impl Controller {
     /// Called by [`crate::daemon::run`] after the three-phase state
     /// refresh completes, before the event loop starts processing
     /// real-world events.
-    pub fn seed_motion_ownership_for_lit_rooms(&mut self) {
+    pub fn log_startup_lit_rooms(&mut self) {
         for (room_name, state) in self.states.iter_mut() {
             if state.physically_on {
                 tracing::info!(
@@ -261,6 +286,27 @@ impl Controller {
     /// layer to build state snapshots for WebSocket clients.
     pub fn all_plug_states(&self) -> &BTreeMap<String, PlugRuntimeState> {
         &self.plug_states
+    }
+
+    /// True if a kill-switch holdoff is currently running for the given
+    /// action rule. Used by tests to verify idle tracking.
+    pub fn is_kill_switch_idle(&self, rule_name: &str) -> bool {
+        self.kill_switch_idle_since.contains_key(rule_name)
+    }
+
+    /// Earliest kill-switch idle start across all `PowerBelow` rules
+    /// targeting `device`. Returns `None` if no rule is currently
+    /// tracking idle for this plug. Used by the snapshot layer to
+    /// expose the aggregate idle timestamp to the web UI.
+    pub fn earliest_kill_switch_idle(&self, device: &str) -> Option<Instant> {
+        self.topology
+            .actions_for_power_below(device)
+            .iter()
+            .filter_map(|&idx| {
+                let name = &self.topology.actions()[idx].name;
+                self.kill_switch_idle_since.get(name).copied()
+            })
+            .min()
     }
 
     /// Reference to the immutable topology. Useful for building topology
@@ -820,6 +866,78 @@ impl Controller {
     pub fn set_plug_state(&mut self, device: &str, on: bool) {
         let state = self.plug_states.entry(device.to_string()).or_default();
         state.on = on;
+        if !on {
+            state.seen_explicit_off = true;
+            state.last_power = None;
+            for &idx in self.topology.actions_for_power_below(device) {
+                let name = &self.topology.actions()[idx].name;
+                self.kill_switch_idle_since.remove(name);
+                self.kill_switch_armed.remove(name);
+            }
+        }
+    }
+
+    /// Pre-arm kill-switch rules for every plug that is currently ON,
+    /// and seed idle tracking from the current power reading if it is
+    /// already below threshold.
+    ///
+    /// Called once after the startup state refresh so that plugs already
+    /// drawing below-threshold power at boot are immediately eligible
+    /// for kill-switch evaluation — the warmup suppression only applies
+    /// after an explicit off→on transition within the same daemon session.
+    ///
+    /// The idle-seeding is necessary because the startup refresh may
+    /// have already delivered a `PlugState` event (with below-threshold
+    /// power) before this method runs. Without seeding, that reading
+    /// would be silently consumed (the rule wasn't armed yet) and the
+    /// holdoff timer would never start until the next power update.
+    pub fn arm_kill_switches_for_active_plugs(&mut self, ts: Instant) {
+        for plug_name in self.topology.all_plug_names() {
+            let plug = match self.plug_states.get(plug_name.as_str()) {
+                Some(p) if p.on => p,
+                _ => continue,
+            };
+            let last_power = plug.last_power;
+
+            for &idx in self.topology.actions_for_power_below(plug_name) {
+                let resolved = &self.topology.actions()[idx];
+                let rule_name = resolved.name.clone();
+                // Skip rules in warmup suppression or already armed.
+                if self.kill_switch_suppressed.contains(&rule_name)
+                    || self.kill_switch_armed.contains(&rule_name)
+                {
+                    continue;
+                }
+                self.kill_switch_armed.insert(rule_name.clone());
+
+                // If we already have a power reading below threshold,
+                // seed the idle timer so the holdoff starts now rather
+                // than waiting for the next PlugState event.
+                if let Some(power) = last_power {
+                    let threshold = match &resolved.trigger {
+                        Trigger::PowerBelow { watts, .. } => *watts,
+                        _ => continue,
+                    };
+                    if power < threshold && !self.kill_switch_idle_since.contains_key(&rule_name) {
+                        tracing::info!(
+                            plug = plug_name.as_str(),
+                            rule = rule_name.as_str(),
+                            power,
+                            threshold,
+                            "startup: pre-arming AND seeding idle (power already below threshold)"
+                        );
+                        self.kill_switch_idle_since.insert(rule_name, ts);
+                        continue;
+                    }
+                }
+
+                tracing::info!(
+                    plug = plug_name.as_str(),
+                    rule = rule_name.as_str(),
+                    "startup: pre-arming kill switch for active plug"
+                );
+            }
+        }
     }
 
     // ----- action rule dispatch ------------------------------------------
@@ -879,8 +997,13 @@ impl Controller {
                                     "action rule → confirm-off: second tap, turning off"
                                 );
                                 plug_state.on = false;
-                                plug_state.idle_since = None;
+                                plug_state.seen_explicit_off = true;
                                 plug_state.last_power = None;
+                                for &idx in self.topology.actions_for_power_below(target) {
+                                    let name = &self.topology.actions()[idx].name;
+                                    self.kill_switch_idle_since.remove(name);
+                                    self.kill_switch_armed.remove(name);
+                                }
                                 return vec![Action::for_device(target, Payload::device_off())];
                             }
                         }
@@ -905,23 +1028,41 @@ impl Controller {
                     "action rule → toggle plug"
                 );
                 plug_state.on = new_on;
-                plug_state.idle_since = None;
-                if !new_on { plug_state.last_power = None; }
+                if !new_on {
+                    plug_state.seen_explicit_off = true;
+                    plug_state.last_power = None;
+                    for &idx in self.topology.actions_for_power_below(target) {
+                        let name = &self.topology.actions()[idx].name;
+                        self.kill_switch_idle_since.remove(name);
+                        self.kill_switch_armed.remove(name);
+                    }
+                } else if plug_state.seen_explicit_off {
+                    plug_state.last_power = None;
+                    plug_state.seen_explicit_off = false;
+                }
                 vec![Action::for_device(target, payload)]
             }
             Effect::TurnOn { target } => {
                 let plug_state = self.plug_states.entry(target.to_string()).or_default();
                 tracing::info!(rule = rule_name, target = target.as_str(), "action rule → turn on plug");
+                if plug_state.seen_explicit_off {
+                    plug_state.last_power = None;
+                }
                 plug_state.on = true;
-                plug_state.idle_since = None;
+                plug_state.seen_explicit_off = false;
                 vec![Action::for_device(target, Payload::device_on())]
             }
             Effect::TurnOff { target } => {
                 let plug_state = self.plug_states.entry(target.to_string()).or_default();
                 tracing::info!(rule = rule_name, target = target.as_str(), "action rule → turn off plug");
                 plug_state.on = false;
-                plug_state.idle_since = None;
+                plug_state.seen_explicit_off = true;
                 plug_state.last_power = None;
+                for &idx in self.topology.actions_for_power_below(target) {
+                    let name = &self.topology.actions()[idx].name;
+                    self.kill_switch_idle_since.remove(name);
+                    self.kill_switch_armed.remove(name);
+                }
                 vec![Action::for_device(target, Payload::device_off())]
             }
             Effect::TurnOffAllZones => {
@@ -964,6 +1105,7 @@ impl Controller {
         ts: Instant,
     ) -> Vec<Action> {
         let plug = self.plug_states.entry(device.to_string()).or_default();
+        let was_on = plug.on;
         if let Some(on) = on {
             plug.on = on;
         }
@@ -971,30 +1113,97 @@ impl Controller {
         // Store power reading (uniformly clamped to ≥ 0 for both
         // protocols — NAS-WR01ZE sends negative meter reports, and we
         // clamp at parse time too, but belt-and-suspenders here).
-        if let Some(watts) = power {
-            plug.last_power = Some(watts.max(0.0));
-        }
+        let effective_power = if let Some(watts) = power {
+            let clamped = watts.max(0.0);
+            plug.last_power = Some(clamped);
+            Some(clamped)
+        } else {
+            plug.last_power
+        };
 
         if !plug.on {
-            plug.idle_since = None;
-            plug.last_power = None;
+            // Only clear power and kill-switch state on an explicit off
+            // transition. Power-only updates (on == None, e.g. Z-Wave
+            // meter events) arriving before the switch state should
+            // preserve last_power so arm_kill_switches_for_active_plugs
+            // can seed idle tracking from it at startup.
+            if on == Some(false) {
+                plug.seen_explicit_off = true;
+                plug.last_power = None;
+                for &idx in self.topology.actions_for_power_below(device) {
+                    let name = &self.topology.actions()[idx].name;
+                    self.kill_switch_idle_since.remove(name);
+                    self.kill_switch_armed.remove(name);
+                }
+            }
             return Vec::new();
         }
+
+        if on == Some(true) && !was_on {
+            let plug = self.plug_states.entry(device.to_string()).or_default();
+            let was_explicitly_off = plug.seen_explicit_off;
+            plug.seen_explicit_off = false;
+
+            // If the plug was explicitly off (not just default-false from
+            // startup), any stored last_power is from the off state
+            // (Z-Wave meter reports during off) and must be discarded.
+            // If never explicitly off (startup out-of-order), last_power
+            // is a valid reading from before the switch state arrived.
+            if was_explicitly_off {
+                plug.last_power = power.map(|w| w.max(0.0));
+            }
+
+            let seed_power = {
+                let plug = self.plug_states.get(device);
+                power.map(|w| w.max(0.0)).or_else(|| plug.and_then(|p| p.last_power))
+            };
+
+            for &idx in self.topology.actions_for_power_below(device) {
+                let resolved = &self.topology.actions()[idx];
+                let rule_name = resolved.name.clone();
+                if self.kill_switch_suppressed.contains(&rule_name) {
+                    continue;
+                }
+                if !self.kill_switch_armed.contains(&rule_name) {
+                    self.kill_switch_armed.insert(rule_name.clone());
+                    if let Some(current_power) = seed_power {
+                        let threshold = match &resolved.trigger {
+                            Trigger::PowerBelow { watts, .. } => *watts,
+                            _ => continue,
+                        };
+                        if current_power < threshold {
+                            tracing::info!(
+                                device,
+                                rule = %rule_name,
+                                power = current_power,
+                                threshold,
+                                "auto-arm: seeding idle (power already below threshold)"
+                            );
+                            self.kill_switch_idle_since.insert(rule_name, ts);
+                            continue;
+                        }
+                    }
+                    tracing::info!(
+                        device,
+                        rule = %rule_name,
+                        "auto-arm: arming kill switch on off→on transition"
+                    );
+                }
+            }
+        }
+
+        // Recompute effective_power after the auto-arm block (suppressed
+        // path may have cleared plug.last_power).
+        let effective_power = {
+            let plug = self.plug_states.get(device);
+            power.map(|w| w.max(0.0)).or_else(|| plug.and_then(|p| p.last_power))
+        };
 
         // Evaluate kill-switch triggers for this plug.
         let rule_indexes = self.topology.actions_for_power_below(device).to_vec();
         if rule_indexes.is_empty() {
             return Vec::new();
         }
-
-        // Use the event's power if present, otherwise fall back to
-        // the last known reading. This handles the Z-Wave split-event
-        // case: a PlugState (on/off change) arrives with power=None,
-        // but we still want to evaluate the kill-switch using the most
-        // recent meter reading.
-        let effective_power = power.or_else(|| {
-            self.plug_states.get(device).and_then(|p| p.last_power)
-        });
 
         let mut out = Vec::new();
         for &idx in &rule_indexes {
@@ -1003,52 +1212,77 @@ impl Controller {
                 Trigger::PowerBelow { watts, for_seconds, .. } => (*watts, *for_seconds),
                 _ => continue,
             };
+            let rule_key = resolved.name.clone();
 
-            let plug = self.plug_states.entry(device.to_string()).or_default();
             if let Some(current_power) = effective_power {
                 if current_power < threshold_watts {
-                    // Power is below threshold — start or continue tracking.
-                    if plug.idle_since.is_none() {
+                    // Power is below threshold. Only start idle tracking
+                    // if the rule is armed (power was above threshold at
+                    // least once since the plug turned on). This prevents
+                    // immediate re-trip after manual re-enable when the
+                    // device hasn't warmed up yet.
+                    if !self.kill_switch_armed.contains(&rule_key) {
                         tracing::info!(
                             device,
-                            rule = %resolved.name,
+                            rule = %rule_key,
                             power = current_power,
                             threshold = threshold_watts,
-                            "kill switch: power dropped below threshold, starting holdoff"
+                            "kill switch: below threshold but not yet armed (waiting for first above-threshold reading)"
                         );
-                        plug.idle_since = Some(ts);
-                    }
-                    // Check if holdoff has elapsed.
-                    if let Some(idle_start) = plug.idle_since {
-                        if ts.duration_since(idle_start) >= Duration::from_secs(holdoff_secs) {
+                    } else {
+                        if !self.kill_switch_idle_since.contains_key(&rule_key) {
                             tracing::info!(
                                 device,
-                                rule = %resolved.name,
-                                holdoff_secs,
-                                "kill switch: holdoff elapsed, turning off plug"
+                                rule = %rule_key,
+                                power = current_power,
+                                threshold = threshold_watts,
+                                "kill switch: power dropped below threshold, starting holdoff"
                             );
-                            plug.on = false;
-                            plug.idle_since = None;
-                            plug.last_power = None;
-                            if let Some(target) = resolved.effect.target() {
-                                out.push(Action::for_device(
-                                    target,
-                                    Payload::device_off(),
-                                ));
+                            self.kill_switch_idle_since.insert(rule_key.clone(), ts);
+                        }
+                        // Check if holdoff has elapsed.
+                        if let Some(&idle_start) = self.kill_switch_idle_since.get(&rule_key) {
+                            if ts.duration_since(idle_start) >= Duration::from_secs(holdoff_secs) {
+                                tracing::info!(
+                                    device,
+                                    rule = %rule_key,
+                                    holdoff_secs,
+                                    "kill switch: holdoff elapsed, turning off plug"
+                                );
+                                let plug = self.plug_states.entry(device.to_string()).or_default();
+                                plug.on = false;
+                                plug.seen_explicit_off = true;
+                                plug.last_power = None;
+                                // Suppress and clear ALL rules for this device.
+                                for &other_idx in self.topology.actions_for_power_below(device) {
+                                    let name = &self.topology.actions()[other_idx].name;
+                                    self.kill_switch_idle_since.remove(name);
+                                    self.kill_switch_armed.remove(name);
+                                    self.kill_switch_suppressed.insert(name.clone());
+                                }
+                                if let Some(target) = resolved.effect.target() {
+                                    out.push(Action::for_device(
+                                        target,
+                                        Payload::device_off(),
+                                    ));
+                                }
                             }
                         }
                     }
                 } else {
-                    // Power is above threshold — clear idle tracking.
-                    if plug.idle_since.is_some() {
+                    // Power is above threshold — arm the rule, clear
+                    // idle tracking, and lift warmup suppression for
+                    // this specific rule.
+                    self.kill_switch_armed.insert(rule_key.clone());
+                    self.kill_switch_suppressed.remove(&rule_key);
+                    if self.kill_switch_idle_since.remove(&rule_key).is_some() {
                         tracing::info!(
                             device,
-                            rule = %resolved.name,
+                            rule = %rule_key,
                             power = current_power,
                             threshold = threshold_watts,
                             "kill switch: power recovered above threshold, resetting holdoff"
                         );
-                        plug.idle_since = None;
                     }
                 }
             }
@@ -1083,23 +1317,28 @@ impl Controller {
                 self.at_last_fired
                     .insert(resolved.name.clone(), (target_hour, target_minute));
                 out.extend(self.execute_effect(&resolved.name, &resolved.effect, ts));
+            } else {
+                // Current time no longer matches — clear the dedup guard
+                // so the rule fires again next time the target minute arrives.
+                self.at_last_fired.remove(&resolved.name);
             }
         }
 
         // Iterate over all power_below action rules and check deadlines.
-        let actions = self.topology.actions().to_vec();
-        for resolved in &actions {
-            let (device, threshold_watts, holdoff_secs) = match &resolved.trigger {
-                Trigger::PowerBelow { device, watts, for_seconds } => {
-                    (device.as_str(), *watts, *for_seconds)
+        for resolved in &actions_snapshot {
+            let (device, holdoff_secs) = match &resolved.trigger {
+                Trigger::PowerBelow { device, for_seconds, .. } => {
+                    (device.as_str(), *for_seconds)
                 }
                 _ => continue,
             };
-            let plug = match self.plug_states.get(device) {
-                Some(p) if p.on && p.idle_since.is_some() => p,
-                _ => continue,
+            let plug_on = self.plug_states.get(device).is_some_and(|p| p.on);
+            if !plug_on {
+                continue;
+            }
+            let Some(&idle_start) = self.kill_switch_idle_since.get(&resolved.name) else {
+                continue;
             };
-            let idle_start = plug.idle_since.unwrap();
             if ts.duration_since(idle_start) >= Duration::from_secs(holdoff_secs) {
                 tracing::info!(
                     device,
@@ -1109,7 +1348,15 @@ impl Controller {
                 );
                 let plug = self.plug_states.get_mut(device).unwrap();
                 plug.on = false;
-                plug.idle_since = None;
+                plug.seen_explicit_off = true;
+                plug.last_power = None;
+                // Suppress and clear ALL rules for this device.
+                for &other_idx in self.topology.actions_for_power_below(device) {
+                    let name = &self.topology.actions()[other_idx].name;
+                    self.kill_switch_idle_since.remove(name);
+                    self.kill_switch_armed.remove(name);
+                    self.kill_switch_suppressed.insert(name.clone());
+                }
                 if let Some(target) = resolved.effect.target() {
                     out.push(Action::for_device(
                         target,
@@ -1117,9 +1364,6 @@ impl Controller {
                     ));
                 }
             }
-            // Note: we don't re-check threshold here — that happens on
-            // PlugState events. Tick only fires the deadline.
-            let _ = threshold_watts; // used by PlugState handler
         }
         out
     }
@@ -1191,10 +1435,6 @@ fn active_slot_scene_ids(schedule: &crate::config::SceneSchedule, hour: u8) -> V
     let Some((_name, slot)) = schedule.slot_for_hour(hour) else {
         return Vec::new();
     };
-    slot_scene_ids(slot)
-}
-
-fn slot_scene_ids(slot: &Slot) -> Vec<u8> {
     slot.scene_ids.clone()
 }
 
@@ -2368,7 +2608,7 @@ mod tests {
         // physically on (e.g. from a retained group-state message).
         c.set_physical_state("study", true);
 
-        c.seed_motion_ownership_for_lit_rooms();
+        c.log_startup_lit_rooms();
 
         assert!(
             !c.state_for("study").unwrap().motion_owned,
@@ -2385,7 +2625,7 @@ mod tests {
         // touched (it's irrelevant; motion-off won't fire on an off room).
         c.set_physical_state("study", false);
 
-        c.seed_motion_ownership_for_lit_rooms();
+        c.log_startup_lit_rooms();
 
         assert!(!c.state_for("study").unwrap().motion_owned);
     }
@@ -2400,7 +2640,7 @@ mod tests {
         let mut c = study_with_motion_controller(clk.clone());
 
         c.set_physical_state("study", true);
-        c.seed_motion_ownership_for_lit_rooms();
+        c.log_startup_lit_rooms();
 
         let actions = c.handle_event(Event::Occupancy {
             sensor: "hue-ms-study".into(),
@@ -2792,7 +3032,7 @@ mod tests {
             ts: clk.now(),
         });
         assert!(actions.is_empty());
-        assert!(c.plug_state_for("z2m-p-printer").unwrap().idle_since.is_none());
+        assert!(!c.is_kill_switch_idle("printer-kill"));
 
         // Power drops below threshold — holdoff starts.
         clk.advance(Duration::from_secs(10));
@@ -2803,7 +3043,7 @@ mod tests {
             ts: clk.now(),
         });
         assert!(actions.is_empty());
-        assert!(c.plug_state_for("z2m-p-printer").unwrap().idle_since.is_some());
+        assert!(c.is_kill_switch_idle("printer-kill"));
 
         // 30 seconds later — still below, holdoff not elapsed yet.
         clk.advance(Duration::from_secs(30));
@@ -2850,14 +3090,23 @@ mod tests {
 
         c.set_plug_state("z2m-p-printer", true);
 
+        // Initial above-threshold reading to arm the kill switch.
+        let _ = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: Some(100.0),
+            ts: clk.now(),
+        });
+
         // Power drops.
+        clk.advance(Duration::from_secs(1));
         let _ = c.handle_event(Event::PlugState {
             device: "z2m-p-printer".into(),
             on: true,
             power: Some(2.0),
             ts: clk.now(),
         });
-        assert!(c.plug_state_for("z2m-p-printer").unwrap().idle_since.is_some());
+        assert!(c.is_kill_switch_idle("printer-kill"));
 
         // Power recovers before holdoff.
         clk.advance(Duration::from_secs(30));
@@ -2868,7 +3117,7 @@ mod tests {
             ts: clk.now(),
         });
         assert!(actions.is_empty());
-        assert!(c.plug_state_for("z2m-p-printer").unwrap().idle_since.is_none());
+        assert!(!c.is_kill_switch_idle("printer-kill"));
 
         // Wait another 60 seconds — no kill because holdoff was reset.
         clk.advance(Duration::from_secs(60));
@@ -2917,6 +3166,15 @@ mod tests {
         });
         assert!(c.plug_state_for("z2m-p-printer").unwrap().on);
 
+        // Above-threshold reading to arm the kill switch.
+        clk.advance(Duration::from_secs(1));
+        let _ = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: Some(100.0),
+            ts: clk.now(),
+        });
+
         // Power drops, holdoff starts.
         clk.advance(Duration::from_secs(1));
         let _ = c.handle_event(Event::PlugState {
@@ -2948,7 +3206,7 @@ mod tests {
             .any(|a| *a == Action::for_device("z2m-p-printer", Payload::device_on())));
         assert!(c.plug_state_for("z2m-p-printer").unwrap().on);
         // idle_since is cleared on toggle.
-        assert!(c.plug_state_for("z2m-p-printer").unwrap().idle_since.is_none());
+        assert!(!c.is_kill_switch_idle("printer-kill"));
     }
 
     #[test]
@@ -2971,7 +3229,16 @@ mod tests {
 
         c.set_plug_state("z2m-p-printer", true);
 
-        // Power drops — sets idle_since.
+        // Above-threshold reading to arm the kill switch.
+        let _ = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: Some(100.0),
+            ts: clk.now(),
+        });
+
+        // Power drops — starts idle tracking.
+        clk.advance(Duration::from_secs(1));
         let _ = c.handle_event(Event::PlugState {
             device: "z2m-p-printer".into(),
             on: true,
@@ -3008,14 +3275,23 @@ mod tests {
 
         c.set_plug_state("z2m-p-printer", true);
 
+        // Above-threshold reading to arm the kill switch.
+        let _ = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: Some(100.0),
+            ts: clk.now(),
+        });
+
         // Power drops.
+        clk.advance(Duration::from_secs(1));
         let _ = c.handle_event(Event::PlugState {
             device: "z2m-p-printer".into(),
             on: true,
             power: Some(1.0),
             ts: clk.now(),
         });
-        assert!(c.plug_state_for("z2m-p-printer").unwrap().idle_since.is_some());
+        assert!(c.is_kill_switch_idle("printer-kill"));
 
         // Plug turned off externally.
         let _ = c.handle_event(Event::PlugState {
@@ -3024,7 +3300,331 @@ mod tests {
             power: Some(0.0),
             ts: clk.now(),
         });
-        assert!(c.plug_state_for("z2m-p-printer").unwrap().idle_since.is_none());
+        assert!(!c.is_kill_switch_idle("printer-kill"));
+    }
+
+    #[test]
+    fn kill_switch_disarms_on_controller_driven_off_on_cycle() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = plug_controller(
+            clk.clone(),
+            vec![
+                ActionRule {
+                    name: "printer-toggle".into(),
+                    trigger: Trigger::Tap {
+                        action: None,
+                        device: "hue-ts-office".into(),
+                        button: 3,
+                    },
+                    effect: Effect::Toggle {
+                        confirm_off_seconds: None,
+                        target: "z2m-p-printer".into(),
+                    },
+                },
+                ActionRule {
+                    name: "printer-kill".into(),
+                    trigger: Trigger::PowerBelow {
+                        device: "z2m-p-printer".into(),
+                        watts: 5.0,
+                        for_seconds: 10,
+                    },
+                    effect: Effect::TurnOff {
+                        target: "z2m-p-printer".into(),
+                    },
+                },
+            ],
+        );
+
+        // Turn on, arm, verify armed.
+        let _ = c.handle_event(Event::TapAction {
+            action: None,
+            device: "hue-ts-office".into(),
+            button: 3,
+            ts: clk.now(),
+        });
+        assert!(c.plug_state_for("z2m-p-printer").unwrap().on);
+
+        // Above-threshold to arm.
+        clk.advance(Duration::from_secs(1));
+        let _ = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: Some(100.0),
+            ts: clk.now(),
+        });
+
+        // Toggle off via controller action (not external MQTT).
+        clk.advance(Duration::from_secs(1));
+        let actions = c.handle_event(Event::TapAction {
+            action: None,
+            device: "hue-ts-office".into(),
+            button: 3,
+            ts: clk.now(),
+        });
+        assert!(actions.iter().any(|a| a.payload == Payload::device_off()));
+        assert!(!c.plug_state_for("z2m-p-printer").unwrap().on);
+
+        // Toggle back on.
+        clk.advance(Duration::from_secs(1));
+        let _ = c.handle_event(Event::TapAction {
+            action: None,
+            device: "hue-ts-office".into(),
+            button: 3,
+            ts: clk.now(),
+        });
+        assert!(c.plug_state_for("z2m-p-printer").unwrap().on);
+
+        // Below-threshold power — must NOT start idle (not armed after off/on).
+        clk.advance(Duration::from_secs(1));
+        let _ = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: Some(2.0),
+            ts: clk.now(),
+        });
+        assert!(
+            !c.is_kill_switch_idle("printer-kill"),
+            "stale arming must not survive controller-driven off/on cycle"
+        );
+    }
+
+    #[test]
+    fn kill_switch_trips_after_startup_with_plug_already_below_threshold() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = plug_controller(
+            clk.clone(),
+            vec![ActionRule {
+                name: "printer-kill".into(),
+                trigger: Trigger::PowerBelow {
+                    device: "z2m-p-printer".into(),
+                    watts: 5.0,
+                    for_seconds: 10,
+                },
+                effect: Effect::TurnOff {
+                    target: "z2m-p-printer".into(),
+                },
+            }],
+        );
+
+        // Simulate daemon startup: the startup refresh delivers a
+        // PlugState event with below-threshold power. The auto-arm in
+        // handle_plug_state fires on first-time off→on (plug was never
+        // explicitly turned off) and seeds idle from the power reading.
+        let _ = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: Some(2.0),
+            ts: clk.now(),
+        });
+        assert!(
+            c.is_kill_switch_idle("printer-kill"),
+            "auto-arm on first ON must seed idle when power is below threshold"
+        );
+
+        // arm_kill_switches is still called (belt-and-suspenders) but
+        // the rule is already armed and tracking.
+        c.arm_kill_switches_for_active_plugs(clk.now());
+        assert!(c.is_kill_switch_idle("printer-kill"));
+
+        // Holdoff elapses — kill switch must fire.
+        clk.advance(Duration::from_secs(11));
+        let actions = c.handle_event(Event::Tick { ts: clk.now() });
+        assert_eq!(actions.len(), 1);
+        assert!(!c.plug_state_for("z2m-p-printer").unwrap().on);
+    }
+
+    #[test]
+    fn kill_switch_startup_zwave_split_event_power_before_switch() {
+        // Z-Wave split-event: meter (power) arrives before binary switch
+        // (on/off) during startup refresh. The power reading must survive
+        // the default plug.on=false so arm_kill_switches can seed idle.
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = plug_controller(
+            clk.clone(),
+            vec![ActionRule {
+                name: "printer-kill".into(),
+                trigger: Trigger::PowerBelow {
+                    device: "z2m-p-printer".into(),
+                    watts: 5.0,
+                    for_seconds: 10,
+                },
+                effect: Effect::TurnOff {
+                    target: "z2m-p-printer".into(),
+                },
+            }],
+        );
+
+        // Z-Wave meter response arrives first (power-only, no on/off).
+        // plug.on is still default false. Power is stored.
+        let _ = c.handle_event(Event::PlugPowerUpdate {
+            device: "z2m-p-printer".into(),
+            watts: 2.0,
+            ts: clk.now(),
+        });
+        assert_eq!(
+            c.plug_state_for("z2m-p-printer").unwrap().last_power,
+            Some(2.0),
+            "power-only update must not clear last_power when on is unknown"
+        );
+
+        // Z-Wave binary switch response arrives second. No kill-switch
+        // has fired (no suppression), so the stored power is treated as
+        // a valid out-of-order reading and used for idle seeding.
+        let _ = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: None,
+            ts: clk.now(),
+        });
+        assert!(
+            c.is_kill_switch_idle("printer-kill"),
+            "auto-arm must seed idle from out-of-order meter reading at startup"
+        );
+
+        // arm_kill_switches is a no-op (rules already armed by auto-arm).
+        c.arm_kill_switches_for_active_plugs(clk.now());
+
+        // Holdoff elapses — kill switch fires.
+        clk.advance(Duration::from_secs(11));
+        let actions = c.handle_event(Event::Tick { ts: clk.now() });
+        assert_eq!(actions.len(), 1);
+        assert!(!c.plug_state_for("z2m-p-printer").unwrap().on);
+    }
+
+    #[test]
+    fn kill_switch_startup_late_switch_response_after_arming() {
+        // Z-Wave binary switch response arrives AFTER
+        // arm_kill_switches_for_active_plugs has already run.
+        // The auto-arm in handle_plug_state must catch this.
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = plug_controller(
+            clk.clone(),
+            vec![ActionRule {
+                name: "printer-kill".into(),
+                trigger: Trigger::PowerBelow {
+                    device: "z2m-p-printer".into(),
+                    watts: 5.0,
+                    for_seconds: 10,
+                },
+                effect: Effect::TurnOff {
+                    target: "z2m-p-printer".into(),
+                },
+            }],
+        );
+
+        // Z-Wave meter arrives during startup drain. No kill-switch has
+        // fired, so this is a valid out-of-order reading.
+        let _ = c.handle_event(Event::PlugPowerUpdate {
+            device: "z2m-p-printer".into(),
+            watts: 2.0,
+            ts: clk.now(),
+        });
+
+        // arm_kill_switches runs — plug.on is still false, so skipped.
+        c.arm_kill_switches_for_active_plugs(clk.now());
+        assert!(!c.is_kill_switch_idle("printer-kill"));
+
+        // Binary switch state arrives LATE (after arming). No
+        // suppression, so stored power is preserved and used for seeding.
+        clk.advance(Duration::from_secs(1));
+        let _ = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: None,
+            ts: clk.now(),
+        });
+        assert!(
+            c.is_kill_switch_idle("printer-kill"),
+            "auto-arm must seed idle from out-of-order meter reading"
+        );
+
+        // Holdoff elapses — kill switch fires.
+        clk.advance(Duration::from_secs(11));
+        let actions = c.handle_event(Event::Tick { ts: clk.now() });
+        assert_eq!(actions.len(), 1);
+        assert!(!c.plug_state_for("z2m-p-printer").unwrap().on);
+    }
+
+    #[test]
+    fn kill_switch_does_not_retrip_before_warmup() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = plug_controller(
+            clk.clone(),
+            vec![ActionRule {
+                name: "printer-kill".into(),
+                trigger: Trigger::PowerBelow {
+                    device: "z2m-p-printer".into(),
+                    watts: 5.0,
+                    for_seconds: 10,
+                },
+                effect: Effect::TurnOff {
+                    target: "z2m-p-printer".into(),
+                },
+            }],
+        );
+
+        // Turn on, arm, let kill switch fire.
+        c.set_plug_state("z2m-p-printer", true);
+        let _ = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: Some(100.0),
+            ts: clk.now(),
+        });
+        clk.advance(Duration::from_secs(1));
+        let _ = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: Some(1.0),
+            ts: clk.now(),
+        });
+        clk.advance(Duration::from_secs(11));
+        let actions = c.handle_event(Event::Tick { ts: clk.now() });
+        assert_eq!(actions.len(), 1); // kill switch fired
+        assert!(!c.plug_state_for("z2m-p-printer").unwrap().on);
+
+        // User re-enables the plug. Power is still below threshold
+        // (device warming up). Kill switch must NOT start idle tracking.
+        let _ = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: Some(2.0),
+            ts: clk.now(),
+        });
+        assert!(
+            !c.is_kill_switch_idle("printer-kill"),
+            "kill switch must not track idle before first above-threshold reading"
+        );
+
+        // Even after holdoff, no fire because rule isn't armed.
+        clk.advance(Duration::from_secs(11));
+        let actions = c.handle_event(Event::Tick { ts: clk.now() });
+        assert!(actions.is_empty(), "must not retrip without warmup");
+        assert!(c.plug_state_for("z2m-p-printer").unwrap().on);
+
+        // Device warms up — above threshold. Now armed.
+        let _ = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: Some(100.0),
+            ts: clk.now(),
+        });
+
+        // Power drops again — NOW idle tracking starts.
+        clk.advance(Duration::from_secs(1));
+        let _ = c.handle_event(Event::PlugState {
+            device: "z2m-p-printer".into(),
+            on: true,
+            power: Some(1.0),
+            ts: clk.now(),
+        });
+        assert!(c.is_kill_switch_idle("printer-kill"));
+
+        // Holdoff elapses — kill fires.
+        clk.advance(Duration::from_secs(11));
+        let actions = c.handle_event(Event::Tick { ts: clk.now() });
+        assert_eq!(actions.len(), 1);
+        assert!(!c.plug_state_for("z2m-p-printer").unwrap().on);
     }
 
     #[test]
@@ -3053,5 +3653,165 @@ mod tests {
         assert!(!actions
             .iter()
             .any(|a| matches!(a.target, crate::domain::action::ActionTarget::Device(_))));
+    }
+
+    // ---- T1: At trigger fires daily -----------------------------------
+
+    #[test]
+    fn at_trigger_fires_again_next_day() {
+        let clk = Arc::new(FakeClock::new(22));
+        clk.set_minute(59);
+        let mut c = plug_controller(
+            clk.clone(),
+            vec![ActionRule {
+                name: "nightly-off".into(),
+                trigger: Trigger::At { hour: 23, minute: 0 },
+                effect: Effect::TurnOff {
+                    target: "z2m-p-printer".into(),
+                },
+            }],
+        );
+        c.set_plug_state("z2m-p-printer", true);
+
+        // Not yet 23:00 — tick should not fire.
+        let actions = c.handle_event(Event::Tick { ts: clk.now() });
+        assert!(actions.is_empty());
+
+        // Advance to 23:00 — should fire.
+        clk.set_hour(23);
+        clk.set_minute(0);
+        clk.advance(Duration::from_secs(60));
+        let actions = c.handle_event(Event::Tick { ts: clk.now() });
+        assert_eq!(actions.len(), 1);
+
+        // Same minute again — should NOT fire (dedup).
+        clk.advance(Duration::from_secs(5));
+        let actions = c.handle_event(Event::Tick { ts: clk.now() });
+        assert!(actions.is_empty());
+
+        // Advance past the target minute — dedup guard should clear.
+        clk.set_minute(1);
+        clk.advance(Duration::from_secs(60));
+        let actions = c.handle_event(Event::Tick { ts: clk.now() });
+        assert!(actions.is_empty()); // not the target minute
+
+        // Next day at 23:00 — should fire again.
+        c.set_plug_state("z2m-p-printer", true);
+        clk.set_minute(0);
+        clk.advance(Duration::from_secs(86400));
+        let actions = c.handle_event(Event::Tick { ts: clk.now() });
+        assert_eq!(actions.len(), 1, "At trigger must fire again next day");
+    }
+
+    // ---- T2: TurnOffAllZones effect -----------------------------------
+
+    #[test]
+    fn turn_off_all_zones_only_touches_lit_rooms() {
+        let clk = Arc::new(FakeClock::new(12));
+        // Build a controller with two rooms.
+        let cfg = Config {
+            name_by_address: BTreeMap::new(),
+            devices: BTreeMap::from([
+                ("hue-l-a".into(), light("0xa")),
+                ("hue-l-b".into(), light("0xb")),
+            ]),
+            rooms: vec![
+                Room {
+                    name: "room-a".into(),
+                    group_name: "hue-lz-a".into(),
+                    id: 1,
+                    members: vec!["hue-l-a/11".into()],
+                    parent: None,
+                    devices: vec![],
+                    scenes: day_scenes(vec![1]),
+                    off_transition_seconds: 0.5,
+                    motion_off_cooldown_seconds: 0,
+                },
+                Room {
+                    name: "room-b".into(),
+                    group_name: "hue-lz-b".into(),
+                    id: 2,
+                    members: vec!["hue-l-b/11".into()],
+                    parent: None,
+                    devices: vec![],
+                    scenes: day_scenes(vec![1]),
+                    off_transition_seconds: 1.0,
+                    motion_off_cooldown_seconds: 0,
+                },
+            ],
+            actions: vec![ActionRule {
+                name: "all-off".into(),
+                trigger: Trigger::At { hour: 23, minute: 0 },
+                effect: Effect::TurnOffAllZones,
+            }],
+            defaults: Defaults::default(),
+        };
+        let topo = Arc::new(Topology::build(&cfg).unwrap());
+        let mut c = Controller::new(topo, clk.clone(), cfg.defaults);
+
+        // room-a is on, room-b is off.
+        c.set_physical_state("room-a", true);
+        c.set_physical_state("room-b", false);
+
+        // Fire the all-off trigger.
+        clk.set_hour(23);
+        clk.set_minute(0);
+        let actions = c.handle_event(Event::Tick { ts: clk.now() });
+
+        // Only room-a should get an OFF action.
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].target_name(), "hue-lz-a");
+
+        // Both rooms should now be off.
+        assert!(!c.state_for("room-a").unwrap().physically_on);
+        assert!(!c.state_for("room-b").unwrap().physically_on);
+    }
+
+    // ---- T3: action-rule-only switches in all_switch_names ------------
+
+    #[test]
+    fn action_rule_only_switch_in_all_switch_names() {
+        let cfg = Config {
+            name_by_address: BTreeMap::new(),
+            devices: BTreeMap::from([
+                ("hue-l-a".into(), light("0xa")),
+                ("hue-s-standalone".into(), switch_dev("0x5")),
+                (
+                    "z2m-p-lamp".into(),
+                    plug_dev("0xe", "sonoff-basic", &["on-off"]),
+                ),
+            ]),
+            rooms: vec![Room {
+                name: "empty-room".into(),
+                group_name: "hue-lz-empty".into(),
+                id: 1,
+                members: vec!["hue-l-a/11".into()],
+                parent: None,
+                devices: vec![],
+                scenes: day_scenes(vec![1]),
+                off_transition_seconds: 0.8,
+                motion_off_cooldown_seconds: 0,
+            }],
+            actions: vec![ActionRule {
+                name: "lamp-on".into(),
+                trigger: Trigger::SwitchOn {
+                    device: "hue-s-standalone".into(),
+                },
+                effect: Effect::TurnOn {
+                    target: "z2m-p-lamp".into(),
+                },
+            }],
+            defaults: Defaults::default(),
+        };
+        let topo = Topology::build(&cfg).unwrap();
+
+        // The switch is NOT bound to any room, only in an action rule.
+        assert!(topo.rooms_for_switch("hue-s-standalone").is_empty());
+
+        // But it MUST appear in all_switch_names for MQTT subscription.
+        assert!(
+            topo.all_switch_names().contains("hue-s-standalone"),
+            "action-rule-only switches must be included in all_switch_names"
+        );
     }
 }

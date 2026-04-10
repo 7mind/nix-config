@@ -303,8 +303,11 @@ fn parse_event(topology: &Topology, p: &Publish) -> Option<Event> {
         let payload_text = std::str::from_utf8(&p.payload).ok()?.trim_matches('"');
         // Switch dispatch first (action set is disjoint from tap's, so
         // even if the same name appeared as both — which is impossible —
-        // we'd recognize the right one).
-        if !topology.rooms_for_switch(name).is_empty() {
+        // we'd recognize the right one). A switch qualifies if it's bound
+        // to a room OR if it has action rules (SwitchOn/SwitchOff).
+        if !topology.rooms_for_switch(name).is_empty()
+            || topology.has_switch_actions(name)
+        {
             let action = SwitchAction::parse(payload_text)?;
             return Some(Event::SwitchAction {
                 device: name.to_string(),

@@ -40,7 +40,7 @@ use anyhow::Context;
 use thiserror::Error;
 use tokio::sync::{broadcast, mpsc};
 
-use crate::config::{Config, Defaults};
+use crate::config::Config;
 use crate::controller::Controller;
 use crate::domain::action::{Action, Payload};
 use crate::domain::event::Event;
@@ -107,7 +107,8 @@ pub async fn run(
     // user press or a motion event that turned the lights on; the
     // motion-default loses one false auto-off in the worst case but
     // gains the ability to auto-clear lights left on at boot.
-    controller.seed_motion_ownership_for_lit_rooms();
+    controller.log_startup_lit_rooms();
+    controller.arm_kill_switches_for_active_plugs(Instant::now());
 
     tracing::info!("startup state refresh complete; entering event loop");
 
@@ -146,43 +147,42 @@ async fn refresh_state(
         "phase 1: retained-message drain"
     );
 
-    // Phase 2: /get the missing groups.
+    // Phase 2+3: /get missing groups and drain responses.
     let missing: Vec<String> = all_groups.difference(&seen_groups).cloned().collect();
-    if missing.is_empty() {
-        return Ok(());
-    }
-    tracing::info!(missing = missing.len(), "phase 2: issuing /get for missing groups");
-    // Pace the /get publishes so we don't dump all of them on z2m at
-    // once. z2m has to walk every member bulb of the group over zigbee
-    // to satisfy each /get; back-to-back floods can stall the z2m
-    // worker queue. 50 ms between publishes gives a 19-group setup a
-    // ~1s burst window which is well below the 2s phase-3 deadline.
-    for group in &missing {
-        bridge.publish_get(group).await?;
-        tokio::time::sleep(GET_BURST_INTERPACKET_DELAY).await;
-    }
+    if !missing.is_empty() {
+        tracing::info!(missing = missing.len(), "phase 2: issuing /get for missing groups");
+        // Pace the /get publishes so we don't dump all of them on z2m at
+        // once. z2m has to walk every member bulb of the group over zigbee
+        // to satisfy each /get; back-to-back floods can stall the z2m
+        // worker queue. 50 ms between publishes gives a 19-group setup a
+        // ~1s burst window which is well below the 2s phase-3 deadline.
+        for group in &missing {
+            bridge.publish_get(group).await?;
+            tokio::time::sleep(GET_BURST_INTERPACKET_DELAY).await;
+        }
 
-    // Phase 3: drain /get responses.
-    let phase3_window = Duration::from_secs(2);
-    let phase3_deadline = Instant::now() + phase3_window;
-    drain_until(
-        controller,
-        bridge,
-        event_rx,
-        &mut seen_groups,
-        phase3_deadline,
-        all_groups.len(),
-    )
-    .await;
+        // Phase 3: drain /get responses.
+        let phase3_window = Duration::from_secs(2);
+        let phase3_deadline = Instant::now() + phase3_window;
+        drain_until(
+            controller,
+            bridge,
+            event_rx,
+            &mut seen_groups,
+            phase3_deadline,
+            all_groups.len(),
+        )
+        .await;
 
-    let still_missing = all_groups.len() - seen_groups.len();
-    if still_missing > 0 {
-        let names: Vec<&String> = all_groups.difference(&seen_groups).collect();
-        tracing::warn!(
-            still_missing,
-            ?names,
-            "phase 3: groups still without state, defaulting to OFF"
-        );
+        let still_missing = all_groups.len() - seen_groups.len();
+        if still_missing > 0 {
+            let names: Vec<&String> = all_groups.difference(&seen_groups).collect();
+            tracing::warn!(
+                still_missing,
+                ?names,
+                "phase 3: groups still without state, defaulting to OFF"
+            );
+        }
     }
 
     // Phase 3b: Zigbee plug state refresh. Same approach as group
@@ -203,13 +203,16 @@ async fn refresh_state(
         }
         let zigbee_plug_drain = Duration::from_secs(2);
         let zigbee_plug_deadline = Instant::now() + zigbee_plug_drain;
+        // Use usize::MAX so drain runs until deadline — we're waiting
+        // for plug events, not groups, so the group-count early exit
+        // must not apply.
         drain_until(
             controller,
             bridge,
             event_rx,
             &mut seen_groups,
             zigbee_plug_deadline,
-            all_groups.len(),
+            usize::MAX,
         )
         .await;
     }
@@ -233,7 +236,8 @@ async fn refresh_state(
             }
             tokio::time::sleep(GET_BURST_INTERPACKET_DELAY).await;
         }
-        // Drain the Z-Wave responses.
+        // Drain the Z-Wave responses. Same usize::MAX trick — we're
+        // waiting for Z-Wave events, not group events.
         let zwave_drain_window = Duration::from_secs(3);
         let zwave_deadline = Instant::now() + zwave_drain_window;
         drain_until(
@@ -242,7 +246,7 @@ async fn refresh_state(
             event_rx,
             &mut seen_groups,
             zwave_deadline,
-            all_groups.len(), // groups won't change, just draining zwave events
+            usize::MAX,
         )
         .await;
     }
@@ -452,17 +456,21 @@ async fn handle_ws_command(
             }
         }
         WsCommand::TogglePlug { device } => {
-            let is_on = controller
-                .plug_state_for(&device)
-                .map_or(false, |s| s.on);
-            let action = if is_on {
-                Action::for_device(device.clone(), Payload::device_off())
+            if !controller.topology().is_plug(&device) {
+                tracing::warn!(device, "web: toggle plug rejected — unknown device");
             } else {
-                Action::for_device(device.clone(), Payload::device_on())
-            };
-            tracing::info!(device, target_state = !is_on, "web: toggle plug");
-            if let Err(e) = bridge.publish_action(&action).await {
-                tracing::error!(error = ?e, "web: failed to publish plug toggle");
+                let is_on = controller
+                    .plug_state_for(&device)
+                    .map_or(false, |s| s.on);
+                let action = if is_on {
+                    Action::for_device(device.clone(), Payload::device_off())
+                } else {
+                    Action::for_device(device.clone(), Payload::device_on())
+                };
+                tracing::info!(device, target_state = !is_on, "web: toggle plug");
+                if let Err(e) = bridge.publish_action(&action).await {
+                    tracing::error!(error = ?e, "web: failed to publish plug toggle");
+                }
             }
         }
     }
@@ -492,9 +500,3 @@ fn broadcast_state_updates(
         }
     }
 }
-
-// `Defaults` is re-imported here so the doc comment at the top of this
-// module can mention it without a disambiguating path. The actual
-// daemon::run signature uses Config which carries Defaults inside.
-#[allow(dead_code)]
-const _DEFAULTS_REFERENCE: std::marker::PhantomData<Defaults> = std::marker::PhantomData;

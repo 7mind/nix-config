@@ -76,10 +76,13 @@ pub struct PlugRuntimeState {
     /// state topic.
     pub on: bool,
 
-    /// Monotonic timestamp when the plug's power reading first dropped
-    /// below the kill-switch threshold. `None` when power is above
-    /// threshold, the plug is off, or no kill switch is configured.
-    pub idle_since: Option<Instant>,
+    /// True if the plug has received an explicit `on = false` at some
+    /// point. Distinguishes "default false" (startup, never seen state)
+    /// from "actually off" (received explicit MQTT off state). Used on
+    /// off→on transitions to decide whether `last_power` is a stale
+    /// off-state reading (clear it) or a valid out-of-order startup
+    /// reading (preserve it).
+    pub seen_explicit_off: bool,
 
     /// Most recent power reading in watts (clamped to ≥ 0). Updated
     /// from both Zigbee combined state events and Z-Wave meter-only

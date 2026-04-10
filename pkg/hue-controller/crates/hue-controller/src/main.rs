@@ -259,12 +259,15 @@ async fn run_daemon(args: DaemonArgs) -> Result<()> {
         let (broadcast_tx, _) = tokio::sync::broadcast::channel(256);
 
         let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
-        hue_controller::web::start_web_server(
-            addr,
-            ws_cmd_tx,
-            broadcast_tx.clone(),
-            assets_dir,
-        );
+        let (_bound_addr, _server_handle) =
+            hue_controller::web::bind_and_start_web_server(
+                addr,
+                ws_cmd_tx,
+                broadcast_tx.clone(),
+                assets_dir,
+            )
+            .await
+            .with_context(|| format!("binding web server on {addr}"))?;
 
         Some(hue_controller::web::WebHandle {
             ws_cmd_rx,

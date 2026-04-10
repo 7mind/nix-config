@@ -166,6 +166,27 @@ pub enum TopologyError {
     },
 
     #[error(
+        "room {room:?} has negative off_transition_seconds: {value}"
+    )]
+    NegativeTransition { room: RoomName, value: f64 },
+
+    #[error(
+        "defaults.cycle_window_seconds is negative: {0}"
+    )]
+    NegativeCycleWindow(f64),
+
+    #[error(
+        "action rule {rule:?} has confirm_off_seconds negative: {value}"
+    )]
+    NegativeConfirmOffWindow { rule: String, value: f64 },
+
+    #[error(
+        "action rule {rule:?} has At trigger with invalid time: hour={hour}, minute={minute} \
+         (must be 0..=23 and 0..=59)"
+    )]
+    InvalidAtTime { rule: String, hour: u8, minute: u8 },
+
+    #[error(
         "plug {device:?} has protocol zwave but no node_id"
     )]
     ZwavePlugMissingNodeId {
@@ -386,6 +407,21 @@ impl Topology {
                     room: room.name.clone(),
                     source,
                 })?;
+        }
+
+        // 4b. Duration and defaults validation.
+        if config.defaults.cycle_window_seconds < 0.0 {
+            return Err(TopologyError::NegativeCycleWindow(
+                config.defaults.cycle_window_seconds,
+            ));
+        }
+        for room in &config.rooms {
+            if room.off_transition_seconds < 0.0 {
+                return Err(TopologyError::NegativeTransition {
+                    room: room.name.clone(),
+                    value: room.off_transition_seconds,
+                });
+            }
         }
 
         // 5. Member references must point at lights in the catalog.
@@ -758,9 +794,14 @@ impl Topology {
                         .or_default()
                         .push(idx);
                 }
-                Trigger::At { .. } => {
-                    // No device to validate; time-based triggers are
-                    // evaluated in handle_tick.
+                Trigger::At { hour, minute } => {
+                    if *hour >= 24 || *minute >= 60 {
+                        return Err(TopologyError::InvalidAtTime {
+                            rule: rule.name.clone(),
+                            hour: *hour,
+                            minute: *minute,
+                        });
+                    }
                 }
             }
 
@@ -777,6 +818,16 @@ impl Topology {
                         rule: rule.name.clone(),
                         device: effect_target.to_string(),
                         kind: kind_label(effect_entry),
+                    });
+                }
+            }
+
+            // Validate confirm_off_seconds if present.
+            if let Some(secs) = rule.effect.confirm_off_seconds() {
+                if secs < 0.0 {
+                    return Err(TopologyError::NegativeConfirmOffWindow {
+                        rule: rule.name.clone(),
+                        value: secs,
                     });
                 }
             }
@@ -867,10 +918,13 @@ impl Topology {
         self.rooms.values().map(|r| r.group_name.as_str()).collect()
     }
 
-    /// All distinct switch friendly names. Used to subscribe to action
-    /// topics.
+    /// All distinct switch friendly names (from both room bindings and
+    /// action rules). Used to subscribe to action topics.
     pub fn all_switch_names(&self) -> BTreeSet<&str> {
-        self.switch_index.keys().map(String::as_str).collect()
+        let mut names: BTreeSet<&str> = self.switch_index.keys().map(String::as_str).collect();
+        names.extend(self.action_switch_on_index.keys().map(String::as_str));
+        names.extend(self.action_switch_off_index.keys().map(String::as_str));
+        names
     }
 
     /// All distinct tap friendly names (from both room bindings and
@@ -951,6 +1005,14 @@ impl Topology {
             .get(&(tap.to_string(), button, action.map(String::from)))
             .map(Vec::as_slice)
             .unwrap_or(&[])
+    }
+
+    /// True if this switch has any action rules (SwitchOn or SwitchOff).
+    /// Used by the MQTT parser to dispatch action-rule-only switches that
+    /// aren't bound to any room.
+    pub fn has_switch_actions(&self, switch: &str) -> bool {
+        self.action_switch_on_index.contains_key(switch)
+            || self.action_switch_off_index.contains_key(switch)
     }
 
     /// Action rule indexes with PowerBelow triggers for a plug device.
