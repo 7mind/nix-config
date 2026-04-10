@@ -84,11 +84,29 @@ pub async fn reconcile_zwave_names(
         .subscribe(topics::zwave_nodeinfo_wildcard(), QoS::AtLeastOnce)
         .await?;
 
-    // Drain retained nodeinfo messages.
-    let mut nodes_by_id: BTreeMap<u16, ZwaveNode> = BTreeMap::new();
-    let drain_deadline = tokio::time::Instant::now() + Duration::from_secs(3);
-
+    // Poll until we receive the SUBACK — only after that will the
+    // broker start delivering retained messages.
+    let suback_deadline = tokio::time::Instant::now() + options.timeout;
     loop {
+        let remaining = suback_deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            anyhow::bail!("zwave: timed out waiting for SUBACK on nodeinfo wildcard");
+        }
+        match tokio::time::timeout(remaining, eventloop.poll()).await {
+            Ok(Ok(rumqttc::Event::Incoming(rumqttc::Packet::SubAck(_)))) => break,
+            Ok(Ok(_)) => continue,
+            Ok(Err(e)) => anyhow::bail!("zwave mqtt suback error: {e}"),
+            Err(_) => anyhow::bail!("zwave: timed out waiting for SUBACK"),
+        }
+    }
+
+    // Drain retained nodeinfo messages. Retained messages arrive
+    // right after the SUBACK; we collect until `desired.len()` nodes
+    // are found or the timeout elapses.
+    let mut nodes_by_id: BTreeMap<u16, ZwaveNode> = BTreeMap::new();
+    let drain_deadline = tokio::time::Instant::now() + options.timeout;
+
+    while nodes_by_id.len() < desired.len() {
         let remaining = drain_deadline.saturating_duration_since(tokio::time::Instant::now());
         if remaining.is_zero() {
             break;
