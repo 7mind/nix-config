@@ -167,6 +167,10 @@ in
         keyboardName: kanataConfigDir:
         lib.nameValuePair "kanata-${keyboardName}" {
           restartTriggers = [ kanataConfigDir ];
+          serviceConfig = {
+            Restart = "on-failure";
+            RestartSec = 5;
+          };
         }
       ) kanataConfigDirs;
     })
