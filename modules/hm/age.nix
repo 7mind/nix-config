@@ -19,15 +19,12 @@ in
       };
     })
 
-    # Dummy config when age is disabled
+    # Fallback for HM configs with age disabled.
+    # Empty masterIdentities so disabled users don't inject an invalid
+    # dummy pubkey into the merged ageWrapper (breaks update-masterkeys).
     (lib.mkIf (!ageEnabled) {
       age.rekey = {
-        masterIdentities = [
-          {
-            identity = "/does-not-exist";
-            pubkey = "age";
-          }
-        ];
+        masterIdentities = [];
         storageMode = "derivation";
       };
     })

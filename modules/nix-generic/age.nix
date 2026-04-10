@@ -76,15 +76,12 @@ in
       age.secrets = ownerSecrets;
     })
 
-    # Dummy config when age is disabled or no master identity - satisfies agenix-rekey requirements
+    # Fallback for hosts with age disabled or no master identity.
+    # Empty masterIdentities so disabled hosts don't inject an invalid
+    # dummy pubkey into the merged ageWrapper (breaks update-masterkeys).
     (lib.mkIf (!config.smind.age.enable || !hasMasterIdentity) {
       age.rekey = {
-        masterIdentities = lib.mkDefault [
-          {
-            identity = "/does-not-exist";
-            pubkey = "age";
-          }
-        ];
+        masterIdentities = lib.mkDefault [];
         storageMode = lib.mkDefault "derivation";
       };
     })

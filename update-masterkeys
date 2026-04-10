@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Re-encrypt all source secrets so every master identity can decrypt them.
+# The ageWrapper built by agenix-rekey merges masterIdentities from ALL hosts,
+# but needs the decrypted key present at every path it references
+# (Linux: /dev/shm/age-master-key, Darwin: /tmp/age-master-key).
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# TPM-protected identity paths (can be overridden in private/setup-env)
+AGE_TPM_IDENTITY="${AGE_TPM_IDENTITY:-${HOME}/.age/tpm-identity.txt}"
+AGE_MASTER_KEY_TPM="${AGE_MASTER_KEY_TPM:-${HOME}/.age/master-key.age}"
+
+# Both paths that the merged ageWrapper expects
+KEY_LINUX="/dev/shm/age-master-key"
+KEY_DARWIN="/tmp/age-master-key"
+
+# Source private environment if it exists
+[[ -f "$SCRIPT_DIR/private/setup-env" ]] && source "$SCRIPT_DIR/private/setup-env"
+
+CREATED_KEYS=()
+
+cleanup() {
+    for key in "${CREATED_KEYS[@]}"; do
+        rm -f "$key"
+    done
+}
+trap cleanup EXIT
+
+decrypt_master_key() {
+    local target="$1"
+
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        local password_key="${HOME}/age-key.age"
+        if [[ ! -f "$password_key" ]]; then
+            echo "Error: Password-protected master key not found: $password_key" >&2
+            return 1
+        fi
+        echo "    Decrypting master key (enter password)..." >&2
+        age -d -o "$target" "$password_key"
+    else
+        if [[ ! -f "$AGE_MASTER_KEY_TPM" ]]; then
+            echo "Error: TPM-encrypted master key not found: $AGE_MASTER_KEY_TPM" >&2
+            echo "Run ./enroll-tpm to set up TPM protection" >&2
+            return 1
+        fi
+        if [[ ! -f "$AGE_TPM_IDENTITY" ]]; then
+            echo "Error: TPM identity not found: $AGE_TPM_IDENTITY" >&2
+            echo "Run ./enroll-tpm to set up TPM protection" >&2
+            return 1
+        fi
+        if ! command -v age-plugin-tpm &>/dev/null; then
+            echo "Error: age-plugin-tpm not found" >&2
+            echo "Install it or run: nix shell nixpkgs#age-plugin-tpm" >&2
+            return 1
+        fi
+        echo "    Decrypting master key via TPM..." >&2
+        age -d -i "$AGE_TPM_IDENTITY" -o "$target" "$AGE_MASTER_KEY_TPM" 2>/dev/null
+    fi
+    chmod 600 "$target"
+}
+
+place_key() {
+    local path="$1"
+    if [[ -f "$path" ]]; then
+        echo "    $path already present, reusing"
+    else
+        if [[ ${#CREATED_KEYS[@]} -eq 0 ]]; then
+            # First key — decrypt from source
+            decrypt_master_key "$path" || exit 1
+        else
+            # Copy from the first key we decrypted
+            cp "${CREATED_KEYS[0]}" "$path"
+            chmod 600 "$path"
+        fi
+        CREATED_KEYS+=("$path")
+    fi
+}
+
+echo "==> Placing master key at expected paths..."
+place_key "$KEY_LINUX"
+place_key "$KEY_DARWIN"
+
+echo "==> Running agenix update-masterkeys..."
+local_system="$(uname -m)-$(uname -s | tr '[:upper:]' '[:lower:]')"
+nix run ".?submodules=1#agenix-rekey.${local_system}.update-masterkeys"
+
+echo "==> Done. Don't forget to commit the updated secrets and re-run ./setup -k for affected hosts."
