@@ -880,6 +880,7 @@ impl Controller {
                                 );
                                 plug_state.on = false;
                                 plug_state.idle_since = None;
+                                plug_state.last_power = None;
                                 return vec![Action::for_device(target, Payload::device_off())];
                             }
                         }
@@ -905,6 +906,7 @@ impl Controller {
                 );
                 plug_state.on = new_on;
                 plug_state.idle_since = None;
+                if !new_on { plug_state.last_power = None; }
                 vec![Action::for_device(target, payload)]
             }
             Effect::TurnOn { target } => {
@@ -919,6 +921,7 @@ impl Controller {
                 tracing::info!(rule = rule_name, target = target.as_str(), "action rule → turn off plug");
                 plug_state.on = false;
                 plug_state.idle_since = None;
+                plug_state.last_power = None;
                 vec![Action::for_device(target, Payload::device_off())]
             }
             Effect::TurnOffAllZones => {
@@ -965,8 +968,16 @@ impl Controller {
             plug.on = on;
         }
 
+        // Store power reading (uniformly clamped to ≥ 0 for both
+        // protocols — NAS-WR01ZE sends negative meter reports, and we
+        // clamp at parse time too, but belt-and-suspenders here).
+        if let Some(watts) = power {
+            plug.last_power = Some(watts.max(0.0));
+        }
+
         if !plug.on {
             plug.idle_since = None;
+            plug.last_power = None;
             return Vec::new();
         }
 
@@ -975,6 +986,15 @@ impl Controller {
         if rule_indexes.is_empty() {
             return Vec::new();
         }
+
+        // Use the event's power if present, otherwise fall back to
+        // the last known reading. This handles the Z-Wave split-event
+        // case: a PlugState (on/off change) arrives with power=None,
+        // but we still want to evaluate the kill-switch using the most
+        // recent meter reading.
+        let effective_power = power.or_else(|| {
+            self.plug_states.get(device).and_then(|p| p.last_power)
+        });
 
         let mut out = Vec::new();
         for &idx in &rule_indexes {
@@ -985,7 +1005,7 @@ impl Controller {
             };
 
             let plug = self.plug_states.entry(device.to_string()).or_default();
-            if let Some(current_power) = power {
+            if let Some(current_power) = effective_power {
                 if current_power < threshold_watts {
                     // Power is below threshold — start or continue tracking.
                     if plug.idle_since.is_none() {
@@ -1009,6 +1029,7 @@ impl Controller {
                             );
                             plug.on = false;
                             plug.idle_since = None;
+                            plug.last_power = None;
                             if let Some(target) = resolved.effect.target() {
                                 out.push(Action::for_device(
                                     target,

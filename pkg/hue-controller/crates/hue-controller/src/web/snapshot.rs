@@ -65,6 +65,7 @@ pub fn build_full_snapshot(controller: &Controller, now: Instant) -> FullStateSn
                 idle_since_ago_ms: state
                     .and_then(|s| s.idle_since)
                     .map(|t| ago_ms(now, t)),
+                power_watts: state.and_then(|s| s.last_power),
             }
         })
         .collect();
@@ -130,6 +131,7 @@ pub fn build_plug_snapshot(
         device: device.to_string(),
         on: state.on,
         idle_since_ago_ms: state.idle_since.map(|t| ago_ms(now, t)),
+        power_watts: state.last_power,
     })
 }
 

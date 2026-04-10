@@ -27,6 +27,11 @@ pub async fn reconcile_devices(
         if matches!(entry, DeviceCatalogEntry::Light(_)) {
             continue;
         }
+        // Z-Wave plugs are not managed by zigbee2mqtt — their options
+        // (if any) must be set via the Z-Wave JS UI API, not z2m /set.
+        if entry.is_zwave_plug() {
+            continue;
+        }
 
         let existing_state = client.fetch_device_state(friendly_name).await?;
         if existing_state.is_none() {

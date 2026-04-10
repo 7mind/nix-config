@@ -299,6 +299,9 @@ pub struct Topology {
     /// All plug friendly_names from the device catalog.
     plug_names: BTreeSet<FriendlyName>,
 
+    /// Zigbee plug friendly_names (subset of plug_names).
+    zigbee_plug_names: BTreeSet<FriendlyName>,
+
     /// Z-Wave plug friendly_names (subset of plug_names).
     zwave_plug_names: BTreeSet<FriendlyName>,
 
@@ -605,8 +608,9 @@ impl Topology {
             })
             .collect();
 
-        // 10. Collect all plug names and Z-Wave metadata from the catalog.
+        // 10. Collect all plug names and protocol metadata from the catalog.
         let mut plug_names: BTreeSet<FriendlyName> = BTreeSet::new();
+        let mut zigbee_plug_names: BTreeSet<FriendlyName> = BTreeSet::new();
         let mut zwave_plug_names: BTreeSet<FriendlyName> = BTreeSet::new();
         let mut plug_protocols: BTreeMap<FriendlyName, PlugProtocol> = BTreeMap::new();
         let mut zwave_node_id_to_name: BTreeMap<u16, FriendlyName> = BTreeMap::new();
@@ -619,21 +623,33 @@ impl Topology {
             let protocol = entry.plug_protocol().unwrap_or_default();
             plug_protocols.insert(name.clone(), protocol);
 
-            if protocol == PlugProtocol::Zwave {
-                let node_id = entry.zwave_node_id().ok_or_else(|| {
-                    TopologyError::ZwavePlugMissingNodeId { device: name.clone() }
-                })?;
-                if let Some(existing) = zwave_node_id_to_name.get(&node_id) {
-                    return Err(TopologyError::DuplicateZwaveNodeId {
-                        node_id,
-                        first: existing.clone(),
-                        second: name.clone(),
-                    });
+            match protocol {
+                PlugProtocol::Zwave => {
+                    let node_id = entry.zwave_node_id().ok_or_else(|| {
+                        TopologyError::ZwavePlugMissingNodeId { device: name.clone() }
+                    })?;
+                    if let Some(existing) = zwave_node_id_to_name.get(&node_id) {
+                        return Err(TopologyError::DuplicateZwaveNodeId {
+                            node_id,
+                            first: existing.clone(),
+                            second: name.clone(),
+                        });
+                    }
+                    zwave_node_id_to_name.insert(node_id, name.clone());
+                    zwave_plug_names.insert(name.clone());
                 }
-                zwave_node_id_to_name.insert(node_id, name.clone());
-                zwave_plug_names.insert(name.clone());
+                PlugProtocol::Zigbee => {
+                    zigbee_plug_names.insert(name.clone());
+                }
             }
         }
+
+        // Every plug must be classified as exactly one protocol.
+        debug_assert_eq!(
+            plug_names.len(),
+            zigbee_plug_names.len() + zwave_plug_names.len(),
+            "every plug must be either zigbee or zwave"
+        );
 
         // 11. Validate action rules and build dispatch indexes.
         let mut action_names: BTreeSet<String> = BTreeSet::new();
@@ -785,6 +801,7 @@ impl Topology {
             action_tap_index,
             action_power_below_index,
             plug_names,
+            zigbee_plug_names,
             zwave_plug_names,
             plug_protocols,
             zwave_node_id_to_name,
@@ -882,6 +899,11 @@ impl Topology {
     /// True if this device is a Z-Wave plug.
     pub fn is_zwave_plug(&self, device: &str) -> bool {
         self.zwave_plug_names.contains(device)
+    }
+
+    /// Zigbee plug friendly_names.
+    pub fn zigbee_plug_names(&self) -> &BTreeSet<FriendlyName> {
+        &self.zigbee_plug_names
     }
 
     /// Z-Wave plug friendly_names.

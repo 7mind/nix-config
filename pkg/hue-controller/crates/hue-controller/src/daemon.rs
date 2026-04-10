@@ -185,6 +185,35 @@ async fn refresh_state(
         );
     }
 
+    // Phase 3b: Zigbee plug state refresh. Same approach as group
+    // /get — ask z2m to re-query each Zigbee plug's state over the air.
+    // Without this, Zigbee plugs rely entirely on retained state, and
+    // if z2m's retained messages are lost, plugs are stuck at OFF.
+    let zigbee_plugs = topology.zigbee_plug_names();
+    if !zigbee_plugs.is_empty() {
+        tracing::info!(
+            zigbee_plugs = zigbee_plugs.len(),
+            "phase 3b: refreshing zigbee plug states"
+        );
+        for plug_name in zigbee_plugs {
+            if let Err(e) = bridge.publish_get(plug_name).await {
+                tracing::warn!(plug = plug_name.as_str(), error = ?e, "failed to request zigbee plug refresh");
+            }
+            tokio::time::sleep(GET_BURST_INTERPACKET_DELAY).await;
+        }
+        let zigbee_plug_drain = Duration::from_secs(2);
+        let zigbee_plug_deadline = Instant::now() + zigbee_plug_drain;
+        drain_until(
+            controller,
+            bridge,
+            event_rx,
+            &mut seen_groups,
+            zigbee_plug_deadline,
+            all_groups.len(),
+        )
+        .await;
+    }
+
     // Phase 4: Z-Wave plug state refresh. With retain=false, the
     // daemon has no idea whether Z-Wave plugs are on or off after a
     // restart. Ask the Z-Wave JS UI gateway to re-poll each node's

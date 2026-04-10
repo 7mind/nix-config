@@ -28,6 +28,8 @@ MC_RoomHasSwitch == (mc_r_parent :> FALSE @@ mc_r_child :> TRUE)
 MC_RoomHasTap   == (mc_r_parent :> TRUE @@ mc_r_child :> FALSE)
 MC_Plugs        == {mc_p1}
 MC_KillHoldoff  == (mc_p1 :> 3)
+MC_KillThreshold == (mc_p1 :> 1)
+MC_MaxPower     == 2
 MC_MaxTime      == 5
 MC_NIL          == mc_NIL
 

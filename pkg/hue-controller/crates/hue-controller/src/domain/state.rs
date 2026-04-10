@@ -80,6 +80,13 @@ pub struct PlugRuntimeState {
     /// below the kill-switch threshold. `None` when power is above
     /// threshold, the plug is off, or no kill switch is configured.
     pub idle_since: Option<Instant>,
+
+    /// Most recent power reading in watts (clamped to ≥ 0). Updated
+    /// from both Zigbee combined state events and Z-Wave meter-only
+    /// events. Used by the kill-switch evaluator when a state-change
+    /// event arrives without an accompanying power reading (Z-Wave
+    /// split-event case), and exposed to the web UI via PlugSnapshot.
+    pub last_power: Option<f64>,
 }
 
 #[cfg(test)]

@@ -40,6 +40,9 @@ pub struct PlugSnapshot {
     pub on: bool,
     /// Milliseconds since the plug entered idle (power below threshold).
     pub idle_since_ago_ms: Option<u64>,
+    /// Most recent power reading in watts, if available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub power_watts: Option<f64>,
 }
 
 /// Full state snapshot sent on connect or on explicit request.
@@ -203,6 +206,7 @@ mod tests {
                 device: "z2m-p-printer".into(),
                 on: true,
                 idle_since_ago_ms: Some(30000),
+                power_watts: Some(120.5),
             }],
             timestamp_epoch_ms: 1700000000000,
         });

@@ -48,6 +48,8 @@ CONSTANTS
     RoomHasTap,         \* [Rooms -> BOOLEAN]
     Plugs,              \* Set of plug identifiers
     KillHoldoff,        \* [Plugs -> Nat] kill-switch holdoff (time units)
+    KillThreshold,      \* [Plugs -> Nat] kill-switch power threshold
+    MaxPower,           \* Nat: upper bound for power readings (model checking)
     MaxTime,            \* Nat: upper bound for bounded model checking
     NIL                 \* Sentinel: "no value"
 
@@ -73,12 +75,13 @@ VARIABLES
     mact,       \* [AllSensors -> BOOLEAN]       motion_active (per sensor)
     pOn,        \* [Plugs -> BOOLEAN]            plug on/off
     pidle,      \* [Plugs -> Nat \cup {NIL}]    plug idle_since
+    pPow,       \* [Plugs -> Nat \cup {NIL}]    last_power (abstract watts)
     now,        \* Nat                           monotonic clock
     started     \* BOOLEAN                       startup seed complete?
 
 roomVars == <<pon, mown, cidx, lpa, loa, mact>>
-plugVars == <<pOn, pidle>>
-vars == <<pon, mown, cidx, lpa, loa, mact, pOn, pidle, now, started>>
+plugVars == <<pOn, pidle, pPow>>
+vars == <<pon, mown, cidx, lpa, loa, mact, pOn, pidle, pPow, now, started>>
 
 \* =====================================================================
 \* Type invariant
@@ -93,6 +96,7 @@ TypeOK ==
     /\ mact \in [AllSensors -> BOOLEAN]
     /\ pOn  \in [Plugs -> BOOLEAN]
     /\ \A p \in Plugs : pidle[p] \in (0..MaxTime) \cup {NIL}
+    /\ \A p \in Plugs : pPow[p] \in (0..MaxPower) \cup {NIL}
     /\ now  \in 0..MaxTime
     /\ started \in BOOLEAN
 
@@ -172,6 +176,7 @@ Init ==
     /\ mact   = [s \in AllSensors |-> FALSE]
     /\ pOn    = [p \in Plugs |-> FALSE]
     /\ pidle  = [p \in Plugs |-> NIL]
+    /\ pPow   = [p \in Plugs |-> NIL]
     /\ now    = 0
     /\ started = FALSE
 
@@ -381,15 +386,20 @@ PlugToggle(p) ==
     /\ started
     /\ pOn'   = [pOn   EXCEPT ![p] = ~pOn[p]]
     /\ pidle' = [pidle EXCEPT ![p] = NIL]
+    /\ pPow'  = [pPow  EXCEPT ![p] = IF pOn[p] THEN NIL ELSE pPow[p]]
     /\ UNCHANGED roomVars
     /\ UNCHANGED <<now, started>>
 
 \* Power drops below kill threshold -> start tracking idle time.
+\* Models both Zigbee combined events and Z-Wave meter-only updates.
 PlugPowerDrop(p) ==
     /\ started
     /\ pOn[p]
     /\ pidle[p] = NIL
-    /\ pidle' = [pidle EXCEPT ![p] = now]
+    /\ \E w \in 0..MaxPower :
+        /\ w < KillThreshold[p]
+        /\ pPow'  = [pPow  EXCEPT ![p] = w]
+        /\ pidle' = [pidle EXCEPT ![p] = now]
     /\ UNCHANGED pOn
     /\ UNCHANGED roomVars
     /\ UNCHANGED <<now, started>>
@@ -399,7 +409,25 @@ PlugPowerRecover(p) ==
     /\ started
     /\ pOn[p]
     /\ pidle[p] # NIL
-    /\ pidle' = [pidle EXCEPT ![p] = NIL]
+    /\ \E w \in 0..MaxPower :
+        /\ w >= KillThreshold[p]
+        /\ pPow'  = [pPow  EXCEPT ![p] = w]
+        /\ pidle' = [pidle EXCEPT ![p] = NIL]
+    /\ UNCHANGED pOn
+    /\ UNCHANGED roomVars
+    /\ UNCHANGED <<now, started>>
+
+\* Power-only update that doesn't cross the threshold boundary.
+\* Models Z-Wave PlugPowerUpdate events where power stays on the
+\* same side of the threshold (no idle state change).
+PlugPowerUpdate(p) ==
+    /\ started
+    /\ pOn[p]
+    /\ \E w \in 0..MaxPower :
+        /\ pPow' = [pPow EXCEPT ![p] = w]
+        /\ IF w < KillThreshold[p]
+           THEN pidle' = [pidle EXCEPT ![p] = IF pidle[p] = NIL THEN now ELSE pidle[p]]
+           ELSE pidle' = [pidle EXCEPT ![p] = NIL]
     /\ UNCHANGED pOn
     /\ UNCHANGED roomVars
     /\ UNCHANGED <<now, started>>
@@ -412,6 +440,7 @@ KillSwitch(p) ==
     /\ now - pidle[p] >= KillHoldoff[p]
     /\ pOn'   = [pOn   EXCEPT ![p] = FALSE]
     /\ pidle' = [pidle EXCEPT ![p] = NIL]
+    /\ pPow'  = [pPow  EXCEPT ![p] = NIL]
     /\ UNCHANGED roomVars
     /\ UNCHANGED <<now, started>>
 
@@ -421,6 +450,7 @@ PlugExternalOff(p) ==
     /\ pOn[p]
     /\ pOn'   = [pOn   EXCEPT ![p] = FALSE]
     /\ pidle' = [pidle EXCEPT ![p] = NIL]
+    /\ pPow'  = [pPow  EXCEPT ![p] = NIL]
     /\ UNCHANGED roomVars
     /\ UNCHANGED <<now, started>>
 
@@ -449,7 +479,7 @@ TurnOffAllZones ==
 Tick ==
     /\ now < MaxTime
     /\ now' = now + 1
-    /\ UNCHANGED <<pon, mown, cidx, lpa, loa, mact, pOn, pidle, started>>
+    /\ UNCHANGED <<pon, mown, cidx, lpa, loa, mact, pOn, pidle, pPow, started>>
 
 \* =====================================================================
 \* Next-state relation
@@ -467,7 +497,7 @@ Next ==
     \/ \E r \in Rooms : GroupStateOn(r) \/ GroupStateOff(r)
     \/ \E p \in Plugs :
         PlugToggle(p) \/ PlugPowerDrop(p) \/ PlugPowerRecover(p) \/
-        KillSwitch(p) \/ PlugExternalOff(p)
+        PlugPowerUpdate(p) \/ KillSwitch(p) \/ PlugExternalOff(p)
     \/ TurnOffAllZones
     \/ Tick
 
@@ -522,7 +552,11 @@ LpaInPast ==
 PidleInPast ==
     \A p \in Plugs : pidle[p] # NIL => pidle[p] <= now
 
-\* S10: Active cooldown actually blocks motion-on. Regression guard:
+\* S10: last_power is only meaningful when the plug is on.
+PlugPowerOnlyWhenOn ==
+    \A p \in Plugs : pPow[p] # NIL => pOn[p]
+
+\* S12: Active cooldown actually blocks motion-on. Regression guard:
 \*      if someone removes the cooldown check from MotionOnFire, this
 \*      catches it.
 CooldownBlocksMotion ==
@@ -530,7 +564,7 @@ CooldownBlocksMotion ==
         (started /\ ~pon[r] /\ Sensors[r] # {} /\ ~CooldownPassed(r))
             => \A s \in Sensors[r] : ~ENABLED MotionOnFire(r, s, FALSE)
 
-\* S11: motion_owned requires at least one sensor to be actively
+\* S13: motion_owned requires at least one sensor to be actively
 \*      reporting occupied. Startup seed and external ON leave rooms
 \*      user-owned — only MotionOnFire sets motion_owned=TRUE, and it
 \*      always records the sensor flag first.
@@ -592,6 +626,13 @@ OnNeverStampsLoa ==
         (~pon[r] /\ pon'[r]) => loa'[r] = loa[r]
 
 OnNeverStampsLoaProp == [][OnNeverStampsLoa]_vars
+
+\* A7: Every plug off transition clears last_power.
+PlugOffClearsPower ==
+    \A p \in Plugs :
+        (pOn[p] /\ ~pOn'[p]) => pPow'[p] = NIL
+
+PlugOffClearsPowerProp == [][PlugOffClearsPower]_vars
 
 \* =====================================================================
 \* LIVENESS PROPERTIES (require fairness, commented out for reference)

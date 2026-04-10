@@ -219,12 +219,12 @@ impl MqttBridge {
         Ok(())
     }
 
-    /// Publish a `{"state": ""}` to `<group>/get` to force z2m to query
+    /// Publish a `{"state": ""}` to `<name>/get` to force z2m to query
     /// the current state and re-publish it on the matching state topic.
-    /// Used by the startup state refresh for groups whose retained
-    /// messages didn't arrive.
-    pub async fn publish_get(&self, group_name: &str) -> Result<(), MqttError> {
-        let topic = topics::get_topic(group_name);
+    /// Used by the startup state refresh for groups and Zigbee plugs
+    /// whose retained messages didn't arrive.
+    pub async fn publish_get(&self, name: &str) -> Result<(), MqttError> {
+        let topic = topics::get_topic(name);
         self.client
             .publish(topic, QoS::AtLeastOnce, false, br#"{"state":""}"#.as_slice())
             .await?;
@@ -414,7 +414,8 @@ fn parse_zwave_event(
         let value: serde_json::Value = serde_json::from_slice(payload).ok()?;
         let watts = value.get("value")?.as_f64()?;
         // NAS-WR01ZE is known to send bogus large negative meter
-        // reports; clamp to zero so they don't trip kill-switch logic.
+        // reports; clamp to zero at parse time as first line of defense.
+        // The controller also clamps uniformly in handle_plug_state.
         let watts = watts.max(0.0);
         return Some(Event::PlugPowerUpdate {
             device: name.to_string(),
