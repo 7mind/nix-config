@@ -3,16 +3,19 @@
 let
   cfg = config.smind.infra.attic-cache;
 
+  log = "${pkgs.util-linux}/bin/logger -t attic-push";
+
   pushScript = pkgs.writeShellScript "attic-post-build-hook" ''
     set -f
     export IFS=' '
     (
       ATTIC_CONFIG_DIR=$(mktemp -d)
       trap 'rm -rf "$ATTIC_CONFIG_DIR"' EXIT
-      TOKEN=$(cat ${cfg.push.tokenFile}) || exit 0
-      ${pkgs.attic-client}/bin/attic login nas ${cfg.server-url} "$TOKEN" 2>/dev/null || exit 0
-      ${pkgs.attic-client}/bin/attic push nas:${cfg.cache-name} $OUT_PATHS 2>/dev/null || true
-    ) &>/dev/null &
+      TOKEN=$(cat ${cfg.push.tokenFile}) || { ${log} -p user.err "failed to read token"; exit 0; }
+      ${pkgs.attic-client}/bin/attic login nas ${cfg.server-url} "$TOKEN" 2>&1 || { ${log} -p user.err "login failed"; exit 0; }
+      OUTPUT=$(${pkgs.attic-client}/bin/attic push nas:${cfg.cache-name} $OUT_PATHS 2>&1) || ${log} -p user.warning "push failed for $OUT_PATHS: $OUTPUT"
+      ${log} -p user.info "$OUTPUT"
+    ) &
     disown
   '';
 in

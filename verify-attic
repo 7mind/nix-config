@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Verify that the Attic binary cache setup is working:
+#   1. Nix config has the right substituters and post-build-hook
+#   2. The Attic server is reachable
+#   3. The post-build hook successfully pushes after a build
+#   4. Nix can fetch from the cache (substituter works)
+
+ATTIC_URL="${ATTIC_URL:-http://nas.home.7mind.io:8080}"
+CACHE_NAME="${CACHE_NAME:-main}"
+CACHE_URL="${ATTIC_URL}/${CACHE_NAME}"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BOLD='\033[1m'
+RESET='\033[0m'
+
+pass=0
+fail=0
+warn=0
+
+ok()   { ((++pass)); echo -e "${GREEN}PASS${RESET}: $1"; }
+fail() { ((++fail)); echo -e "${RED}FAIL${RESET}: $1"; }
+warn() { ((++warn)); echo -e "${YELLOW}WARN${RESET}: $1"; }
+info() { echo -e "${BOLD}---${RESET} $1"; }
+
+# ---------- 1. Nix configuration ----------
+info "Checking nix configuration"
+
+nix_config=$(nix show-config 2>/dev/null)
+
+substituters=$(echo "$nix_config" | grep '^substituters ' | cut -d= -f2-)
+if echo "$substituters" | grep -q "$CACHE_URL"; then
+    ok "Attic substituter is configured: $CACHE_URL"
+else
+    fail "Attic substituter not found in nix config (got:$substituters)"
+fi
+
+hook=$(echo "$nix_config" | grep '^post-build-hook ' | awk '{print $NF}')
+if [[ -n "$hook" ]]; then
+    if [[ -r "$hook" ]] && grep -q "attic" "$hook"; then
+        ok "Post-build hook points to attic script: $hook"
+    else
+        fail "Post-build hook exists ($hook) but doesn't reference attic"
+    fi
+else
+    fail "No post-build-hook configured in nix"
+fi
+
+trusted_keys=$(echo "$nix_config" | grep '^trusted-public-keys ' | cut -d= -f2-)
+if echo "$trusted_keys" | grep -q "nas.home.7mind.io"; then
+    ok "Attic cache public key is trusted"
+else
+    fail "Attic cache public key not found in trusted-public-keys"
+fi
+
+# ---------- 2. Server reachability ----------
+info "Checking Attic server at $ATTIC_URL"
+
+if curl -sf --connect-timeout 5 "$ATTIC_URL" >/dev/null 2>&1; then
+    ok "Attic server is reachable"
+else
+    fail "Cannot reach Attic server at $ATTIC_URL"
+    echo "  Remaining tests require server connectivity, aborting."
+    echo ""
+    echo -e "Results: ${GREEN}${pass} passed${RESET}, ${RED}${fail} failed${RESET}, ${YELLOW}${warn} warnings${RESET}"
+    exit 1
+fi
+
+if curl -sf --connect-timeout 5 "${CACHE_URL}/nix-cache-info" >/dev/null 2>&1; then
+    ok "Cache '${CACHE_NAME}' exists and serves nix-cache-info"
+else
+    fail "Cache '${CACHE_NAME}' not found at ${CACHE_URL}/nix-cache-info"
+fi
+
+# ---------- 3. Post-build hook (push) ----------
+# We build a unique derivation that can't exist in any upstream cache.
+# This ensures Attic must store it locally, making the narinfo check reliable.
+info "Building a unique test derivation to test push"
+
+test_marker="attic-test-$(date +%s)-$$"
+if ! built_path=$(nix build --no-link --print-out-paths --impure --expr "
+  let pkgs = import <nixpkgs> {}; in
+  pkgs.runCommand \"$test_marker\" {} ''
+    echo $test_marker > \$out
+  ''
+" 2>/dev/null); then
+    built_path=""
+fi
+
+if [[ -z "$built_path" || ! -e "$built_path" ]]; then
+    warn "Could not build test derivation, skipping push test"
+else
+    info "Built: $built_path"
+
+    # The hook runs in background (disown), give it time to finish
+    info "Waiting for background push to complete..."
+    sleep 5
+
+    narinfo_hash=$(echo "$built_path" | sed 's|/nix/store/||' | cut -d- -f1)
+    if curl -sf --connect-timeout 5 "${CACHE_URL}/${narinfo_hash}.narinfo" >/dev/null 2>&1; then
+        ok "Built path found in Attic cache (post-build hook works!)"
+    else
+        info "Not found yet, waiting 10 more seconds..."
+        sleep 10
+        if curl -sf --connect-timeout 5 "${CACHE_URL}/${narinfo_hash}.narinfo" >/dev/null 2>&1; then
+            ok "Built path found in Attic cache after retry"
+        else
+            fail "Built path NOT found in Attic cache — post-build hook may not be pushing"
+            echo "  Path: $built_path"
+            echo "  Checked: ${CACHE_URL}/${narinfo_hash}.narinfo"
+            echo ""
+            echo "  Debug: try running the hook manually:"
+            echo "    OUT_PATHS=\"$built_path\" bash -x $hook"
+        fi
+    fi
+fi
+
+# ---------- 4. Substituter (fetch) ----------
+info "Testing substituter (fetch from cache)"
+
+if [[ -n "${built_path:-}" && -n "${narinfo_hash:-}" ]]; then
+    if curl -sf --connect-timeout 5 "${CACHE_URL}/${narinfo_hash}.narinfo" >/dev/null 2>&1; then
+        if nix path-info --store "$CACHE_URL" "$built_path" >/dev/null 2>&1; then
+            ok "nix path-info can query paths from Attic substituter"
+        else
+            fail "nix path-info cannot query $built_path from $CACHE_URL"
+        fi
+    else
+        warn "Test path not in cache, skipping substituter fetch test"
+    fi
+else
+    warn "No test path available, skipping substituter fetch test"
+fi
+
+# ---------- Summary ----------
+echo ""
+echo -e "${BOLD}=== Summary ===${RESET}"
+echo -e "${GREEN}${pass} passed${RESET}, ${RED}${fail} failed${RESET}, ${YELLOW}${warn} warnings${RESET}"
+[[ $fail -eq 0 ]]
