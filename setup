@@ -408,6 +408,11 @@ do_build() {
         build_args+=(--offline)
     fi
 
+    # Inhibit per-derivation attic pushes during bulk build
+    local attic_inhibit="/tmp/attic-push-inhibit"
+    touch "$attic_inhibit"
+    trap 'rm -f "$attic_inhibit"' EXIT
+
     for host in "${HOSTS[@]}"; do
         local platform
         platform=$(get_host_attr "$host" "platform")
@@ -430,6 +435,18 @@ do_build() {
                 ;;
         esac
     done
+
+    # Remove inhibit and push all closures to attic in one go
+    rm -f "$attic_inhibit"
+    trap - EXIT
+    if command -v attic-push-closure &>/dev/null; then
+        local -a closures=()
+        for host in "${HOSTS[@]}"; do
+            closures+=("$(readlink -f "${ROOTS}/${host}")")
+        done
+        echo "==> Pushing ${#closures[@]} closure(s) to attic..."
+        attic-push-closure "${closures[@]}" || echo "    Warning: attic push failed (non-fatal)"
+    fi
 
     commit_and_push
 }

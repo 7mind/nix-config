@@ -5,27 +5,46 @@ let
 
   log = "${pkgs.util-linux}/bin/logger -t attic-push";
 
+  inhibitFile = "/tmp/attic-push-inhibit";
+
+  atticConfigSnippet = ''
+    TOKEN=$(cat ${cfg.push.tokenFile}) || { ${log} -p user.err "failed to read token"; exit 1; }
+    export ATTIC_CONFIG_DIR=$(mktemp -d)
+    trap 'rm -rf "$ATTIC_CONFIG_DIR"' EXIT
+    cat > "$ATTIC_CONFIG_DIR/config.toml" <<TOML
+default-server = "nas"
+[servers.nas]
+endpoint = "${cfg.server-url}"
+token = "$TOKEN"
+TOML
+  '';
+
   pushScript = pkgs.writeShellScript "attic-post-build-hook" ''
     set -f
     export IFS=' '
+    # When the inhibit file exists, a bulk push will happen later (e.g. from ./setup)
+    [[ -f ${inhibitFile} ]] && exit 0
     (
-      TOKEN=$(cat ${cfg.push.tokenFile}) || { ${log} -p user.err "failed to read token"; exit 0; }
-
-      # Write attic config directly instead of calling `attic login` (avoids an HTTP round-trip per build)
-      export ATTIC_CONFIG_DIR=$(mktemp -d)
-      trap 'rm -rf "$ATTIC_CONFIG_DIR"' EXIT
-      cat > "$ATTIC_CONFIG_DIR/config.toml" <<EOF
-    default-server = "nas"
-
-    [servers.nas]
-    endpoint = "${cfg.server-url}"
-    token = "$TOKEN"
-    EOF
-
+      ${atticConfigSnippet}
       OUTPUT=$(${pkgs.attic-client}/bin/attic push nas:${cfg.cache-name} $OUT_PATHS 2>&1) || ${log} -p user.warning "push failed for $OUT_PATHS: $OUTPUT"
       ${log} -p user.info "$OUTPUT"
     ) &
     disown
+  '';
+
+  # Script to push a full closure to attic, used by ./setup after building
+  bulkPushScript = pkgs.writeShellScriptBin "attic-push-closure" ''
+    set -euo pipefail
+    if [[ $# -eq 0 ]]; then
+      echo "Usage: attic-push-closure STORE_PATH..." >&2
+      exit 1
+    fi
+    ${atticConfigSnippet}
+    ${log} -p user.info "bulk push: $*"
+    ${pkgs.attic-client}/bin/attic push nas:${cfg.cache-name} "$@" 2>&1 | while IFS= read -r line; do
+      echo "$line"
+      ${log} -p user.info "$line"
+    done
   '';
 in
 {
@@ -90,6 +109,8 @@ in
         secret-key-files = [ cfg.push.signingKeyFile ];
         trusted-public-keys = [ cfg.push.signing-public-key ];
       };
+
+      environment.systemPackages = [ bulkPushScript ];
     })
   ]);
 }
