@@ -211,6 +211,11 @@ pub fn summarize_event(event: &crate::domain::event::Event) -> String {
                 .unwrap_or_default();
             format!("plug state {state} for {device}{watts}")
         }
+        crate::domain::event::Event::PlugPowerUpdate {
+            device, watts, ..
+        } => {
+            format!("plug power {watts:.1}W for {device}")
+        }
         crate::domain::event::Event::Tick { .. } => "tick".to_string(),
     }
 }

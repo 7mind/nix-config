@@ -167,22 +167,55 @@ impl MqttBridge {
                 .subscribe(topics::state_topic(group), QoS::AtLeastOnce)
                 .await?;
         }
-        // Plugs: state topic (for on/off + power monitoring)
+        // Zigbee plugs: state topic (for on/off + power monitoring)
         for plug in topology.all_plug_names() {
+            if !topology.is_zwave_plug(plug) {
+                client
+                    .subscribe(topics::state_topic(plug), QoS::AtLeastOnce)
+                    .await?;
+            }
+        }
+        // Z-Wave plugs: separate topics for switch state and power meter
+        for plug in topology.zwave_plug_names() {
             client
-                .subscribe(topics::state_topic(plug), QoS::AtLeastOnce)
+                .subscribe(topics::zwave_switch_state_topic(plug), QoS::AtLeastOnce)
+                .await?;
+            client
+                .subscribe(topics::zwave_meter_power_topic(plug), QoS::AtLeastOnce)
                 .await?;
         }
         Ok(())
     }
 
     /// Publish an [`Action`] to the corresponding `/set` topic.
+    /// For Z-Wave plugs, translates to the Z-Wave JS UI wire format.
     pub async fn publish_action(&self, action: &Action) -> Result<(), MqttError> {
-        let topic = topics::set_topic(action.target_name());
-        let payload = serde_json::to_vec(&action.payload)?;
-        self.client
-            .publish(topic, QoS::AtLeastOnce, false, payload)
-            .await?;
+        let name = action.target_name();
+        if self.topology.is_zwave_plug(name) {
+            // Z-Wave plugs: publish true/false to switch_binary targetValue
+            let on = match &action.payload {
+                crate::domain::action::Payload::DeviceStateSet { state } => *state == "ON",
+                other => {
+                    tracing::warn!(
+                        device = name,
+                        payload = ?other,
+                        "unexpected payload type for zwave plug; ignoring"
+                    );
+                    return Ok(());
+                }
+            };
+            let topic = topics::zwave_switch_set_topic(name);
+            let payload = if on { b"true".as_slice() } else { b"false".as_slice() };
+            self.client
+                .publish(topic, QoS::AtLeastOnce, false, payload)
+                .await?;
+        } else {
+            let topic = topics::set_topic(name);
+            let payload = serde_json::to_vec(&action.payload)?;
+            self.client
+                .publish(topic, QoS::AtLeastOnce, false, payload)
+                .await?;
+        }
         Ok(())
     }
 
@@ -232,6 +265,11 @@ async fn run_eventloop(mut eventloop: EventLoop, tx: mpsc::Sender<Event>, topolo
 fn parse_event(topology: &Topology, p: &Publish) -> Option<Event> {
     let now = Instant::now();
     let topic = p.topic.as_str();
+
+    // Z-Wave topics are under `zwave/` — try those first.
+    if let Some(event) = parse_zwave_event(topology, topic, &p.payload, now) {
+        return Some(event);
+    }
 
     // Strip the `zigbee2mqtt/` prefix; everything we care about lives
     // under that namespace.
@@ -315,12 +353,64 @@ fn parse_event(topology: &Topology, p: &Publish) -> Option<Event> {
     None
 }
 
+/// Parse a Z-Wave JS UI MQTT message into an [`Event`]. Z-Wave JS UI
+/// publishes each value on its own topic with a wrapper payload:
+/// `{"time":…,"value":<actual>,"nodeName":"…","nodeLocation":"…"}`.
+///
+/// We care about two topic shapes per Z-Wave plug:
+///   - `zwave/<name>/switch_binary/endpoint_0/currentValue` → on/off
+///   - `zwave/<name>/meter/endpoint_0/value/66049` → power (watts)
+fn parse_zwave_event(
+    topology: &Topology,
+    topic: &str,
+    payload: &[u8],
+    now: Instant,
+) -> Option<Event> {
+    let rest = topic.strip_prefix("zwave/")?;
+
+    // Binary switch state: zwave/<name>/switch_binary/endpoint_0/currentValue
+    if let Some(name) = rest.strip_suffix("/switch_binary/endpoint_0/currentValue") {
+        if !topology.is_zwave_plug(name) {
+            return None;
+        }
+        let value: serde_json::Value = serde_json::from_slice(payload).ok()?;
+        let on = value.get("value")?.as_bool()?;
+        return Some(Event::PlugState {
+            device: name.to_string(),
+            on,
+            power: None,
+            ts: now,
+        });
+    }
+
+    // Meter power reading: zwave/<name>/meter/endpoint_0/value/66049
+    let meter_suffix = format!("/meter/endpoint_0/value/{}", codec::zwave_meter::POWER_W);
+    if let Some(name) = rest.strip_suffix(&meter_suffix) {
+        if !topology.is_zwave_plug(name) {
+            return None;
+        }
+        let value: serde_json::Value = serde_json::from_slice(payload).ok()?;
+        let watts = value.get("value")?.as_f64()?;
+        // NAS-WR01ZE is known to send bogus large negative meter
+        // reports; clamp to zero so they don't trip kill-switch logic.
+        let watts = watts.max(0.0);
+        return Some(Event::PlugPowerUpdate {
+            device: name.to_string(),
+            watts,
+            ts: now,
+        });
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     //! Parser tests. The MQTT client itself is exercised by the
     //! integration tests against rumqttd.
 
     use super::*;
+    use crate::config::catalog::PlugProtocol;
     use crate::config::scenes::{Scene, SceneSchedule, Slot};
     use crate::config::{
         ActionRule, CommonFields, Config, DeviceBinding, DeviceCatalogEntry, Defaults,
@@ -399,6 +489,22 @@ mod tests {
                         },
                         variant: "sonoff-power".into(),
                         capabilities: vec!["on-off".into(), "power".into()],
+                        protocol: PlugProtocol::Zigbee,
+                        node_id: None,
+                    },
+                ),
+                (
+                    "zneo-p-attic-desk".into(),
+                    DeviceCatalogEntry::Plug {
+                        common: CommonFields {
+                            ieee_address: "zwave:6".into(),
+                            description: None,
+                            options: BTreeMap::new(),
+                        },
+                        variant: "neo-nas-wr01ze".into(),
+                        capabilities: vec!["on-off".into(), "power".into()],
+                        protocol: PlugProtocol::Zwave,
+                        node_id: Some(6),
                     },
                 ),
             ]),
@@ -619,5 +725,93 @@ mod tests {
             parse_event(&topo, &p),
             Some(Event::PlugState { .. })
         ));
+    }
+
+    // ---- Z-Wave plug tests ------------------------------------------------
+
+    #[test]
+    fn parse_zwave_switch_on() {
+        let topo = small_topology();
+        let p = publish(
+            "zwave/zneo-p-attic-desk/switch_binary/endpoint_0/currentValue",
+            r#"{"time":1775507352385,"value":true,"nodeName":"zneo-p-attic-desk","nodeLocation":""}"#,
+        );
+        let event = parse_event(&topo, &p).unwrap();
+        match event {
+            Event::PlugState { device, on, power, .. } => {
+                assert_eq!(device, "zneo-p-attic-desk");
+                assert!(on);
+                assert!(power.is_none());
+            }
+            other => panic!("expected PlugState, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_zwave_switch_off() {
+        let topo = small_topology();
+        let p = publish(
+            "zwave/zneo-p-attic-desk/switch_binary/endpoint_0/currentValue",
+            r#"{"time":1775507352385,"value":false,"nodeName":"zneo-p-attic-desk","nodeLocation":""}"#,
+        );
+        let event = parse_event(&topo, &p).unwrap();
+        match event {
+            Event::PlugState { on, .. } => assert!(!on),
+            other => panic!("expected PlugState off, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_zwave_meter_power() {
+        let topo = small_topology();
+        let p = publish(
+            "zwave/zneo-p-attic-desk/meter/endpoint_0/value/66049",
+            r#"{"time":1775507242082,"value":42.5,"nodeName":"zneo-p-attic-desk","nodeLocation":""}"#,
+        );
+        let event = parse_event(&topo, &p).unwrap();
+        match event {
+            Event::PlugPowerUpdate { device, watts, .. } => {
+                assert_eq!(device, "zneo-p-attic-desk");
+                assert!((watts - 42.5).abs() < f64::EPSILON);
+            }
+            other => panic!("expected PlugPowerUpdate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_zwave_meter_negative_clamped_to_zero() {
+        let topo = small_topology();
+        // NAS-WR01ZE sends bogus negative values occasionally.
+        let p = publish(
+            "zwave/zneo-p-attic-desk/meter/endpoint_0/value/66049",
+            r#"{"time":1775507242082,"value":-12345.6,"nodeName":"zneo-p-attic-desk","nodeLocation":""}"#,
+        );
+        let event = parse_event(&topo, &p).unwrap();
+        match event {
+            Event::PlugPowerUpdate { watts, .. } => {
+                assert_eq!(watts, 0.0);
+            }
+            other => panic!("expected PlugPowerUpdate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn zwave_unknown_device_returns_none() {
+        let topo = small_topology();
+        let p = publish(
+            "zwave/unknown-device/switch_binary/endpoint_0/currentValue",
+            r#"{"time":0,"value":true,"nodeName":"","nodeLocation":""}"#,
+        );
+        assert!(parse_event(&topo, &p).is_none());
+    }
+
+    #[test]
+    fn zwave_unrelated_topic_returns_none() {
+        let topo = small_topology();
+        let p = publish(
+            "zwave/zneo-p-attic-desk/configuration/endpoint_0/LED_Indicator",
+            r#"{"time":0,"value":1,"nodeName":"","nodeLocation":""}"#,
+        );
+        assert!(parse_event(&topo, &p).is_none());
     }
 }

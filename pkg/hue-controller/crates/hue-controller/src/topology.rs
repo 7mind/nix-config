@@ -29,6 +29,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use thiserror::Error;
 
 use crate::config::{Config, DeviceCatalogEntry, Room, Trigger};
+use crate::config::catalog::PlugProtocol;
 
 /// Stable name → resolved room data. Built from the raw `Config::rooms`
 /// after validation; the controller indexes everything by room name.
@@ -163,6 +164,22 @@ pub enum TopologyError {
         device: String,
         variant: String,
     },
+
+    #[error(
+        "plug {device:?} has protocol zwave but no node_id"
+    )]
+    ZwavePlugMissingNodeId {
+        device: FriendlyName,
+    },
+
+    #[error(
+        "duplicate zwave node_id {node_id} (used by plugs {first:?} and {second:?})"
+    )]
+    DuplicateZwaveNodeId {
+        node_id: u16,
+        first: FriendlyName,
+        second: FriendlyName,
+    },
 }
 
 /// One tap button → room binding. The catalog lookup of the tap device
@@ -281,6 +298,16 @@ pub struct Topology {
 
     /// All plug friendly_names from the device catalog.
     plug_names: BTreeSet<FriendlyName>,
+
+    /// Z-Wave plug friendly_names (subset of plug_names).
+    zwave_plug_names: BTreeSet<FriendlyName>,
+
+    /// Per-plug protocol, keyed by friendly_name.
+    plug_protocols: BTreeMap<FriendlyName, PlugProtocol>,
+
+    /// Z-Wave node_id → plug friendly_name mapping. Used by the
+    /// provisioner to map discovered nodes to their desired names.
+    zwave_node_id_to_name: BTreeMap<u16, FriendlyName>,
 }
 
 impl Topology {
@@ -578,13 +605,35 @@ impl Topology {
             })
             .collect();
 
-        // 10. Collect all plug names from the catalog.
-        let plug_names: BTreeSet<FriendlyName> = config
-            .devices
-            .iter()
-            .filter(|(_, entry)| entry.is_plug())
-            .map(|(name, _)| name.clone())
-            .collect();
+        // 10. Collect all plug names and Z-Wave metadata from the catalog.
+        let mut plug_names: BTreeSet<FriendlyName> = BTreeSet::new();
+        let mut zwave_plug_names: BTreeSet<FriendlyName> = BTreeSet::new();
+        let mut plug_protocols: BTreeMap<FriendlyName, PlugProtocol> = BTreeMap::new();
+        let mut zwave_node_id_to_name: BTreeMap<u16, FriendlyName> = BTreeMap::new();
+
+        for (name, entry) in &config.devices {
+            if !entry.is_plug() {
+                continue;
+            }
+            plug_names.insert(name.clone());
+            let protocol = entry.plug_protocol().unwrap_or_default();
+            plug_protocols.insert(name.clone(), protocol);
+
+            if protocol == PlugProtocol::Zwave {
+                let node_id = entry.zwave_node_id().ok_or_else(|| {
+                    TopologyError::ZwavePlugMissingNodeId { device: name.clone() }
+                })?;
+                if let Some(existing) = zwave_node_id_to_name.get(&node_id) {
+                    return Err(TopologyError::DuplicateZwaveNodeId {
+                        node_id,
+                        first: existing.clone(),
+                        second: name.clone(),
+                    });
+                }
+                zwave_node_id_to_name.insert(node_id, name.clone());
+                zwave_plug_names.insert(name.clone());
+            }
+        }
 
         // 11. Validate action rules and build dispatch indexes.
         let mut action_names: BTreeSet<String> = BTreeSet::new();
@@ -736,6 +785,9 @@ impl Topology {
             action_tap_index,
             action_power_below_index,
             plug_names,
+            zwave_plug_names,
+            plug_protocols,
+            zwave_node_id_to_name,
         })
     }
 
@@ -822,9 +874,30 @@ impl Topology {
         &self.plug_names
     }
 
-    /// True if this device name is a known plug.
+    /// True if this device name is a known plug (any protocol).
     pub fn is_plug(&self, device: &str) -> bool {
         self.plug_names.contains(device)
+    }
+
+    /// True if this device is a Z-Wave plug.
+    pub fn is_zwave_plug(&self, device: &str) -> bool {
+        self.zwave_plug_names.contains(device)
+    }
+
+    /// Z-Wave plug friendly_names.
+    pub fn zwave_plug_names(&self) -> &BTreeSet<FriendlyName> {
+        &self.zwave_plug_names
+    }
+
+    /// The protocol for a plug device. Returns `None` if the device
+    /// is not a plug.
+    pub fn plug_protocol(&self, device: &str) -> Option<PlugProtocol> {
+        self.plug_protocols.get(device).copied()
+    }
+
+    /// Z-Wave node_id → plug name mapping. Used by the provisioner.
+    pub fn zwave_node_id_to_name(&self) -> &BTreeMap<u16, FriendlyName> {
+        &self.zwave_node_id_to_name
     }
 
     /// All resolved action rules.
@@ -985,6 +1058,22 @@ mod tests {
             },
             variant: variant.into(),
             capabilities: caps.iter().map(|s| s.to_string()).collect(),
+            protocol: PlugProtocol::default(),
+            node_id: None,
+        }
+    }
+
+    fn zwave_plug_dev(node_id: u16, variant: &str, caps: &[&str]) -> DeviceCatalogEntry {
+        DeviceCatalogEntry::Plug {
+            common: CommonFields {
+                ieee_address: format!("zwave:{node_id}"),
+                description: None,
+                options: BTreeMap::new(),
+            },
+            variant: variant.into(),
+            capabilities: caps.iter().map(|s| s.to_string()).collect(),
+            protocol: PlugProtocol::Zwave,
+            node_id: Some(node_id),
         }
     }
 

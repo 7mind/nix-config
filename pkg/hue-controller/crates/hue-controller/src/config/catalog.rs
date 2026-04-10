@@ -34,6 +34,19 @@ use serde::{Deserialize, Serialize};
 /// wire and printing/comparing it as a string is the common case.
 pub type IeeeAddress = String;
 
+/// Which MQTT bridge a plug communicates through.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum PlugProtocol {
+    /// zigbee2mqtt — single state topic with JSON `{"state":"ON","power":…}`.
+    #[default]
+    Zigbee,
+    /// Z-Wave JS UI — separate topics per command class
+    /// (`switch_binary/endpoint_0/currentValue`,
+    /// `meter/endpoint_0/value/66049`).
+    Zwave,
+}
+
 /// One catalog entry. Tagged by `kind`. Variant data carries everything
 /// needed by the provisioner and the runtime — no follow-up lookups.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -71,22 +84,30 @@ pub enum DeviceCatalogEntry {
         max_illuminance: Option<u32>,
     },
 
-    /// Zigbee smart plug (e.g. Sonoff, IKEA, Tuya). Controlled via
-    /// action rules rather than room scene cycling. The `variant` tag
-    /// identifies the hardware model, and `capabilities` lists what
-    /// z2m exposes the plug supports (derived from the variant on the
-    /// Nix side).
+    /// Smart plug (Zigbee or Z-Wave). Controlled via action rules rather
+    /// than room scene cycling. The `variant` tag identifies the hardware
+    /// model, and `capabilities` lists what the bridge exposes (derived
+    /// from the variant on the Nix side).
     Plug {
         #[serde(flatten)]
         common: CommonFields,
-        /// Hardware variant identifier (e.g. "sonoff-power", "ikea-outlet").
-        /// Used for documentation and to gate capability-dependent action
-        /// triggers at config validation time.
+        /// Hardware variant identifier (e.g. "sonoff-power",
+        /// "neo-nas-wr01ze"). Used for documentation and to gate
+        /// capability-dependent action triggers at config validation time.
         variant: String,
         /// Capabilities this plug exposes, derived from `variant` on the
         /// Nix side. The Rust topology validator uses this to reject
         /// `power_below` triggers on plugs that lack `"power"`.
         capabilities: Vec<String>,
+        /// Which MQTT bridge protocol this plug uses. Defaults to
+        /// `zigbee` for backward compatibility.
+        #[serde(default)]
+        protocol: PlugProtocol,
+        /// Z-Wave node ID. Required when `protocol` is `zwave`; ignored
+        /// for zigbee plugs. This is the stable identifier within the
+        /// Z-Wave network (assigned at inclusion, does not change).
+        #[serde(default)]
+        node_id: Option<u16>,
     },
 }
 
@@ -160,9 +181,30 @@ impl DeviceCatalogEntry {
         matches!(self, Self::MotionSensor { .. })
     }
 
-    /// True if this kind is a smart plug.
+    /// True if this kind is a smart plug (any protocol).
     pub fn is_plug(&self) -> bool {
         matches!(self, Self::Plug { .. })
+    }
+
+    /// True if this is a Z-Wave plug.
+    pub fn is_zwave_plug(&self) -> bool {
+        matches!(self, Self::Plug { protocol: PlugProtocol::Zwave, .. })
+    }
+
+    /// The plug's MQTT protocol, if this is a plug.
+    pub fn plug_protocol(&self) -> Option<PlugProtocol> {
+        match self {
+            Self::Plug { protocol, .. } => Some(*protocol),
+            _ => None,
+        }
+    }
+
+    /// The Z-Wave node ID, if this is a Z-Wave plug.
+    pub fn zwave_node_id(&self) -> Option<u16> {
+        match self {
+            Self::Plug { protocol: PlugProtocol::Zwave, node_id, .. } => *node_id,
+            _ => None,
+        }
     }
 
     /// True if this plug has the named capability (e.g. "power").
@@ -289,13 +331,17 @@ mod tests {
         }"#;
         let entry: DeviceCatalogEntry = serde_json::from_str(json).unwrap();
         assert!(entry.is_plug());
+        assert!(!entry.is_zwave_plug());
+        assert_eq!(entry.plug_protocol(), Some(PlugProtocol::Zigbee));
         assert!(entry.has_capability("power"));
         assert!(entry.has_capability("on-off"));
         assert!(!entry.has_capability("voltage"));
         match entry {
-            DeviceCatalogEntry::Plug { variant, capabilities, .. } => {
+            DeviceCatalogEntry::Plug { variant, capabilities, protocol, node_id, .. } => {
                 assert_eq!(variant, "sonoff-power");
                 assert_eq!(capabilities, vec!["on-off", "power", "energy"]);
+                assert_eq!(protocol, PlugProtocol::Zigbee);
+                assert_eq!(node_id, None);
             }
             other => panic!("expected Plug, got {other:?}"),
         }
@@ -323,8 +369,39 @@ mod tests {
             "capabilities": ["on-off", "power"]
         }"#;
         let entry: DeviceCatalogEntry = serde_json::from_str(json).unwrap();
-        // Plugs are not room input devices — they're action targets.
         assert!(!entry.is_runtime_input());
+    }
+
+    #[test]
+    fn deserialize_zwave_plug() {
+        let json = r#"{
+            "kind": "plug",
+            "ieee_address": "zwave:6",
+            "variant": "neo-nas-wr01ze",
+            "capabilities": ["on-off", "power"],
+            "protocol": "zwave",
+            "node_id": 6
+        }"#;
+        let entry: DeviceCatalogEntry = serde_json::from_str(json).unwrap();
+        assert!(entry.is_plug());
+        assert!(entry.is_zwave_plug());
+        assert_eq!(entry.plug_protocol(), Some(PlugProtocol::Zwave));
+        assert_eq!(entry.zwave_node_id(), Some(6));
+        assert!(entry.has_capability("power"));
+    }
+
+    #[test]
+    fn zwave_plug_without_node_id() {
+        let json = r#"{
+            "kind": "plug",
+            "ieee_address": "zwave:?",
+            "variant": "neo-nas-wr01ze",
+            "capabilities": ["on-off"],
+            "protocol": "zwave"
+        }"#;
+        let entry: DeviceCatalogEntry = serde_json::from_str(json).unwrap();
+        assert!(entry.is_zwave_plug());
+        assert_eq!(entry.zwave_node_id(), None);
     }
 
     #[test]

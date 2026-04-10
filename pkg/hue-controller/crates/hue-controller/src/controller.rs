@@ -198,7 +198,12 @@ impl Controller {
                 on,
                 power,
                 ts,
-            } => self.handle_plug_state(&device, on, power, ts),
+            } => self.handle_plug_state(&device, Some(on), power, ts),
+            Event::PlugPowerUpdate {
+                device,
+                watts,
+                ts,
+            } => self.handle_plug_state(&device, None, Some(watts), ts),
             Event::Tick { ts } => self.handle_tick(ts),
         }
     }
@@ -951,17 +956,22 @@ impl Controller {
 
     // ----- plug state & kill switch -------------------------------------
 
+    /// Handle a plug state or power update. When `on` is `Some`, the
+    /// plug's on/off state is updated. When `None` (Z-Wave meter-only
+    /// updates), the existing on/off state is preserved.
     fn handle_plug_state(
         &mut self,
         device: &str,
-        on: bool,
+        on: Option<bool>,
         power: Option<f64>,
         ts: Instant,
     ) -> Vec<Action> {
         let plug = self.plug_states.entry(device.to_string()).or_default();
-        plug.on = on;
+        if let Some(on) = on {
+            plug.on = on;
+        }
 
-        if !on {
+        if !plug.on {
             plug.idle_since = None;
             return Vec::new();
         }
@@ -2583,6 +2593,8 @@ mod tests {
             },
             variant: variant.into(),
             capabilities: caps.iter().map(|s| s.to_string()).collect(),
+            protocol: crate::config::catalog::PlugProtocol::default(),
+            node_id: None,
         }
     }
 

@@ -42,6 +42,7 @@ mod devices;
 mod groups;
 mod names;
 mod scenes;
+pub mod zwave;
 
 use std::time::Duration;
 
@@ -128,11 +129,18 @@ pub async fn reconcile(
     mqtt: MqttConfig,
     options: ProvisionOptions,
 ) -> anyhow::Result<ReconcileSummary> {
+    let mut summary = ReconcileSummary::default();
+
+    // Phase 0: Z-Wave node renames (independent of zigbee2mqtt).
+    // Runs first so subsequent Z-Wave topics use the correct names.
+    let zwave_summary = zwave::reconcile_zwave_names(config, &mqtt, &options)
+        .await
+        .context("reconciling zwave node names")?;
+    summary += zwave_summary;
+
     let client = Z2mClient::connect(mqtt, options.timeout)
         .await
         .context("connecting to mqtt for provisioning")?;
-
-    let mut summary = ReconcileSummary::default();
 
     // Fetch the device inventory once — used by both the names phase
     // and the descriptions phase.

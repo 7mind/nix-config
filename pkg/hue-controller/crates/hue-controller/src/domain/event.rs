@@ -55,6 +55,18 @@ pub enum Event {
         ts: Instant,
     },
 
+    /// A Z-Wave plug's meter reported a power update without an
+    /// accompanying on/off state change. Z-Wave JS UI publishes state
+    /// and power on separate MQTT topics, so power-only updates arrive
+    /// independently. The controller updates the plug's power reading
+    /// without touching its on/off tracking.
+    PlugPowerUpdate {
+        device: String,
+        /// Real-time power in watts.
+        watts: f64,
+        ts: Instant,
+    },
+
     /// Periodic tick event fired by the daemon's timer. The controller
     /// uses this to evaluate time-dependent action triggers (kill
     /// switch holdoff deadlines).
