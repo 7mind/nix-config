@@ -13,6 +13,8 @@
       default = outerConfig.smind.isDesktop;
       description = "Install documentation and man pages";
     };
+
+    smind.hm.environment.television.enable = lib.mkEnableOption "television fuzzy finder (replaces fzf)";
   };
 
   config = lib.mkIf config.smind.hm.environment.sane-defaults.generic.enable {
@@ -81,8 +83,36 @@
       '';
     };
 
+    programs.television = lib.mkIf config.smind.hm.environment.television.enable {
+      enable = true;
+      enableZshIntegration = true;
+      channels.edit = {
+        metadata = {
+          name = "edit";
+          description = "Fuzzy find a file and open it in $EDITOR";
+          requirements = [ "fd" "bat" ];
+        };
+        source = {
+          command = [ "fd -t f" "fd -t f -H" ];
+        };
+        preview = {
+          command = "bat -n --color=always '{}'";
+          env = { BAT_THEME = "ansi"; };
+        };
+        keybindings = {
+          enter = "actions:edit";
+        };
+        actions.edit = {
+          description = "Opens the selected entry with the default editor";
+          command = "\${EDITOR:-vim} '{}'";
+          shell = "bash";
+          mode = "execute";
+        };
+      };
+    };
+
     programs.fzf = {
-      enable = lib.mkDefault (!config.smind.hm.roles.desktop);
+      enable = lib.mkDefault (!config.smind.hm.environment.television.enable && !config.smind.hm.roles.desktop);
       enableZshIntegration = true;
       defaultCommand = "fd .$HOME";
       fileWidgetCommand = "$FZF_DEFAULT_COMMAND";
@@ -131,7 +161,11 @@
       settings = { updates = { auto_update = true; }; };
     };
 
-    home.shellAliases = cfg-const.universal-aliases // { };
+    home.shellAliases = cfg-const.universal-aliases
+      // lib.optionalAttrs config.smind.hm.environment.television.enable {
+        fzf = "tv";
+        tve = "tv edit";
+      };
 
     home.packages = lib.mkIf cfg-meta.isLinux (with pkgs; [
       imagemagick
