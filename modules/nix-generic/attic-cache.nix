@@ -61,6 +61,8 @@ in
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
     {
+      environment.systemPackages = [ pkgs.attic-client ];
+
       nix.settings = {
         substituters = [ "${cfg.server-url}/${cfg.cache-name}" ];
         trusted-public-keys = [ cfg.public-key ];
