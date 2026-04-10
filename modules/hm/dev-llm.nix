@@ -407,6 +407,8 @@ in
               --rw "''${HOME}/.claude" \
               --rw "''${HOME}/.claude.json" \
               --rw "''${HOME}/.config/claude" \
+              --rw "''${HOME}/.codex" \
+              --rw "''${HOME}/.config/codex" \
               --rw "''${HOME}/.cache" \
               --rw "''${HOME}/.ivy2" \
               "''${SOCKET_ARGS[@]}" \
@@ -439,6 +441,8 @@ in
               --bind "''${HOME}/.claude-work,''${HOME}/.claude" \
               --bind "''${HOME}/.claude-work-home/.claude.json,''${HOME}/.claude.json" \
               --bind "''${HOME}/.config/claude-work,''${HOME}/.config/claude" \
+              --rw "''${HOME}/.codex" \
+              --rw "''${HOME}/.config/codex" \
               --rw "''${HOME}/.cache" \
               --rw "''${HOME}/.ivy2" \
               "''${SOCKET_ARGS[@]}" \
