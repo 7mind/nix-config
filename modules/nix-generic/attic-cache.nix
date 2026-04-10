@@ -15,7 +15,7 @@ in
 
     public-key = lib.mkOption {
       type = lib.types.str;
-      default = "nas.home.7mind.io-1:SET_THIS_AFTER_FIRST_BOOT";
+      default = "nas.home.7mind.io-1:0yzrMlTWAoq2aGTXCQ+jurDEB1r8X5phENygSRz7PwY=";
       description = "Public signing key of the attic cache";
     };
   };
