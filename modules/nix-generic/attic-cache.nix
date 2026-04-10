@@ -96,7 +96,7 @@ in
 
       nix.settings = {
         substituters = [ "${cfg.server-url}/${cfg.cache-name}" ];
-        trusted-public-keys = [ cfg.public-key ];
+        trusted-public-keys = [ cfg.public-key cfg.push.signing-public-key ];
         # Fall back to building locally when attic is unreachable
         fallback = true;
         connect-timeout = 3;
@@ -107,7 +107,6 @@ in
       nix.settings = {
         post-build-hook = pushScript;
         secret-key-files = [ cfg.push.signingKeyFile ];
-        trusted-public-keys = [ cfg.push.signing-public-key ];
       };
 
       environment.systemPackages = [ bulkPushScript ];
