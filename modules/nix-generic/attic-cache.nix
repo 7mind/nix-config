@@ -4,14 +4,13 @@ let
   cfg = config.smind.infra.attic-cache;
 
   pushScript = pkgs.writeShellScript "attic-post-build-hook" ''
-    set -eu
     set -f
     export IFS=' '
     export ATTIC_CONFIG_DIR=$(mktemp -d)
     trap 'rm -rf "$ATTIC_CONFIG_DIR"' EXIT
-    TOKEN=$(cat ${cfg.push.tokenFile})
-    ${pkgs.attic-client}/bin/attic login nas ${cfg.server-url} "$TOKEN" 2>/dev/null
-    ${pkgs.attic-client}/bin/attic push nas:${cfg.cache-name} $OUT_PATHS
+    TOKEN=$(cat ${cfg.push.tokenFile}) || exit 0
+    ${pkgs.attic-client}/bin/attic login nas ${cfg.server-url} "$TOKEN" 2>/dev/null || exit 0
+    ${pkgs.attic-client}/bin/attic push nas:${cfg.cache-name} $OUT_PATHS 2>/dev/null || true
   '';
 in
 {

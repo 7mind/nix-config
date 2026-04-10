@@ -375,6 +375,7 @@ in
         pkgs.gh
         pkgs.github-copilot-cli
         pkgs.mistral-vibe
+        pkgs.nodejs # required by claude-code plugins (.mjs scripts)
       ]
       ++ lib.optionals cfg-meta.isDarwin [
         inputs.claude-code-sandbox.packages."${pkgs.stdenv.hostPlatform.system}".default
