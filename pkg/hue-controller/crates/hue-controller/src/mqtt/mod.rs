@@ -47,6 +47,7 @@ use tokio::sync::mpsc;
 
 use crate::domain::action::Action;
 use crate::domain::event::{Event, SwitchAction, parse_tap_action};
+use crate::time::Clock;
 use crate::topology::Topology;
 
 /// MQTT connection parameters.
@@ -93,6 +94,7 @@ pub enum MqttError {
 pub struct MqttBridge {
     client: AsyncClient,
     topology: Arc<Topology>,
+    clock: Arc<dyn Clock>,
 }
 
 impl MqttBridge {
@@ -104,6 +106,7 @@ impl MqttBridge {
     pub async fn start(
         config: MqttConfig,
         topology: Arc<Topology>,
+        clock: Arc<dyn Clock>,
     ) -> Result<(Self, mpsc::Receiver<Event>), MqttError> {
         let mut opts = MqttOptions::new(&config.client_id, &config.host, config.port);
         opts.set_credentials(&config.user, &config.password);
@@ -127,12 +130,14 @@ impl MqttBridge {
 
         let (tx, rx) = mpsc::channel(512);
         let topology_for_loop = topology.clone();
-        tokio::spawn(run_eventloop(eventloop, tx, topology_for_loop));
+        let clock_for_loop = clock.clone();
+        tokio::spawn(run_eventloop(eventloop, tx, topology_for_loop, clock_for_loop));
 
         Ok((
             Self {
                 client,
                 topology,
+                clock,
             },
             rx,
         ))
@@ -260,11 +265,11 @@ impl MqttBridge {
     }
 }
 
-async fn run_eventloop(mut eventloop: EventLoop, tx: mpsc::Sender<Event>, topology: Arc<Topology>) {
+async fn run_eventloop(mut eventloop: EventLoop, tx: mpsc::Sender<Event>, topology: Arc<Topology>, clock: Arc<dyn Clock>) {
     loop {
         match eventloop.poll().await {
             Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(p))) => {
-                if let Some(event) = parse_event(&topology, &p) {
+                if let Some(event) = parse_event(&topology, &p, &*clock) {
                     if tx.send(event).await.is_err() {
                         // Receiver dropped → daemon shutting down.
                         break;
@@ -284,8 +289,8 @@ async fn run_eventloop(mut eventloop: EventLoop, tx: mpsc::Sender<Event>, topolo
 /// messages we don't care about (unknown topic, malformed payload,
 /// unrecognized action). The whole controller/runtime tolerates `None`
 /// — we never panic on bad input from the broker.
-fn parse_event(topology: &Topology, p: &Publish) -> Option<Event> {
-    let now = Instant::now();
+fn parse_event(topology: &Topology, p: &Publish, clock: &dyn Clock) -> Option<Event> {
+    let now = clock.now();
     let topic = p.topic.as_str();
 
     // Z-Wave topics are under `zwave/` — try those first.
@@ -442,7 +447,12 @@ mod tests {
         ActionRule, CommonFields, Config, DeviceBinding, DeviceCatalogEntry, Defaults,
         Effect, Room, Trigger,
     };
+    use crate::time::FakeClock;
     use std::collections::BTreeMap;
+
+    fn clock() -> FakeClock {
+        FakeClock::new(12)
+    }
 
     fn day_scenes() -> SceneSchedule {
         SceneSchedule {
@@ -582,7 +592,7 @@ mod tests {
     fn parse_switch_action() {
         let topo = small_topology();
         let p = publish("zigbee2mqtt/hue-s-study/action", "on_press_release");
-        let event = parse_event(&topo, &p).unwrap();
+        let event = parse_event(&topo, &p, &clock()).unwrap();
         match event {
             Event::SwitchAction {
                 device,
@@ -597,7 +607,7 @@ mod tests {
     fn parse_tap_action() {
         let topo = small_topology();
         let p = publish("zigbee2mqtt/hue-ts-foo/action", "press_1");
-        let event = parse_event(&topo, &p).unwrap();
+        let event = parse_event(&topo, &p, &clock()).unwrap();
         match event {
             Event::TapAction { device, button, .. } => {
                 assert_eq!(device, "hue-ts-foo");
@@ -614,7 +624,7 @@ mod tests {
             "zigbee2mqtt/hue-lz-study",
             r#"{"state":"ON","brightness":254}"#,
         );
-        let event = parse_event(&topo, &p).unwrap();
+        let event = parse_event(&topo, &p, &clock()).unwrap();
         match event {
             Event::GroupState { group, on, .. } => {
                 assert_eq!(group, "hue-lz-study");
@@ -628,7 +638,7 @@ mod tests {
     fn parse_group_state_off() {
         let topo = small_topology();
         let p = publish("zigbee2mqtt/hue-lz-study", r#"{"state":"OFF"}"#);
-        let event = parse_event(&topo, &p).unwrap();
+        let event = parse_event(&topo, &p, &clock()).unwrap();
         match event {
             Event::GroupState { on: false, .. } => {}
             other => panic!("expected GroupState off, got {other:?}"),
@@ -642,7 +652,7 @@ mod tests {
             "zigbee2mqtt/hue-ms-study",
             r#"{"occupancy":true,"illuminance":42,"battery":97}"#,
         );
-        let event = parse_event(&topo, &p).unwrap();
+        let event = parse_event(&topo, &p, &clock()).unwrap();
         match event {
             Event::Occupancy {
                 sensor,
@@ -662,7 +672,7 @@ mod tests {
     fn parse_motion_without_illuminance() {
         let topo = small_topology();
         let p = publish("zigbee2mqtt/hue-ms-study", r#"{"occupancy":false}"#);
-        let event = parse_event(&topo, &p).unwrap();
+        let event = parse_event(&topo, &p, &clock()).unwrap();
         match event {
             Event::Occupancy {
                 occupied: false,
@@ -677,21 +687,21 @@ mod tests {
     fn unknown_topic_returns_none() {
         let topo = small_topology();
         let p = publish("zigbee2mqtt/hue-l-other/action", "on_press_release");
-        assert!(parse_event(&topo, &p).is_none());
+        assert!(parse_event(&topo, &p, &clock()).is_none());
     }
 
     #[test]
     fn malformed_payload_returns_none() {
         let topo = small_topology();
         let p = publish("zigbee2mqtt/hue-lz-study", "not json");
-        assert!(parse_event(&topo, &p).is_none());
+        assert!(parse_event(&topo, &p, &clock()).is_none());
     }
 
     #[test]
     fn unknown_switch_action_returns_none() {
         let topo = small_topology();
         let p = publish("zigbee2mqtt/hue-s-study/action", "long_press");
-        assert!(parse_event(&topo, &p).is_none());
+        assert!(parse_event(&topo, &p, &clock()).is_none());
     }
 
     #[test]
@@ -701,7 +711,7 @@ mod tests {
             "zigbee2mqtt/z2m-p-printer",
             r#"{"state":"ON","power":120.5,"energy":42.1}"#,
         );
-        let event = parse_event(&topo, &p).unwrap();
+        let event = parse_event(&topo, &p, &clock()).unwrap();
         match event {
             Event::PlugState {
                 device,
@@ -724,7 +734,7 @@ mod tests {
             "zigbee2mqtt/z2m-p-printer",
             r#"{"state":"OFF"}"#,
         );
-        let event = parse_event(&topo, &p).unwrap();
+        let event = parse_event(&topo, &p, &clock()).unwrap();
         match event {
             Event::PlugState {
                 on,
@@ -748,7 +758,7 @@ mod tests {
             r#"{"state":"ON","power":0.5}"#,
         );
         assert!(matches!(
-            parse_event(&topo, &p),
+            parse_event(&topo, &p, &clock()),
             Some(Event::PlugState { .. })
         ));
     }
@@ -762,7 +772,7 @@ mod tests {
             "zwave/zneo-p-attic-desk/switch_binary/endpoint_0/currentValue",
             r#"{"time":1775507352385,"value":true,"nodeName":"zneo-p-attic-desk","nodeLocation":""}"#,
         );
-        let event = parse_event(&topo, &p).unwrap();
+        let event = parse_event(&topo, &p, &clock()).unwrap();
         match event {
             Event::PlugState { device, on, power, .. } => {
                 assert_eq!(device, "zneo-p-attic-desk");
@@ -780,7 +790,7 @@ mod tests {
             "zwave/zneo-p-attic-desk/switch_binary/endpoint_0/currentValue",
             r#"{"time":1775507352385,"value":false,"nodeName":"zneo-p-attic-desk","nodeLocation":""}"#,
         );
-        let event = parse_event(&topo, &p).unwrap();
+        let event = parse_event(&topo, &p, &clock()).unwrap();
         match event {
             Event::PlugState { on, .. } => assert!(!on),
             other => panic!("expected PlugState off, got {other:?}"),
@@ -794,7 +804,7 @@ mod tests {
             "zwave/zneo-p-attic-desk/meter/endpoint_0/value/66049",
             r#"{"time":1775507242082,"value":42.5,"nodeName":"zneo-p-attic-desk","nodeLocation":""}"#,
         );
-        let event = parse_event(&topo, &p).unwrap();
+        let event = parse_event(&topo, &p, &clock()).unwrap();
         match event {
             Event::PlugPowerUpdate { device, watts, .. } => {
                 assert_eq!(device, "zneo-p-attic-desk");
@@ -812,7 +822,7 @@ mod tests {
             "zwave/zneo-p-attic-desk/meter/endpoint_0/value/66049",
             r#"{"time":1775507242082,"value":-12345.6,"nodeName":"zneo-p-attic-desk","nodeLocation":""}"#,
         );
-        let event = parse_event(&topo, &p).unwrap();
+        let event = parse_event(&topo, &p, &clock()).unwrap();
         match event {
             Event::PlugPowerUpdate { watts, .. } => {
                 assert_eq!(watts, 0.0);
@@ -828,7 +838,7 @@ mod tests {
             "zwave/unknown-device/switch_binary/endpoint_0/currentValue",
             r#"{"time":0,"value":true,"nodeName":"","nodeLocation":""}"#,
         );
-        assert!(parse_event(&topo, &p).is_none());
+        assert!(parse_event(&topo, &p, &clock()).is_none());
     }
 
     #[test]
@@ -838,6 +848,6 @@ mod tests {
             "zwave/zneo-p-attic-desk/configuration/endpoint_0/LED_Indicator",
             r#"{"time":0,"value":1,"nodeName":"","nodeLocation":""}"#,
         );
-        assert!(parse_event(&topo, &p).is_none());
+        assert!(parse_event(&topo, &p, &clock()).is_none());
     }
 }

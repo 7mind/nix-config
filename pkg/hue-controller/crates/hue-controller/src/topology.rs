@@ -59,6 +59,16 @@ pub enum TopologyError {
         second: RoomName,
     },
 
+    #[error(
+        "group name {group_name:?} (room {room:?}) collides with a {device_kind} in the \
+         device catalog — both would share the same zigbee2mqtt/<name> MQTT topic"
+    )]
+    GroupNameDeviceCollision {
+        group_name: FriendlyName,
+        room: RoomName,
+        device_kind: &'static str,
+    },
+
     #[error("room {room:?} has parent {parent:?} which is not a known room")]
     UnknownParent { room: RoomName, parent: RoomName },
 
@@ -163,6 +173,17 @@ pub enum TopologyError {
         rule: String,
         device: String,
         variant: String,
+    },
+
+    #[error(
+        "action rule {rule:?} has power_below trigger on device {trigger_device:?} but \
+         effect targets device {effect_target:?} — kill-switch rules must target the \
+         same plug they monitor"
+    )]
+    PowerBelowCrossTarget {
+        rule: String,
+        trigger_device: String,
+        effect_target: String,
     },
 
     #[error(
@@ -364,6 +385,20 @@ impl Topology {
                     name: room.group_name.clone(),
                     first: prev,
                     second: room.name.clone(),
+                });
+            }
+        }
+
+        // 2b. MQTT namespace safety: group names must not collide with
+        //     any device catalog name. Both share the bare
+        //     `zigbee2mqtt/<name>` topic namespace, and a collision would
+        //     cause parse_event to misroute messages.
+        for room in &config.rooms {
+            if let Some(entry) = config.devices.get(&room.group_name) {
+                return Err(TopologyError::GroupNameDeviceCollision {
+                    group_name: room.group_name.clone(),
+                    room: room.name.clone(),
+                    device_kind: kind_label(entry),
                 });
             }
         }
@@ -788,6 +823,18 @@ impl Topology {
                             variant,
                         });
                     }
+                    // Kill-switch rules must target the same plug they
+                    // monitor. Cross-target rules would mutate the wrong
+                    // runtime state and are not covered by the TLA model.
+                    if let Some(effect_target) = rule.effect.target() {
+                        if effect_target != device {
+                            return Err(TopologyError::PowerBelowCrossTarget {
+                                rule: rule.name.clone(),
+                                trigger_device: device.clone(),
+                                effect_target: effect_target.to_string(),
+                            });
+                        }
+                    }
                     let idx = actions.len();
                     action_power_below_index
                         .entry(device.clone())
@@ -1126,6 +1173,27 @@ mod tests {
         }
     }
 
+    fn room_with_group_name(
+        name: &str,
+        id: u8,
+        group_name: &str,
+        members: Vec<&str>,
+        devices: Vec<crate::config::DeviceBinding>,
+        parent: Option<&str>,
+    ) -> Room {
+        Room {
+            name: name.into(),
+            group_name: group_name.into(),
+            id,
+            members: members.into_iter().map(String::from).collect(),
+            parent: parent.map(String::from),
+            devices,
+            scenes: day_scenes(),
+            off_transition_seconds: 0.8,
+            motion_off_cooldown_seconds: 0,
+        }
+    }
+
     fn binding(device: &str, button: Option<u8>) -> crate::config::DeviceBinding {
         crate::config::DeviceBinding {
             device: device.into(),
@@ -1310,6 +1378,28 @@ mod tests {
             err,
             TopologyError::DuplicateGroupName { name, .. } if name == "shared"
         ));
+    }
+
+    #[test]
+    fn group_name_device_collision_rejected() {
+        // Group name "z2m-p-foo" collides with a plug in the device catalog.
+        let cfg = config(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("hue-s-a", switch_dev("0x1")),
+                ("z2m-p-foo", plug_dev("0xf", "sonoff-basic", &["on-off"])),
+            ],
+            vec![room_with_group_name(
+                "a",
+                1,
+                "z2m-p-foo",
+                vec!["hue-l-a/11"],
+                vec![binding("hue-s-a", None)],
+                None,
+            )],
+        );
+        let err = Topology::build(&cfg).unwrap_err();
+        assert!(matches!(err, TopologyError::GroupNameDeviceCollision { .. }));
     }
 
     #[test]
@@ -1750,6 +1840,29 @@ mod tests {
             topo.descendants_of("kitchen-all"),
             &["kitchen-cooker".to_string()]
         );
+    }
+
+    #[test]
+    fn power_below_cross_target_rejected() {
+        let cfg = config_with_actions(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("z2m-p-monitor", plug_dev("0xf1", "sonoff-power", &["on-off", "power"])),
+                ("z2m-p-target", plug_dev("0xf2", "sonoff-power", &["on-off", "power"])),
+            ],
+            vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+            vec![ActionRule {
+                name: "cross-kill".into(),
+                trigger: Trigger::PowerBelow {
+                    device: "z2m-p-monitor".into(),
+                    watts: 5.0,
+                    for_seconds: 300,
+                },
+                effect: Effect::TurnOff { target: "z2m-p-target".into() },
+            }],
+        );
+        let err = Topology::build(&cfg).unwrap_err();
+        assert!(matches!(err, TopologyError::PowerBelowCrossTarget { .. }));
     }
 
     #[test]

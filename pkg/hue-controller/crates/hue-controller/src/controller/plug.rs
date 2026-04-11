@@ -109,16 +109,21 @@ impl Controller {
     }
 
     /// Apply kill-switch results: update plug state and produce actions.
+    ///
+    /// Topology validation enforces that PowerBelow rules target the same
+    /// plug they monitor (device == target). We update the target plug's
+    /// state — which is the plug being turned off.
     pub(super) fn apply_kill_switch_fired(
         &mut self,
         fired: &[super::kill_switch::KillSwitchFired],
     ) -> Vec<Action> {
         let mut out = Vec::new();
         for f in fired {
-            let plug = self.plug_states.entry(f.device.clone()).or_default();
+            let plug = self.plug_states.entry(f.target.clone()).or_default();
             plug.on = false;
             plug.seen_explicit_off = true;
             plug.last_power = None;
+            self.kill_switch.on_plug_off(&f.target);
             out.push(Action::for_device(&f.target, Payload::device_off()));
         }
         out

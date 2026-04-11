@@ -59,7 +59,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::config::Defaults;
-use crate::domain::action::Action;
+use crate::domain::action::{Action, Payload};
 use crate::domain::event::Event;
 use crate::domain::state::{PlugRuntimeState, ZoneState};
 use crate::time::Clock;
@@ -273,7 +273,102 @@ impl Controller {
                 "group state echo → on→off transition (motion ownership cleared)"
             );
         }
+
+        // Propagate to descendants so child rooms track the parent's
+        // physical state even when z2m does not emit separate child
+        // group echoes for a parent-group change.
+        self.propagate_to_descendants(&room_name, on, ts);
+
         Vec::new()
+    }
+
+    // ----- web command handlers ---------------------------------------------
+    //
+    // These mirror the wall-switch / tap paths but are triggered by the
+    // web UI. They go through the same state machine updates (write_after_on,
+    // publish_off, propagate_to_descendants) so the controller stays
+    // consistent between MQTT echoes.
+
+    /// Web UI: recall a specific scene in a room.
+    pub fn web_recall_scene(&mut self, room_name: &str, scene_id: u8, ts: Instant) -> Vec<Action> {
+        let Some(room) = self.topology.room_by_name(room_name) else {
+            return Vec::new();
+        };
+        let group_name = room.group_name.clone();
+        let hour = self.clock.local_hour();
+        let scenes_for_now = active_slot_scene_ids(&room.scenes, hour);
+
+        // Find the cycle index for this scene_id; default to 0.
+        let cycle_idx = scenes_for_now
+            .iter()
+            .position(|&id| id == scene_id)
+            .unwrap_or(0);
+
+        tracing::info!(
+            room = room_name,
+            group = %group_name,
+            scene = scene_id,
+            cycle_idx,
+            "web: recall scene → scene_recall (controller path)"
+        );
+
+        let action = Action::new(group_name, Payload::scene_recall(scene_id));
+        self.write_after_on(room_name, ts, cycle_idx);
+        self.propagate_to_descendants(room_name, true, ts);
+        vec![action]
+    }
+
+    /// Web UI: turn a room off.
+    pub fn web_set_room_off(&mut self, room_name: &str, ts: Instant) -> Vec<Action> {
+        let Some(room) = self.topology.room_by_name(room_name) else {
+            return Vec::new();
+        };
+        let group_name = room.group_name.clone();
+        let off_transition = room.off_transition_seconds;
+
+        tracing::info!(
+            room = room_name,
+            group = %group_name,
+            transition = off_transition,
+            "web: set room off (controller path)"
+        );
+
+        let mut out = Vec::new();
+        self.publish_off(room_name, &group_name, off_transition, ts, &mut out);
+        out
+    }
+
+    /// Web UI: toggle a smart plug.
+    pub fn web_toggle_plug(&mut self, device: &str, ts: Instant) -> Vec<Action> {
+        if !self.topology.is_plug(device) {
+            tracing::warn!(device, "web: toggle plug rejected — unknown device");
+            return Vec::new();
+        }
+        let is_on = self
+            .plug_state_for(device)
+            .map_or(false, |s| s.on);
+        let action = if is_on {
+            Action::for_device(device.to_string(), Payload::device_off())
+        } else {
+            Action::for_device(device.to_string(), Payload::device_on())
+        };
+
+        // Optimistically update plug state so rapid toggles don't
+        // derive the next command from stale state.
+        let plug = self.plug_states.entry(device.to_string()).or_default();
+        if is_on {
+            plug.on = false;
+            plug.seen_explicit_off = true;
+            plug.last_power = None;
+            self.kill_switch.on_plug_off(device);
+        } else {
+            plug.on = true;
+            plug.seen_explicit_off = false;
+            self.kill_switch.on_plug_on(device, None, ts);
+        }
+
+        tracing::info!(device, target_state = !is_on, "web: toggle plug (controller path)");
+        vec![action]
     }
 
     // ----- tick handler (dispatches to actions + kill_switch) ---------------

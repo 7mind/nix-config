@@ -42,7 +42,6 @@ use tokio::sync::{broadcast, mpsc};
 
 use crate::config::Config;
 use crate::controller::Controller;
-use crate::domain::action::{Action, Payload};
 use crate::domain::event::Event;
 use crate::mqtt::{MqttBridge, MqttConfig, MqttError};
 use crate::time::Clock;
@@ -89,14 +88,14 @@ pub async fn run(
         "topology built"
     );
 
-    let mut controller = Controller::new(topology.clone(), clock, defaults);
+    let mut controller = Controller::new(topology.clone(), clock.clone(), defaults);
 
     tracing::info!(
         host = %mqtt.host,
         port = mqtt.port,
         "connecting to mqtt"
     );
-    let (bridge, mut event_rx) = MqttBridge::start(mqtt, topology.clone())
+    let (bridge, mut event_rx) = MqttBridge::start(mqtt, topology.clone(), clock.clone())
         .await
         .context("connecting to mqtt broker")?;
 
@@ -108,11 +107,11 @@ pub async fn run(
     // motion-default loses one false auto-off in the worst case but
     // gains the ability to auto-clear lights left on at boot.
     controller.log_startup_lit_rooms();
-    controller.arm_kill_switches_for_active_plugs(Instant::now());
+    controller.arm_kill_switches_for_active_plugs(clock.now());
 
     tracing::info!("startup state refresh complete; entering event loop");
 
-    run_event_loop(&mut controller, &bridge, &mut event_rx, web).await
+    run_event_loop(&mut controller, &bridge, &mut event_rx, web, clock).await
 }
 
 /// Three-phase startup state refresh. See module docs.
@@ -312,6 +311,7 @@ async fn run_event_loop(
     bridge: &MqttBridge,
     event_rx: &mut mpsc::Receiver<Event>,
     web: Option<WebHandle>,
+    clock: Arc<dyn Clock>,
 ) -> anyhow::Result<()> {
     let mut tick = tokio::time::interval(TICK_INTERVAL);
     // The first tick fires immediately; skip it so we don't waste a
@@ -337,7 +337,7 @@ async fn run_event_loop(
                 }
             }
             _ = tick.tick() => {
-                Event::Tick { ts: Instant::now() }
+                Event::Tick { ts: clock.now() }
             }
             cmd = recv_ws_cmd(&mut ws_cmd_rx) => {
                 match cmd {
@@ -347,6 +347,7 @@ async fn run_event_loop(
                             controller,
                             bridge,
                             &broadcast_tx,
+                            &*clock,
                         ).await;
                         continue;
                     }
@@ -355,7 +356,7 @@ async fn run_event_loop(
             }
         };
 
-        let now = Instant::now();
+        let now = clock.now();
 
         // Capture tracing decisions if web is enabled.
         if has_web {
@@ -421,10 +422,11 @@ async fn handle_ws_command(
     controller: &mut Controller,
     bridge: &MqttBridge,
     broadcast_tx: &Option<broadcast::Sender<hue_wire::ServerMessage>>,
+    clock: &dyn Clock,
 ) {
     match cmd {
         WsCommand::RequestSnapshot { reply } => {
-            let snap = snapshot::build_full_snapshot(controller, Instant::now());
+            let snap = snapshot::build_full_snapshot(controller, clock.now());
             let _ = reply.send(snap);
         }
         WsCommand::RequestTopology { reply } => {
@@ -432,42 +434,24 @@ async fn handle_ws_command(
             let _ = reply.send(topo);
         }
         WsCommand::RecallScene { room, scene_id } => {
-            if let Some(resolved) = controller.topology().room_by_name(&room) {
-                let action = Action::new(
-                    resolved.group_name.clone(),
-                    Payload::scene_recall(scene_id),
-                );
-                tracing::info!(room, scene_id, "web: recall scene");
+            let actions = controller.web_recall_scene(&room, scene_id, clock.now());
+            for action in actions {
                 if let Err(e) = bridge.publish_action(&action).await {
                     tracing::error!(error = ?e, "web: failed to publish scene recall");
                 }
             }
         }
         WsCommand::SetRoomOff { room } => {
-            if let Some(resolved) = controller.topology().room_by_name(&room) {
-                let action = Action::new(
-                    resolved.group_name.clone(),
-                    Payload::state_off(resolved.off_transition_seconds),
-                );
-                tracing::info!(room, "web: set room off");
+            let actions = controller.web_set_room_off(&room, clock.now());
+            for action in actions {
                 if let Err(e) = bridge.publish_action(&action).await {
                     tracing::error!(error = ?e, "web: failed to publish room off");
                 }
             }
         }
         WsCommand::TogglePlug { device } => {
-            if !controller.topology().is_plug(&device) {
-                tracing::warn!(device, "web: toggle plug rejected — unknown device");
-            } else {
-                let is_on = controller
-                    .plug_state_for(&device)
-                    .map_or(false, |s| s.on);
-                let action = if is_on {
-                    Action::for_device(device.clone(), Payload::device_off())
-                } else {
-                    Action::for_device(device.clone(), Payload::device_on())
-                };
-                tracing::info!(device, target_state = !is_on, "web: toggle plug");
+            let actions = controller.web_toggle_plug(&device, clock.now());
+            for action in actions {
                 if let Err(e) = bridge.publish_action(&action).await {
                     tracing::error!(error = ?e, "web: failed to publish plug toggle");
                 }
@@ -478,7 +462,7 @@ async fn handle_ws_command(
     // Broadcast a fresh snapshot after any command so clients see
     // the effect immediately (before the z2m state callback arrives).
     if let Some(tx) = &broadcast_tx {
-        broadcast_state_updates(controller, tx, Instant::now());
+        broadcast_state_updates(controller, tx, clock.now());
     }
 }
 
