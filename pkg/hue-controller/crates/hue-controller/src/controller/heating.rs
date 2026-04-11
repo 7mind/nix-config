@@ -56,6 +56,10 @@ pub struct HeatingController {
     /// do NOT start open-window timers (they are state synchronization,
     /// not fresh heating cycles).
     startup_complete: bool,
+    /// When the controller was created. Used for the delayed proactive
+    /// OFF for unknown-state zones: we wait at least min_cycle from
+    /// startup before sending OFF, in case the relay was physically ON.
+    startup_at: Instant,
     /// Monotonic tick generation counter. Incremented at the start of
     /// each `handle_tick`. Used by reconciliation to skip commands
     /// that were just issued in the current tick (avoids duplicates).
@@ -90,6 +94,7 @@ impl HeatingController {
             clock,
             state,
             startup_complete: false,
+            startup_at: now,
             tick_gen: 0,
         }
     }
@@ -326,10 +331,17 @@ impl HeatingController {
             // Only clears THIS zone's pending state (not other zones').
             if !on && zone_state.pending_on_at.is_some() {
                 zone_state.pending_on_at = None;
+                zone_state.pending_off_at = None;
                 zone_state.desired_relay = None;
+                // This OFF echo confirms the relay went from
+                // potentially-ON (pending_on_at was set) to definitely-OFF.
+                // Record the confirmed stop time for min_pause enforcement.
+                // If the relay was already off, this is conservative
+                // (records a later stop = longer pause before next ON).
+                self.state.pump_off_since = Some(now);
                 tracing::info!(
                     zone = %zone_name, relay = device,
-                    "MQTT: repeated OFF echo clears stale pending-ON state"
+                    "MQTT: repeated OFF echo confirms relay off, recording pump stop"
                 );
             }
             return;
@@ -360,7 +372,10 @@ impl HeatingController {
             if relays_on_before == 0 {
                 self.state.pump_on_since = Some(now);
                 self.state.pump_off_since = None;
-                self.state.pending_pump_off_at = None;
+                // Pump is confirmed running — all pending OFFs are moot.
+                for zs in self.state.zones.values_mut() {
+                    zs.pending_off_at = None;
+                }
                 tracing::info!(
                     zone = %zone_name, relay = device,
                     "MQTT: relay ON observed, pump starting"
@@ -384,7 +399,9 @@ impl HeatingController {
             if relays_on_before == 1 {
                 self.state.pump_off_since = Some(now);
                 self.state.pump_on_since = None;
-                self.state.pending_pump_off_at = None;
+                for zs in self.state.zones.values_mut() {
+                    zs.pending_off_at = None;
+                }
                 tracing::info!(
                     zone = %zone_name, relay = device,
                     "MQTT: relay OFF observed, pump stopping"
@@ -511,19 +528,56 @@ impl HeatingController {
             // and NOT inhibited. This prevents the latch-on bug where a
             // forced TRV's own demand (from the 30°C override) keeps the
             // group active after the original caller stops demanding.
+            // Conservative: pressure groups use raw demand (not effective)
+            // because staleness = telemetry loss, NOT proof of valve closure.
+            // A stale TRV's valve might still be open → keep siblings forced.
+            // BUT: exclude pressure_forced (latch prevention) and inhibited
+            // (open window takes priority).
             let any_organic_demand = group.trvs.iter().any(|trv_name| {
                 find_trv_in_zones(&self.state, trv_name)
                     .is_some_and(|t| {
                         !t.pressure_forced && !t.is_inhibited(now) && t.has_raw_demand()
                     })
             });
+            // Safe override: release the group when the ZONE'S OWN relay is
+            // confirmed off. Each zone has a separate heating circuit —
+            // another zone's relay being on does not create flow through
+            // THIS zone's radiators. So the local relay is the correct
+            // signal for pressure safety, not the global pump state.
+            // Also require no pending/desired ON (lost echo scenario).
+            let zone_relay_off = group.trvs.first().and_then(|trv_name| {
+                self.config.zones.iter()
+                    .find(|z| z.trvs.iter().any(|zt| zt.device == *trv_name))
+                    .and_then(|z| self.state.zones.get(&z.name))
+                    .map(|zs| {
+                        !zs.relay_on
+                            && zs.relay_state_known
+                            && zs.desired_relay != Some(true)
+                            && zs.pending_on_at.is_none()
+                    })
+            }).unwrap_or(false);
+            let group_active = any_organic_demand && !zone_relay_off;
+
+            // Alert if any TRV in the group is stale but still has demand.
+            for trv_name in &group.trvs {
+                if let Some(t) = find_trv_in_zones(&self.state, trv_name) {
+                    if t.is_stale(now) && t.has_raw_demand() {
+                        tracing::error!(
+                            trv = %trv_name,
+                            group = %group.name,
+                            "FAULT: TRV in pressure group is stale with demand; \
+                             group stays forced for flow safety — check device"
+                        );
+                    }
+                }
+            }
 
             for trv_name in &group.trvs {
                 let Some(trv_state) = find_trv_in_zones_mut(&mut self.state, trv_name) else {
                     continue;
                 };
 
-                if any_organic_demand {
+                if group_active {
                     // Skip inhibited TRVs: open-window inhibition takes
                     // priority over pressure balancing.
                     if trv_state.is_inhibited(now) {
@@ -709,30 +763,41 @@ impl HeatingController {
             })
             .collect();
 
-        // --- Phase 0: unknown-state zones with no demand → proactive OFF ---
-        // If the relay was physically ON before restart but the startup
-        // refresh missed, we must proactively send OFF to reconcile.
+        // Unknown-state zones (relay_state_known=false):
+        // - WITH demand → send ON (harmless if already on, echo self-heals)
+        // - WITHOUT demand → send OFF only after min_cycle from startup
+        //   (the relay might have been physically ON before restart; we
+        //   must wait min_cycle before sending OFF to avoid short-cycling)
+        let min_cycle_from_startup_ok =
+            now.duration_since(self.startup_at) >= min_cycle;
         for zone in &self.config.zones {
             let Some(zs) = self.state.zones.get_mut(&zone.name) else {
                 continue;
             };
             if !zs.relay_state_known && zs.desired_relay.is_none() {
                 let has_demand = zs.has_effective_demand(now);
-                if !has_demand {
-                    // Proactively send OFF. If the relay was already off,
-                    // this is a harmless no-op. If it was physically on,
-                    // this turns it off. Either way the echo will resolve
-                    // relay_state_known.
+                if !has_demand && min_cycle_from_startup_ok {
                     actions.push(Action::for_device(
                         zone.relay.clone(),
                         Payload::device_off(),
                     ));
                     zs.desired_relay = Some(false);
                     zs.desired_relay_gen = self.tick_gen;
+                    // Do NOT set pending_off_at: this OFF is speculative.
+                    // If the relay was already off, no pump stop happened.
+                    // If it was on and our OFF succeeds, the echo handler
+                    // will set proper pump timestamps. Setting it here
+                    // would pollute min_pause for other zones.
+                    //
+                    // Set pending_on_at so the reconciler keeps retrying
+                    // OFF until an echo confirms (the relay might be
+                    // physically ON with no echo path otherwise).
+                    zs.pending_on_at = Some(self.startup_at);
                     tracing::info!(
                         zone = %zone.name,
                         relay = %zone.relay,
-                        "heating: proactive OFF for unknown-state zone (no demand)"
+                        "heating: delayed proactive OFF for unknown-state zone \
+                         (no demand, min_cycle from startup elapsed)"
                     );
                 }
             }
@@ -775,9 +840,12 @@ impl HeatingController {
                 if cycle_ok {
                     // Set desired=Some(false) so reconcile retries the OFF
                     // until the wall thermostat confirms it.
-                    { let zs = self.state.zones.get_mut(&d.zone_name).unwrap(); zs.desired_relay = Some(false); zs.desired_relay_gen = self.tick_gen; }
+                    { let zs = self.state.zones.get_mut(&d.zone_name).unwrap();
+                      zs.desired_relay = Some(false);
+                      zs.desired_relay_gen = self.tick_gen;
+                      zs.pending_off_at = Some(now);
+                    }
                     actions.push(Action::for_device(d.relay.clone(), Payload::device_off()));
-                    self.state.pending_pump_off_at = Some(now);
                     // pending_on_at stays on this zone until the OFF echo confirms.
                     tracing::info!(
                         zone = %d.zone_name, relay = %d.relay,
@@ -841,13 +909,16 @@ impl HeatingController {
                 if cycle_ok {
                     for d in &want_off {
                         actions.push(Action::for_device(d.relay.clone(), Payload::device_off()));
-                        { let zs = self.state.zones.get_mut(&d.zone_name).unwrap(); zs.desired_relay = Some(false); zs.desired_relay_gen = self.tick_gen; }
+                        { let zs = self.state.zones.get_mut(&d.zone_name).unwrap();
+                          zs.desired_relay = Some(false);
+                          zs.desired_relay_gen = self.tick_gen;
+                          zs.pending_off_at = Some(now);
+                        }
                         tracing::info!(
                             zone = %d.zone_name, relay = %d.relay,
                             "heating: requesting relay OFF (pump stopping)"
                         );
                     }
-                    self.state.pending_pump_off_at = Some(now);
                 } else {
                     tracing::debug!(
                         zones_wanting_off = want_off.len(),
@@ -1070,7 +1141,10 @@ mod tests {
         DeviceCatalogEntry::WallThermostat(CommonFields {
             ieee_address: ieee.into(),
             description: None,
-            options: BTreeMap::new(),
+            options: BTreeMap::from([
+                ("heater_type".into(), serde_json::json!("manual_control")),
+                ("operating_mode".into(), serde_json::json!("manual")),
+            ]),
         })
     }
 
@@ -1480,6 +1554,9 @@ mod tests {
             battery: None,
             ts: clk.now(),
         });
+        // Relay must be ON for pressure groups to be active (flow exists).
+        hc.handle_tick(); // emits relay ON
+        echo_relay(&mut hc, "wt-bath", true, &clk);
 
         let actions = hc.handle_tick();
         // Should force-open trv-2 (setpoint 30°C).
@@ -1993,7 +2070,7 @@ mod tests {
     #[test]
     fn pending_pump_off_enforces_min_pause_on_lost_echo() {
         // Regression: if relay OFF command succeeds but echo is lost,
-        // pending_pump_off_at must still enforce min_pause.
+        // pending_off_at must still enforce min_pause.
         let cfg = simple_config();
         let (mut hc, clk) = setup(&cfg);
         hc.handle_tick();
@@ -2025,10 +2102,10 @@ mod tests {
             battery: None,
             ts: clk.now(),
         });
-        hc.handle_tick(); // emits relay OFF, sets pending_pump_off_at
+        hc.handle_tick(); // emits relay OFF, sets pending_off_at
         // Do NOT echo OFF — simulate lost echo.
 
-        assert!(hc.state.pending_pump_off_at.is_some(), "pending stop should be set");
+        assert!(hc.state.effective_pump_off_since().is_some(), "pending stop should be set");
 
         // TRV demands again immediately.
         hc.handle_event(&Event::TrvState {
@@ -2042,7 +2119,7 @@ mod tests {
             ts: clk.now(),
         });
 
-        // Without pending_pump_off_at, min_pause would be bypassed since
+        // Without pending_off_at, min_pause would be bypassed since
         // relay_on is still true (echo was lost). With it, the controller
         // uses the pending timestamp for conservative enforcement.
         clk.advance(Duration::from_secs(10)); // < min_pause
@@ -2051,7 +2128,7 @@ mod tests {
         // pump is running. This is conservative — it won't try to turn
         // ON because it thinks relay is already on. That's fine. The
         // reconciler sends OFF retries. When the echo eventually arrives,
-        // pending_pump_off_at enforces the pause.
+        // pending_off_at enforces the pause.
 
         // Verify the pending timestamp is tracked.
         assert!(
@@ -2780,6 +2857,8 @@ mod tests {
             ts: clk.now(),
         });
         hc.handle_tick();
+        echo_relay(&mut hc, "wt-bath", true, &clk); // relay ON for pressure
+        hc.handle_tick(); // force trv-2
 
         // trv-2 reports demand from the 30°C override.
         hc.handle_event(&Event::TrvState {
@@ -2932,23 +3011,35 @@ mod tests {
     // -- Round 10 adversarial regression tests --
 
     #[test]
-    fn unknown_state_zone_gets_proactive_off_when_no_demand() {
-        // Regression: if relay was ON before restart but startup refresh
-        // missed, the controller must proactively send OFF for zones
-        // without demand (the relay might still be physically ON).
+    fn unknown_state_zone_delayed_off_after_min_cycle() {
+        // Unknown relay state with no demand: the controller waits
+        // min_cycle from startup before sending OFF (the relay might
+        // have been physically ON before restart).
         let cfg = simple_config();
         let clk = Arc::new(FakeClock::new(12));
         let topo = Arc::new(Topology::build(&cfg).unwrap());
         let heating_cfg = cfg.heating.clone().unwrap();
         let mut hc = HeatingController::new(heating_cfg, topo, clk.clone());
-        // Do NOT set relay_state_known — simulates missed refresh.
         hc.startup_complete = true;
-        clk.advance(Duration::from_secs(120));
 
-        // No TRV demand. The zone is unknown but has no demand.
+        // Before min_cycle (120s): no OFF.
+        clk.advance(Duration::from_secs(60));
         let actions = hc.handle_tick();
+        let relay_off: Vec<_> = actions
+            .iter()
+            .filter(|a| {
+                a.target_name() == "wt-bath"
+                    && serde_json::to_string(&a.payload).unwrap().contains("OFF")
+            })
+            .collect();
+        assert!(
+            relay_off.is_empty(),
+            "must not send OFF before min_cycle from startup"
+        );
 
-        // Should proactively send OFF to reconcile unknown state.
+        // After min_cycle: send OFF.
+        clk.advance(Duration::from_secs(70)); // total 130s > 120s
+        let actions = hc.handle_tick();
         let relay_off: Vec<_> = actions
             .iter()
             .filter(|a| {
@@ -2958,7 +3049,44 @@ mod tests {
             .collect();
         assert!(
             !relay_off.is_empty(),
-            "unknown-state zone with no demand should get proactive OFF"
+            "must send delayed OFF after min_cycle from startup"
+        );
+    }
+
+    #[test]
+    fn unknown_state_zone_with_demand_sends_on() {
+        // Unknown relay state WITH demand: the controller sends ON
+        // (harmless if already on, self-healing via echo).
+        let cfg = simple_config();
+        let clk = Arc::new(FakeClock::new(12));
+        let topo = Arc::new(Topology::build(&cfg).unwrap());
+        let heating_cfg = cfg.heating.clone().unwrap();
+        let mut hc = HeatingController::new(heating_cfg, topo, clk.clone());
+        hc.startup_complete = true;
+        clk.advance(Duration::from_secs(120));
+
+        hc.handle_event(&Event::TrvState {
+            device: "trv-bath-1".into(),
+            local_temperature: Some(18.0),
+            pi_heating_demand: Some(50),
+            running_state: Some("heat".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
+        let actions = hc.handle_tick();
+
+        let relay_on: Vec<_> = actions
+            .iter()
+            .filter(|a| {
+                a.target_name() == "wt-bath"
+                    && serde_json::to_string(&a.payload).unwrap().contains("ON")
+            })
+            .collect();
+        assert!(
+            !relay_on.is_empty(),
+            "unknown-state zone with demand should send ON (self-healing)"
         );
     }
 
@@ -3282,6 +3410,275 @@ mod tests {
         assert!(
             !trv.has_effective_demand(clk.now()),
             "stale TRV demand must be suppressed"
+        );
+    }
+
+    #[test]
+    fn stale_trv_in_pressure_group_releases_after_relay_off() {
+        // A stale TRV with demand keeps the pressure group active
+        // (conservative for flow safety). But once the relay turns OFF
+        // (no flow → no pressure issue), the group releases.
+        let cfg = make_config(
+            vec![HeatingZone {
+                name: "bath".into(),
+                relay: "wt-bath".into(),
+                trvs: vec![
+                    ZoneTrv { device: "trv-1".into(), schedule: "s".into() },
+                    ZoneTrv { device: "trv-2".into(), schedule: "s".into() },
+                ],
+            }],
+            BTreeMap::from([("s".into(), TemperatureSchedule { days: full_week(20.0) })]),
+            vec![PressureGroup {
+                name: "g".into(),
+                trvs: vec!["trv-1".into(), "trv-2".into()],
+            }],
+        );
+        let (mut hc, clk) = setup(&cfg);
+        hc.handle_tick();
+
+        // trv-1 demands heat (organic).
+        hc.handle_event(&Event::TrvState {
+            device: "trv-1".into(),
+            local_temperature: Some(18.0),
+            pi_heating_demand: Some(50),
+            running_state: Some("heat".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
+        hc.handle_tick();
+        echo_relay(&mut hc, "wt-bath", true, &clk);
+        hc.handle_tick(); // forces trv-2
+
+        // trv-1's battery dies — no more updates for 31 minutes.
+        clk.advance(Duration::from_secs(31 * 60));
+        hc.handle_tick();
+
+        // trv-1 is stale but group stays active (conservative for pressure).
+        let trv1 = hc.find_trv_state("trv-1").unwrap();
+        assert!(trv1.is_stale(clk.now()));
+        let trv2 = hc.find_trv_state("trv-2").unwrap();
+        assert!(
+            trv2.pressure_forced,
+            "stale TRV keeps pressure group active (valve might still be open)"
+        );
+
+        // Relay turns OFF (stale TRV has no effective demand → relay off).
+        clk.advance(Duration::from_secs(200));
+        hc.handle_tick(); // relay OFF requested
+        echo_relay(&mut hc, "wt-bath", false, &clk);
+        hc.handle_tick(); // group releases
+
+        let trv2 = hc.find_trv_state("trv-2").unwrap();
+        assert!(
+            !trv2.pressure_forced,
+            "pressure group should release after relay confirmed OFF"
+        );
+    }
+
+    #[test]
+    fn unknown_relay_delayed_off_does_not_pollute_min_pause() {
+        // The startup OFF probe is speculative — it must NOT set
+        // pending_off_at, which would block other zones' ON requests.
+        // If the relay was actually ON, the echo handler sets proper
+        // timestamps. If it was already OFF, no pump stop occurred.
+        let cfg = simple_config();
+        let clk = Arc::new(FakeClock::new(12));
+        let topo = Arc::new(Topology::build(&cfg).unwrap());
+        let heating_cfg = cfg.heating.clone().unwrap();
+        let mut hc = HeatingController::new(heating_cfg, topo, clk.clone());
+        hc.startup_complete = true;
+        clk.advance(Duration::from_secs(130));
+        hc.handle_tick(); // fires delayed OFF
+
+        // pending_off_at must NOT be set (speculative probe).
+        let zs = hc.state.zones.get("bath").unwrap();
+        assert!(
+            zs.pending_off_at.is_none(),
+            "startup OFF probe must not pollute pending_off_at"
+        );
+        // But pending_on_at must be set (for reconciler retries).
+        assert!(
+            zs.pending_on_at.is_some(),
+            "startup OFF must set pending_on_at for reconciler retries"
+        );
+    }
+
+    #[test]
+    fn unknown_relay_delayed_off_retries_on_lost_publish() {
+        // If the delayed OFF publish is lost, the reconciler must keep
+        // retrying because pending_on_at is set (relay might be ON).
+        let cfg = simple_config();
+        let clk = Arc::new(FakeClock::new(12));
+        let topo = Arc::new(Topology::build(&cfg).unwrap());
+        let heating_cfg = cfg.heating.clone().unwrap();
+        let mut hc = HeatingController::new(heating_cfg, topo, clk.clone());
+        hc.startup_complete = true;
+        clk.advance(Duration::from_secs(130));
+        hc.handle_tick(); // fires delayed OFF (first publish)
+
+        let zs = hc.state.zones.get("bath").unwrap();
+        assert!(
+            zs.pending_on_at.is_some(),
+            "pending_on_at must be set for reconciler retry"
+        );
+
+        // Next tick: reconciler should retry the OFF.
+        let actions = hc.handle_tick();
+        let off_retries: Vec<_> = actions
+            .iter()
+            .filter(|a| {
+                a.target_name() == "wt-bath"
+                    && serde_json::to_string(&a.payload).unwrap().contains("OFF")
+            })
+            .collect();
+        assert!(
+            !off_retries.is_empty(),
+            "reconciler must retry OFF for unknown-state zone until echo confirms"
+        );
+
+        // After an OFF echo, retries stop.
+        echo_relay(&mut hc, "wt-bath", false, &clk);
+        let zs = hc.state.zones.get("bath").unwrap();
+        assert!(zs.pending_on_at.is_none(), "echo should clear pending_on_at");
+        assert!(zs.relay_state_known, "echo should mark state as known");
+    }
+
+    // -- Redesign regression tests --
+
+    #[test]
+    fn pressure_forced_sibling_demand_does_not_drive_relay() {
+        // A pressure-forced sibling reports heat demand from its 30°C
+        // override. This artificial demand must NOT keep the relay on
+        // — only organic (non-forced) demand should drive relays.
+        let cfg = make_config(
+            vec![HeatingZone {
+                name: "bath".into(),
+                relay: "wt-bath".into(),
+                trvs: vec![
+                    ZoneTrv { device: "trv-1".into(), schedule: "s".into() },
+                    ZoneTrv { device: "trv-2".into(), schedule: "s".into() },
+                ],
+            }],
+            BTreeMap::from([("s".into(), TemperatureSchedule { days: full_week(20.0) })]),
+            vec![PressureGroup {
+                name: "g".into(),
+                trvs: vec!["trv-1".into(), "trv-2".into()],
+            }],
+        );
+        let (mut hc, clk) = setup(&cfg);
+        hc.handle_tick();
+
+        // trv-1 demands → relay ON, pressure forces trv-2 to 30°C.
+        hc.handle_event(&Event::TrvState {
+            device: "trv-1".into(),
+            local_temperature: Some(18.0),
+            pi_heating_demand: Some(50),
+            running_state: Some("heat".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None, battery: None,
+            ts: clk.now(),
+        });
+        hc.handle_tick();
+        echo_relay(&mut hc, "wt-bath", true, &clk);
+        hc.handle_tick(); // forces trv-2
+
+        // trv-2 (forced) reports heat from the 30°C override.
+        hc.handle_event(&Event::TrvState {
+            device: "trv-2".into(),
+            local_temperature: Some(22.0),
+            pi_heating_demand: Some(80),
+            running_state: Some("heat".into()),
+            occupied_heating_setpoint: Some(30.0),
+            operating_mode: None, battery: None,
+            ts: clk.now(),
+        });
+
+        // trv-1 stops organic demand.
+        hc.handle_event(&Event::TrvState {
+            device: "trv-1".into(),
+            local_temperature: Some(20.5),
+            pi_heating_demand: Some(0),
+            running_state: Some("idle".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None, battery: None,
+            ts: clk.now(),
+        });
+
+        // trv-2 is pressure_forced — its demand is artificial.
+        let trv2 = hc.find_trv_state("trv-2").unwrap();
+        assert!(trv2.pressure_forced);
+        assert!(
+            !trv2.has_effective_demand(clk.now()),
+            "pressure-forced TRV's demand must not count as effective"
+        );
+
+        // The zone should have no effective demand → relay turns off.
+        let zone = hc.state.zones.get("bath").unwrap();
+        assert!(
+            !zone.has_effective_demand(clk.now()),
+            "zone must not have effective demand from forced-only TRVs"
+        );
+    }
+
+    #[test]
+    fn multi_zone_startup_probes_do_not_block_healthy_zones() {
+        // Two unknown zones get delayed OFF. These are speculative
+        // probes — they must NOT set pending_off_at, so a healthy
+        // zone that needs heat can turn on immediately.
+        let cfg = make_config(
+            vec![
+                HeatingZone {
+                    name: "z1".into(),
+                    relay: "wt-1".into(),
+                    trvs: vec![ZoneTrv { device: "trv-1".into(), schedule: "s".into() }],
+                },
+                HeatingZone {
+                    name: "z2".into(),
+                    relay: "wt-2".into(),
+                    trvs: vec![ZoneTrv { device: "trv-2".into(), schedule: "s".into() }],
+                },
+            ],
+            BTreeMap::from([("s".into(), TemperatureSchedule { days: full_week(20.0) })]),
+            vec![],
+        );
+        let clk = Arc::new(FakeClock::new(12));
+        let topo = Arc::new(Topology::build(&cfg).unwrap());
+        let heating_cfg = cfg.heating.clone().unwrap();
+        let mut hc = HeatingController::new(heating_cfg, topo, clk.clone());
+        hc.startup_complete = true;
+        clk.advance(Duration::from_secs(130));
+        hc.handle_tick(); // delayed OFF for both zones
+
+        // Neither zone should have pending_off_at (speculative probes).
+        assert!(hc.state.zones.get("z1").unwrap().pending_off_at.is_none());
+        assert!(hc.state.zones.get("z2").unwrap().pending_off_at.is_none());
+
+        // Zone 1's echo confirms it was already OFF. This sets
+        // pump_off_since (conservative). Advance past min_pause.
+        echo_relay(&mut hc, "wt-1", false, &clk);
+        clk.advance(Duration::from_secs(70)); // > min_pause (60s)
+        hc.handle_event(&Event::TrvState {
+            device: "trv-1".into(),
+            local_temperature: Some(18.0),
+            pi_heating_demand: Some(50),
+            running_state: Some("heat".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None, battery: None,
+            ts: clk.now(),
+        });
+        let actions = hc.handle_tick();
+        let z1_on: Vec<_> = actions
+            .iter()
+            .filter(|a| {
+                a.target_name() == "wt-1"
+                    && serde_json::to_string(&a.payload).unwrap().contains("ON")
+            })
+            .collect();
+        assert!(
+            !z1_on.is_empty(),
+            "healthy zone must not be blocked by other zone's speculative startup probe"
         );
     }
 }

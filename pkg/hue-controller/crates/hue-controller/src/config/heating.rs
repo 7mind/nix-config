@@ -334,6 +334,12 @@ pub enum HeatingConfigError {
         relay: String,
         other_zone: String,
     },
+
+    #[error(
+        "zone {zone:?}: relay {relay:?} is missing options.heater_type = \"manual_control\" — \
+         without this the wall thermostat's internal algorithm ignores relay commands"
+    )]
+    RelayMissingManualControl { zone: String, relay: String },
 }
 
 impl TemperatureSchedule {

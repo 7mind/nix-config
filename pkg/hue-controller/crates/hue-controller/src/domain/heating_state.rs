@@ -38,13 +38,7 @@ pub struct HeatingRuntimeState {
     /// has never run.
     pub pump_off_since: Option<Instant>,
 
-    /// When the controller last REQUESTED the last relay to turn off.
-    /// Used for conservative min_pause enforcement: even if the echo
-    /// is lost, we still enforce the pause from the command timestamp.
-    /// Cleared when an ON echo proves the stop never happened.
-    pub pending_pump_off_at: Option<Instant>,
-
-    // Per-zone pending ON tracking moved to HeatingZoneRuntimeState::pending_on_at.
+    // Per-zone pending ON/OFF tracking in HeatingZoneRuntimeState.
 
     /// Per-zone state, keyed by zone name.
     pub zones: BTreeMap<String, HeatingZoneRuntimeState>,
@@ -55,17 +49,19 @@ impl HeatingRuntimeState {
         Self {
             pump_on_since: None,
             pump_off_since: None,
-            pending_pump_off_at: None,
             zones: BTreeMap::new(),
         }
     }
 
-    /// The most conservative pump-off timestamp: whichever is more
-    /// recent of the confirmed echo and the pending command. Used for
-    /// min_pause enforcement so that a lost OFF echo doesn't bypass
-    /// protection.
+    /// The most conservative pump-off timestamp: the most recent of
+    /// the confirmed echo and any per-zone pending OFF. Per-zone
+    /// tracking prevents one zone's echo from clearing another's
+    /// pending stop.
     pub fn effective_pump_off_since(&self) -> Option<Instant> {
-        match (self.pump_off_since, self.pending_pump_off_at) {
+        let latest_pending = self.zones.values()
+            .filter_map(|zs| zs.pending_off_at)
+            .max();
+        match (self.pump_off_since, latest_pending) {
             (Some(a), Some(b)) => Some(a.max(b)),
             (a, b) => a.or(b),
         }
@@ -136,6 +132,11 @@ pub struct HeatingZoneRuntimeState {
     /// on stale-ON cancellation.
     pub pending_on_at: Option<Instant>,
 
+    /// When the controller requested relay OFF for this zone and the
+    /// echo hasn't confirmed it yet. Per-zone so that one zone's echo
+    /// can't erase another's pending stop for min_pause enforcement.
+    pub pending_off_at: Option<Instant>,
+
     /// Per-TRV state, keyed by TRV device friendly_name.
     pub trvs: BTreeMap<String, TrvRuntimeState>,
 }
@@ -150,6 +151,7 @@ impl HeatingZoneRuntimeState {
             desired_relay: None,
             desired_relay_gen: 0,
             pending_on_at: None,
+            pending_off_at: None,
             trvs: BTreeMap::new(),
         }
     }
@@ -284,13 +286,15 @@ impl TrvRuntimeState {
         })
     }
 
-    /// True if this TRV has heat demand AND is not inhibited, stale,
-    /// or pending pressure-group release confirmation.
+    /// True if this TRV has ORGANIC heat demand (not from a pressure
+    /// group override). Excludes: inhibited, stale, pressure-forced,
+    /// and pressure-release-pending TRVs. This is what drives relay
+    /// control — only real heating demand should keep relays on.
     pub fn has_effective_demand(&self, now: Instant) -> bool {
         if self.is_inhibited(now) {
             return false;
         }
-        if self.pressure_release_pending {
+        if self.pressure_forced || self.pressure_release_pending {
             return false;
         }
         if self.is_stale(now) {

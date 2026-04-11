@@ -800,18 +800,23 @@ impl Topology {
                 // for safe relay control.
                 if let Some(entry) = config.devices.get(&zone.relay) {
                     let opts = entry.options();
+                    // heater_type = manual_control is a hard requirement:
+                    // without it the wall thermostat runs its own climate
+                    // algorithm and ignores our ON/OFF relay commands.
                     let has_manual_control = opts
                         .get("heater_type")
                         .and_then(|v| v.as_str())
                         .is_some_and(|v| v == "manual_control");
                     if !has_manual_control {
-                        tracing::warn!(
-                            zone = %zone.name,
-                            relay = %zone.relay,
-                            "wall thermostat is missing options.heater_type = \"manual_control\"; \
-                             relay commands may be ignored by the device's internal thermostat"
-                        );
+                        return Err(TopologyError::HeatingError(
+                            HeatingConfigError::RelayMissingManualControl {
+                                zone: zone.name.clone(),
+                                relay: zone.relay.clone(),
+                            },
+                        ));
                     }
+                    // operating_mode = manual is recommended but enforced
+                    // at runtime (the controller reasserts it if it drifts).
                     let has_manual_mode = opts
                         .get("operating_mode")
                         .and_then(|v| v.as_str())
