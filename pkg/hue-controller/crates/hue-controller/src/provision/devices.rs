@@ -22,11 +22,6 @@ pub async fn reconcile_devices(
         if opts.is_empty() {
             continue;
         }
-        // Light entries don't have controllable options. Skip them
-        // even if (somehow) the catalog has options on a Light.
-        if matches!(entry, DeviceCatalogEntry::Light(_)) {
-            continue;
-        }
         // Z-Wave plugs are not managed by zigbee2mqtt — their options
         // (if any) must be set via the Z-Wave JS UI API, not z2m /set.
         if entry.is_zwave_plug() {

@@ -203,7 +203,7 @@ in
           RemainAfterExit = true;
           LoadCredential = "mqtt-password:${cfg.mqtt.passwordFile}";
           Restart = "on-failure";
-          RestartSec = 30;
+          RestartSec = 5;
           DynamicUser = true;
         };
       };
@@ -236,7 +236,7 @@ in
         '';
         serviceConfig = {
           Type = "simple";
-          Restart = "on-failure";
+          Restart = "always";
           RestartSec = 5;
           LoadCredential = "mqtt-password:${cfg.mqtt.passwordFile}";
           DynamicUser = true;

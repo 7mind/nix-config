@@ -299,10 +299,12 @@ impl Controller {
             );
         }
 
-        // Propagate to descendants so child rooms track the parent's
-        // physical state even when z2m does not emit separate child
-        // group echoes for a parent-group change.
-        self.propagate_to_descendants(&room_name, on, ts);
+        // Propagate only the physical on/off flag to descendants so
+        // child rooms track the parent's physical state.  Use the
+        // *soft* variant that preserves cycle state (last_press_at,
+        // cycle_idx) — a group echo is NOT an explicit button press,
+        // so it must not destroy a child's in-progress scene cycle.
+        self.soft_propagate_to_descendants(&room_name, on, ts);
 
         Vec::new()
     }
@@ -439,6 +441,36 @@ impl Controller {
         state.last_press_at = Some(ts);
         state.last_off_at = Some(ts);
         state.motion_owned = false;
+    }
+
+    /// Soft propagation: update only `physically_on` (and `last_off_at`
+    /// on off transitions) for descendants.  Does NOT reset
+    /// `last_press_at`, `cycle_idx`, or `motion_owned`.
+    ///
+    /// Used by `handle_group_state` where the echo is a side-effect of
+    /// z2m aggregating member states, not an explicit user action.  If
+    /// we cleared cycle state here, a child room's tap-press cycle
+    /// window would be destroyed every time z2m re-publishes the
+    /// parent group's state after the child turned on.
+    fn soft_propagate_to_descendants(&mut self, ancestor: &str, on: bool, ts: Instant) {
+        let descendants: Vec<RoomName> = self.topology.descendants_of(ancestor).to_vec();
+        if descendants.is_empty() {
+            return;
+        }
+        tracing::debug!(
+            ancestor,
+            descendants = ?descendants,
+            physically_on = on,
+            "group echo: soft-propagating physical state to descendants \
+             (preserving cycle state)"
+        );
+        for desc in descendants {
+            let state = self.states.entry(desc).or_default();
+            state.physically_on = on;
+            if !on {
+                state.last_off_at = Some(ts);
+            }
+        }
     }
 
     /// Optimistically propagate a parent's new physical state to every
@@ -1090,6 +1122,76 @@ mod tests {
         assert!(!c.state_for("study").unwrap().motion_owned);
         let actions = c.handle_event(Event::Occupancy { sensor: "hue-ms-study".into(), occupied: false, illuminance: None, ts: clk.now() });
         assert!(actions.is_empty(), "room is user-owned; motion-off must not fire");
+    }
+
+    // ---- group echo must not destroy child cycle window ------------------
+
+    #[test]
+    fn child_tap_cycles_despite_parent_group_echo() {
+        // Regression: when a child group turns on, z2m publishes the
+        // parent group as ON too (member-state aggregation).  The old
+        // code's propagate_to_descendants inside handle_group_state
+        // cleared last_press_at on the child, killing its cycle window.
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = kitchen_controller(clk.clone());
+
+        // 1. Press child button → cooker turns on, scene 1.
+        let a1 = c.handle_event(Event::TapAction {
+            action: None, device: "hue-ts-foo".into(), button: 2, ts: clk.now(),
+        });
+        assert_eq!(a1, vec![Action::new("hue-lz-kitchen-cooker", Payload::scene_recall(1))]);
+        assert!(c.state_for("kitchen-cooker").unwrap().last_press_at.is_some());
+
+        // 2. z2m parent group echo arrives (parent was off → now on).
+        clk.advance(Duration::from_millis(80));
+        c.handle_event(Event::GroupState {
+            group: "hue-lz-kitchen-all".into(), on: true, ts: clk.now(),
+        });
+
+        // Child's cycle state must survive the parent echo.
+        let s = c.state_for("kitchen-cooker").unwrap();
+        assert!(s.physically_on);
+        assert!(s.last_press_at.is_some(), "parent group echo must not clear child's last_press_at");
+
+        // 3. Press child button again within cycle window → should cycle.
+        clk.advance(Duration::from_millis(200));
+        let a2 = c.handle_event(Event::TapAction {
+            action: None, device: "hue-ts-foo".into(), button: 2, ts: clk.now(),
+        });
+        assert_eq!(
+            a2, vec![Action::new("hue-lz-kitchen-cooker", Payload::scene_recall(2))],
+            "second press within cycle window must advance to scene 2, not turn off"
+        );
+        assert_eq!(c.state_for("kitchen-cooker").unwrap().cycle_idx, 1);
+    }
+
+    #[test]
+    fn parent_group_off_echo_propagates_physical_state_to_children() {
+        // Soft propagation must still update physically_on on off.
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = kitchen_controller(clk.clone());
+
+        // Turn on child.
+        c.handle_event(Event::TapAction {
+            action: None, device: "hue-ts-foo".into(), button: 2, ts: clk.now(),
+        });
+        assert!(c.state_for("kitchen-cooker").unwrap().physically_on);
+
+        // z2m publishes parent group ON (member-state aggregation).
+        clk.advance(Duration::from_millis(80));
+        c.handle_event(Event::GroupState {
+            group: "hue-lz-kitchen-all".into(), on: true, ts: clk.now(),
+        });
+
+        // Parent group echo: off (e.g. someone turned off all via z2m UI).
+        clk.advance(Duration::from_millis(100));
+        c.handle_event(Event::GroupState {
+            group: "hue-lz-kitchen-all".into(), on: false, ts: clk.now(),
+        });
+
+        // Children must be marked off.
+        assert!(!c.state_for("kitchen-cooker").unwrap().physically_on);
+        assert!(!c.state_for("kitchen-dining").unwrap().physically_on);
     }
 
     // ---- time-of-day slot dispatch --------------------------------------
