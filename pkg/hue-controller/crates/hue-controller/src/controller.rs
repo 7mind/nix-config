@@ -690,9 +690,24 @@ impl Controller {
         // skip the dispatch. This mirrors bento's preDispatch unconditional
         // update — without it, multi-sensor coordination would see stale
         // flags from the sensor that just fired.
+        //
+        // Dedup for repeated false: z2m re-publishes the full sensor state
+        // on *any* attribute change (temperature, illuminance, battery).
+        // Each publish includes the current `occupancy` value even when it
+        // hasn't changed, flooding the log with suppression messages every
+        // ~10 seconds.  For repeated `occupied: false` events the outcome
+        // is always the same (motion-off was already processed on the real
+        // transition), so skip them.  We do NOT dedup repeated `occupied:
+        // true` because external state may change between publishes
+        // (cooldown expires, illuminance decreases) and re-evaluation is
+        // required.
         {
             let state = self.states.entry(room_name.to_string()).or_default();
+            let prev = state.motion_active_by_sensor.get(sensor).copied();
             state.motion_active_by_sensor.insert(sensor.to_string(), occupied);
+            if !occupied && prev == Some(false) {
+                return;
+            }
         }
         let state_snapshot = self.states.get(room_name).cloned().unwrap_or_default();
 
