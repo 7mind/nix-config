@@ -94,13 +94,6 @@ impl HeatingController {
         }
     }
 
-    /// Mark startup hydration as complete. Called by the daemon after
-    /// the state refresh phases finish. Only after this do relay-on
-    /// edges start open-window timers.
-    pub fn mark_startup_complete(&mut self) {
-        self.startup_complete = true;
-    }
-
     /// Handle TRV or wall thermostat state events. Returns actions.
     pub fn handle_event(&mut self, event: &Event) -> Vec<Action> {
         match event {
@@ -169,14 +162,35 @@ impl HeatingController {
         // 0. Expire any finished inhibitions (runs unconditionally).
         self.expire_inhibitions(now);
 
-        // 1. Schedule evaluation: update TRV setpoints.
+        // 0b. Warn about stale TRVs (demand suppressed automatically).
+        for zone in &self.config.zones {
+            if let Some(zs) = self.state.zones.get(&zone.name) {
+                for zt in &zone.trvs {
+                    if let Some(trv) = zs.trvs.get(&zt.device) {
+                        if trv.is_stale(now) && trv.has_raw_demand() {
+                            tracing::warn!(
+                                trv = %zt.device,
+                                zone = %zone.name,
+                                last_seen_secs_ago = trv.last_seen
+                                    .map(|s| now.duration_since(s).as_secs())
+                                    .unwrap_or(0),
+                                "TRV stale: demand suppressed (device may be unreachable)"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // 1. Pressure group enforcement (before schedule so released
+        //    TRVs get their scheduled setpoint in the same tick).
+        actions.extend(self.enforce_pressure_groups(now));
+
+        // 2. Schedule evaluation: update TRV setpoints.
         actions.extend(self.evaluate_schedules(weekday, hour, minute, now));
 
-        // 1b. Reconcile: retry setpoints the device hasn't confirmed.
+        // 2b. Reconcile: retry setpoints the device hasn't confirmed.
         actions.extend(self.reconcile_setpoints());
-
-        // 2. Pressure group enforcement.
-        actions.extend(self.enforce_pressure_groups(now));
 
         // 3. Open window detection.
         actions.extend(self.detect_open_windows(now));
@@ -207,9 +221,11 @@ impl HeatingController {
         operating_mode: Option<&str>,
         battery: Option<u8>,
     ) {
+        let now = self.clock.now();
         let Some(trv) = self.find_trv_state_mut(device) else {
             return;
         };
+        trv.last_seen = Some(now);
         if let Some(temp) = local_temperature {
             trv.local_temperature = Some(temp);
             // Update high-water mark for open-window detection.
@@ -335,6 +351,11 @@ impl HeatingController {
             }
             // ON echo confirms this zone's pending ON.
             zone_state.pending_on_at = None;
+            // Clear desired_relay now that the echo confirmed it.
+            // This re-enables phase-0 proactive OFF for future restarts.
+            if zone_state.desired_relay == Some(true) {
+                zone_state.desired_relay = None;
+            }
             // If no relay was on before, pump just started.
             if relays_on_before == 0 {
                 self.state.pump_on_since = Some(now);
@@ -355,6 +376,9 @@ impl HeatingController {
             }
             // OFF echo confirms this zone's relay is off.
             zone_state.pending_on_at = None;
+            if zone_state.desired_relay == Some(false) {
+                zone_state.desired_relay = None;
+            }
             // If this was the only relay on (count was 1 before, now 0
             // after the mutation above), pump just stopped.
             if relays_on_before == 1 {
@@ -3193,5 +3217,71 @@ mod tests {
 
         let trv = hc.find_trv_state("trv-bath-1").unwrap();
         assert_eq!(trv.battery, Some(5));
+    }
+
+    // -- Subagent adversarial review regression tests --
+
+    #[test]
+    fn desired_relay_cleared_on_confirmed_echo() {
+        let cfg = simple_config();
+        let (mut hc, clk) = setup(&cfg);
+        hc.handle_tick();
+
+        // TRV demands → relay ON.
+        hc.handle_event(&Event::TrvState {
+            device: "trv-bath-1".into(),
+            local_temperature: Some(18.0),
+            pi_heating_demand: Some(50),
+            running_state: Some("heat".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
+        hc.handle_tick();
+        assert_eq!(
+            hc.state.zones.get("bath").unwrap().desired_relay,
+            Some(true)
+        );
+
+        // ON echo confirms.
+        echo_relay(&mut hc, "wt-bath", true, &clk);
+        assert_eq!(
+            hc.state.zones.get("bath").unwrap().desired_relay,
+            None,
+            "desired_relay must be cleared to None after confirmed ON echo"
+        );
+    }
+
+    #[test]
+    fn stale_trv_demand_suppressed() {
+        let cfg = simple_config();
+        let (mut hc, clk) = setup(&cfg);
+        hc.handle_tick();
+
+        // TRV demands heat.
+        hc.handle_event(&Event::TrvState {
+            device: "trv-bath-1".into(),
+            local_temperature: Some(18.0),
+            pi_heating_demand: Some(50),
+            running_state: Some("heat".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
+        let trv = hc.find_trv_state("trv-bath-1").unwrap();
+        assert!(trv.has_effective_demand(clk.now()));
+
+        // 31 minutes pass with no TRV update (device died).
+        clk.advance(Duration::from_secs(31 * 60));
+
+        let trv = hc.find_trv_state("trv-bath-1").unwrap();
+        assert!(trv.is_stale(clk.now()), "TRV should be stale after 31 min");
+        assert!(trv.has_raw_demand(), "raw demand still set");
+        assert!(
+            !trv.has_effective_demand(clk.now()),
+            "stale TRV demand must be suppressed"
+        );
     }
 }

@@ -27,6 +27,10 @@ in
   config = lib.mkIf cfg.enable {
     services.mosquitto = {
       enable = true;
+      settings = {
+        # Allow large retained messages (z2m bridge/devices can be ~200KB+).
+        message_size_limit = 0; # 0 = unlimited (mosquitto default, explicit)
+      };
       listeners = [
         {
           port = cfg.port;

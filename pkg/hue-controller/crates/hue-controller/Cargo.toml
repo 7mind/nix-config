@@ -22,7 +22,7 @@ tokio = { version = "1", features = ["full"] }
 
 # MQTT client. eclipse-paho is C-based; rumqttc is pure Rust + tokio-native and
 # integrates cleanly with the rest of the async stack here.
-rumqttc = "0.24"
+rumqttc = "0.25"
 
 # Config (de)serialization. The Nix layer will generate JSON; the on-the-wire
 # z2m protocol is also JSON. One serde stack covers both.

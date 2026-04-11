@@ -2,7 +2,7 @@
 //! transitions live in [`crate::controller::heating`].
 
 use std::collections::BTreeMap;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Running state reported by a TRV's internal PID controller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -71,11 +71,13 @@ impl HeatingRuntimeState {
         }
     }
 
-    /// The earliest pump-on timestamp (confirmed or any per-zone pending).
-    /// Used for min_cycle enforcement so that a lost ON echo doesn't
-    /// bypass the minimum run time.
+    /// The earliest pump-on timestamp (confirmed or any per-zone pending
+    /// that is still desired ON). Zones being cancelled (desired=false
+    /// with pending_on_at) are excluded so their phantom timestamps
+    /// don't artificially extend min_cycle for other zones.
     pub fn effective_pump_on_since(&self) -> Option<Instant> {
         let earliest_pending = self.zones.values()
+            .filter(|zs| zs.desired_relay != Some(false))
             .filter_map(|zs| zs.pending_on_at)
             .min();
         match (self.pump_on_since, earliest_pending) {
@@ -161,6 +163,12 @@ impl HeatingZoneRuntimeState {
 /// Per-TRV heating state.
 #[derive(Debug, Clone)]
 pub struct TrvRuntimeState {
+    /// When the last state update was received from this TRV.
+    /// Used for staleness detection: if no update arrives for a
+    /// configurable period, demand is suppressed to prevent a dead
+    /// TRV from keeping the zone heating indefinitely.
+    pub last_seen: Option<Instant>,
+
     /// Last reported operating_mode from the TRV.
     /// Must be `"manual"` for safe controller operation.
     pub operating_mode: Option<String>,
@@ -233,6 +241,7 @@ pub struct TrvRuntimeState {
 impl TrvRuntimeState {
     pub fn new() -> Self {
         Self {
+            last_seen: None,
             operating_mode: None,
             battery: None,
             local_temperature: None,
@@ -263,13 +272,28 @@ impl TrvRuntimeState {
         self.inhibited_until.is_some_and(|until| now < until)
     }
 
-    /// True if this TRV has heat demand AND is not inhibited or
-    /// pending pressure-group release confirmation.
+    /// 30 minutes without any TRV state report = stale.
+    const STALE_THRESHOLD_SECS: u64 = 30 * 60;
+
+    /// True if this TRV hasn't reported any state for a long time.
+    /// A stale TRV's demand is suppressed to prevent indefinite heating
+    /// from a dead device.
+    pub fn is_stale(&self, now: Instant) -> bool {
+        self.last_seen.is_some_and(|seen| {
+            now.duration_since(seen) >= Duration::from_secs(Self::STALE_THRESHOLD_SECS)
+        })
+    }
+
+    /// True if this TRV has heat demand AND is not inhibited, stale,
+    /// or pending pressure-group release confirmation.
     pub fn has_effective_demand(&self, now: Instant) -> bool {
         if self.is_inhibited(now) {
             return false;
         }
         if self.pressure_release_pending {
+            return false;
+        }
+        if self.is_stale(now) {
             return false;
         }
         self.has_raw_demand()
