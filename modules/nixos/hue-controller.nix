@@ -198,6 +198,13 @@ in
         script = ''
           exec ${cfg.package}/bin/hue-controller --verbose provision ${commonArgs}
         '';
+        unitConfig = {
+          # When the provisioner is active, ensure the daemon is
+          # running. If the provisioner fails on first boot and only
+          # succeeds on a later retry, Upholds re-queues a start job
+          # for the daemon automatically.
+          Upholds = "hue-controller.service";
+        };
         serviceConfig = {
           Type = "oneshot";
           RemainAfterExit = true;
