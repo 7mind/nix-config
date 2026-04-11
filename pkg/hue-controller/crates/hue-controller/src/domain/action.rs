@@ -76,8 +76,19 @@ pub enum Payload {
     BrightnessMove { brightness_move: i16 },
 
     /// `{"state": "ON"}` or `{"state": "OFF"}` — simple on/off for
-    /// smart plugs. Unlike `StateOff` this has no transition field.
+    /// smart plugs and wall thermostat relays. Unlike `StateOff` this
+    /// has no transition field.
     DeviceStateSet { state: &'static str },
+
+    /// `{"occupied_heating_setpoint": 22.0}` — set target temperature
+    /// on a TRV. Used by the heating controller for schedule-driven
+    /// setpoint changes and pressure group force-open.
+    TrvSetpoint { occupied_heating_setpoint: f64 },
+
+    /// `{"operating_mode": "manual"}` — reassert the required operating
+    /// mode on a TRV or wall thermostat that has drifted (e.g. someone
+    /// pressed a button on the physical device).
+    OperatingMode { operating_mode: &'static str },
 }
 
 impl Payload {
@@ -111,6 +122,12 @@ impl Payload {
 
     pub fn device_off() -> Self {
         Self::DeviceStateSet { state: "OFF" }
+    }
+
+    pub fn trv_setpoint(temp: f64) -> Self {
+        Self::TrvSetpoint {
+            occupied_heating_setpoint: temp,
+        }
     }
 }
 

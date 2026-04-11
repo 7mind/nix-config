@@ -67,9 +67,36 @@ pub enum Event {
         ts: Instant,
     },
 
+    /// A TRV (thermostatic radiator valve) reported a state update.
+    /// Fields are optional because z2m may publish partial updates.
+    TrvState {
+        device: String,
+        local_temperature: Option<f64>,
+        pi_heating_demand: Option<u8>,
+        /// `"idle"` or `"heat"`.
+        running_state: Option<String>,
+        occupied_heating_setpoint: Option<f64>,
+        /// `"schedule"`, `"manual"`, or `"pause"`.
+        operating_mode: Option<String>,
+        /// Battery percentage (0-100).
+        battery: Option<u8>,
+        ts: Instant,
+    },
+
+    /// A wall thermostat (used as relay) reported a state update.
+    WallThermostatState {
+        device: String,
+        /// Relay on/off from the `"state"` JSON field.
+        relay_on: Option<bool>,
+        local_temperature: Option<f64>,
+        /// `"schedule"`, `"manual"`, or `"pause"`.
+        operating_mode: Option<String>,
+        ts: Instant,
+    },
+
     /// Periodic tick event fired by the daemon's timer. The controller
     /// uses this to evaluate time-dependent action triggers (kill
-    /// switch holdoff deadlines).
+    /// switch holdoff deadlines) and heating schedule/relay decisions.
     Tick {
         ts: Instant,
     },

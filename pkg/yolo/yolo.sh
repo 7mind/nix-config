@@ -19,18 +19,28 @@
 : "${YOLO_COPILOT_BIN:?must be set}"
 
 WORK_MODE=0
+MOBILE_MODE=0
 ENV_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --work|-w) WORK_MODE=1; shift ;;
+    --mobile) MOBILE_MODE=1; shift ;;
     --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
     -*) echo "Unknown flag: $1" >&2; exit 1 ;;
     *) break ;;
   esac
 done
 
+if [[ $MOBILE_MODE -eq 1 ]]; then
+  if [[ -n "${TMUX:-}" ]]; then
+    tmux resize-pane -x 59 -y 33
+  else
+    echo "warning: --mobile requires tmux, ignoring" >&2
+  fi
+fi
+
 if [[ $# -eq 0 ]]; then
-  echo "Usage: yolo [--work] [--env KEY=VAL]... <claude|codex|copilot|gemini|vibe|opencode> [args...]" >&2
+  echo "Usage: yolo [--work] [--mobile] [--env KEY=VAL]... <claude|codex|copilot|gemini|vibe|opencode> [args...]" >&2
   exit 1
 fi
 

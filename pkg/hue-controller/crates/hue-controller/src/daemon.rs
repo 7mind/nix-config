@@ -84,7 +84,10 @@ pub async fn run(
         motion_sensors = topology.all_motion_sensor_names().len(),
         groups = topology.all_group_names().len(),
         plugs = topology.all_plug_names().len(),
+        trvs = topology.all_trv_names().len(),
+        wall_thermostats = topology.all_wall_thermostat_names().len(),
         actions = topology.actions().len(),
+        heating = topology.heating_config().is_some(),
         "topology built"
     );
 
@@ -249,6 +252,57 @@ async fn refresh_state(
             event_rx,
             &mut seen_groups,
             zwave_deadline,
+            usize::MAX,
+            clock,
+        )
+        .await;
+    }
+
+    // Phase 5: TRV and wall thermostat state refresh. Query each device
+    // to populate the heating controller's initial state.
+    //
+    // TRVs need explicit climate attribute queries (local_temperature,
+    // pi_heating_demand, running_state, occupied_heating_setpoint) —
+    // the generic {"state":""} doesn't return these on Bosch BTH-RA.
+    //
+    // Wall thermostats use the standard {"state":""} query which
+    // returns the relay on/off state.
+    let trv_names = topology.all_trv_names();
+    let wt_names = topology.all_wall_thermostat_names();
+    if !trv_names.is_empty() || !wt_names.is_empty() {
+        tracing::info!(
+            trvs = trv_names.len(),
+            wall_thermostats = wt_names.len(),
+            "phase 5: refreshing heating device states"
+        );
+        for name in trv_names {
+            if let Err(e) = bridge.publish_get_trv(name).await {
+                tracing::warn!(
+                    device = name.as_str(),
+                    error = ?e,
+                    "failed to request TRV state refresh"
+                );
+            }
+            tokio::time::sleep(GET_BURST_INTERPACKET_DELAY).await;
+        }
+        for name in wt_names {
+            if let Err(e) = bridge.publish_get(name).await {
+                tracing::warn!(
+                    device = name.as_str(),
+                    error = ?e,
+                    "failed to request wall thermostat state refresh"
+                );
+            }
+            tokio::time::sleep(GET_BURST_INTERPACKET_DELAY).await;
+        }
+        let heating_drain = Duration::from_secs(2);
+        let heating_deadline = clock.now() + heating_drain;
+        drain_until(
+            controller,
+            bridge,
+            event_rx,
+            &mut seen_groups,
+            heating_deadline,
             usize::MAX,
             clock,
         )

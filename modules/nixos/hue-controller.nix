@@ -76,6 +76,27 @@ in
               brightness_move_rate = 40;
             };
           };
+          # Optional heating subsystem:
+          heating = {
+            zones = [ {
+              name = "floor-bathroom";
+              relay = "bosch-wt-bathroom";   # wall-thermostat device
+              trvs = [
+                { device = "bosch-trv-bath-1"; schedule = "bathroom"; }
+              ];
+            } ];
+            schedules.bathroom = {
+              monday = [
+                { start_hour = 0; start_minute = 0; end_hour = 6; end_minute = 0; temperature = 18.0; }
+                { start_hour = 6; start_minute = 0; end_hour = 22; end_minute = 0; temperature = 22.0; }
+                { start_hour = 22; start_minute = 0; end_hour = 24; end_minute = 0; temperature = 18.0; }
+              ];
+              # tuesday..sunday required (same structure)
+            };
+            pressure_groups = [ ];
+            heat_pump = { min_cycle_seconds = 300; min_pause_seconds = 180; };
+            open_window = { detection_minutes = 20; inhibit_minutes = 80; };
+          };
         }
         ```
 

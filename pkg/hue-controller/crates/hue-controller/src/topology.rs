@@ -222,6 +222,9 @@ pub enum TopologyError {
         first: FriendlyName,
         second: FriendlyName,
     },
+
+    #[error("heating config error: {0}")]
+    HeatingError(#[from] crate::config::heating::HeatingConfigError),
 }
 
 /// One tap button → room binding. The catalog lookup of the tap device
@@ -353,6 +356,15 @@ pub struct Topology {
     /// Z-Wave node_id → plug friendly_name mapping. Used by the
     /// provisioner to map discovered nodes to their desired names.
     zwave_node_id_to_name: BTreeMap<u16, FriendlyName>,
+
+    /// TRV device friendly_names from the device catalog.
+    trv_names: BTreeSet<FriendlyName>,
+
+    /// Wall thermostat device friendly_names from the device catalog.
+    wall_thermostat_names: BTreeSet<FriendlyName>,
+
+    /// Validated heating config (if present). Stored for the controller.
+    heating_config: Option<crate::config::HeatingConfig>,
 }
 
 impl Topology {
@@ -529,6 +541,20 @@ impl Topology {
                             room: room.name.clone(),
                             device: binding.device.clone(),
                             kind: "plug",
+                        });
+                    }
+                    DeviceCatalogEntry::Trv(_) => {
+                        return Err(TopologyError::WrongDeviceKind {
+                            room: room.name.clone(),
+                            device: binding.device.clone(),
+                            kind: "trv",
+                        });
+                    }
+                    DeviceCatalogEntry::WallThermostat(_) => {
+                        return Err(TopologyError::WrongDeviceKind {
+                            room: room.name.clone(),
+                            device: binding.device.clone(),
+                            kind: "wall-thermostat",
                         });
                     }
                     DeviceCatalogEntry::Switch(_) => {
@@ -722,6 +748,191 @@ impl Topology {
             "every plug must be either zigbee or zwave"
         );
 
+        // 10b. Collect TRV and wall thermostat names from the catalog.
+        let mut trv_names: BTreeSet<FriendlyName> = BTreeSet::new();
+        let mut wall_thermostat_names: BTreeSet<FriendlyName> = BTreeSet::new();
+        for (name, entry) in &config.devices {
+            if entry.is_trv() {
+                trv_names.insert(name.clone());
+            }
+            if entry.is_wall_thermostat() {
+                wall_thermostat_names.insert(name.clone());
+            }
+        }
+
+        // 10c. Validate heating config if present.
+        let heating_config = if let Some(ref heating) = config.heating {
+            use crate::config::heating::HeatingConfigError;
+            // Validate schedules.
+            heating
+                .validate_schedules()
+                .map_err(|e| TopologyError::HeatingError(e))?;
+
+            // Validate zone references.
+            let mut trv_to_zone: BTreeMap<String, String> = BTreeMap::new();
+            let mut relay_to_zone: BTreeMap<String, String> = BTreeMap::new();
+            let mut zone_names: BTreeSet<String> = BTreeSet::new();
+
+            for zone in &heating.zones {
+                if !zone_names.insert(zone.name.clone()) {
+                    return Err(TopologyError::HeatingError(
+                        HeatingConfigError::DuplicateZoneName {
+                            zone: zone.name.clone(),
+                        },
+                    ));
+                }
+                if zone.trvs.is_empty() {
+                    return Err(TopologyError::HeatingError(
+                        HeatingConfigError::ZoneEmpty {
+                            zone: zone.name.clone(),
+                        },
+                    ));
+                }
+                if !wall_thermostat_names.contains(&zone.relay) {
+                    return Err(TopologyError::HeatingError(
+                        HeatingConfigError::RelayNotWallThermostat {
+                            zone: zone.name.clone(),
+                            relay: zone.relay.clone(),
+                        },
+                    ));
+                }
+                // Validate the wall thermostat has the required options
+                // for safe relay control.
+                if let Some(entry) = config.devices.get(&zone.relay) {
+                    let opts = entry.options();
+                    let has_manual_control = opts
+                        .get("heater_type")
+                        .and_then(|v| v.as_str())
+                        .is_some_and(|v| v == "manual_control");
+                    if !has_manual_control {
+                        tracing::warn!(
+                            zone = %zone.name,
+                            relay = %zone.relay,
+                            "wall thermostat is missing options.heater_type = \"manual_control\"; \
+                             relay commands may be ignored by the device's internal thermostat"
+                        );
+                    }
+                    let has_manual_mode = opts
+                        .get("operating_mode")
+                        .and_then(|v| v.as_str())
+                        .is_some_and(|v| v == "manual");
+                    if !has_manual_mode {
+                        tracing::warn!(
+                            zone = %zone.name,
+                            relay = %zone.relay,
+                            "wall thermostat is missing options.operating_mode = \"manual\"; \
+                             device's internal schedule may override relay control"
+                        );
+                    }
+                }
+                if let Some(other_zone) = relay_to_zone.insert(zone.relay.clone(), zone.name.clone()) {
+                    return Err(TopologyError::HeatingError(
+                        HeatingConfigError::DuplicateRelay {
+                            zone: zone.name.clone(),
+                            relay: zone.relay.clone(),
+                            other_zone,
+                        },
+                    ));
+                }
+                for zt in &zone.trvs {
+                    if !trv_names.contains(&zt.device) {
+                        return Err(TopologyError::HeatingError(
+                            HeatingConfigError::TrvNotInCatalog {
+                                zone: zone.name.clone(),
+                                trv: zt.device.clone(),
+                            },
+                        ));
+                    }
+                    // Validate TRV has operating_mode = manual in its options.
+                    if let Some(entry) = config.devices.get(&zt.device) {
+                        let has_manual = entry.options()
+                            .get("operating_mode")
+                            .and_then(|v| v.as_str())
+                            .is_some_and(|v| v == "manual");
+                        if !has_manual {
+                            tracing::warn!(
+                                zone = %zone.name,
+                                trv = %zt.device,
+                                "TRV is missing options.operating_mode = \"manual\"; \
+                                 device's internal schedule may override setpoint commands"
+                            );
+                        }
+                    }
+                    if !heating.schedules.contains_key(&zt.schedule) {
+                        return Err(TopologyError::HeatingError(
+                            HeatingConfigError::UnknownSchedule {
+                                zone: zone.name.clone(),
+                                trv: zt.device.clone(),
+                                schedule: zt.schedule.clone(),
+                            },
+                        ));
+                    }
+                    if let Some(other_zone) =
+                        trv_to_zone.insert(zt.device.clone(), zone.name.clone())
+                    {
+                        return Err(TopologyError::HeatingError(
+                            HeatingConfigError::TrvInMultipleZones {
+                                trv: zt.device.clone(),
+                                zone_a: other_zone,
+                                zone_b: zone.name.clone(),
+                            },
+                        ));
+                    }
+                }
+            }
+
+            // Validate pressure groups.
+            let mut trv_to_group: BTreeMap<String, String> = BTreeMap::new();
+            for group in &heating.pressure_groups {
+                if group.trvs.len() < 2 {
+                    return Err(TopologyError::HeatingError(
+                        HeatingConfigError::PressureGroupTooSmall {
+                            group: group.name.clone(),
+                        },
+                    ));
+                }
+                let mut group_zone: Option<String> = None;
+                for trv_name in &group.trvs {
+                    let zone_name = trv_to_zone.get(trv_name).ok_or_else(|| {
+                        TopologyError::HeatingError(
+                            HeatingConfigError::PressureGroupTrvNotInZone {
+                                group: group.name.clone(),
+                                trv: trv_name.clone(),
+                            },
+                        )
+                    })?;
+                    match &group_zone {
+                        None => group_zone = Some(zone_name.clone()),
+                        Some(first_zone) if first_zone != zone_name => {
+                            return Err(TopologyError::HeatingError(
+                                HeatingConfigError::PressureGroupMultipleZones {
+                                    group: group.name.clone(),
+                                    zone_a: first_zone.clone(),
+                                    zone_b: zone_name.clone(),
+                                },
+                            ));
+                        }
+                        Some(_) => {}
+                    }
+                    if let Some(other_group) =
+                        trv_to_group.insert(trv_name.clone(), group.name.clone())
+                    {
+                        return Err(TopologyError::HeatingError(
+                            HeatingConfigError::TrvInMultiplePressureGroups {
+                                trv: trv_name.clone(),
+                                group_a: other_group,
+                                group_b: group.name.clone(),
+                            },
+                        ));
+                    }
+                }
+            }
+
+            Some(heating.clone())
+        } else {
+            None
+        };
+
         // 11. Validate action rules and build dispatch indexes.
         let mut action_names: BTreeSet<String> = BTreeSet::new();
         let mut actions: Vec<ResolvedAction> = Vec::new();
@@ -903,6 +1114,9 @@ impl Topology {
             zwave_plug_names,
             plug_protocols,
             zwave_node_id_to_name,
+            trv_names,
+            wall_thermostat_names,
+            heating_config,
         })
     }
 
@@ -1023,6 +1237,31 @@ impl Topology {
         &self.zwave_node_id_to_name
     }
 
+    /// All TRV device friendly_names.
+    pub fn all_trv_names(&self) -> &BTreeSet<FriendlyName> {
+        &self.trv_names
+    }
+
+    /// True if `device` is a TRV.
+    pub fn is_trv(&self, device: &str) -> bool {
+        self.trv_names.contains(device)
+    }
+
+    /// All wall thermostat device friendly_names.
+    pub fn all_wall_thermostat_names(&self) -> &BTreeSet<FriendlyName> {
+        &self.wall_thermostat_names
+    }
+
+    /// True if `device` is a wall thermostat.
+    pub fn is_wall_thermostat(&self, device: &str) -> bool {
+        self.wall_thermostat_names.contains(device)
+    }
+
+    /// The validated heating config, if present.
+    pub fn heating_config(&self) -> Option<&crate::config::HeatingConfig> {
+        self.heating_config.as_ref()
+    }
+
     /// All resolved action rules.
     pub fn actions(&self) -> &[ResolvedAction] {
         &self.actions
@@ -1086,6 +1325,8 @@ fn kind_label(entry: &DeviceCatalogEntry) -> &'static str {
         DeviceCatalogEntry::Switch(_) => "switch",
         DeviceCatalogEntry::Tap(_) => "tap",
         DeviceCatalogEntry::MotionSensor { .. } => "motion-sensor",
+        DeviceCatalogEntry::Trv(_) => "trv",
+        DeviceCatalogEntry::WallThermostat(_) => "wall-thermostat",
         DeviceCatalogEntry::Plug { .. } => "plug",
     }
 }
@@ -1248,6 +1489,7 @@ mod tests {
             rooms,
             actions,
             defaults: Default::default(),
+            heating: None,
         }
     }
 

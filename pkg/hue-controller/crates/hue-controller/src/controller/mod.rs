@@ -47,6 +47,7 @@
 //!   - `last_off_at`    — Instant of the most recent OFF (motion
 //!     cooldown gate)
 
+pub mod heating;
 pub mod kill_switch;
 
 mod actions;
@@ -65,6 +66,7 @@ use crate::domain::state::{PlugRuntimeState, ZoneState};
 use crate::time::Clock;
 use crate::topology::{RoomName, Topology};
 
+use heating::HeatingController;
 use kill_switch::KillSwitchEvaluator;
 
 // ## Why wall switch on and tap press take different code paths
@@ -107,11 +109,19 @@ pub struct Controller {
     /// Last (hour, minute) at which each `At` trigger fired, keyed by
     /// action rule name.
     at_last_fired: BTreeMap<String, (u8, u8)>,
+
+    /// Optional heating sub-controller. Only present when the config
+    /// has a `heating` section.
+    heating: Option<HeatingController>,
 }
 
 impl Controller {
     pub fn new(topology: Arc<Topology>, clock: Arc<dyn Clock>, defaults: Defaults) -> Self {
         let kill_switch = KillSwitchEvaluator::new(topology.clone());
+        let heating = topology
+            .heating_config()
+            .cloned()
+            .map(|cfg| HeatingController::new(cfg, topology.clone(), clock.clone()));
         Self {
             topology,
             clock,
@@ -121,6 +131,7 @@ impl Controller {
             kill_switch,
             confirm_off_pending: BTreeMap::new(),
             at_last_fired: BTreeMap::new(),
+            heating,
         }
     }
 
@@ -169,6 +180,20 @@ impl Controller {
                 watts,
                 ts,
             } => self.handle_plug_state(&device, None, Some(watts), ts),
+            Event::TrvState { .. } => {
+                if let Some(ref mut hc) = self.heating {
+                    hc.handle_event(&event)
+                } else {
+                    Vec::new()
+                }
+            }
+            Event::WallThermostatState { .. } => {
+                if let Some(ref mut hc) = self.heating {
+                    hc.handle_event(&event)
+                } else {
+                    Vec::new()
+                }
+            }
             Event::Tick { ts } => self.handle_tick(ts),
         }
     }
@@ -387,6 +412,12 @@ impl Controller {
             plug_states.get(device).is_some_and(|p| p.on)
         });
         out.extend(self.apply_kill_switch_fired(&fired));
+
+        // Heating tick.
+        if let Some(ref mut hc) = self.heating {
+            out.extend(hc.handle_tick());
+        }
+
         out
     }
 
@@ -557,6 +588,7 @@ mod tests {
             ],
             actions: vec![],
             defaults: Defaults::default(),
+            heating: None,
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
         Controller::new(topo, clock, cfg.defaults)
@@ -578,6 +610,7 @@ mod tests {
             }],
             actions: vec![],
             defaults: Defaults::default(),
+            heating: None,
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
         Controller::new(topo, clock, cfg.defaults)
@@ -887,7 +920,7 @@ mod tests {
                 devices: vec![binding("hue-ms-study", None)],
                 scenes: day_scenes(vec![1]), off_transition_seconds: 0.8, motion_off_cooldown_seconds: 0,
             }],
-            actions: vec![], defaults: Defaults::default(),
+            actions: vec![], defaults: Defaults::default(), heating: None,
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
         let mut c = Controller::new(topo, clk.clone(), cfg.defaults);
@@ -915,7 +948,7 @@ mod tests {
                 devices: vec![binding("hue-ms-study", None)],
                 scenes: day_scenes(vec![1]), off_transition_seconds: 0.8, motion_off_cooldown_seconds: 0,
             }],
-            actions: vec![], defaults: Defaults::default(),
+            actions: vec![], defaults: Defaults::default(), heating: None,
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
         let mut c = Controller::new(topo, clk.clone(), cfg.defaults);
@@ -950,7 +983,7 @@ mod tests {
                 devices: vec![binding("hue-ms-a", None), binding("hue-ms-b", None)],
                 scenes: day_scenes(vec![1]), off_transition_seconds: 0.8, motion_off_cooldown_seconds: 0,
             }],
-            actions: vec![], defaults: Defaults::default(),
+            actions: vec![], defaults: Defaults::default(), heating: None,
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
         let mut c = Controller::new(topo, clk.clone(), cfg.defaults);
@@ -1104,6 +1137,7 @@ mod tests {
             }],
             actions,
             defaults: Defaults::default(),
+            heating: None,
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
         Controller::new(topo, clock, cfg.defaults)
@@ -1413,6 +1447,7 @@ mod tests {
             ],
             actions: vec![ActionRule { name: "all-off".into(), trigger: Trigger::At { hour: 23, minute: 0 }, effect: Effect::TurnOffAllZones }],
             defaults: Defaults::default(),
+            heating: None,
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
         let mut c = Controller::new(topo, clk.clone(), cfg.defaults);
@@ -1448,6 +1483,7 @@ mod tests {
                 effect: Effect::TurnOn { target: "z2m-p-lamp".into() },
             }],
             defaults: Defaults::default(),
+            heating: None,
         };
         let topo = Topology::build(&cfg).unwrap();
         assert!(topo.rooms_for_switch("hue-s-standalone").is_empty());

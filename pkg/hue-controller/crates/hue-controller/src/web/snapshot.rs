@@ -201,6 +201,30 @@ pub fn summarize_event(event: &crate::domain::event::Event) -> String {
         } => {
             format!("plug power {watts:.1}W for {device}")
         }
+        crate::domain::event::Event::TrvState {
+            device,
+            local_temperature,
+            pi_heating_demand,
+            running_state,
+            ..
+        } => {
+            let temp = local_temperature
+                .map(|t| format!("{t:.1}°C"))
+                .unwrap_or_else(|| "?".into());
+            let demand = pi_heating_demand
+                .map(|d| format!("{d}%"))
+                .unwrap_or_else(|| "?".into());
+            let rs = running_state.as_deref().unwrap_or("?");
+            format!("trv {device}: {temp}, demand {demand}, {rs}")
+        }
+        crate::domain::event::Event::WallThermostatState {
+            device, relay_on, ..
+        } => {
+            let state = relay_on
+                .map(|on| if on { "ON" } else { "OFF" })
+                .unwrap_or("?");
+            format!("wall thermostat {device}: relay {state}")
+        }
         crate::domain::event::Event::Tick { .. } => "tick".to_string(),
     }
 }

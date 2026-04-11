@@ -6,4 +6,5 @@
 
 pub mod action;
 pub mod event;
+pub mod heating_state;
 pub mod state;

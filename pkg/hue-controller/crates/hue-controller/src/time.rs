@@ -15,8 +15,10 @@
 
 use std::time::{Duration, Instant};
 
-use chrono::Timelike;
+use chrono::{Datelike, Timelike};
 use chrono_tz::Tz;
+
+use crate::config::heating::Weekday;
 
 /// Source of "now" for the controller. The runtime uses [`SystemClock`];
 /// tests use [`FakeClock`].
@@ -32,6 +34,10 @@ pub trait Clock: std::fmt::Debug + Send + Sync {
 
     /// Local minute (0..=59) used for scheduled action triggers.
     fn local_minute(&self) -> u8;
+
+    /// Local weekday. Used by the heating subsystem for temperature
+    /// schedule evaluation.
+    fn local_weekday(&self) -> Weekday;
 
     /// Wall-clock milliseconds since the Unix epoch. Used for wire
     /// protocol timestamps (snapshot and decision-log entries).
@@ -66,6 +72,19 @@ impl Clock for SystemClock {
         now.minute() as u8
     }
 
+    fn local_weekday(&self) -> Weekday {
+        let now = chrono::Utc::now().with_timezone(&self.timezone);
+        match now.weekday() {
+            chrono::Weekday::Mon => Weekday::Monday,
+            chrono::Weekday::Tue => Weekday::Tuesday,
+            chrono::Weekday::Wed => Weekday::Wednesday,
+            chrono::Weekday::Thu => Weekday::Thursday,
+            chrono::Weekday::Fri => Weekday::Friday,
+            chrono::Weekday::Sat => Weekday::Saturday,
+            chrono::Weekday::Sun => Weekday::Sunday,
+        }
+    }
+
     fn epoch_millis(&self) -> u64 {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -87,6 +106,7 @@ struct FakeClockInner {
     now: Instant,
     hour: u8,
     minute: u8,
+    weekday: Weekday,
     epoch_millis: u64,
 }
 
@@ -100,6 +120,7 @@ impl FakeClock {
                 now: Instant::now(),
                 hour,
                 minute: 0,
+                weekday: Weekday::Monday,
                 epoch_millis: 1_700_000_000_000,
             }),
         }
@@ -125,6 +146,12 @@ impl FakeClock {
         let mut inner = self.inner.lock().expect("FakeClock mutex poisoned");
         inner.minute = minute;
     }
+
+    /// Set the local weekday.
+    pub fn set_weekday(&self, weekday: Weekday) {
+        let mut inner = self.inner.lock().expect("FakeClock mutex poisoned");
+        inner.weekday = weekday;
+    }
 }
 
 impl Clock for FakeClock {
@@ -138,6 +165,10 @@ impl Clock for FakeClock {
 
     fn local_minute(&self) -> u8 {
         self.inner.lock().expect("FakeClock mutex poisoned").minute
+    }
+
+    fn local_weekday(&self) -> Weekday {
+        self.inner.lock().expect("FakeClock mutex poisoned").weekday
     }
 
     fn epoch_millis(&self) -> u64 {

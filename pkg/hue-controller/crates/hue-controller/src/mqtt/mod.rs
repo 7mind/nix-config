@@ -180,6 +180,18 @@ impl MqttBridge {
                     .await?;
             }
         }
+        // TRVs: state topic (for temperature, demand, setpoint)
+        for trv in topology.all_trv_names() {
+            client
+                .subscribe(topics::state_topic(trv), QoS::AtLeastOnce)
+                .await?;
+        }
+        // Wall thermostats: state topic (for relay state, temperature)
+        for wt in topology.all_wall_thermostat_names() {
+            client
+                .subscribe(topics::state_topic(wt), QoS::AtLeastOnce)
+                .await?;
+        }
         // Z-Wave plugs: separate topics for switch state and power meter
         for plug in topology.zwave_plug_names() {
             client
@@ -254,6 +266,19 @@ impl MqttBridge {
         let payload = serde_json::json!({"args": [node_id]});
         self.client
             .publish(topic, QoS::AtLeastOnce, false, serde_json::to_vec(&payload)?)
+            .await?;
+        Ok(())
+    }
+
+    /// Publish a `/get` for TRV climate attributes that the heating
+    /// controller needs: temperature, demand, running state, setpoint.
+    /// Unlike `publish_get` which sends `{"state":""}`, this queries
+    /// the specific climate attributes Bosch BTH-RA exposes.
+    pub async fn publish_get_trv(&self, name: &str) -> Result<(), MqttError> {
+        let topic = topics::get_topic(name);
+        let payload = br#"{"local_temperature":"","pi_heating_demand":"","running_state":"","occupied_heating_setpoint":"","operating_mode":"","battery":""}"#;
+        self.client
+            .publish(topic, QoS::AtLeastOnce, false, payload.as_slice())
             .await?;
         Ok(())
     }
@@ -361,6 +386,60 @@ fn parse_event(topology: &Topology, p: &Publish, clock: &dyn Clock) -> Option<Ev
             device: name.to_string(),
             on,
             power,
+            ts: now,
+        });
+    }
+
+    if topology.is_trv(name) {
+        let value: serde_json::Value = serde_json::from_slice(&p.payload).ok()?;
+        let local_temperature = value.get("local_temperature").and_then(|v| v.as_f64());
+        let pi_heating_demand = value
+            .get("pi_heating_demand")
+            .and_then(|v| v.as_u64())
+            .map(|n| n.min(100) as u8);
+        let running_state = value
+            .get("running_state")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        let occupied_heating_setpoint = value
+            .get("occupied_heating_setpoint")
+            .and_then(|v| v.as_f64());
+        let operating_mode = value
+            .get("operating_mode")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        let battery = value
+            .get("battery")
+            .and_then(|v| v.as_u64())
+            .map(|n| n.min(100) as u8);
+        return Some(Event::TrvState {
+            device: name.to_string(),
+            local_temperature,
+            pi_heating_demand,
+            running_state,
+            occupied_heating_setpoint,
+            operating_mode,
+            battery,
+            ts: now,
+        });
+    }
+
+    if topology.is_wall_thermostat(name) {
+        let value: serde_json::Value = serde_json::from_slice(&p.payload).ok()?;
+        let relay_on = value
+            .get("state")
+            .and_then(|v| v.as_str())
+            .map(|s| s.eq_ignore_ascii_case("ON"));
+        let local_temperature = value.get("local_temperature").and_then(|v| v.as_f64());
+        let operating_mode = value
+            .get("operating_mode")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        return Some(Event::WallThermostatState {
+            device: name.to_string(),
+            relay_on,
+            local_temperature,
+            operating_mode,
             ts: now,
         });
     }
@@ -580,6 +659,7 @@ mod tests {
                 },
             }],
             defaults: Defaults::default(),
+            heating: None,
         };
         Arc::new(Topology::build(&cfg).unwrap())
     }

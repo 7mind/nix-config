@@ -84,6 +84,17 @@ pub enum DeviceCatalogEntry {
         max_illuminance: Option<u32>,
     },
 
+    /// Bosch BTH-RA TRV (thermostatic radiator valve). Controlled by the
+    /// heating subsystem — setpoint is driven by temperature schedules,
+    /// valve position by the device's internal PID controller.
+    Trv(CommonFields),
+
+    /// Bosch BTH-RM230Z 230V wall thermostat used as a relay. The heating
+    /// subsystem controls the relay via `state: ON/OFF` after provisioning
+    /// sets `heater_type: manual_control`.
+    #[serde(rename = "wall-thermostat")]
+    WallThermostat(CommonFields),
+
     /// Smart plug (Zigbee or Z-Wave). Controlled via action rules rather
     /// than room scene cycling. The `variant` tag identifies the hardware
     /// model, and `capabilities` lists what the bridge exposes (derived
@@ -142,7 +153,8 @@ fn default_occupancy_timeout() -> u32 {
 impl DeviceCatalogEntry {
     pub fn common(&self) -> &CommonFields {
         match self {
-            Self::Light(c) | Self::Switch(c) | Self::Tap(c) => c,
+            Self::Light(c) | Self::Switch(c) | Self::Tap(c) | Self::Trv(c)
+            | Self::WallThermostat(c) => c,
             Self::MotionSensor { common, .. } | Self::Plug { common, .. } => common,
         }
     }
@@ -189,6 +201,16 @@ impl DeviceCatalogEntry {
     /// True if this is a Z-Wave plug.
     pub fn is_zwave_plug(&self) -> bool {
         matches!(self, Self::Plug { protocol: PlugProtocol::Zwave, .. })
+    }
+
+    /// True if this kind is a TRV (thermostatic radiator valve).
+    pub fn is_trv(&self) -> bool {
+        matches!(self, Self::Trv(_))
+    }
+
+    /// True if this kind is a wall thermostat (used as relay).
+    pub fn is_wall_thermostat(&self) -> bool {
+        matches!(self, Self::WallThermostat(_))
     }
 
     /// The plug's MQTT protocol, if this is a plug.

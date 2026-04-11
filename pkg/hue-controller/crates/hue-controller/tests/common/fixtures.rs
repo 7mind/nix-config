@@ -118,6 +118,7 @@ pub fn kitchen_config() -> Config {
         ],
         actions: vec![],
         defaults: Defaults::default(),
+        heating: None,
     }
 }
 
@@ -143,5 +144,6 @@ pub fn study_switch_config() -> Config {
         }],
         actions: vec![],
         defaults: Defaults::default(),
+        heating: None,
     }
 }

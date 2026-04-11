@@ -61,12 +61,14 @@ use thiserror::Error;
 pub mod actions;
 pub mod catalog;
 pub mod defaults;
+pub mod heating;
 pub mod room;
 pub mod scenes;
 
 pub use actions::{ActionRule, Effect, Trigger};
 pub use catalog::{CommonFields, DeviceCatalogEntry, IeeeAddress};
 pub use defaults::Defaults;
+pub use heating::HeatingConfig;
 pub use room::{DeviceBinding, Room};
 pub use scenes::{Scene, SceneSchedule, Slot, SlotName};
 
@@ -99,6 +101,11 @@ pub struct Config {
     /// Behavioural defaults (cycle windows, brightness step, etc).
     #[serde(default)]
     pub defaults: Defaults,
+
+    /// Optional heating subsystem configuration. Hosts without TRVs
+    /// or wall thermostats omit this entirely.
+    #[serde(default)]
+    pub heating: Option<HeatingConfig>,
 }
 
 #[derive(Debug, Error)]
