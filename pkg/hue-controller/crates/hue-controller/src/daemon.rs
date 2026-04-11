@@ -99,7 +99,7 @@ pub async fn run(
         .await
         .context("connecting to mqtt broker")?;
 
-    refresh_state(&mut controller, &bridge, &mut event_rx, &topology).await?;
+    refresh_state(&mut controller, &bridge, &mut event_rx, &topology, &*clock).await?;
 
     // Default any room that the refresh found "physically on" to
     // motion-owned. We can't tell from MQTT alone whether it was a
@@ -120,6 +120,7 @@ async fn refresh_state(
     bridge: &MqttBridge,
     event_rx: &mut mpsc::Receiver<Event>,
     topology: &Topology,
+    clock: &dyn Clock,
 ) -> Result<(), DaemonError> {
     let all_groups: BTreeSet<String> = topology
         .all_group_names()
@@ -130,7 +131,7 @@ async fn refresh_state(
 
     // Phase 1: drain retained messages.
     let phase1_window = Duration::from_millis(300);
-    let phase1_deadline = Instant::now() + phase1_window;
+    let phase1_deadline = clock.now() + phase1_window;
     drain_until(
         controller,
         bridge,
@@ -138,6 +139,7 @@ async fn refresh_state(
         &mut seen_groups,
         phase1_deadline,
         all_groups.len(),
+        clock,
     )
     .await;
     tracing::info!(
@@ -162,7 +164,7 @@ async fn refresh_state(
 
         // Phase 3: drain /get responses.
         let phase3_window = Duration::from_secs(2);
-        let phase3_deadline = Instant::now() + phase3_window;
+        let phase3_deadline = clock.now() + phase3_window;
         drain_until(
             controller,
             bridge,
@@ -170,6 +172,7 @@ async fn refresh_state(
             &mut seen_groups,
             phase3_deadline,
             all_groups.len(),
+            clock,
         )
         .await;
 
@@ -201,7 +204,7 @@ async fn refresh_state(
             tokio::time::sleep(GET_BURST_INTERPACKET_DELAY).await;
         }
         let zigbee_plug_drain = Duration::from_secs(2);
-        let zigbee_plug_deadline = Instant::now() + zigbee_plug_drain;
+        let zigbee_plug_deadline = clock.now() + zigbee_plug_drain;
         // Use usize::MAX so drain runs until deadline — we're waiting
         // for plug events, not groups, so the group-count early exit
         // must not apply.
@@ -212,6 +215,7 @@ async fn refresh_state(
             &mut seen_groups,
             zigbee_plug_deadline,
             usize::MAX,
+            clock,
         )
         .await;
     }
@@ -238,7 +242,7 @@ async fn refresh_state(
         // Drain the Z-Wave responses. Same usize::MAX trick — we're
         // waiting for Z-Wave events, not group events.
         let zwave_drain_window = Duration::from_secs(3);
-        let zwave_deadline = Instant::now() + zwave_drain_window;
+        let zwave_deadline = clock.now() + zwave_drain_window;
         drain_until(
             controller,
             bridge,
@@ -246,6 +250,7 @@ async fn refresh_state(
             &mut seen_groups,
             zwave_deadline,
             usize::MAX,
+            clock,
         )
         .await;
     }
@@ -267,9 +272,10 @@ async fn drain_until(
     seen_groups: &mut BTreeSet<String>,
     deadline: Instant,
     expected_total: usize,
+    clock: &dyn Clock,
 ) {
     while seen_groups.len() < expected_total {
-        let now = Instant::now();
+        let now = clock.now();
         if now >= deadline {
             break;
         }
@@ -378,7 +384,7 @@ async fn run_event_loop(
                 event_seq += 1;
                 let entry = hue_wire::DecisionLogEntry {
                     seq: event_seq,
-                    timestamp_epoch_ms: snapshot::epoch_millis_now(),
+                    timestamp_epoch_ms: clock.epoch_millis(),
                     event_summary,
                     decisions,
                     actions_emitted: actions.iter().map(snapshot::action_to_dto).collect(),

@@ -15,7 +15,7 @@ use crate::topology::Topology;
 pub fn build_full_snapshot(controller: &Controller, now: Instant) -> FullStateSnapshot {
     let topology = controller.topology();
     let hour = controller.clock().local_hour();
-    let epoch_ms = epoch_millis_now();
+    let epoch_ms = controller.clock().epoch_millis();
 
     let rooms: Vec<RoomSnapshot> = topology
         .rooms()
@@ -209,9 +209,3 @@ fn ago_ms(now: Instant, then: Instant) -> u64 {
     now.duration_since(then).as_millis() as u64
 }
 
-pub fn epoch_millis_now() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}

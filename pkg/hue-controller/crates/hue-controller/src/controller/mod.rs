@@ -354,7 +354,10 @@ impl Controller {
         };
 
         // Optimistically update plug state so rapid toggles don't
-        // derive the next command from stale state.
+        // derive the next command from stale state. Matches the
+        // Toggle/TurnOn/TurnOff patterns in actions.rs: kill-switch
+        // arming is NOT done here — it happens on the confirmed ON
+        // echo in handle_plug_state (on == Some(true) && !was_on).
         let plug = self.plug_states.entry(device.to_string()).or_default();
         if is_on {
             plug.on = false;
@@ -362,9 +365,11 @@ impl Controller {
             plug.last_power = None;
             self.kill_switch.on_plug_off(device);
         } else {
+            if plug.seen_explicit_off {
+                plug.last_power = None;
+            }
             plug.on = true;
             plug.seen_explicit_off = false;
-            self.kill_switch.on_plug_on(device, None, ts);
         }
 
         tracing::info!(device, target_state = !is_on, "web: toggle plug (controller path)");

@@ -32,6 +32,10 @@ pub trait Clock: std::fmt::Debug + Send + Sync {
 
     /// Local minute (0..=59) used for scheduled action triggers.
     fn local_minute(&self) -> u8;
+
+    /// Wall-clock milliseconds since the Unix epoch. Used for wire
+    /// protocol timestamps (snapshot and decision-log entries).
+    fn epoch_millis(&self) -> u64;
 }
 
 /// Production clock. Time-of-day comes from a configured IANA timezone so
@@ -61,6 +65,13 @@ impl Clock for SystemClock {
         let now = chrono::Utc::now().with_timezone(&self.timezone);
         now.minute() as u8
     }
+
+    fn epoch_millis(&self) -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0)
+    }
 }
 
 /// Test clock. The current `Instant` and local hour are both stored
@@ -76,6 +87,7 @@ struct FakeClockInner {
     now: Instant,
     hour: u8,
     minute: u8,
+    epoch_millis: u64,
 }
 
 impl FakeClock {
@@ -88,15 +100,17 @@ impl FakeClock {
                 now: Instant::now(),
                 hour,
                 minute: 0,
+                epoch_millis: 1_700_000_000_000,
             }),
         }
     }
 
-    /// Advance the monotonic clock by `d`. Subsequent `now()` calls
-    /// return the advanced value.
+    /// Advance the monotonic clock and epoch time by `d`. Subsequent
+    /// `now()` and `epoch_millis()` calls return the advanced values.
     pub fn advance(&self, d: Duration) {
         let mut inner = self.inner.lock().expect("FakeClock mutex poisoned");
         inner.now += d;
+        inner.epoch_millis += d.as_millis() as u64;
     }
 
     /// Set the local hour. Useful for testing slot transitions without
@@ -124,6 +138,10 @@ impl Clock for FakeClock {
 
     fn local_minute(&self) -> u8 {
         self.inner.lock().expect("FakeClock mutex poisoned").minute
+    }
+
+    fn epoch_millis(&self) -> u64 {
+        self.inner.lock().expect("FakeClock mutex poisoned").epoch_millis
     }
 }
 
