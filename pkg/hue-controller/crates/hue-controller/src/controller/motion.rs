@@ -37,6 +37,7 @@ impl Controller {
         out: &mut Vec<Action>,
     ) {
         // Capture room metadata before borrowing mut state.
+        let sun = self.sun_times();
         let (group_name, max_lux, cooldown_ms, off_transition, scenes_for_now) = {
             let Some(room) = self.topology.room_by_name(room_name) else {
                 return;
@@ -52,7 +53,8 @@ impl Controller {
                 .max();
             let cooldown_ms = room.motion_off_cooldown_seconds * 1000;
             let hour = self.clock.local_hour();
-            let scenes = active_slot_scene_ids(&room.scenes, hour);
+            let minute = self.clock.local_minute();
+            let scenes = active_slot_scene_ids(&room.scenes, hour, minute, sun.as_ref());
             (
                 room.group_name.clone(),
                 max_lux,

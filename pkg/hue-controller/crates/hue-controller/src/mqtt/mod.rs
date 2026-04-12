@@ -546,8 +546,8 @@ mod tests {
             slots: BTreeMap::from([(
                 "day".into(),
                 Slot {
-                    start_hour: 0,
-                    end_hour_exclusive: 24,
+                    from: crate::config::TimeExpr::Fixed { minute_of_day: 0 },
+                    to: crate::config::TimeExpr::Fixed { minute_of_day: 1440 },
                     scene_ids: vec![1],
                 },
             )]),
@@ -633,14 +633,17 @@ mod tests {
                     DeviceBinding {
                         device: "hue-s-study".into(),
                         button: None,
+                        cycle_on_double_tap: false,
                     },
                     DeviceBinding {
                         device: "hue-ts-foo".into(),
                         button: Some(1),
+                        cycle_on_double_tap: false,
                     },
                     DeviceBinding {
                         device: "hue-ms-study".into(),
                         button: None,
+                        cycle_on_double_tap: false,
                     },
                 ],
                 scenes: day_scenes(),
@@ -660,6 +663,7 @@ mod tests {
             }],
             defaults: Defaults::default(),
             heating: None,
+            location: None,
         };
         Arc::new(Topology::build(&cfg).unwrap())
     }

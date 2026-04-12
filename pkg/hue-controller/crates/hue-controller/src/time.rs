@@ -15,10 +15,17 @@
 
 use std::time::{Duration, Instant};
 
-use chrono::{Datelike, Timelike};
+use chrono::{Datelike, NaiveDate, Offset, Timelike};
 use chrono_tz::Tz;
 
 use crate::config::heating::Weekday;
+
+/// Date information for sunrise/sunset computation.
+#[derive(Debug, Clone, Copy)]
+pub struct DateInfo {
+    pub date: NaiveDate,
+    pub utc_offset_hours: f64,
+}
 
 /// Source of "now" for the controller. The runtime uses [`SystemClock`];
 /// tests use [`FakeClock`].
@@ -42,6 +49,9 @@ pub trait Clock: std::fmt::Debug + Send + Sync {
     /// Wall-clock milliseconds since the Unix epoch. Used for wire
     /// protocol timestamps (snapshot and decision-log entries).
     fn epoch_millis(&self) -> u64;
+
+    /// Local date and UTC offset. Used for sunrise/sunset calculations.
+    fn local_date_info(&self) -> DateInfo;
 }
 
 /// Production clock. Time-of-day comes from a configured IANA timezone so
@@ -91,6 +101,17 @@ impl Clock for SystemClock {
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0)
     }
+
+    fn local_date_info(&self) -> DateInfo {
+        let now = chrono::Utc::now().with_timezone(&self.timezone);
+        let utc_time = chrono::Utc::now();
+        let local_time = utc_time.with_timezone(&self.timezone);
+        let offset_secs = local_time.offset().fix().local_minus_utc();
+        DateInfo {
+            date: now.date_naive(),
+            utc_offset_hours: offset_secs as f64 / 3600.0,
+        }
+    }
 }
 
 /// Test clock. The current `Instant` and local hour are both stored
@@ -108,6 +129,7 @@ struct FakeClockInner {
     minute: u8,
     weekday: Weekday,
     epoch_millis: u64,
+    date_info: DateInfo,
 }
 
 impl FakeClock {
@@ -122,6 +144,10 @@ impl FakeClock {
                 minute: 0,
                 weekday: Weekday::Monday,
                 epoch_millis: 1_700_000_000_000,
+                date_info: DateInfo {
+                    date: NaiveDate::from_ymd_opt(2026, 4, 11).unwrap(),
+                    utc_offset_hours: 1.0,
+                },
             }),
         }
     }
@@ -152,6 +178,12 @@ impl FakeClock {
         let mut inner = self.inner.lock().expect("FakeClock mutex poisoned");
         inner.weekday = weekday;
     }
+
+    /// Set the local date info for sun calculations.
+    pub fn set_date_info(&self, date_info: DateInfo) {
+        let mut inner = self.inner.lock().expect("FakeClock mutex poisoned");
+        inner.date_info = date_info;
+    }
 }
 
 impl Clock for FakeClock {
@@ -173,6 +205,10 @@ impl Clock for FakeClock {
 
     fn epoch_millis(&self) -> u64 {
         self.inner.lock().expect("FakeClock mutex poisoned").epoch_millis
+    }
+
+    fn local_date_info(&self) -> DateInfo {
+        self.inner.lock().expect("FakeClock mutex poisoned").date_info
     }
 }
 

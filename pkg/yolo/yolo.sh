@@ -33,7 +33,8 @@ done
 
 if [[ $MOBILE_MODE -eq 1 ]]; then
   if [[ -n "${TMUX:-}" ]]; then
-    tmux resize-pane -x 59 -y 33
+    tmux set-window-option window-size manual
+    tmux resize-window -x 59 -y 33
   else
     echo "warning: --mobile requires tmux, ignoring" >&2
   fi

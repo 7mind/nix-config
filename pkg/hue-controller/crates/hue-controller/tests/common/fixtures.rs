@@ -25,8 +25,8 @@ fn day_scenes(ids: Vec<u8>) -> SceneSchedule {
         slots: BTreeMap::from([(
             "day".into(),
             Slot {
-                start_hour: 0,
-                end_hour_exclusive: 24,
+                from: hue_controller::config::TimeExpr::Fixed { minute_of_day: 0 },
+                to: hue_controller::config::TimeExpr::Fixed { minute_of_day: 1440 },
                 scene_ids: ids,
             },
         )]),
@@ -61,6 +61,7 @@ fn binding(device: &str, button: Option<u8>) -> DeviceBinding {
     DeviceBinding {
         device: device.into(),
         button,
+        cycle_on_double_tap: false,
     }
 }
 
@@ -119,6 +120,7 @@ pub fn kitchen_config() -> Config {
         actions: vec![],
         defaults: Defaults::default(),
         heating: None,
+        location: None,
     }
 }
 
@@ -145,5 +147,6 @@ pub fn study_switch_config() -> Config {
         actions: vec![],
         defaults: Defaults::default(),
         heating: None,
+        location: None,
     }
 }

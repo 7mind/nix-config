@@ -70,6 +70,12 @@ pub struct DeviceBinding {
 
     #[serde(default)]
     pub button: Option<u8>,
+
+    /// When true, single tap toggles on/off and double tap cycles scenes.
+    /// When false (default), the existing 3-branch tap state machine applies
+    /// (consecutive taps cycle, delayed tap turns off).
+    #[serde(default)]
+    pub cycle_on_double_tap: bool,
 }
 
 #[cfg(test)]
@@ -92,7 +98,7 @@ mod tests {
                     {"id": 1, "name": "x", "state": "ON", "brightness": null, "color_temp": null, "transition": 0.5}
                 ],
                 "slots": {
-                    "day": {"start_hour": 0, "end_hour_exclusive": 24, "scene_ids": [1]}
+                    "day": {"from": "00:00", "to": "24:00", "scene_ids": [1]}
                 }
             },
             "off_transition_seconds": 0.8,

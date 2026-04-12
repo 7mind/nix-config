@@ -15,13 +15,15 @@ use crate::topology::Topology;
 pub fn build_full_snapshot(controller: &Controller, now: Instant) -> FullStateSnapshot {
     let topology = controller.topology();
     let hour = controller.clock().local_hour();
+    let minute = controller.clock().local_minute();
+    let sun = snapshot_sun_times(controller);
     let epoch_ms = controller.clock().epoch_millis();
 
     let rooms: Vec<RoomSnapshot> = topology
         .rooms()
         .map(|room| {
             let state = controller.state_for(&room.name);
-            room_snapshot_from(room, state, hour, now)
+            room_snapshot_from(room, state, hour, minute, sun.as_ref(), now)
         })
         .collect();
 
@@ -59,18 +61,29 @@ pub fn build_room_snapshot(
     let room = topology.room_by_name(room_name)?;
     let state = controller.state_for(room_name);
     let hour = controller.clock().local_hour();
-    Some(room_snapshot_from(room, state, hour, now))
+    let minute = controller.clock().local_minute();
+    let sun = snapshot_sun_times(controller);
+    Some(room_snapshot_from(room, state, hour, minute, sun.as_ref(), now))
+}
+
+/// Compute sun times for snapshots (read-only path, no caching).
+fn snapshot_sun_times(controller: &Controller) -> Option<crate::sun::SunTimes> {
+    let loc = controller.location()?;
+    let info = controller.clock().local_date_info();
+    Some(crate::sun::compute_sun_times(loc, info.date, info.utc_offset_hours))
 }
 
 fn room_snapshot_from(
     room: &crate::topology::ResolvedRoom,
     state: Option<&crate::domain::state::ZoneState>,
     hour: u8,
+    minute: u8,
+    sun: Option<&crate::sun::SunTimes>,
     now: Instant,
 ) -> RoomSnapshot {
     let (active_slot, scene_ids) = room
         .scenes
-        .slot_for_hour(hour)
+        .slot_for_time(hour, minute, sun)
         .map(|(name, slot)| (Some(name.clone()), slot.scene_ids.clone()))
         .unwrap_or((None, Vec::new()));
 
@@ -132,8 +145,8 @@ pub fn build_topology_info(topology: &Topology) -> TopologyInfo {
                 .iter()
                 .map(|(name, slot)| SlotInfo {
                     name: name.clone(),
-                    start_hour: slot.start_hour,
-                    end_hour_exclusive: slot.end_hour_exclusive,
+                    from: slot.from.to_string(),
+                    to: slot.to.to_string(),
                     scene_ids: slot.scene_ids.clone(),
                 })
                 .collect(),

@@ -43,15 +43,19 @@ impl Controller {
 
     /// Evaluate scheduled `At` triggers. Called on every tick.
     pub(super) fn evaluate_at_triggers(&mut self, ts: Instant) -> Vec<Action> {
+        let sun = self.sun_times();
         let current_hour = self.clock.local_hour();
         let current_minute = self.clock.local_minute();
         let actions_snapshot = self.topology.actions().to_vec();
         let mut out = Vec::new();
         for resolved in &actions_snapshot {
-            let (target_hour, target_minute) = match &resolved.trigger {
-                crate::config::Trigger::At { hour, minute } => (*hour, *minute),
+            let time_expr = match &resolved.trigger {
+                crate::config::Trigger::At { time } => time,
                 _ => continue,
             };
+            let resolved_minutes = time_expr.resolve(sun.as_ref());
+            let target_hour = (resolved_minutes / 60) as u8;
+            let target_minute = (resolved_minutes % 60) as u8;
             if current_hour == target_hour && current_minute == target_minute {
                 let last = self.at_last_fired.get(&resolved.name);
                 if last == Some(&(target_hour, target_minute)) {
@@ -59,8 +63,9 @@ impl Controller {
                 }
                 tracing::info!(
                     rule = resolved.name.as_str(),
-                    hour = target_hour,
-                    minute = target_minute,
+                    time = %time_expr,
+                    resolved_hour = target_hour,
+                    resolved_minute = target_minute,
                     "scheduled trigger fired"
                 );
                 self.at_last_fired

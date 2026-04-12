@@ -1,19 +1,22 @@
 //! Time-of-day scene scheduling.
 //!
-//! Each room defines its scenes in terms of *slots* — disjoint hour
+//! Each room defines its scenes in terms of *slots* — disjoint time
 //! ranges of the local day, each with its own ordered list of scenes for
-//! the cycle button. The current bento implementation has just two slots
-//! ("day" and "night") in production but the schema is open: any number
-//! of slots is allowed as long as their hour ranges cover the full 24h
-//! day exactly once.
+//! the cycle button. The current production setup has just two slots
+//! ("day" and "night") but the schema is open: any number of slots is
+//! allowed as long as their time ranges cover the full 24h day exactly
+//! once.
+//!
+//! Slot boundaries are [`TimeExpr`] values: either a fixed `"HH:MM"` or
+//! a sun-relative `"sunrise/sunset ± HH:MM"`.
 //!
 //! Example (rendered by Nix from `defaultScheduledScenes`):
 //!
 //! ```jsonc
 //! {
 //!   "slots": {
-//!     "day":   { "start_hour": 6,  "end_hour_exclusive": 23, "scene_ids": [1, 2, 3] },
-//!     "night": { "start_hour": 23, "end_hour_exclusive": 6,  "scene_ids": [3, 2, 1] }
+//!     "day":   { "from": "06:00",  "to": "23:00", "scene_ids": [1, 2, 3] },
+//!     "night": { "from": "23:00",  "to": "06:00", "scene_ids": [3, 2, 1] }
 //!   },
 //!   "scenes": [
 //!     { "id": 1, "name": "bright",  "brightness": 254, "color_temp": 250 },
@@ -25,13 +28,16 @@
 //!
 //! The `scenes` list is consumed by provisioning (one `scene_add` per
 //! entry). The `slots` map drives the runtime cycle: at button press time,
-//! the controller picks the slot whose hour range contains "now", then
+//! the controller picks the slot whose time range contains "now", then
 //! cycles through that slot's `scene_ids` in order.
 
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use super::time_expr::TimeExpr;
+use crate::sun::SunTimes;
 
 /// Slot identifier — typically `"day"` or `"night"`. Free-form string so
 /// the user can introduce more granular slots (e.g. `"morning"`,
@@ -86,65 +92,92 @@ fn default_scene_state() -> String {
     "ON".to_string()
 }
 
-/// Hour range for one slot. `start_hour` is inclusive, `end_hour_exclusive`
-/// is exclusive. The night slot wraps midnight: `start=23, end=6` means
-/// "23:00 .. 24:00 ∪ 00:00 .. 06:00".
+/// One time-of-day slot. `from` is inclusive, `to` is exclusive.
+/// Wrapping midnight is supported: `from: "23:00", to: "06:00"` means
+/// 23:00–24:00 ∪ 00:00–06:00.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Slot {
-    pub start_hour: u8,
-    pub end_hour_exclusive: u8,
+    pub from: TimeExpr,
+    pub to: TimeExpr,
     /// Ordered cycle: pressing the cycle button advances through this list.
     pub scene_ids: Vec<u8>,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum SceneScheduleError {
-    #[error("hour {hour} is out of range — must be 0..=23")]
-    HourOutOfRange { hour: u8 },
+    #[error("slot {name:?} `from` time is out of range: {expr}")]
+    FromOutOfRange { name: SlotName, expr: String },
+
+    #[error("slot {name:?} `to` time is out of range: {expr}")]
+    ToOutOfRange { name: SlotName, expr: String },
 
     #[error("slot {name:?} references scene id {id} which is not in the room's `scenes` list")]
     UnknownSceneId { name: SlotName, id: u8 },
 
-    #[error("the {count} slot(s) defined do not exactly cover 24 hours; coverage map is {coverage:?}")]
-    IncompleteCoverage { count: usize, coverage: Vec<u8> },
+    #[error("the {count} slot(s) defined do not exactly cover 24 hours; coverage map has {uncovered} uncovered minutes")]
+    IncompleteCoverage { count: usize, uncovered: usize },
 
-    #[error("hour {hour} is covered by multiple slots: {slots:?}")]
-    OverlappingSlots { hour: u8, slots: Vec<SlotName> },
+    #[error("minute {minute} is covered by multiple slots: {slots:?}")]
+    OverlappingSlots { minute: u16, slots: Vec<SlotName> },
 }
 
 impl Slot {
-    /// True iff the local hour `h` falls in this slot. Handles wrap.
-    pub fn contains_hour(&self, h: u8) -> bool {
-        if self.start_hour <= self.end_hour_exclusive {
-            // Normal range, e.g. day = [6, 23): 6,7,...,22.
-            h >= self.start_hour && h < self.end_hour_exclusive
+    /// True iff local time `(h, m)` falls in this slot. Handles midnight
+    /// wrap. `sun` is required when the slot uses sun-relative boundaries.
+    pub fn contains_time(&self, h: u8, m: u8, sun: Option<&SunTimes>) -> bool {
+        let start = self.from.resolve(sun);
+        let end = self.to.resolve(sun);
+        let now = h as u16 * 60 + m as u16;
+        if start <= end {
+            now >= start && now < end
         } else {
-            // Wrap-around range, e.g. night = [23, 6): 23, then 0..5.
-            h >= self.start_hour || h < self.end_hour_exclusive
+            // Wraps midnight.
+            now >= start || now < end
         }
+    }
+
+    /// True if either boundary uses a sun-relative expression.
+    pub fn uses_sun(&self) -> bool {
+        self.from.uses_sun() || self.to.uses_sun()
     }
 }
 
 impl SceneSchedule {
+    /// True if any slot boundary references sunrise/sunset.
+    pub fn uses_sun_expressions(&self) -> bool {
+        self.slots.values().any(|s| s.uses_sun())
+    }
+
     /// Validate the schedule:
-    ///   * every hour 0..24 is covered by exactly one slot
     ///   * every `scene_ids` entry refers to a scene in `scenes`
+    ///   * if all boundaries are fixed, every minute 0..1440 is covered
+    ///     by exactly one slot
+    ///
+    /// When sun-relative expressions are present, coverage validation is
+    /// skipped (boundaries change daily).
     pub fn validate(&self) -> Result<(), SceneScheduleError> {
         let known_scene_ids: std::collections::BTreeSet<u8> =
             self.scenes.iter().map(|s| s.id).collect();
 
         // Cross-reference: every cycle id must exist as a scene definition.
         for (slot_name, slot) in &self.slots {
-            if slot.start_hour >= 24 {
-                return Err(SceneScheduleError::HourOutOfRange {
-                    hour: slot.start_hour,
-                });
+            // Validate fixed boundaries are in range.
+            if let TimeExpr::Fixed { minute_of_day } = &slot.from {
+                if *minute_of_day > 1440 {
+                    return Err(SceneScheduleError::FromOutOfRange {
+                        name: slot_name.clone(),
+                        expr: slot.from.to_string(),
+                    });
+                }
             }
-            if slot.end_hour_exclusive > 24 {
-                return Err(SceneScheduleError::HourOutOfRange {
-                    hour: slot.end_hour_exclusive,
-                });
+            if let TimeExpr::Fixed { minute_of_day } = &slot.to {
+                if *minute_of_day > 1440 {
+                    return Err(SceneScheduleError::ToOutOfRange {
+                        name: slot_name.clone(),
+                        expr: slot.to.to_string(),
+                    });
+                }
             }
             for &id in &slot.scene_ids {
                 if !known_scene_ids.contains(&id) {
@@ -156,40 +189,59 @@ impl SceneSchedule {
             }
         }
 
-        // Coverage: every hour 0..24 must be claimed by exactly one slot.
-        // Build a 24-element vector recording which slots claim each hour.
-        let mut owners: Vec<Vec<SlotName>> = vec![vec![]; 24];
-        for (slot_name, slot) in &self.slots {
-            for h in 0..24u8 {
-                if slot.contains_hour(h) {
-                    owners[h as usize].push(slot_name.clone());
-                }
-            }
-        }
-        for (h, slot_owners) in owners.iter().enumerate() {
-            if slot_owners.len() > 1 {
-                return Err(SceneScheduleError::OverlappingSlots {
-                    hour: h as u8,
-                    slots: slot_owners.clone(),
-                });
-            }
-        }
-        let coverage_count: Vec<u8> = owners.iter().map(|v| v.len() as u8).collect();
-        if coverage_count.iter().any(|&c| c == 0) {
-            return Err(SceneScheduleError::IncompleteCoverage {
-                count: self.slots.len(),
-                coverage: coverage_count,
-            });
+        // Coverage validation only when all boundaries are fixed.
+        if !self.uses_sun_expressions() {
+            self.validate_coverage(None)?;
         }
 
         Ok(())
     }
 
-    /// Pick the slot whose hour range contains `hour`. Assumes `validate`
-    /// has already been called — returns `None` only if the schedule is
-    /// invalid (no slot covers this hour).
-    pub fn slot_for_hour(&self, hour: u8) -> Option<(&SlotName, &Slot)> {
-        self.slots.iter().find(|(_, slot)| slot.contains_hour(hour))
+    /// Check that every minute 0..1440 is covered by exactly one slot.
+    /// When `sun` is `Some`, resolves sun-relative boundaries; when
+    /// `None`, only works if all boundaries are fixed.
+    fn validate_coverage(&self, sun: Option<&SunTimes>) -> Result<(), SceneScheduleError> {
+        // Check all 1440 minutes for minute-precise validation.
+        let mut owners: Vec<Vec<SlotName>> = vec![vec![]; 1440];
+        for (slot_name, slot) in &self.slots {
+            for m in 0..1440u16 {
+                let h = (m / 60) as u8;
+                let min = (m % 60) as u8;
+                if slot.contains_time(h, min, sun) {
+                    owners[m as usize].push(slot_name.clone());
+                }
+            }
+        }
+        for (m, slot_owners) in owners.iter().enumerate() {
+            if slot_owners.len() > 1 {
+                return Err(SceneScheduleError::OverlappingSlots {
+                    minute: m as u16,
+                    slots: slot_owners.clone(),
+                });
+            }
+        }
+        let uncovered = owners.iter().filter(|v| v.is_empty()).count();
+        if uncovered > 0 {
+            return Err(SceneScheduleError::IncompleteCoverage {
+                count: self.slots.len(),
+                uncovered,
+            });
+        }
+        Ok(())
+    }
+
+    /// Pick the slot whose time range contains `(hour, minute)`. Assumes
+    /// `validate` has already been called. Returns `None` only if no slot
+    /// covers this time (invalid schedule).
+    pub fn slot_for_time(
+        &self,
+        hour: u8,
+        minute: u8,
+        sun: Option<&SunTimes>,
+    ) -> Option<(&SlotName, &Slot)> {
+        self.slots
+            .iter()
+            .find(|(_, slot)| slot.contains_time(hour, minute, sun))
     }
 }
 
@@ -197,6 +249,10 @@ impl SceneSchedule {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
+
+    fn fixed(h: u8, m: u8) -> TimeExpr {
+        TimeExpr::Fixed { minute_of_day: h as u16 * 60 + m as u16 }
+    }
 
     fn day_night_schedule() -> SceneSchedule {
         SceneSchedule {
@@ -230,16 +286,16 @@ mod tests {
                 (
                     "day".into(),
                     Slot {
-                        start_hour: 6,
-                        end_hour_exclusive: 23,
+                        from: fixed(6, 0),
+                        to: fixed(23, 0),
                         scene_ids: vec![1, 2, 3],
                     },
                 ),
                 (
                     "night".into(),
                     Slot {
-                        start_hour: 23,
-                        end_hour_exclusive: 6,
+                        from: fixed(23, 0),
+                        to: fixed(6, 0),
                         scene_ids: vec![3, 2, 1],
                     },
                 ),
@@ -252,42 +308,42 @@ mod tests {
         let s = day_night_schedule();
         s.validate().unwrap();
 
-        let (name, slot) = s.slot_for_hour(12).unwrap();
+        let (name, slot) = s.slot_for_time(12, 0, None).unwrap();
         assert_eq!(name, "day");
         assert_eq!(slot.scene_ids, vec![1, 2, 3]);
 
-        let (name, _) = s.slot_for_hour(23).unwrap();
+        let (name, _) = s.slot_for_time(23, 0, None).unwrap();
         assert_eq!(name, "night");
 
-        let (name, _) = s.slot_for_hour(2).unwrap();
+        let (name, _) = s.slot_for_time(2, 0, None).unwrap();
         assert_eq!(name, "night");
     }
 
     #[test]
-    fn slot_contains_hour_normal_range() {
+    fn slot_contains_time_normal_range() {
         let s = Slot {
-            start_hour: 6,
-            end_hour_exclusive: 23,
+            from: fixed(6, 0),
+            to: fixed(23, 0),
             scene_ids: vec![],
         };
-        assert!(!s.contains_hour(5));
-        assert!(s.contains_hour(6));
-        assert!(s.contains_hour(22));
-        assert!(!s.contains_hour(23));
+        assert!(!s.contains_time(5, 59, None));
+        assert!(s.contains_time(6, 0, None));
+        assert!(s.contains_time(22, 59, None));
+        assert!(!s.contains_time(23, 0, None));
     }
 
     #[test]
-    fn slot_contains_hour_wrap_range() {
+    fn slot_contains_time_wrap_range() {
         let s = Slot {
-            start_hour: 23,
-            end_hour_exclusive: 6,
+            from: fixed(23, 0),
+            to: fixed(6, 0),
             scene_ids: vec![],
         };
-        assert!(s.contains_hour(23));
-        assert!(s.contains_hour(0));
-        assert!(s.contains_hour(5));
-        assert!(!s.contains_hour(6));
-        assert!(!s.contains_hour(22));
+        assert!(s.contains_time(23, 0, None));
+        assert!(s.contains_time(0, 0, None));
+        assert!(s.contains_time(5, 59, None));
+        assert!(!s.contains_time(6, 0, None));
+        assert!(!s.contains_time(22, 59, None));
     }
 
     #[test]
@@ -304,13 +360,12 @@ mod tests {
     #[test]
     fn overlapping_slots_are_rejected() {
         let mut s = day_night_schedule();
-        // Make night start at 22 instead of 23 → overlaps with day (which
-        // ends-exclusive at 23, so the day slot still covers hour 22).
-        s.slots.get_mut("night").unwrap().start_hour = 22;
+        // Make night start at 22:00 instead of 23:00 → overlaps with day.
+        s.slots.get_mut("night").unwrap().from = fixed(22, 0);
         let err = s.validate().unwrap_err();
         assert!(matches!(
             err,
-            SceneScheduleError::OverlappingSlots { hour: 22, .. }
+            SceneScheduleError::OverlappingSlots { .. }
         ));
     }
 
@@ -328,8 +383,8 @@ mod tests {
             slots: BTreeMap::from([(
                 "day".into(),
                 Slot {
-                    start_hour: 6,
-                    end_hour_exclusive: 22,
+                    from: fixed(6, 0),
+                    to: fixed(22, 0),
                     scene_ids: vec![1],
                 },
             )]),
@@ -339,5 +394,45 @@ mod tests {
             err,
             SceneScheduleError::IncompleteCoverage { .. }
         ));
+    }
+
+    #[test]
+    fn sun_relative_schedule_skips_coverage_check() {
+        use crate::config::time_expr::SunEvent;
+        let s = SceneSchedule {
+            scenes: vec![Scene {
+                id: 1,
+                name: "x".into(),
+                state: "ON".into(),
+                brightness: None,
+                color_temp: None,
+                transition: 0.0,
+            }],
+            slots: BTreeMap::from([(
+                "day".into(),
+                Slot {
+                    from: TimeExpr::SunRelative { event: SunEvent::Sunrise, offset_minutes: 0 },
+                    to: TimeExpr::SunRelative { event: SunEvent::Sunset, offset_minutes: 0 },
+                    scene_ids: vec![1],
+                },
+            )]),
+        };
+        // Would fail coverage check, but sun expressions skip it.
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn serde_roundtrip() {
+        let json = r#"{
+            "scenes": [
+                {"id": 1, "name": "x", "state": "ON", "brightness": null, "color_temp": null, "transition": 0.5}
+            ],
+            "slots": {
+                "day": {"from": "06:00", "to": "23:00", "scene_ids": [1]}
+            }
+        }"#;
+        let schedule: SceneSchedule = serde_json::from_str(json).unwrap();
+        assert_eq!(schedule.slots["day"].from, fixed(6, 0));
+        assert_eq!(schedule.slots["day"].to, fixed(23, 0));
     }
 }

@@ -110,8 +110,10 @@ pub struct RoomInfo {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SlotInfo {
     pub name: String,
-    pub start_hour: u8,
-    pub end_hour_exclusive: u8,
+    /// Slot start as a time expression string (e.g. "06:00", "sunset-01:00").
+    pub from: String,
+    /// Slot end (exclusive) as a time expression string.
+    pub to: String,
     pub scene_ids: Vec<u8>,
 }
 
@@ -224,8 +226,8 @@ mod tests {
                 parent: None,
                 slots: vec![SlotInfo {
                     name: "day".into(),
-                    start_hour: 7,
-                    end_hour_exclusive: 22,
+                    from: "07:00".into(),
+                    to: "22:00".into(),
                     scene_ids: vec![1, 2],
                 }],
                 has_motion: true,

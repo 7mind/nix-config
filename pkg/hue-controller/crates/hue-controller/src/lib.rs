@@ -20,6 +20,7 @@ pub mod daemon;
 pub mod domain;
 pub mod mqtt;
 pub mod provision;
+pub mod sun;
 pub mod time;
 pub mod topology;
 pub mod web;

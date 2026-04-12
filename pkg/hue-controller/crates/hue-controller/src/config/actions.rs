@@ -19,6 +19,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::time_expr::TimeExpr;
+
 /// One declarative action rule. Validated at topology-build time
 /// (trigger device exists, effect target is a plug, capability gates
 /// pass).
@@ -69,11 +71,11 @@ pub enum Trigger {
         for_seconds: u64,
     },
 
-    /// Fires once per day at the specified local time (hour:minute).
+    /// Fires once per day at the specified local time. Accepts fixed
+    /// times ("14:00") and sun-relative expressions ("sunset-01:00").
     /// Evaluated on every `Tick` event (~5 s resolution).
     At {
-        hour: u8,
-        minute: u8,
+        time: TimeExpr,
     },
 }
 

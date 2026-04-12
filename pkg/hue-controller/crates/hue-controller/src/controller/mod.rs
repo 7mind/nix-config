@@ -113,10 +113,23 @@ pub struct Controller {
     /// Optional heating sub-controller. Only present when the config
     /// has a `heating` section.
     heating: Option<HeatingController>,
+
+    /// Geographic location for sunrise/sunset. `None` when no schedule
+    /// uses sun-relative expressions.
+    location: Option<crate::sun::Location>,
+
+    /// Cached sunrise/sunset. Keyed by (date, utc_offset_seconds) so
+    /// a DST transition within the same date forces a recompute.
+    cached_sun: Option<(chrono::NaiveDate, i32, crate::sun::SunTimes)>,
 }
 
 impl Controller {
-    pub fn new(topology: Arc<Topology>, clock: Arc<dyn Clock>, defaults: Defaults) -> Self {
+    pub fn new(
+        topology: Arc<Topology>,
+        clock: Arc<dyn Clock>,
+        defaults: Defaults,
+        location: Option<crate::sun::Location>,
+    ) -> Self {
         let kill_switch = KillSwitchEvaluator::new(topology.clone());
         let heating = topology
             .heating_config()
@@ -132,6 +145,8 @@ impl Controller {
             confirm_off_pending: BTreeMap::new(),
             at_last_fired: BTreeMap::new(),
             heating,
+            location,
+            cached_sun: None,
         }
     }
 
@@ -153,12 +168,7 @@ impl Controller {
                 ref action,
                 ts,
             } => {
-                // Room scene cycling only fires on single/press taps.
-                let mut out = if action.is_none() {
-                    self.handle_tap_action(device, button, ts)
-                } else {
-                    Vec::new()
-                };
+                let mut out = self.handle_tap_action(device, button, action.as_deref(), ts);
                 out.extend(self.dispatch_tap_actions(device, button, action.as_deref(), ts));
                 out
             }
@@ -216,7 +226,7 @@ impl Controller {
     ///
     /// Deliberately does NOT set `last_off_at` so that motion sensors
     /// can immediately re-trigger the lights if someone is in the room.
-    pub fn startup_turn_off_motion_zones(&mut self, ts: Instant) -> Vec<Action> {
+    pub fn startup_turn_off_motion_zones(&mut self, _ts: Instant) -> Vec<Action> {
         let mut out = Vec::new();
         for room in self.topology.rooms() {
             let state = self.states.entry(room.name.clone()).or_default();
@@ -280,6 +290,49 @@ impl Controller {
         &self.clock
     }
 
+    /// Reference to the geographic location (if configured).
+    pub fn location(&self) -> Option<&crate::sun::Location> {
+        self.location.as_ref()
+    }
+
+    /// Compute (and cache) sun times for today. Returns `None` if no
+    /// location is configured. Returns a copy so callers don't hold a
+    /// borrow on `self`.
+    pub fn sun_times(&mut self) -> Option<crate::sun::SunTimes> {
+        let loc = self.location.as_ref()?;
+        let info = self.clock.local_date_info();
+        // Truncate offset to seconds for cache key — catches DST transitions
+        // within the same date (e.g. CET→CEST changes UTC offset by 3600s).
+        let offset_secs = (info.utc_offset_hours * 3600.0) as i32;
+        let needs_refresh = self.cached_sun.as_ref().map_or(true, |(d, o, _)| {
+            *d != info.date || *o != offset_secs
+        });
+        if needs_refresh {
+            let times = crate::sun::compute_sun_times(loc, info.date, info.utc_offset_hours);
+            tracing::info!(
+                sunrise = %format!("{:02}:{:02}", times.sunrise_minute_of_day / 60, times.sunrise_minute_of_day % 60),
+                sunset = %format!("{:02}:{:02}", times.sunset_minute_of_day / 60, times.sunset_minute_of_day % 60),
+                date = %info.date,
+                offset_secs,
+                "computed sun times"
+            );
+            self.cached_sun = Some((info.date, offset_secs, times));
+        }
+        self.cached_sun.as_ref().map(|(_, _, t)| *t)
+    }
+
+    /// Helper: get the current scene IDs for a room, taking sun times
+    /// into account.
+    fn scenes_for_room(&mut self, room_name: &str) -> Vec<u8> {
+        let sun = self.sun_times();
+        let hour = self.clock.local_hour();
+        let minute = self.clock.local_minute();
+        let Some(room) = self.topology.room_by_name(room_name) else {
+            return Vec::new();
+        };
+        active_slot_scene_ids(&room.scenes, hour, minute, sun.as_ref())
+    }
+
     // ----- group state handler (small, stays in mod.rs) ---------------------
 
     fn handle_group_state(&mut self, group_name: &str, on: bool, ts: Instant) -> Vec<Action> {
@@ -341,12 +394,11 @@ impl Controller {
 
     /// Web UI: recall a specific scene in a room.
     pub fn web_recall_scene(&mut self, room_name: &str, scene_id: u8, ts: Instant) -> Vec<Action> {
+        let scenes_for_now = self.scenes_for_room(room_name);
         let Some(room) = self.topology.room_by_name(room_name) else {
             return Vec::new();
         };
         let group_name = room.group_name.clone();
-        let hour = self.clock.local_hour();
-        let scenes_for_now = active_slot_scene_ids(&room.scenes, hour);
 
         // Find the cycle index for this scene_id; default to 0.
         let cycle_idx = scenes_for_now
@@ -523,9 +575,14 @@ impl Controller {
     }
 }
 
-/// Pull out the `scene_ids` of the slot covering `hour`.
-fn active_slot_scene_ids(schedule: &crate::config::SceneSchedule, hour: u8) -> Vec<u8> {
-    let Some((_name, slot)) = schedule.slot_for_hour(hour) else {
+/// Pull out the `scene_ids` of the slot covering `(hour, minute)`.
+fn active_slot_scene_ids(
+    schedule: &crate::config::SceneSchedule,
+    hour: u8,
+    minute: u8,
+    sun: Option<&crate::sun::SunTimes>,
+) -> Vec<u8> {
+    let Some((_name, slot)) = schedule.slot_for_time(hour, minute, sun) else {
         return Vec::new();
     };
     slot.scene_ids.clone()
@@ -568,12 +625,16 @@ mod tests {
             slots: BTreeMap::from([(
                 "day".into(),
                 Slot {
-                    start_hour: 0,
-                    end_hour_exclusive: 24,
+                    from: fixed_time(0, 0),
+                    to: fixed_time(24, 0),
                     scene_ids: ids,
                 },
             )]),
         }
+    }
+
+    fn fixed_time(h: u8, m: u8) -> crate::config::TimeExpr {
+        crate::config::TimeExpr::Fixed { minute_of_day: h as u16 * 60 + m as u16 }
     }
 
     fn day_night_scenes() -> SceneSchedule {
@@ -585,8 +646,8 @@ mod tests {
         SceneSchedule {
             scenes,
             slots: BTreeMap::from([
-                ("day".into(), Slot { start_hour: 6, end_hour_exclusive: 23, scene_ids: vec![1, 2, 3] }),
-                ("night".into(), Slot { start_hour: 23, end_hour_exclusive: 6, scene_ids: vec![3, 2, 1] }),
+                ("day".into(), Slot { from: fixed_time(6, 0), to: fixed_time(23, 0), scene_ids: vec![1, 2, 3] }),
+                ("night".into(), Slot { from: fixed_time(23, 0), to: fixed_time(6, 0), scene_ids: vec![3, 2, 1] }),
             ]),
         }
     }
@@ -609,7 +670,11 @@ mod tests {
     }
 
     fn binding(device: &str, button: Option<u8>) -> DeviceBinding {
-        DeviceBinding { device: device.into(), button }
+        DeviceBinding { device: device.into(), button, cycle_on_double_tap: false }
+    }
+
+    fn binding_double_tap(device: &str, button: u8) -> DeviceBinding {
+        DeviceBinding { device: device.into(), button: Some(button), cycle_on_double_tap: true }
     }
 
     fn kitchen_controller(clock: Arc<FakeClock>) -> Controller {
@@ -644,9 +709,10 @@ mod tests {
             actions: vec![],
             defaults: Defaults::default(),
             heating: None,
+            location: None,
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
-        Controller::new(topo, clock, cfg.defaults)
+        Controller::new(topo, clock, cfg.defaults, None)
     }
 
     fn study_with_motion_controller(clock: Arc<FakeClock>) -> Controller {
@@ -666,9 +732,10 @@ mod tests {
             actions: vec![],
             defaults: Defaults::default(),
             heating: None,
+            location: None,
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
-        Controller::new(topo, clock, cfg.defaults)
+        Controller::new(topo, clock, cfg.defaults, None)
     }
 
     // ---- cycle button: fresh on / cycle / expire ------------------------
@@ -975,10 +1042,10 @@ mod tests {
                 devices: vec![binding("hue-ms-study", None)],
                 scenes: day_scenes(vec![1]), off_transition_seconds: 0.8, motion_off_cooldown_seconds: 0,
             }],
-            actions: vec![], defaults: Defaults::default(), heating: None,
+            actions: vec![], defaults: Defaults::default(), heating: None, location: None,
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
-        let mut c = Controller::new(topo, clk.clone(), cfg.defaults);
+        let mut c = Controller::new(topo, clk.clone(), cfg.defaults, None);
         let bright = c.handle_event(Event::Occupancy { sensor: "hue-ms-study".into(), occupied: true, illuminance: Some(50), ts: clk.now() });
         assert!(bright.is_empty());
         let dim = c.handle_event(Event::Occupancy { sensor: "hue-ms-study".into(), occupied: true, illuminance: Some(10), ts: clk.now() });
@@ -1003,10 +1070,10 @@ mod tests {
                 devices: vec![binding("hue-ms-study", None)],
                 scenes: day_scenes(vec![1]), off_transition_seconds: 0.8, motion_off_cooldown_seconds: 0,
             }],
-            actions: vec![], defaults: Defaults::default(), heating: None,
+            actions: vec![], defaults: Defaults::default(), heating: None, location: None,
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
-        let mut c = Controller::new(topo, clk.clone(), cfg.defaults);
+        let mut c = Controller::new(topo, clk.clone(), cfg.defaults, None);
         let on = c.handle_event(Event::Occupancy { sensor: "hue-ms-study".into(), occupied: true, illuminance: Some(10), ts: clk.now() });
         assert_eq!(on, vec![Action::new("hue-lz-study", Payload::scene_recall(1))]);
         assert!(c.state_for("study").unwrap().motion_owned);
@@ -1038,16 +1105,123 @@ mod tests {
                 devices: vec![binding("hue-ms-a", None), binding("hue-ms-b", None)],
                 scenes: day_scenes(vec![1]), off_transition_seconds: 0.8, motion_off_cooldown_seconds: 0,
             }],
-            actions: vec![], defaults: Defaults::default(), heating: None,
+            actions: vec![], defaults: Defaults::default(), heating: None, location: None,
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
-        let mut c = Controller::new(topo, clk.clone(), cfg.defaults);
+        let mut c = Controller::new(topo, clk.clone(), cfg.defaults, None);
         c.handle_event(Event::Occupancy { sensor: "hue-ms-a".into(), occupied: true, illuminance: None, ts: clk.now() });
         c.handle_event(Event::Occupancy { sensor: "hue-ms-b".into(), occupied: true, illuminance: None, ts: clk.now() });
         let no_off = c.handle_event(Event::Occupancy { sensor: "hue-ms-a".into(), occupied: false, illuminance: None, ts: clk.now() });
         assert!(no_off.is_empty());
         let off = c.handle_event(Event::Occupancy { sensor: "hue-ms-b".into(), occupied: false, illuminance: None, ts: clk.now() });
         assert_eq!(off, vec![Action::new("hue-lz-hall", Payload::state_off(0.8))]);
+    }
+
+    // ---- cycle_on_double_tap ------------------------------------------------
+
+    fn double_tap_controller(clock: Arc<FakeClock>) -> Controller {
+        let cfg = Config {
+            name_by_address: BTreeMap::new(),
+            devices: BTreeMap::from([
+                ("hue-l-a".into(), light("0xa")),
+                ("sonoff-ts-foo".into(), tap_dev("0x1")),
+            ]),
+            rooms: vec![Room {
+                name: "bedroom".into(), group_name: "hue-lz-bedroom".into(), id: 1,
+                members: vec!["hue-l-a/11".into()], parent: None,
+                devices: vec![binding_double_tap("sonoff-ts-foo", 1)],
+                scenes: day_night_scenes(), off_transition_seconds: 0.8,
+                motion_off_cooldown_seconds: 0,
+            }],
+            actions: vec![], defaults: Defaults::default(), heating: None, location: None,
+        };
+        let topo = Arc::new(Topology::build(&cfg).unwrap());
+        Controller::new(topo, clock, cfg.defaults, None)
+    }
+
+    #[test]
+    fn double_tap_single_tap_turns_on_first_scene() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = double_tap_controller(clk.clone());
+        let actions = c.handle_event(Event::TapAction {
+            device: "sonoff-ts-foo".into(), button: 1, action: None, ts: clk.now(),
+        });
+        assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::scene_recall(1))]);
+        assert!(c.state_for("bedroom").unwrap().physically_on);
+    }
+
+    #[test]
+    fn double_tap_single_tap_turns_off() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = double_tap_controller(clk.clone());
+        // Turn on first.
+        c.handle_event(Event::TapAction {
+            device: "sonoff-ts-foo".into(), button: 1, action: None, ts: clk.now(),
+        });
+        clk.advance(Duration::from_secs(5));
+        // Single tap again → off (no cycle window involved).
+        let actions = c.handle_event(Event::TapAction {
+            device: "sonoff-ts-foo".into(), button: 1, action: None, ts: clk.now(),
+        });
+        assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::state_off(0.8))]);
+        assert!(!c.state_for("bedroom").unwrap().physically_on);
+    }
+
+    #[test]
+    fn double_tap_cycles_scenes() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = double_tap_controller(clk.clone());
+        // Turn on via single tap.
+        c.handle_event(Event::TapAction {
+            device: "sonoff-ts-foo".into(), button: 1, action: None, ts: clk.now(),
+        });
+        // Double tap → advance to scene 2.
+        let actions = c.handle_event(Event::TapAction {
+            device: "sonoff-ts-foo".into(), button: 1,
+            action: Some("double".into()), ts: clk.now(),
+        });
+        assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::scene_recall(2))]);
+        assert_eq!(c.state_for("bedroom").unwrap().cycle_idx, 1);
+    }
+
+    #[test]
+    fn double_tap_cycle_wraps() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = double_tap_controller(clk.clone());
+        // Turn on via single tap (cycle_idx = 0, scene 1).
+        c.handle_event(Event::TapAction {
+            device: "sonoff-ts-foo".into(), button: 1, action: None, ts: clk.now(),
+        });
+        // Double tap → scene 2 (cycle_idx = 1).
+        c.handle_event(Event::TapAction {
+            device: "sonoff-ts-foo".into(), button: 1,
+            action: Some("double".into()), ts: clk.now(),
+        });
+        // Double tap → scene 3 (cycle_idx = 2).
+        c.handle_event(Event::TapAction {
+            device: "sonoff-ts-foo".into(), button: 1,
+            action: Some("double".into()), ts: clk.now(),
+        });
+        // Double tap → wraps to scene 1 (cycle_idx = 0).
+        let actions = c.handle_event(Event::TapAction {
+            device: "sonoff-ts-foo".into(), button: 1,
+            action: Some("double".into()), ts: clk.now(),
+        });
+        assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::scene_recall(1))]);
+        assert_eq!(c.state_for("bedroom").unwrap().cycle_idx, 0);
+    }
+
+    #[test]
+    fn double_tap_on_off_room_turns_on() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = double_tap_controller(clk.clone());
+        // Double tap when off → turns on with first scene.
+        let actions = c.handle_event(Event::TapAction {
+            device: "sonoff-ts-foo".into(), button: 1,
+            action: Some("double".into()), ts: clk.now(),
+        });
+        assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::scene_recall(1))]);
+        assert!(c.state_for("bedroom").unwrap().physically_on);
     }
 
     // ---- startup turn-off for motion zones --------------------------------
@@ -1118,10 +1292,10 @@ mod tests {
                 scenes: day_scenes(vec![1]), off_transition_seconds: 0.8,
                 motion_off_cooldown_seconds: 0,
             }],
-            actions: vec![], defaults: Defaults::default(), heating: None,
+            actions: vec![], defaults: Defaults::default(), heating: None, location: None,
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
-        let mut c = Controller::new(topo, clk.clone(), cfg.defaults);
+        let mut c = Controller::new(topo, clk.clone(), cfg.defaults, None);
         c.set_physical_state("office", true);
         let actions = c.startup_turn_off_motion_zones(clk.now());
         assert!(actions.is_empty(), "non-motion rooms must not be turned off at startup");
@@ -1311,9 +1485,10 @@ mod tests {
             actions,
             defaults: Defaults::default(),
             heating: None,
+            location: None,
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
-        Controller::new(topo, clock, cfg.defaults)
+        Controller::new(topo, clock, cfg.defaults, None)
     }
 
     #[test]
@@ -1585,7 +1760,7 @@ mod tests {
         clk.set_minute(59);
         let mut c = plug_controller(clk.clone(), vec![ActionRule {
             name: "nightly-off".into(),
-            trigger: Trigger::At { hour: 23, minute: 0 },
+            trigger: Trigger::At { time: fixed_time(23, 0) },
             effect: Effect::TurnOff { target: "z2m-p-printer".into() },
         }]);
         c.set_plug_state("z2m-p-printer", true);
@@ -1618,12 +1793,13 @@ mod tests {
                 Room { name: "room-a".into(), group_name: "hue-lz-a".into(), id: 1, members: vec!["hue-l-a/11".into()], parent: None, devices: vec![], scenes: day_scenes(vec![1]), off_transition_seconds: 0.5, motion_off_cooldown_seconds: 0 },
                 Room { name: "room-b".into(), group_name: "hue-lz-b".into(), id: 2, members: vec!["hue-l-b/11".into()], parent: None, devices: vec![], scenes: day_scenes(vec![1]), off_transition_seconds: 1.0, motion_off_cooldown_seconds: 0 },
             ],
-            actions: vec![ActionRule { name: "all-off".into(), trigger: Trigger::At { hour: 23, minute: 0 }, effect: Effect::TurnOffAllZones }],
+            actions: vec![ActionRule { name: "all-off".into(), trigger: Trigger::At { time: fixed_time(23, 0) }, effect: Effect::TurnOffAllZones }],
             defaults: Defaults::default(),
             heating: None,
+            location: None,
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
-        let mut c = Controller::new(topo, clk.clone(), cfg.defaults);
+        let mut c = Controller::new(topo, clk.clone(), cfg.defaults, None);
         c.set_physical_state("room-a", true);
         c.set_physical_state("room-b", false);
         clk.set_hour(23); clk.set_minute(0);
@@ -1657,6 +1833,7 @@ mod tests {
             }],
             defaults: Defaults::default(),
             heating: None,
+            location: None,
         };
         let topo = Topology::build(&cfg).unwrap();
         assert!(topo.rooms_for_switch("hue-s-standalone").is_empty());

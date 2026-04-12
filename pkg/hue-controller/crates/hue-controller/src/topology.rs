@@ -134,6 +134,9 @@ pub enum TopologyError {
         source: crate::config::scenes::SceneScheduleError,
     },
 
+    #[error("sun-relative schedule expressions require a `location` in the config")]
+    MissingLocationForSunExpressions,
+
     #[error("duplicate action rule name {0:?}")]
     DuplicateActionName(String),
 
@@ -202,10 +205,9 @@ pub enum TopologyError {
     NegativeConfirmOffWindow { rule: String, value: f64 },
 
     #[error(
-        "action rule {rule:?} has At trigger with invalid time: hour={hour}, minute={minute} \
-         (must be 0..=23 and 0..=59)"
+        "action rule {rule:?} has At trigger with invalid time: {time}"
     )]
-    InvalidAtTime { rule: String, hour: u8, minute: u8 },
+    InvalidAtTime { rule: String, time: String },
 
     #[error(
         "plug {device:?} has protocol zwave but no node_id"
@@ -234,6 +236,8 @@ pub struct TapButtonBinding {
     pub device: FriendlyName,
     pub button: u8,
     pub room: RoomName,
+    /// When true, single tap toggles on/off and double tap cycles scenes.
+    pub cycle_on_double_tap: bool,
 }
 
 /// One motion sensor → room binding. Carries the per-sensor settings the
@@ -447,6 +451,7 @@ impl Topology {
         }
 
         // 4. Scene schedule validation.
+        let mut needs_location = false;
         for room in &config.rooms {
             room.scenes
                 .validate()
@@ -454,7 +459,11 @@ impl Topology {
                     room: room.name.clone(),
                     source,
                 })?;
+            if room.scenes.uses_sun_expressions() {
+                needs_location = true;
+            }
         }
+        // Location check deferred until after action rules (At triggers may also need it).
 
         // 4b. Duration and defaults validation.
         if config.defaults.cycle_window_seconds < 0.0 {
@@ -587,6 +596,7 @@ impl Topology {
                             device: binding.device.clone(),
                             button,
                             room: room.name.clone(),
+                            cycle_on_double_tap: binding.cycle_on_double_tap,
                         });
                     }
                     DeviceCatalogEntry::MotionSensor {
@@ -1057,13 +1067,20 @@ impl Topology {
                         .or_default()
                         .push(idx);
                 }
-                Trigger::At { hour, minute } => {
-                    if *hour >= 24 || *minute >= 60 {
-                        return Err(TopologyError::InvalidAtTime {
-                            rule: rule.name.clone(),
-                            hour: *hour,
-                            minute: *minute,
-                        });
+                Trigger::At { time } => {
+                    if let crate::config::time_expr::TimeExpr::Fixed { minute_of_day } = time {
+                        // Reject >= 1440 (24:00): the clock's local_hour is
+                        // 0-23 so minute 1440 would resolve to hour=24 and
+                        // never match, creating a silently dead rule.
+                        if *minute_of_day >= 1440 {
+                            return Err(TopologyError::InvalidAtTime {
+                                rule: rule.name.clone(),
+                                time: time.to_string(),
+                            });
+                        }
+                    }
+                    if time.uses_sun() {
+                        needs_location = true;
                     }
                 }
             }
@@ -1100,6 +1117,11 @@ impl Topology {
                 trigger: rule.trigger.clone(),
                 effect: rule.effect.clone(),
             });
+        }
+
+        // Location is required if any schedule slot or At trigger uses sun expressions.
+        if needs_location && config.location.is_none() {
+            return Err(TopologyError::MissingLocationForSunExpressions);
         }
 
         Ok(Self {
@@ -1158,6 +1180,18 @@ impl Topology {
             .get(&(tap.to_string(), button))
             .map(Vec::as_slice)
             .unwrap_or(&[])
+    }
+
+    /// Check if a (tap, button, room) binding has cycle_on_double_tap.
+    pub fn tap_cycle_on_double_tap(&self, device: &str, button: u8, room: &str) -> bool {
+        self.rooms
+            .get(room)
+            .map(|r| {
+                r.bound_taps
+                    .iter()
+                    .any(|b| b.device == device && b.button == button && b.cycle_on_double_tap)
+            })
+            .unwrap_or(false)
     }
 
     /// Rooms driven by a motion sensor friendly_name.
@@ -1391,8 +1425,8 @@ mod tests {
             slots: BTreeMap::from([(
                 "day".into(),
                 Slot {
-                    start_hour: 0,
-                    end_hour_exclusive: 24,
+                    from: crate::config::TimeExpr::Fixed { minute_of_day: 0 },
+                    to: crate::config::TimeExpr::Fixed { minute_of_day: 1440 },
                     scene_ids: vec![1],
                 },
             )]),
@@ -1444,6 +1478,7 @@ mod tests {
         crate::config::DeviceBinding {
             device: device.into(),
             button,
+            cycle_on_double_tap: false,
         }
     }
 
@@ -1495,6 +1530,7 @@ mod tests {
             actions,
             defaults: Default::default(),
             heating: None,
+            location: None,
         }
     }
 

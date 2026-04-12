@@ -121,6 +121,7 @@ impl Controller {
         &mut self,
         device: &str,
         button: u8,
+        action: Option<&str>,
         ts: Instant,
     ) -> Vec<Action> {
         let rooms: Vec<RoomName> = self
@@ -132,7 +133,16 @@ impl Controller {
         }
         let mut out = Vec::new();
         for room_name in &rooms {
-            self.tap_press(room_name, device, button, ts, &mut out);
+            let cycle_on_double = self.topology.tap_cycle_on_double_tap(device, button, room_name);
+            if cycle_on_double {
+                match action {
+                    None => self.tap_toggle(room_name, device, button, ts, &mut out),
+                    Some("double") => self.tap_cycle(room_name, device, button, ts, &mut out),
+                    _ => {}
+                }
+            } else if action.is_none() {
+                self.tap_press(room_name, device, button, ts, &mut out);
+            }
         }
         out
     }
@@ -146,14 +156,16 @@ impl Controller {
         ts: Instant,
         out: &mut Vec<Action>,
     ) {
+        let sun = self.sun_times();
         let (group_name, scenes_for_now) = {
             let Some(room) = self.topology.room_by_name(room_name) else {
                 return;
             };
             let hour = self.clock.local_hour();
+            let minute = self.clock.local_minute();
             (
                 room.group_name.clone(),
-                active_slot_scene_ids(&room.scenes, hour),
+                active_slot_scene_ids(&room.scenes, hour, minute, sun.as_ref()),
             )
         };
         if scenes_for_now.is_empty() {
@@ -196,14 +208,16 @@ impl Controller {
         ts: Instant,
         out: &mut Vec<Action>,
     ) {
+        let sun = self.sun_times();
         let (group_name, scenes_for_now, off_transition) = {
             let Some(room) = self.topology.room_by_name(room_name) else {
                 return;
             };
             let hour = self.clock.local_hour();
+            let minute = self.clock.local_minute();
             (
                 room.group_name.clone(),
-                active_slot_scene_ids(&room.scenes, hour),
+                active_slot_scene_ids(&room.scenes, hour, minute, sun.as_ref()),
                 room.off_transition_seconds,
             )
         };
@@ -280,6 +294,127 @@ impl Controller {
                 "tap press → state OFF"
             );
             self.publish_off(room_name, &group_name, off_transition, ts, out);
+        }
+    }
+
+    /// cycle_on_double_tap: single tap = toggle on (first scene) / off.
+    fn tap_toggle(
+        &mut self,
+        room_name: &str,
+        device: &str,
+        button: u8,
+        ts: Instant,
+        out: &mut Vec<Action>,
+    ) {
+        let sun = self.sun_times();
+        let Some(room) = self.topology.room_by_name(room_name) else {
+            return;
+        };
+        let group_name = room.group_name.clone();
+        let off_transition = room.off_transition_seconds;
+        let hour = self.clock.local_hour();
+        let minute = self.clock.local_minute();
+        let scenes_for_now = active_slot_scene_ids(&room.scenes, hour, minute, sun.as_ref());
+
+        let state_snapshot = self.states.get(room_name).cloned().unwrap_or_default();
+
+        if state_snapshot.physically_on {
+            tracing::info!(
+                device,
+                button,
+                room = room_name,
+                group = %group_name,
+                transition = off_transition,
+                branch = "toggle off (cycle_on_double_tap)",
+                "tap single → state OFF"
+            );
+            self.publish_off(room_name, &group_name, off_transition, ts, out);
+        } else {
+            let Some(&first) = scenes_for_now.first() else {
+                return;
+            };
+            tracing::info!(
+                device,
+                button,
+                room = room_name,
+                group = %group_name,
+                scene = first,
+                branch = "toggle on (cycle_on_double_tap)",
+                "tap single → scene_recall"
+            );
+            out.push(Action::new(
+                group_name.clone(),
+                Payload::scene_recall(first),
+            ));
+            self.write_after_on(room_name, ts, 0);
+            self.propagate_to_descendants(room_name, true, ts);
+        }
+    }
+
+    /// cycle_on_double_tap: double tap = cycle to next scene.
+    fn tap_cycle(
+        &mut self,
+        room_name: &str,
+        device: &str,
+        button: u8,
+        ts: Instant,
+        out: &mut Vec<Action>,
+    ) {
+        let sun = self.sun_times();
+        let Some(room) = self.topology.room_by_name(room_name) else {
+            return;
+        };
+        let group_name = room.group_name.clone();
+        let hour = self.clock.local_hour();
+        let minute = self.clock.local_minute();
+        let scenes_for_now = active_slot_scene_ids(&room.scenes, hour, minute, sun.as_ref());
+        if scenes_for_now.is_empty() {
+            return;
+        }
+
+        let state_snapshot = self.states.get(room_name).cloned().unwrap_or_default();
+
+        if !state_snapshot.physically_on {
+            // Off → turn on with first scene.
+            let first = scenes_for_now[0];
+            tracing::info!(
+                device,
+                button,
+                room = room_name,
+                group = %group_name,
+                scene = first,
+                branch = "cycle fresh on (cycle_on_double_tap, was off)",
+                "tap double → scene_recall"
+            );
+            out.push(Action::new(
+                group_name.clone(),
+                Payload::scene_recall(first),
+            ));
+            self.write_after_on(room_name, ts, 0);
+            self.propagate_to_descendants(room_name, true, ts);
+        } else {
+            // On → advance to next scene.
+            let n = scenes_for_now.len();
+            let next_idx = (state_snapshot.cycle_idx + 1) % n;
+            let next_scene = scenes_for_now[next_idx];
+            tracing::info!(
+                device,
+                button,
+                room = room_name,
+                group = %group_name,
+                scene = next_scene,
+                cycle_idx_from = state_snapshot.cycle_idx,
+                cycle_idx_to = next_idx,
+                cycle_len = n,
+                branch = "cycle advance (cycle_on_double_tap)",
+                "tap double → scene_recall"
+            );
+            out.push(Action::new(
+                group_name.clone(),
+                Payload::scene_recall(next_scene),
+            ));
+            self.write_after_on(room_name, ts, next_idx);
+            self.propagate_to_descendants(room_name, true, ts);
         }
     }
 

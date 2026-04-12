@@ -147,6 +147,21 @@ in
       '';
     };
 
+    location = {
+      latitude = lib.mkOption {
+        type = lib.types.nullOr lib.types.float;
+        default = null;
+        example = 53.35;
+        description = "Latitude for sunrise/sunset calculations. Required when schedules use sun-relative expressions.";
+      };
+      longitude = lib.mkOption {
+        type = lib.types.nullOr lib.types.float;
+        default = null;
+        example = -6.26;
+        description = "Longitude for sunrise/sunset calculations. Required when schedules use sun-relative expressions.";
+      };
+    };
+
     web = {
       enable = lib.mkEnableOption "Web dashboard for the hue-controller daemon";
 
@@ -166,7 +181,11 @@ in
 
   config = lib.mkIf cfg.enable (
     let
-      configFile = yaml.generate "hue-controller.json" cfg.config;
+      locationAttr = lib.optionalAttrs
+        (cfg.location.latitude != null && cfg.location.longitude != null)
+        { location = { inherit (cfg.location) latitude longitude; }; };
+      mergedConfig = cfg.config // locationAttr;
+      configFile = yaml.generate "hue-controller.json" mergedConfig;
 
       # The `--verbose` flag is the global one (clap `global = true`), so it
       # has to come BEFORE the subcommand on the command line. The provision

@@ -64,6 +64,7 @@ pub mod defaults;
 pub mod heating;
 pub mod room;
 pub mod scenes;
+pub mod time_expr;
 
 pub use actions::{ActionRule, Effect, Trigger};
 pub use catalog::{CommonFields, DeviceCatalogEntry, IeeeAddress};
@@ -71,6 +72,7 @@ pub use defaults::Defaults;
 pub use heating::HeatingConfig;
 pub use room::{DeviceBinding, Room};
 pub use scenes::{Scene, SceneSchedule, Slot, SlotName};
+pub use time_expr::TimeExpr;
 
 /// Top-level config. The Nix layer renders this as JSON; both subcommands
 /// load it via [`Config::load_from_path`].
@@ -106,6 +108,11 @@ pub struct Config {
     /// or wall thermostats omit this entirely.
     #[serde(default)]
     pub heating: Option<HeatingConfig>,
+
+    /// Geographic location for sunrise/sunset calculations. Required
+    /// when any scene schedule uses sun-relative time expressions.
+    #[serde(default)]
+    pub location: Option<crate::sun::Location>,
 }
 
 #[derive(Debug, Error)]

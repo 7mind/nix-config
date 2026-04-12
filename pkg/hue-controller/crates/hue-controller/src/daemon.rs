@@ -91,7 +91,7 @@ pub async fn run(
         "topology built"
     );
 
-    let mut controller = Controller::new(topology.clone(), clock.clone(), defaults);
+    let mut controller = Controller::new(topology.clone(), clock.clone(), defaults, config.location);
 
     tracing::info!(
         host = %mqtt.host,

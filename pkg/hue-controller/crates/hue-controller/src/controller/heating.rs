@@ -783,12 +783,12 @@ impl HeatingController {
                     ));
                     zs.desired_relay = Some(false);
                     zs.desired_relay_gen = self.tick_gen;
-                    // Do NOT set pending_off_at: this OFF is speculative.
-                    // If the relay was already off, no pump stop happened.
-                    // If it was on and our OFF succeeds, the echo handler
-                    // will set proper pump timestamps. Setting it here
-                    // would pollute min_pause for other zones.
-                    //
+                    // Record pending stop: if the relay was actually ON
+                    // and our probe turns it off, min_pause must be
+                    // enforced. Per-zone pending_off_at ensures one
+                    // zone's echo only clears its own timestamp (no
+                    // cross-zone pollution — that was the old global bug).
+                    zs.pending_off_at = Some(now);
                     // Set pending_on_at so the reconciler keeps retrying
                     // OFF until an echo confirms (the relay might be
                     // physically ON with no echo path otherwise).
@@ -1186,6 +1186,7 @@ mod tests {
                     inhibit_minutes: 80,
                 },
             }),
+            location: None,
         }
     }
 
@@ -3478,11 +3479,10 @@ mod tests {
     }
 
     #[test]
-    fn unknown_relay_delayed_off_does_not_pollute_min_pause() {
-        // The startup OFF probe is speculative — it must NOT set
-        // pending_off_at, which would block other zones' ON requests.
-        // If the relay was actually ON, the echo handler sets proper
-        // timestamps. If it was already OFF, no pump stop occurred.
+    fn unknown_relay_delayed_off_records_pending_stop() {
+        // The startup OFF probe sets pending_off_at (per-zone) so
+        // min_pause is enforced if the relay was actually ON and our
+        // probe stops it. Per-zone tracking prevents cross-zone pollution.
         let cfg = simple_config();
         let clk = Arc::new(FakeClock::new(12));
         let topo = Arc::new(Topology::build(&cfg).unwrap());
@@ -3492,16 +3492,18 @@ mod tests {
         clk.advance(Duration::from_secs(130));
         hc.handle_tick(); // fires delayed OFF
 
-        // pending_off_at must NOT be set (speculative probe).
         let zs = hc.state.zones.get("bath").unwrap();
         assert!(
-            zs.pending_off_at.is_none(),
-            "startup OFF probe must not pollute pending_off_at"
+            zs.pending_off_at.is_some(),
+            "startup OFF probe must set pending_off_at for min_pause"
         );
-        // But pending_on_at must be set (for reconciler retries).
         assert!(
             zs.pending_on_at.is_some(),
             "startup OFF must set pending_on_at for reconciler retries"
+        );
+        assert!(
+            hc.state.effective_pump_off_since().is_some(),
+            "effective_pump_off_since must reflect the startup probe"
         );
     }
 
@@ -3651,9 +3653,9 @@ mod tests {
         clk.advance(Duration::from_secs(130));
         hc.handle_tick(); // delayed OFF for both zones
 
-        // Neither zone should have pending_off_at (speculative probes).
-        assert!(hc.state.zones.get("z1").unwrap().pending_off_at.is_none());
-        assert!(hc.state.zones.get("z2").unwrap().pending_off_at.is_none());
+        // Both zones have pending_off_at (conservative: relay might be ON).
+        assert!(hc.state.zones.get("z1").unwrap().pending_off_at.is_some());
+        assert!(hc.state.zones.get("z2").unwrap().pending_off_at.is_some());
 
         // Zone 1's echo confirms it was already OFF. This sets
         // pump_off_since (conservative). Advance past min_pause.
