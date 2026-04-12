@@ -95,15 +95,15 @@
 
         music-meta-fix = pkgs.callPackage "${cfg-meta.paths.pkg}/music-meta-fix/default.nix" { };
 
-        hue-frontend =
+        mqtt-controller-frontend =
           let
             craneLib = (inputs.crane.mkLib pkgs).overrideToolchain (p:
               p.rust-bin.stable.latest.default.override {
                 targets = [ "wasm32-unknown-unknown" ];
               }
             );
-            hue-controller-src = pkgs.lib.cleanSourceWith {
-              src = "${cfg-meta.paths.pkg}/hue-controller";
+            mqtt-controller-src = pkgs.lib.cleanSourceWith {
+              src = "${cfg-meta.paths.pkg}/mqtt-controller";
               filter = name: type:
                 let baseName = baseNameOf (toString name); in
                 ! (type == "directory" && baseName == "target");
@@ -111,9 +111,9 @@
           in
           let
             commonArgs = {
-              src = hue-controller-src;
-              cargoToml = "${hue-controller-src}/crates/hue-frontend/Cargo.toml";
-              cargoExtraArgs = "-p hue-frontend";
+              src = mqtt-controller-src;
+              cargoToml = "${mqtt-controller-src}/crates/mqtt-controller-frontend/Cargo.toml";
+              cargoExtraArgs = "-p mqtt-controller-frontend";
             };
             cargoArtifacts = craneLib.buildDepsOnly (commonArgs // {
               CARGO_BUILD_TARGET = "wasm32-unknown-unknown";
@@ -126,13 +126,13 @@
             # trunk must run from the frontend crate directory so it can
             # find the [package] Cargo.toml. We cd there before trunk
             # runs and adjust the install path accordingly.
-            preBuild = "cd crates/hue-frontend";
+            preBuild = "cd crates/mqtt-controller-frontend";
             trunkIndexPath = "./index.html";
             installPhaseCommand = "cp -r dist $out";
           });
 
-        hue-controller = pkgs.callPackage "${cfg-meta.paths.pkg}/hue-controller/default.nix" {
-          hue-frontend = self.hue-frontend;
+        mqtt-controller = pkgs.callPackage "${cfg-meta.paths.pkg}/mqtt-controller/default.nix" {
+          mqtt-controller-frontend = self.mqtt-controller-frontend;
         };
 
         zigbee-mqtt-import = pkgs.callPackage "${cfg-meta.paths.pkg}/zigbee-mqtt-import/default.nix" { };

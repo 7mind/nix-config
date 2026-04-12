@@ -38,7 +38,7 @@
   ./locale-ie.nix
   ./metrics.nix
   ./mosquitto.nix
-  ./hue-controller.nix
+  ./mqtt-controller.nix
   ./mouse.nix
   ./networking-desktop.nix
   ./networking.nix

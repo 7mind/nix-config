@@ -11,7 +11,7 @@ topic, and writes a JSON object of the form
 
 to stdout. Output is sorted by ieee_address for stable diffs so the
 result can be checked into source control / pasted into the
-`devicesByAddress` block of `hue-lights.nix`.
+`devicesByAddress` block of `mqtt-controller-config.nix`.
 
 `type` is inferred from the device's `definition.exposes` payload:
 
