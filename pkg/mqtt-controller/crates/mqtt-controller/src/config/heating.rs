@@ -390,6 +390,16 @@ pub enum HeatingConfigError {
     RelayMissingManualControl { zone: String, relay: String },
 
     #[error(
+        "zone {zone:?}: {device_kind} {device:?} is missing options.operating_mode = \"manual\" — \
+         without this the device's internal schedule may override controller commands"
+    )]
+    DeviceMissingManualMode {
+        zone: String,
+        device: String,
+        device_kind: &'static str,
+    },
+
+    #[error(
         "heat_pump.{field} must be > 0 (got {value}); zero disables pump protection"
     )]
     ZeroProtectionTimer { field: &'static str, value: u64 },

@@ -825,19 +825,21 @@ impl Topology {
                             },
                         ));
                     }
-                    // operating_mode = manual is recommended but enforced
-                    // at runtime (the controller reasserts it if it drifts).
+                    // operating_mode = manual is a hard requirement:
+                    // without it the wall thermostat's internal schedule
+                    // overrides our relay commands.
                     let has_manual_mode = opts
                         .get("operating_mode")
                         .and_then(|v| v.as_str())
                         .is_some_and(|v| v == "manual");
                     if !has_manual_mode {
-                        tracing::warn!(
-                            zone = %zone.name,
-                            relay = %zone.relay,
-                            "wall thermostat is missing options.operating_mode = \"manual\"; \
-                             device's internal schedule may override relay control"
-                        );
+                        return Err(TopologyError::HeatingError(
+                            HeatingConfigError::DeviceMissingManualMode {
+                                zone: zone.name.clone(),
+                                device: zone.relay.clone(),
+                                device_kind: "relay",
+                            },
+                        ));
                     }
                     crate::config::heating::validate_wall_thermostat_options(
                         &zone.relay, opts,
@@ -869,12 +871,13 @@ impl Topology {
                             .and_then(|v| v.as_str())
                             .is_some_and(|v| v == "manual");
                         if !has_manual {
-                            tracing::warn!(
-                                zone = %zone.name,
-                                trv = %zt.device,
-                                "TRV is missing options.operating_mode = \"manual\"; \
-                                 device's internal schedule may override setpoint commands"
-                            );
+                            return Err(TopologyError::HeatingError(
+                                HeatingConfigError::DeviceMissingManualMode {
+                                    zone: zone.name.clone(),
+                                    device: zt.device.clone(),
+                                    device_kind: "TRV",
+                                },
+                            ));
                         }
                         crate::config::heating::validate_trv_options(&zt.device, opts)
                             .map_err(TopologyError::HeatingError)?;

@@ -1233,7 +1233,9 @@ mod tests {
         DeviceCatalogEntry::Trv(CommonFields {
             ieee_address: ieee.into(),
             description: None,
-            options: BTreeMap::new(),
+            options: BTreeMap::from([
+                ("operating_mode".into(), serde_json::json!("manual")),
+            ]),
         })
     }
 
