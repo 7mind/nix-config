@@ -119,16 +119,14 @@ in
       };
 
       # libvirt upstream uses systemd-creds encrypt (TPM/host-key) for the secrets
-      # encryption key, but not all hosts have a TPM. Store as a plain file and load
-      # via LoadCredential instead of LoadCredentialEncrypted.
+      # encryption key. On hosts without TPM, the key must be encrypted with
+      # --with-key=host-only. If migrating from a TPM host, delete the old key:
+      #   rm /var/lib/libvirt/secrets/secrets-encryption-key
+      #   systemctl restart virt-secret-init-encryption
       systemd.services.virt-secret-init-encryption.serviceConfig.ExecStart = lib.mkForce [
         ""
-        "${pkgs.runtimeShell} -c 'umask 0077 && ${pkgs.coreutils}/bin/dd if=/dev/random status=none bs=32 count=1 of=/var/lib/libvirt/secrets/secrets-encryption-key'"
+        "${pkgs.runtimeShell} -c 'umask 0077 && (${pkgs.coreutils}/bin/dd if=/dev/random status=none bs=32 count=1 | ${pkgs.systemd}/bin/systemd-creds encrypt --with-key=host-only --name=secrets-encryption-key - /var/lib/libvirt/secrets/secrets-encryption-key)'"
       ];
-      systemd.services.libvirtd.serviceConfig = {
-        LoadCredentialEncrypted = lib.mkForce "";
-        LoadCredential = [ "secrets-encryption-key:/var/lib/libvirt/secrets/secrets-encryption-key" ];
-      };
     }
 
     (lib.mkIf cfg.iommu.enable {
