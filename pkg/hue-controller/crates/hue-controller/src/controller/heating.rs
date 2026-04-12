@@ -983,7 +983,8 @@ impl HeatingController {
         Vec::new()
     }
 
-    fn reconcile_relays(&self) -> Vec<Action> {
+    fn reconcile_relays(&mut self) -> Vec<Action> {
+        let now = self.clock.now();
         let mut actions = Vec::new();
         for zone in &self.config.zones {
             let Some(zone_state) = self.state.zones.get(&zone.name) else {
@@ -992,18 +993,13 @@ impl HeatingController {
             let Some(desired) = zone_state.desired_relay else {
                 continue;
             };
-            // Skip entries changed this tick (already published).
             if zone_state.desired_relay_gen == self.tick_gen {
                 continue;
             }
 
-            // Normal case: desired != confirmed → retry.
             let needs_retry = if desired != zone_state.relay_on {
                 true
             } else if !desired && zone_state.pending_on_at.is_some() {
-                // Special case: desired=false, relay_on=false, but
-                // this zone has a pending ON — the relay might physically
-                // be ON (ON echo was lost). Keep retrying OFF.
                 true
             } else {
                 false
@@ -1019,12 +1015,22 @@ impl HeatingController {
                 Payload::device_off()
             };
             actions.push(Action::for_device(zone.relay.clone(), payload));
+
+            // Refresh pending_off_at on every OFF retry so min_pause is
+            // measured from the most recent command, not the original
+            // probe. If the first publish was lost and a later retry is
+            // the one that actually stops the relay, this ensures
+            // min_pause covers the real stop time.
+            if !desired {
+                if let Some(zs) = self.state.zones.get_mut(&zone.name) {
+                    zs.pending_off_at = Some(now);
+                }
+            }
+
             tracing::info!(
                 zone = %zone.name,
                 relay = %zone.relay,
                 desired,
-                confirmed = zone_state.relay_on,
-                pending_on = zone_state.pending_on_at.is_some(),
                 "reconcile: retrying unconfirmed relay command"
             );
         }
