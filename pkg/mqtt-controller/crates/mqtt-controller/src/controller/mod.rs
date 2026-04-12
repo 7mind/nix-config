@@ -290,6 +290,11 @@ impl Controller {
         &self.clock
     }
 
+    /// Read-only access to the heating sub-controller's runtime state.
+    pub fn heating_state(&self) -> Option<&crate::domain::heating_state::HeatingRuntimeState> {
+        self.heating.as_ref().map(|hc| hc.state())
+    }
+
     /// Reference to the geographic location (if configured).
     pub fn location(&self) -> Option<&crate::sun::Location> {
         self.location.as_ref()

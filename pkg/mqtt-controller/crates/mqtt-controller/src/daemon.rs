@@ -432,6 +432,13 @@ async fn run_event_loop(
             String::new()
         };
 
+        // Extract event-side entity names before the event is consumed.
+        let event_entities = if has_web {
+            snapshot::extract_event_entities(&event, controller.topology())
+        } else {
+            Vec::new()
+        };
+
         let actions = controller.handle_event(event);
 
         // Broadcast to WebSocket clients.
@@ -439,12 +446,18 @@ async fn run_event_loop(
             let decisions = decision_capture::drain_capture();
             if !event_summary.is_empty() || !actions.is_empty() || !decisions.is_empty() {
                 event_seq += 1;
+                let involved_entities = snapshot::finish_involved_entities(
+                    event_entities,
+                    &actions,
+                    controller.topology(),
+                );
                 let entry = mqtt_controller_wire::DecisionLogEntry {
                     seq: event_seq,
                     timestamp_epoch_ms: clock.epoch_millis(),
                     event_summary,
                     decisions,
                     actions_emitted: actions.iter().map(snapshot::action_to_dto).collect(),
+                    involved_entities,
                 };
                 let _ = tx.send(mqtt_controller_wire::ServerMessage::EventLog(entry));
             }
@@ -529,7 +542,7 @@ async fn handle_ws_command(
     }
 }
 
-/// Broadcast current state of all rooms and plugs to WebSocket clients.
+/// Broadcast current state of all rooms, plugs, and heating zones to WebSocket clients.
 fn broadcast_state_updates(
     controller: &Controller,
     tx: &broadcast::Sender<mqtt_controller_wire::ServerMessage>,
@@ -544,6 +557,13 @@ fn broadcast_state_updates(
     for plug_name in topology.all_plug_names() {
         if let Some(snap) = snapshot::build_plug_snapshot(controller, plug_name, now) {
             let _ = tx.send(mqtt_controller_wire::ServerMessage::PlugUpdate(snap));
+        }
+    }
+    if let Some(cfg) = topology.heating_config() {
+        for zone in &cfg.zones {
+            if let Some(snap) = snapshot::build_heating_zone_snapshot(controller, &zone.name, now) {
+                let _ = tx.send(mqtt_controller_wire::ServerMessage::HeatingZoneUpdate(snap));
+            }
         }
     }
 }

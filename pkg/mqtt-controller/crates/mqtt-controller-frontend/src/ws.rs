@@ -1,13 +1,15 @@
 //! WebSocket connection manager with auto-reconnect.
 
+use std::collections::BTreeSet;
+
 use leptos::prelude::*;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{CloseEvent, ErrorEvent, MessageEvent, WebSocket};
 
 use mqtt_controller_wire::{
-    ClientMessage, DecisionLogEntry, FullStateSnapshot, RoomSnapshot, ServerMessage, TopologyInfo,
-    PlugSnapshot,
+    ClientMessage, DecisionLogEntry, FullStateSnapshot, HeatingZoneSnapshot, RoomSnapshot,
+    ServerMessage, TopologyInfo, PlugSnapshot,
 };
 
 const MAX_LOG_ENTRIES: usize = 200;
@@ -21,6 +23,12 @@ pub struct WsState {
     pub snapshot: ReadSignal<Option<FullStateSnapshot>>,
     pub topology: ReadSignal<Option<TopologyInfo>>,
     pub log_entries: ReadSignal<Vec<DecisionLogEntry>>,
+    /// Entity names selected for event log filtering. Empty = show all.
+    pub filter_entities: ReadSignal<BTreeSet<String>>,
+    pub set_filter_entities: WriteSignal<BTreeSet<String>>,
+    /// Entity name whose JSON detail is expanded. None = all collapsed.
+    pub detail_entity: ReadSignal<Option<String>>,
+    pub set_detail_entity: WriteSignal<Option<String>>,
     ws: StoredValue<Option<WebSocket>>,
     set_connected: WriteSignal<bool>,
     set_snapshot: WriteSignal<Option<FullStateSnapshot>>,
@@ -34,6 +42,8 @@ impl WsState {
         let (snapshot, set_snapshot) = signal(None::<FullStateSnapshot>);
         let (topology, set_topology) = signal(None::<TopologyInfo>);
         let (log_entries, set_log_entries) = signal(Vec::<DecisionLogEntry>::new());
+        let (filter_entities, set_filter_entities) = signal(BTreeSet::<String>::new());
+        let (detail_entity, set_detail_entity) = signal(None::<String>);
         let ws = StoredValue::new(None::<WebSocket>);
 
         let state = Self {
@@ -41,6 +51,10 @@ impl WsState {
             snapshot,
             topology,
             log_entries,
+            filter_entities,
+            set_filter_entities,
+            detail_entity,
+            set_detail_entity,
             ws,
             set_connected,
             set_snapshot,
@@ -49,6 +63,20 @@ impl WsState {
         };
         state.connect(0);
         state
+    }
+
+    /// Clear the event log.
+    pub fn clear_log(&self) {
+        self.set_log_entries.set(Vec::new());
+    }
+
+    /// Toggle an entity in the filter set.
+    pub fn toggle_filter(&self, entity: &str) {
+        self.set_filter_entities.update(|set| {
+            if !set.remove(entity) {
+                set.insert(entity.to_string());
+            }
+        });
     }
 
     /// Send a client message through the WebSocket.
@@ -124,6 +152,13 @@ impl WsState {
                                 }
                             });
                         }
+                        ServerMessage::HeatingZoneUpdate(zone) => {
+                            set_snapshot.update(|snap| {
+                                if let Some(snap) = snap {
+                                    update_heating_zone_in_snapshot(snap, zone);
+                                }
+                            });
+                        }
                     }
                 }
             }
@@ -186,5 +221,13 @@ fn update_plug_in_snapshot(snap: &mut FullStateSnapshot, plug: PlugSnapshot) {
         *existing = plug;
     } else {
         snap.plugs.push(plug);
+    }
+}
+
+fn update_heating_zone_in_snapshot(snap: &mut FullStateSnapshot, zone: HeatingZoneSnapshot) {
+    if let Some(existing) = snap.heating_zones.iter_mut().find(|z| z.name == zone.name) {
+        *existing = zone;
+    } else {
+        snap.heating_zones.push(zone);
     }
 }

@@ -45,11 +45,38 @@ pub struct PlugSnapshot {
     pub power_watts: Option<f64>,
 }
 
+/// Current state of one heating zone (relay + TRVs).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct HeatingZoneSnapshot {
+    pub name: String,
+    pub relay_device: String,
+    pub relay_on: bool,
+    pub relay_state_known: bool,
+    pub relay_temperature: Option<f64>,
+    pub trvs: Vec<TrvSnapshot>,
+}
+
+/// Current state of one TRV.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TrvSnapshot {
+    pub device: String,
+    pub local_temperature: Option<f64>,
+    pub pi_heating_demand: Option<u8>,
+    /// `"idle"`, `"heat"`, or `"unknown"`.
+    pub running_state: String,
+    pub setpoint: Option<f64>,
+    pub battery: Option<u8>,
+    /// True if open-window inhibition is active.
+    pub inhibited: bool,
+}
+
 /// Full state snapshot sent on connect or on explicit request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FullStateSnapshot {
     pub rooms: Vec<RoomSnapshot>,
     pub plugs: Vec<PlugSnapshot>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub heating_zones: Vec<HeatingZoneSnapshot>,
     /// Wall-clock timestamp of when this snapshot was taken (Unix epoch ms).
     pub timestamp_epoch_ms: u64,
 }
@@ -71,6 +98,10 @@ pub struct DecisionLogEntry {
     pub decisions: Vec<String>,
     /// Actions the controller decided to publish.
     pub actions_emitted: Vec<ActionDto>,
+    /// Entity names involved in this event (source + action targets).
+    /// Used by the frontend to filter events by entity.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub involved_entities: Vec<String>,
 }
 
 /// One outbound action (scene recall, state change, brightness, etc.).
@@ -94,6 +125,16 @@ pub struct ActionDto {
 pub struct TopologyInfo {
     pub rooms: Vec<RoomInfo>,
     pub plugs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub heating_zones: Vec<HeatingZoneInfo>,
+}
+
+/// Static metadata for one heating zone.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct HeatingZoneInfo {
+    pub name: String,
+    pub relay_device: String,
+    pub trv_devices: Vec<String>,
 }
 
 /// Static metadata for one room.
@@ -156,6 +197,8 @@ pub enum ServerMessage {
     RoomUpdate(RoomSnapshot),
     /// Incremental plug state update.
     PlugUpdate(PlugSnapshot),
+    /// Incremental heating zone state update.
+    HeatingZoneUpdate(HeatingZoneSnapshot),
 }
 
 // ---------------------------------------------------------------------------
@@ -210,6 +253,22 @@ mod tests {
                 idle_since_ago_ms: Some(30000),
                 power_watts: Some(120.5),
             }],
+            heating_zones: vec![HeatingZoneSnapshot {
+                name: "living-room".into(),
+                relay_device: "z2m-wt-living".into(),
+                relay_on: true,
+                relay_state_known: true,
+                relay_temperature: Some(21.5),
+                trvs: vec![TrvSnapshot {
+                    device: "z2m-trv-living-1".into(),
+                    local_temperature: Some(20.8),
+                    pi_heating_demand: Some(60),
+                    running_state: "heat".into(),
+                    setpoint: Some(22.0),
+                    battery: Some(85),
+                    inhibited: false,
+                }],
+            }],
             timestamp_epoch_ms: 1700000000000,
         });
         let json = serde_json::to_string(&snapshot).unwrap();
@@ -233,6 +292,11 @@ mod tests {
                 has_motion: true,
             }],
             plugs: vec!["z2m-p-printer".into()],
+            heating_zones: vec![HeatingZoneInfo {
+                name: "study".into(),
+                relay_device: "z2m-wt-study".into(),
+                trv_devices: vec!["z2m-trv-study-1".into()],
+            }],
         });
         let json = serde_json::to_string(&topo).unwrap();
         let back: ServerMessage = serde_json::from_str(&json).unwrap();
@@ -254,6 +318,11 @@ mod tests {
                 target_kind: "group".into(),
                 payload_json: r#"{"scene_recall":2}"#.into(),
             }],
+            involved_entities: vec![
+                "hue-lz-kitchen-cooker".into(),
+                "hue-ts-kitchen".into(),
+                "kitchen-cooker".into(),
+            ],
         });
         let json = serde_json::to_string(&entry).unwrap();
         let back: ServerMessage = serde_json::from_str(&json).unwrap();

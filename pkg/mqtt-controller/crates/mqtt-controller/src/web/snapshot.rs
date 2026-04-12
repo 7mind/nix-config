@@ -4,7 +4,8 @@
 use std::time::Instant;
 
 use mqtt_controller_wire::{
-    ActionDto, FullStateSnapshot, PlugSnapshot, RoomInfo, RoomSnapshot, SlotInfo, TopologyInfo,
+    ActionDto, FullStateSnapshot, HeatingZoneInfo, HeatingZoneSnapshot, PlugSnapshot, RoomInfo,
+    RoomSnapshot, SlotInfo, TopologyInfo, TrvSnapshot,
 };
 
 use crate::controller::Controller;
@@ -44,9 +45,12 @@ pub fn build_full_snapshot(controller: &Controller, now: Instant) -> FullStateSn
         })
         .collect();
 
+    let heating_zones = build_heating_zone_snapshots(controller, now);
+
     FullStateSnapshot {
         rooms,
         plugs,
+        heating_zones,
         timestamp_epoch_ms: epoch_ms,
     }
 }
@@ -156,7 +160,25 @@ pub fn build_topology_info(topology: &Topology) -> TopologyInfo {
 
     let plugs: Vec<String> = topology.all_plug_names().iter().cloned().collect();
 
-    TopologyInfo { rooms, plugs }
+    let heating_zones: Vec<HeatingZoneInfo> = topology
+        .heating_config()
+        .map(|cfg| {
+            cfg.zones
+                .iter()
+                .map(|zone| HeatingZoneInfo {
+                    name: zone.name.clone(),
+                    relay_device: zone.relay.clone(),
+                    trv_devices: zone.trvs.iter().map(|t| t.device.clone()).collect(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    TopologyInfo {
+        rooms,
+        plugs,
+        heating_zones,
+    }
 }
 
 /// Convert an [`Action`] to a wire DTO.
@@ -240,6 +262,171 @@ pub fn summarize_event(event: &crate::domain::event::Event) -> String {
         }
         crate::domain::event::Event::Tick { .. } => "tick".to_string(),
     }
+}
+
+/// Build snapshots for all heating zones.
+fn build_heating_zone_snapshots(
+    controller: &Controller,
+    now: Instant,
+) -> Vec<HeatingZoneSnapshot> {
+    let Some(heating_cfg) = controller.topology().heating_config() else {
+        return Vec::new();
+    };
+    let Some(heating_state) = controller.heating_state() else {
+        return Vec::new();
+    };
+    heating_cfg
+        .zones
+        .iter()
+        .map(|zone| build_one_heating_zone(zone, heating_state, now))
+        .collect()
+}
+
+fn build_one_heating_zone(
+    zone: &crate::config::heating::HeatingZone,
+    heating_state: &crate::domain::heating_state::HeatingRuntimeState,
+    now: Instant,
+) -> HeatingZoneSnapshot {
+    let zone_state = heating_state.zones.get(&zone.name);
+    let relay_on = zone_state.map_or(false, |z| z.relay_on);
+    let relay_state_known = zone_state.map_or(false, |z| z.relay_state_known);
+
+    let trvs: Vec<TrvSnapshot> = zone
+        .trvs
+        .iter()
+        .map(|zt| {
+            let trv_state = zone_state.and_then(|z| z.trvs.get(&zt.device));
+            TrvSnapshot {
+                device: zt.device.clone(),
+                local_temperature: trv_state.and_then(|t| t.local_temperature),
+                pi_heating_demand: trv_state.and_then(|t| t.pi_heating_demand),
+                running_state: trv_state
+                    .map(|t| {
+                        if !t.running_state_seen {
+                            "unknown"
+                        } else if t.running_state.is_heat() {
+                            "heat"
+                        } else {
+                            "idle"
+                        }
+                    })
+                    .unwrap_or("unknown")
+                    .to_string(),
+                setpoint: trv_state.and_then(|t| t.reported_setpoint),
+                battery: trv_state.and_then(|t| t.battery),
+                inhibited: trv_state.is_some_and(|t| t.is_inhibited(now)),
+            }
+        })
+        .collect();
+
+    // Wall thermostat temperature: not tracked in zone state (it arrives
+    // via the Event, not stored separately). We leave it None for now;
+    // the relay_on state is the main piece of information.
+    HeatingZoneSnapshot {
+        name: zone.name.clone(),
+        relay_device: zone.relay.clone(),
+        relay_on,
+        relay_state_known,
+        relay_temperature: None,
+        trvs,
+    }
+}
+
+/// Build a single heating zone snapshot for incremental updates.
+pub fn build_heating_zone_snapshot(
+    controller: &Controller,
+    zone_name: &str,
+    now: Instant,
+) -> Option<HeatingZoneSnapshot> {
+    let heating_cfg = controller.topology().heating_config()?;
+    let heating_state = controller.heating_state()?;
+    let zone = heating_cfg.zones.iter().find(|z| z.name == zone_name)?;
+    Some(build_one_heating_zone(zone, heating_state, now))
+}
+
+/// Extract entity names from an event (before it is consumed by handle_event).
+pub fn extract_event_entities(
+    event: &crate::domain::event::Event,
+    topology: &Topology,
+) -> Vec<String> {
+    let mut entities = Vec::new();
+    match event {
+        crate::domain::event::Event::SwitchAction { device, .. } => {
+            entities.push(device.clone());
+            for room in topology.rooms_for_switch(device) {
+                entities.push(room.clone());
+            }
+        }
+        crate::domain::event::Event::TapAction {
+            device, button, ..
+        } => {
+            entities.push(device.clone());
+            for room in topology.rooms_for_tap_button(device, *button) {
+                entities.push(room.clone());
+            }
+        }
+        crate::domain::event::Event::Occupancy { sensor, .. } => {
+            entities.push(sensor.clone());
+            for room in topology.rooms_for_motion(sensor) {
+                entities.push(room.clone());
+            }
+        }
+        crate::domain::event::Event::GroupState { group, .. } => {
+            entities.push(group.clone());
+            if let Some(room) = topology.room_by_group_name(group) {
+                entities.push(room.name.clone());
+            }
+        }
+        crate::domain::event::Event::PlugState { device, .. }
+        | crate::domain::event::Event::PlugPowerUpdate { device, .. } => {
+            entities.push(device.clone());
+        }
+        crate::domain::event::Event::TrvState { device, .. } => {
+            entities.push(device.clone());
+            if let Some(cfg) = topology.heating_config() {
+                for zone in &cfg.zones {
+                    if zone.trvs.iter().any(|t| t.device == *device) {
+                        entities.push(zone.name.clone());
+                    }
+                }
+            }
+        }
+        crate::domain::event::Event::WallThermostatState { device, .. } => {
+            entities.push(device.clone());
+            if let Some(cfg) = topology.heating_config() {
+                for zone in &cfg.zones {
+                    if zone.relay == *device {
+                        entities.push(zone.name.clone());
+                    }
+                }
+            }
+        }
+        crate::domain::event::Event::Tick { .. } => {}
+    }
+    entities
+}
+
+/// Combine event entities with action-target entities into a deduped list.
+pub fn finish_involved_entities(
+    mut entities: Vec<String>,
+    actions: &[crate::domain::action::Action],
+    topology: &Topology,
+) -> Vec<String> {
+    for action in actions {
+        let target_name = match &action.target {
+            crate::domain::action::ActionTarget::Group(name) => name,
+            crate::domain::action::ActionTarget::Device(name) => name,
+        };
+        entities.push(target_name.clone());
+        if let crate::domain::action::ActionTarget::Group(group) = &action.target {
+            if let Some(room) = topology.room_by_group_name(group) {
+                entities.push(room.name.clone());
+            }
+        }
+    }
+    entities.sort();
+    entities.dedup();
+    entities
 }
 
 fn ago_ms(now: Instant, then: Instant) -> u64 {

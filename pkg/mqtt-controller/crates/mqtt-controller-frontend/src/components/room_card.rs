@@ -30,6 +30,8 @@ fn RoomCard(room: RoomSnapshot) -> impl IntoView {
     let ws = expect_context::<WsState>();
     let room_name = room.name.clone();
     let display_name = room.name.clone();
+    let filter_name = room.name.clone();
+    let detail_name = room.name.clone();
     let on_class = if room.physically_on { "status-dot on" } else { "status-dot off" };
 
     let scene_buttons: Vec<_> = room
@@ -71,11 +73,47 @@ fn RoomCard(room: RoomSnapshot) -> impl IntoView {
     };
     let cycle_text = format!(" cycle: {}", room.cycle_idx);
 
+    let json_text = serde_json::to_string_pretty(&room).unwrap_or_default();
+
+    let filter_ws = ws.clone();
+    let filter_entities = ws.filter_entities;
+    let detail_entity = ws.detail_entity;
+
+    let detail_ws = ws.clone();
+
+    let filter_name_cb = filter_name.clone();
+
     view! {
         <div class="card">
             <div class="card-header">
+                <input
+                    type="checkbox"
+                    class="entity-filter-cb"
+                    prop:checked=move || filter_entities.get().contains(&filter_name_cb)
+                    on:change={
+                        let name = filter_name.clone();
+                        move |_| filter_ws.toggle_filter(&name)
+                    }
+                />
                 <span class=on_class></span>
-                <span class="card-name">{display_name}</span>
+                <span class="card-name">{display_name.clone()}</span>
+                <button
+                    class="btn detail-btn"
+                    on:click={
+                        let name = detail_name.clone();
+                        move |_| {
+                            detail_ws.set_detail_entity.update(|current| {
+                                if current.as_deref() == Some(&name) {
+                                    *current = None;
+                                } else {
+                                    *current = Some(name.clone());
+                                }
+                            });
+                        }
+                    }
+                >
+                    "JSON"
+                </button>
             </div>
             <div class="card-meta">
                 {slot_badge}
@@ -94,6 +132,12 @@ fn RoomCard(room: RoomSnapshot) -> impl IntoView {
                     "OFF"
                 </button>
             </div>
+            {move || {
+                let show = detail_entity.get().as_deref() == Some(display_name.as_str());
+                show.then(|| view! {
+                    <pre class="json-detail">{json_text.clone()}</pre>
+                })
+            }}
         </div>
     }
 }

@@ -3,6 +3,7 @@
 use leptos::prelude::*;
 
 use crate::components::event_log::EventLog;
+use crate::components::heating_card::HeatingCards;
 use crate::components::plug_card::PlugCards;
 use crate::components::room_card::RoomCards;
 use crate::ws::WsState;
@@ -26,6 +27,10 @@ pub fn App() -> impl IntoView {
                 <section>
                     <h2>"Plugs"</h2>
                     <PlugCards />
+                </section>
+                <section>
+                    <h2>"Heating"</h2>
+                    <HeatingCards />
                 </section>
                 <section class="event-log">
                     <h2>"Event Log"</h2>

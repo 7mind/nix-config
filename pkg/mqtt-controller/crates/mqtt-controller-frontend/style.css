@@ -9,6 +9,8 @@
     --on: #4ecca3;
     --off: #555;
     --motion: #f9a826;
+    --heat: #e94560;
+    --idle: #4ecca3;
 }
 
 * {
@@ -96,6 +98,7 @@ header h1 {
 .card-name {
     font-weight: 600;
     font-size: 0.95rem;
+    flex: 1;
 }
 
 .card-meta {
@@ -113,6 +116,10 @@ header h1 {
 }
 .badge.motion { background: var(--motion); color: #000; }
 .badge.slot { background: var(--border); }
+.badge.heat { background: var(--heat); color: #fff; }
+.badge.idle { background: var(--idle); color: #000; }
+.badge.unknown { background: var(--off); color: var(--text); }
+.badge.inhibited { background: #6a5acd; color: #fff; }
 
 .card-controls {
     display: flex;
@@ -135,6 +142,76 @@ header h1 {
 .btn.active { border-color: var(--on); color: var(--on); }
 .btn.off-btn { border-color: var(--accent); color: var(--accent); }
 
+/* Entity filter checkbox */
+.entity-filter-cb {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    cursor: pointer;
+    accent-color: var(--on);
+}
+
+/* JSON detail button */
+.detail-btn {
+    font-size: 0.65rem;
+    padding: 0.15rem 0.4rem;
+    margin-left: auto;
+}
+
+/* JSON detail view */
+.json-detail {
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 300px;
+    overflow-y: auto;
+    color: var(--text-muted);
+}
+
+/* Heating cards */
+.heating-card .trv-list {
+    margin-top: 0.25rem;
+}
+
+.trv-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0;
+    border-top: 1px solid var(--border);
+    font-size: 0.8rem;
+}
+
+.trv-device {
+    font-weight: 500;
+    min-width: 0;
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.trv-temp {
+    color: var(--text);
+}
+
+.trv-battery {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+}
+
+.relay-device {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
 /* Event log */
 .event-log {
     grid-column: 1 / -1;
@@ -143,6 +220,22 @@ header h1 {
 .event-log h2 {
     font-size: 1rem;
     margin-bottom: 0.5rem;
+}
+
+.log-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.filter-summary {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
 }
 
 .log-list {
@@ -169,6 +262,14 @@ header h1 {
 
 .log-entry .event-summary {
     font-weight: 500;
+}
+
+.log-entry .involved-entities {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.65rem;
+    margin-top: 0.1rem;
+    font-style: italic;
 }
 
 .log-entry .decisions {
