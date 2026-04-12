@@ -104,12 +104,15 @@ pub async fn run(
 
     refresh_state(&mut controller, &bridge, &mut event_rx, &topology, &*clock).await?;
 
-    // Default any room that the refresh found "physically on" to
-    // motion-owned. We can't tell from MQTT alone whether it was a
-    // user press or a motion event that turned the lights on; the
-    // motion-default loses one false auto-off in the worst case but
-    // gains the ability to auto-clear lights left on at boot.
-    controller.log_startup_lit_rooms();
+    // Turn off any motion-controlled room that was left on before
+    // restart. No cooldown is applied so motion sensors can
+    // immediately re-trigger if someone is actually in the room.
+    let startup_off = controller.startup_turn_off_motion_zones(clock.now());
+    for action in &startup_off {
+        if let Err(e) = bridge.publish_action(action).await {
+            tracing::error!(error = ?e, "failed to publish startup turn-off action");
+        }
+    }
     controller.arm_kill_switches_for_active_plugs(clock.now());
 
     tracing::info!("startup state refresh complete; entering event loop");

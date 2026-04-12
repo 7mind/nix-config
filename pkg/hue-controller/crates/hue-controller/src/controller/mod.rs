@@ -211,18 +211,41 @@ impl Controller {
         state.physically_on = on;
     }
 
-    /// Log rooms that are physically on at startup but leave them
-    /// user-owned (motion_owned = false).
-    pub fn log_startup_lit_rooms(&mut self) {
-        for (room_name, state) in self.states.iter_mut() {
-            if state.physically_on {
+    /// Turn off all motion-controlled rooms that are physically on at
+    /// startup. Non-motion rooms are left user-owned (logged only).
+    ///
+    /// Deliberately does NOT set `last_off_at` so that motion sensors
+    /// can immediately re-trigger the lights if someone is in the room.
+    pub fn startup_turn_off_motion_zones(&mut self, ts: Instant) -> Vec<Action> {
+        let mut out = Vec::new();
+        for room in self.topology.rooms() {
+            let state = self.states.entry(room.name.clone()).or_default();
+            if !state.physically_on {
+                continue;
+            }
+            if room.has_motion_sensor() {
                 tracing::info!(
-                    room = %room_name,
-                    "startup: room is physically on; leaving user-owned \
-                     (motion-off requires a full occupied→cleared cycle)"
+                    room = %room.name,
+                    group = %room.group_name,
+                    transition = room.off_transition_seconds,
+                    "startup: turning off motion-controlled zone (no cooldown)"
+                );
+                state.physically_on = false;
+                state.motion_owned = false;
+                state.cycle_idx = 0;
+                // Deliberately skip last_off_at — no cooldown after startup turn-off.
+                out.push(Action::new(
+                    &room.group_name,
+                    Payload::state_off(room.off_transition_seconds),
+                ));
+            } else {
+                tracing::info!(
+                    room = %room.name,
+                    "startup: room is physically on; leaving user-owned (no motion sensor)"
                 );
             }
         }
+        out
     }
 
     /// Read-only access to every room's state.
@@ -1027,34 +1050,82 @@ mod tests {
         assert_eq!(off, vec![Action::new("hue-lz-hall", Payload::state_off(0.8))]);
     }
 
-    // ---- startup motion-ownership seed ----------------------------------
+    // ---- startup turn-off for motion zones --------------------------------
 
     #[test]
-    fn seed_does_not_assume_motion_ownership() {
+    fn startup_turns_off_lit_motion_rooms() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = study_with_motion_controller(clk.clone());
         c.set_physical_state("study", true);
-        c.log_startup_lit_rooms();
-        assert!(!c.state_for("study").unwrap().motion_owned, "lit rooms must stay user-owned at startup");
+        let actions = c.startup_turn_off_motion_zones(clk.now());
+        assert_eq!(actions, vec![Action::new("hue-lz-study", Payload::state_off(0.8))]);
+        let s = c.state_for("study").unwrap();
+        assert!(!s.physically_on);
+        assert!(!s.motion_owned);
     }
 
     #[test]
-    fn seed_motion_ownership_skips_unlit_rooms() {
+    fn startup_skips_unlit_motion_rooms() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = study_with_motion_controller(clk.clone());
         c.set_physical_state("study", false);
-        c.log_startup_lit_rooms();
-        assert!(!c.state_for("study").unwrap().motion_owned);
+        let actions = c.startup_turn_off_motion_zones(clk.now());
+        assert!(actions.is_empty());
     }
 
     #[test]
-    fn motion_off_suppressed_after_startup_seed() {
+    fn startup_no_cooldown_after_turn_off() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = study_with_motion_controller(clk.clone());
         c.set_physical_state("study", true);
-        c.log_startup_lit_rooms();
-        let actions = c.handle_event(Event::Occupancy { sensor: "hue-ms-study".into(), occupied: false, illuminance: None, ts: clk.now() });
-        assert!(actions.is_empty(), "motion-off must be suppressed after startup (user-owned)");
+        let _ = c.startup_turn_off_motion_zones(clk.now());
+        assert!(c.state_for("study").unwrap().last_off_at.is_none(),
+            "startup turn-off must not set cooldown");
+        // Motion can immediately re-trigger.
+        let on = c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(), occupied: true,
+            illuminance: Some(10), ts: clk.now(),
+        });
+        assert_eq!(on, vec![Action::new("hue-lz-study", Payload::scene_recall(1))]);
+    }
+
+    #[test]
+    fn startup_motion_off_suppressed_room_already_off() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = study_with_motion_controller(clk.clone());
+        c.set_physical_state("study", true);
+        let _ = c.startup_turn_off_motion_zones(clk.now());
+        let actions = c.handle_event(Event::Occupancy {
+            sensor: "hue-ms-study".into(), occupied: false,
+            illuminance: None, ts: clk.now(),
+        });
+        assert!(actions.is_empty(), "motion-off suppressed: room already off after startup");
+    }
+
+    #[test]
+    fn startup_leaves_non_motion_rooms_on() {
+        let clk = Arc::new(FakeClock::new(12));
+        let cfg = Config {
+            name_by_address: BTreeMap::new(),
+            devices: BTreeMap::from([
+                ("hue-l-a".into(), light("0xa")),
+                ("hue-s-foo".into(), switch_dev("0x1")),
+            ]),
+            rooms: vec![Room {
+                name: "office".into(), group_name: "hue-lz-office".into(), id: 1,
+                members: vec!["hue-l-a/11".into()], parent: None,
+                devices: vec![binding("hue-s-foo", None)],
+                scenes: day_scenes(vec![1]), off_transition_seconds: 0.8,
+                motion_off_cooldown_seconds: 0,
+            }],
+            actions: vec![], defaults: Defaults::default(), heating: None,
+        };
+        let topo = Arc::new(Topology::build(&cfg).unwrap());
+        let mut c = Controller::new(topo, clk.clone(), cfg.defaults);
+        c.set_physical_state("office", true);
+        let actions = c.startup_turn_off_motion_zones(clk.now());
+        assert!(actions.is_empty(), "non-motion rooms must not be turned off at startup");
+        assert!(c.state_for("office").unwrap().physically_on);
     }
 
     // ---- group state reconciliation -------------------------------------
