@@ -983,8 +983,7 @@ impl HeatingController {
         Vec::new()
     }
 
-    fn reconcile_relays(&mut self) -> Vec<Action> {
-        let now = self.clock.now();
+    fn reconcile_relays(&self) -> Vec<Action> {
         let mut actions = Vec::new();
         for zone in &self.config.zones {
             let Some(zone_state) = self.state.zones.get(&zone.name) else {
@@ -1015,18 +1014,12 @@ impl HeatingController {
                 Payload::device_off()
             };
             actions.push(Action::for_device(zone.relay.clone(), payload));
-
-            // Refresh pending_off_at on every OFF retry so min_pause is
-            // measured from the most recent command, not the original
-            // probe. If the first publish was lost and a later retry is
-            // the one that actually stops the relay, this ensures
-            // min_pause covers the real stop time.
-            if !desired {
-                if let Some(zs) = self.state.zones.get_mut(&zone.name) {
-                    zs.pending_off_at = Some(now);
-                }
-            }
-
+            // pending_off_at stays pinned at the original probe/command
+            // time. Refreshing it on every retry would slide min_pause
+            // forward indefinitely, causing a heating lockout when echoes
+            // are delayed. The bounded staleness (a few seconds) if a
+            // later retry is the one that actually stops the relay is
+            // acceptable — the echo will set proper timestamps.
             tracing::info!(
                 zone = %zone.name,
                 relay = %zone.relay,
