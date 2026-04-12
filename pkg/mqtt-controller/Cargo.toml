@@ -6,7 +6,6 @@ resolver = "3"
 # Smaller binary on raspi5m: thin LTO is a good speed/size tradeoff and
 # stripping symbols cuts ~20-30%.
 lto = "thin"
-codegen-units = 1
 strip = "symbols"
 # Optimize for size, not for SIMD throughput — this is an MQTT pub/sub
 # service, not a compute kernel.

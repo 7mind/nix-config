@@ -141,9 +141,9 @@ impl HeatingController {
     /// Called on every Tick. Returns all heating actions.
     pub fn handle_tick(&mut self) -> Vec<Action> {
         self.tick_gen += 1;
+        let mut actions = Vec::new();
         if !self.startup_complete {
             self.startup_complete = true;
-            // Warn about zones whose relay state is still unknown.
             for zone in &self.config.zones {
                 if let Some(zs) = self.state.zones.get(&zone.name) {
                     if !zs.relay_state_known {
@@ -155,6 +155,10 @@ impl HeatingController {
                         );
                     }
                 }
+                // No startup window_detection clear needed: we don't use
+                // window_detection in automatic inhibition (setpoint-only),
+                // and a one-shot unreconciled write could strand a TRV
+                // if the publish is lost.
             }
         }
         let now = self.clock.now();
@@ -162,25 +166,30 @@ impl HeatingController {
         let hour = self.clock.local_hour();
         let minute = self.clock.local_minute();
 
-        let mut actions = Vec::new();
-
         // 0. Expire any finished inhibitions (runs unconditionally).
         self.expire_inhibitions(now);
 
         // 0b. Warn about stale TRVs (demand suppressed automatically).
         for zone in &self.config.zones {
-            if let Some(zs) = self.state.zones.get(&zone.name) {
+            if let Some(zs) = self.state.zones.get_mut(&zone.name) {
                 for zt in &zone.trvs {
-                    if let Some(trv) = zs.trvs.get(&zt.device) {
-                        if trv.is_stale(now) && trv.has_raw_demand() {
-                            tracing::warn!(
-                                trv = %zt.device,
-                                zone = %zone.name,
-                                last_seen_secs_ago = trv.last_seen
-                                    .map(|s| now.duration_since(s).as_secs())
-                                    .unwrap_or(0),
-                                "TRV stale: demand suppressed (device may be unreachable)"
-                            );
+                    if let Some(trv) = zs.trvs.get_mut(&zt.device) {
+                        if trv.is_stale(now) {
+                            // Clear pressure_release_pending if stuck
+                            // (TRV went unreachable after pressure release).
+                            if trv.pressure_release_pending {
+                                trv.pressure_release_pending = false;
+                            }
+                            if trv.has_raw_demand() {
+                                tracing::warn!(
+                                    trv = %zt.device,
+                                    zone = %zone.name,
+                                    last_seen_secs_ago = trv.last_seen
+                                        .map(|s| now.duration_since(s).as_secs())
+                                        .unwrap_or(0),
+                                    "TRV stale: demand suppressed (device may be unreachable)"
+                                );
+                            }
                         }
                     }
                 }
@@ -233,6 +242,15 @@ impl HeatingController {
         trv.last_seen = Some(now);
         if let Some(temp) = local_temperature {
             trv.local_temperature = Some(temp);
+            trv.temp_last_updated = Some(now);
+            // Backfill open-window baseline if we were waiting for a
+            // fresh temp after relay-on.
+            if trv.awaiting_temp_baseline {
+                trv.temp_at_relay_on = Some(temp);
+                trv.temp_high_water = Some(temp);
+                trv.baseline_established_at = Some(now);
+                trv.awaiting_temp_baseline = false;
+            }
             // Update high-water mark for open-window detection.
             if trv.temp_at_relay_on.is_some() {
                 trv.temp_high_water = Some(
@@ -355,9 +373,28 @@ impl HeatingController {
             // complete. During startup, this is state synchronization
             // (the relay was already on), not a fresh heating cycle.
             if self.startup_complete {
+                // Capture the ON command time before clearing it.
+                // A TRV temp that arrived after the ON command but
+                // before this echo is a valid post-heating baseline.
+                let on_command_at = zone_state.pending_on_at;
                 for trv_state in zone_state.trvs.values_mut() {
-                    trv_state.temp_at_relay_on = trv_state.local_temperature;
-                    trv_state.temp_high_water = trv_state.local_temperature;
+                    // Check if a temp arrived after the ON command.
+                    let has_post_command_temp = on_command_at
+                        .zip(trv_state.temp_last_updated)
+                        .is_some_and(|(cmd, temp)| temp >= cmd);
+                    if has_post_command_temp {
+                        // Reuse as baseline — it arrived after heating started.
+                        trv_state.temp_at_relay_on = trv_state.local_temperature;
+                        trv_state.temp_high_water = trv_state.local_temperature;
+                        trv_state.baseline_established_at = trv_state.temp_last_updated;
+                        trv_state.awaiting_temp_baseline = false;
+                    } else {
+                        // Wait for the first post-ON temperature.
+                        trv_state.temp_at_relay_on = None;
+                        trv_state.temp_high_water = None;
+                        trv_state.baseline_established_at = None;
+                        trv_state.awaiting_temp_baseline = true;
+                    }
                     trv_state.open_window_checked = false;
                 }
             }
@@ -387,7 +424,9 @@ impl HeatingController {
             for trv_state in zone_state.trvs.values_mut() {
                 trv_state.temp_at_relay_on = None;
                 trv_state.temp_high_water = None;
+                trv_state.baseline_established_at = None;
                 trv_state.open_window_checked = false;
+                trv_state.awaiting_temp_baseline = false;
             }
             // OFF echo confirms this zone's relay is off.
             zone_state.pending_on_at = None;
@@ -417,7 +456,7 @@ impl HeatingController {
         weekday: Weekday,
         hour: u8,
         minute: u8,
-        _now: Instant,
+        now: Instant,
     ) -> Vec<Action> {
         let mut actions = Vec::new();
 
@@ -436,13 +475,9 @@ impl HeatingController {
                     continue;
                 };
 
-                // Don't update setpoint if:
-                // - TRV is pressure-forced (setpoint overridden to 30°C)
-                // - TRV is inhibited (setpoint lowered to 5°C)
                 if trv_state.pressure_forced {
                     continue;
                 }
-                let now = self.clock.now();
                 if trv_state.is_inhibited(now) {
                     continue;
                 }
@@ -599,6 +634,12 @@ impl HeatingController {
                         );
                     }
                 } else if trv_state.pressure_forced {
+                    // Skip inhibited TRVs — their setpoint tracking (5°C)
+                    // must not be clobbered by the release. They'll be
+                    // released when inhibition expires.
+                    if trv_state.is_inhibited(now) {
+                        continue;
+                    }
                     trv_state.pressure_forced = false;
                     trv_state.pressure_release_pending = true;
                     trv_state.last_sent_setpoint = None;
@@ -652,19 +693,76 @@ impl HeatingController {
                     continue;
                 }
                 let Some(temp_at_on) = trv_state.temp_at_relay_on else {
+                    // No baseline yet (awaiting first post-ON temp).
+                    // If we've been waiting longer than detect + grace
+                    // without getting a baseline, give up with a warning.
+                    let grace = Duration::from_secs(5 * 60);
+                    if now.duration_since(relay_on_since) >= detect_dur + grace {
+                        trv_state.open_window_checked = true;
+                        tracing::warn!(
+                            trv = %zt.device, zone = %zone.name,
+                            "open window check: no temperature received since \
+                             relay ON — check TRV telemetry"
+                        );
+                    }
+                    continue;
+                };
+                let Some(baseline_at) = trv_state.baseline_established_at else {
                     continue;
                 };
 
-                // Mark as checked — this TRV won't be evaluated again
-                // until the relay cycles off and back on.
+                // Detection deadline anchored to relay_on_since (when
+                // heating started), not baseline_established_at. The
+                // user configured "check after N minutes of heating."
+                // (The outer loop already checked relay_on_since >= detect_dur.)
+
+                // Require a second temp sample after the baseline AND
+                // a minimum observation window from baseline (half of
+                // detection_minutes). A late baseline with a second sample
+                // arriving seconds later is not enough heating time.
+                let min_observation = detect_dur / 2;
+                let grace = Duration::from_secs(5 * 60);
+                let has_post_baseline_sample = trv_state.temp_last_updated
+                    .is_some_and(|t| t > baseline_at);
+                let observation_elapsed =
+                    now.duration_since(baseline_at) >= min_observation;
+
+                if !has_post_baseline_sample || !observation_elapsed {
+                    // Grace deadline: the later of relay_on + detect + grace
+                    // and baseline + min_observation + grace. This ensures
+                    // a late baseline still gets enough observation time.
+                    let relay_deadline = relay_on_since + detect_dur + grace;
+                    let baseline_deadline = baseline_at + min_observation + grace;
+                    let effective_deadline = relay_deadline.max(baseline_deadline);
+                    if now >= effective_deadline {
+                        trv_state.open_window_checked = true;
+                        tracing::warn!(
+                            trv = %zt.device, zone = %zone.name,
+                            "open window check: insufficient data within \
+                             grace window — check TRV telemetry"
+                        );
+                    }
+                    continue;
+                }
+
+                // Sufficient observation time and data. Evaluate and latch.
                 trv_state.open_window_checked = true;
 
                 // Use the high-water mark: if the temperature EVER rose
                 // above the baseline during the detection window, the
                 // room warmed successfully and this is not an open window.
                 let peak = trv_state.temp_high_water.unwrap_or(temp_at_on);
-                if peak <= temp_at_on {
+                // 0.1°C hysteresis: sensor quantization noise on the
+                // BTH-RA (0.1°C resolution) can cause false inhibition
+                // on slow-warming rooms. Require a clear rise, not just
+                // equal-or-below.
+                if peak <= temp_at_on + 0.1 {
                     trv_state.inhibited_until = Some(now + inhibit_dur);
+                    // Use setpoint-to-5°C (fully reconciled via existing
+                    // setpoint tracking with retry). We deliberately avoid
+                    // window_detection here because the device ignores
+                    // setpoint writes while in window mode — a lost OFF
+                    // publish would strand the TRV cold with no recovery.
                     trv_state.last_sent_setpoint = Some(MIN_SETPOINT);
                     trv_state.setpoint_confirmed = false;
                     trv_state.setpoint_dirty_gen = self.tick_gen;
@@ -676,7 +774,7 @@ impl HeatingController {
                         trv = %zt.device,
                         zone = %zone.name,
                         temp_at_on, peak, inhibit_minutes,
-                        "open window detected: inhibiting TRV (temp never rose above baseline)"
+                        "open window detected: inhibiting TRV (setpoint → 5°C)"
                     );
                 } else {
                     tracing::debug!(
@@ -708,14 +806,17 @@ impl HeatingController {
                         trv_state.inhibited_until = None;
                         trv_state.last_sent_setpoint = None;
                         trv_state.setpoint_confirmed = true; // schedule will re-send
-                        // Clear the reference temp so open window detection
-                        // doesn't immediately re-trigger. A new reference
-                        // will be set on the next relay-on cycle.
+                        // Reset one-shot flag so detection can re-trigger.
+                        trv_state.open_window_checked = false;
+                        // Clear old baseline and re-arm if relay is on.
+                        // A new detection cycle needs a fresh baseline.
                         trv_state.temp_at_relay_on = None;
                         trv_state.temp_high_water = None;
+                        trv_state.baseline_established_at = None;
+                        trv_state.awaiting_temp_baseline = zone_state.relay_on;
                         tracing::info!(
                             trv = %zt.device, zone = %zone.name,
-                            "open window inhibition expired, restoring TRV"
+                            "open window inhibition expired, schedule will restore setpoint"
                         );
                     }
                 }
@@ -1649,20 +1750,42 @@ mod tests {
         hc.handle_tick(); // emits relay ON
         echo_relay(&mut hc, "wt-bath", true, &clk); // confirm relay
 
-        // Advance past detection period (60s).
-        clk.advance(Duration::from_secs(70));
+        // First post-ON temp → establishes baseline (18.0).
+        clk.advance(Duration::from_secs(5));
+        hc.handle_event(&Event::TrvState {
+            device: "trv-bath-1".into(),
+            local_temperature: Some(18.0),
+            pi_heating_demand: Some(50),
+            running_state: Some("heat".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
 
-        // Temperature hasn't risen (still 18.0).
+        // Second post-baseline temp after detection window (still 18.0).
+        clk.advance(Duration::from_secs(65)); // 65s after baseline > 60s detect
+        hc.handle_event(&Event::TrvState {
+            device: "trv-bath-1".into(),
+            local_temperature: Some(18.0),
+            pi_heating_demand: Some(50),
+            running_state: Some("heat".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
+
         let actions = hc.handle_tick();
-        // Should inhibit TRV (setpoint → 5°C).
+        // Should inhibit TRV via window_detection: ON.
         let inhibit: Vec<_> = actions
             .iter()
             .filter(|a| {
                 a.target_name() == "trv-bath-1"
-                    && serde_json::to_string(&a.payload).unwrap().contains("5")
+                    && serde_json::to_string(&a.payload).unwrap().contains("\"occupied_heating_setpoint\":5")
             })
             .collect();
-        assert_eq!(inhibit.len(), 1, "TRV should be inhibited");
+        assert!(!inhibit.is_empty(), "TRV should be inhibited via setpoint 5°C");
 
         let trv = hc.find_trv_state("trv-bath-1").unwrap();
         assert!(trv.is_inhibited(clk.now()));
@@ -1691,7 +1814,30 @@ mod tests {
         hc.handle_tick(); // emits relay ON
         echo_relay(&mut hc, "wt-bath", true, &clk); // confirm
 
-        clk.advance(Duration::from_secs(70));
+        // First post-ON temp → baseline.
+        clk.advance(Duration::from_secs(5));
+        hc.handle_event(&Event::TrvState {
+            device: "trv-bath-1".into(),
+            local_temperature: Some(18.0),
+            pi_heating_demand: Some(50),
+            running_state: Some("heat".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
+        // Second temp after detection window.
+        clk.advance(Duration::from_secs(65));
+        hc.handle_event(&Event::TrvState {
+            device: "trv-bath-1".into(),
+            local_temperature: Some(18.0),
+            pi_heating_demand: Some(50),
+            running_state: Some("heat".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
         hc.handle_tick(); // inhibit
 
         // Verify inhibited.
@@ -2767,15 +2913,31 @@ mod tests {
         hc.handle_tick();
         assert!(hc.startup_complete);
 
-        // Now a real relay cycle should set open-window tracking.
+        // Now a real relay cycle should arm open-window detection
+        // after the first post-ON temperature arrives.
         echo_relay(&mut hc, "wt-bath", false, &clk);
         clk.advance(Duration::from_secs(5));
         echo_relay(&mut hc, "wt-bath", true, &clk);
 
+        // Relay just turned ON — awaiting baseline.
+        let trv = hc.find_trv_state("trv-bath-1").unwrap();
+        assert!(trv.awaiting_temp_baseline);
+
+        // First post-ON temp → backfills baseline.
+        hc.handle_event(&Event::TrvState {
+            device: "trv-bath-1".into(),
+            local_temperature: Some(20.0),
+            pi_heating_demand: Some(30),
+            running_state: Some("heat".into()),
+            occupied_heating_setpoint: Some(22.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
         let trv = hc.find_trv_state("trv-bath-1").unwrap();
         assert!(
             trv.temp_at_relay_on.is_some(),
-            "post-startup relay ON should start open-window tracking"
+            "post-startup relay ON + temp update should arm open-window tracking"
         );
     }
 

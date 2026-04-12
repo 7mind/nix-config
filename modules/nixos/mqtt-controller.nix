@@ -87,9 +87,9 @@ in
             } ];
             schedules.bathroom = {
               monday = [
-                { start_hour = 0; start_minute = 0; end_hour = 6; end_minute = 0; temperature = 18.0; }
-                { start_hour = 6; start_minute = 0; end_hour = 22; end_minute = 0; temperature = 22.0; }
-                { start_hour = 22; start_minute = 0; end_hour = 24; end_minute = 0; temperature = 18.0; }
+                { start = "00:00"; end = "06:00"; temperature = 18.0; }
+                { start = "06:00"; end = "22:00"; temperature = 22.0; }
+                { start = "22:00"; end = "24:00"; temperature = 18.0; }
               ];
               # tuesday..sunday required (same structure)
             };

@@ -71,7 +71,7 @@ impl fmt::Display for ParseTimeExprError {
 impl std::error::Error for ParseTimeExprError {}
 
 /// Parse `HH:MM` into (hour, minute). Accepts 00:00 through 24:00.
-fn parse_hhmm(s: &str) -> Result<(u8, u8), ParseTimeExprError> {
+pub(crate) fn parse_hhmm(s: &str) -> Result<(u8, u8), ParseTimeExprError> {
     let (hh, mm) = s.split_once(':').ok_or_else(|| {
         ParseTimeExprError(format!("{s:?}: expected HH:MM"))
     })?;

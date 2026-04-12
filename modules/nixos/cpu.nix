@@ -35,9 +35,10 @@ in
         message = "Exactly one CPU arch flag must be set";
       })
 
+      # TODO(intel-to-epyc): relaxed from == 1 to <= 1 so vm host can set isIA64 without picking a vendor; restore to == 1 after migration
       ({
-        assertion = config.smind.hw.cpu.isIA64 && (sumList (map (b: if b then 1 else 0) [ config.smind.hw.cpu.isIntel config.smind.hw.cpu.isAmd ])) == 1 || config.smind.hw.cpu.isArm;
-        message = "Exactly one IA64 CPU type flag must be set";
+        assertion = config.smind.hw.cpu.isIA64 && (sumList (map (b: if b then 1 else 0) [ config.smind.hw.cpu.isIntel config.smind.hw.cpu.isAmd ])) <= 1 || config.smind.hw.cpu.isArm;
+        message = "At most one IA64 CPU type flag must be set";
       })
     ];
   };

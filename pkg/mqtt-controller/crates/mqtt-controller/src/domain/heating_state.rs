@@ -165,10 +165,9 @@ impl HeatingZoneRuntimeState {
 /// Per-TRV heating state.
 #[derive(Debug, Clone)]
 pub struct TrvRuntimeState {
-    /// When the last state update was received from this TRV.
-    /// Used for staleness detection: if no update arrives for a
-    /// configurable period, demand is suppressed to prevent a dead
-    /// TRV from keeping the zone heating indefinitely.
+    /// When ANY state update was last received (device liveness).
+    /// Used for staleness: a device that stops publishing entirely
+    /// has its demand suppressed after 30 minutes.
     pub last_seen: Option<Instant>,
 
     /// Last reported operating_mode from the TRV.
@@ -180,6 +179,11 @@ pub struct TrvRuntimeState {
 
     /// Last reported local temperature.
     pub local_temperature: Option<f64>,
+
+    /// When the last temperature sample was received. Used by
+    /// open-window detection: both the baseline and the comparison
+    /// must be from fresh samples.
+    pub temp_last_updated: Option<Instant>,
 
     /// Last reported pi_heating_demand (0-100).
     pub pi_heating_demand: Option<u8>,
@@ -238,6 +242,16 @@ pub struct TrvRuntimeState {
     /// false-triggering on normal temperature drift during long heating
     /// runs. Reset when the relay turns off or on again.
     pub open_window_checked: bool,
+
+    /// True when the relay turned on but no fresh temp was available
+    /// for the baseline. The next temperature update will backfill
+    /// `temp_at_relay_on` and `temp_high_water`.
+    pub awaiting_temp_baseline: bool,
+
+    /// When the open-window baseline was actually established. For
+    /// detection, the window is measured from this time (not relay_on_since)
+    /// to avoid false inhibition from late backfills.
+    pub baseline_established_at: Option<Instant>,
 }
 
 impl TrvRuntimeState {
@@ -247,6 +261,7 @@ impl TrvRuntimeState {
             operating_mode: None,
             battery: None,
             local_temperature: None,
+            temp_last_updated: None,
             pi_heating_demand: None,
             running_state: HeatingRunningState::Idle,
             running_state_seen: false,
@@ -260,6 +275,8 @@ impl TrvRuntimeState {
             temp_at_relay_on: None,
             temp_high_water: None,
             open_window_checked: false,
+            awaiting_temp_baseline: false,
+            baseline_established_at: None,
         }
     }
 
@@ -277,9 +294,12 @@ impl TrvRuntimeState {
     /// 30 minutes without any TRV state report = stale.
     const STALE_THRESHOLD_SECS: u64 = 30 * 60;
 
-    /// True if this TRV hasn't reported any state for a long time.
-    /// A stale TRV's demand is suppressed to prevent indefinite heating
-    /// from a dead device.
+    /// True if this TRV hasn't reported ANY state for 30+ minutes.
+    /// Uses `last_seen` (refreshed on every TRV update). A device
+    /// that stops publishing entirely has its demand suppressed.
+    /// Note: a TRV publishing temperature-only without demand fields
+    /// is NOT considered stale — with z2m's default json output mode,
+    /// demand fields are included in every state change.
     pub fn is_stale(&self, now: Instant) -> bool {
         self.last_seen.is_some_and(|seen| {
             now.duration_since(seen) >= Duration::from_secs(Self::STALE_THRESHOLD_SECS)

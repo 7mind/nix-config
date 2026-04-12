@@ -57,8 +57,9 @@ impl std::fmt::Display for Weekday {
 /// A time range within a single day with an associated target temperature.
 /// `end` is exclusive. No midnight crossing: start must be strictly before
 /// end within the same day (00:00 to 24:00).
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-#[serde(deny_unknown_fields)]
+///
+/// Serialized as `{"start": "HH:MM", "end": "HH:MM", "temperature": …}`.
+#[derive(Debug, Clone, PartialEq)]
 pub struct DayTimeRange {
     pub start_hour: u8,
     pub start_minute: u8,
@@ -68,6 +69,53 @@ pub struct DayTimeRange {
     pub end_minute: u8,
     /// Target temperature in °C. Must be in 5.0..=30.0 (BTH-RA range).
     pub temperature: f64,
+}
+
+impl<'de> Deserialize<'de> for DayTimeRange {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Raw {
+            start: String,
+            end: String,
+            temperature: f64,
+        }
+        let raw = Raw::deserialize(deserializer)?;
+        let (start_hour, start_minute) =
+            super::time_expr::parse_hhmm(&raw.start).map_err(serde::de::Error::custom)?;
+        let (end_hour, end_minute) =
+            super::time_expr::parse_hhmm(&raw.end).map_err(serde::de::Error::custom)?;
+        Ok(DayTimeRange {
+            start_hour,
+            start_minute,
+            end_hour,
+            end_minute,
+            temperature: raw.temperature,
+        })
+    }
+}
+
+impl Serialize for DayTimeRange {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut s = serializer.serialize_struct("DayTimeRange", 3)?;
+        s.serialize_field(
+            "start",
+            &format!("{:02}:{:02}", self.start_hour, self.start_minute),
+        )?;
+        s.serialize_field(
+            "end",
+            &format!("{:02}:{:02}", self.end_hour, self.end_minute),
+        )?;
+        s.serialize_field("temperature", &self.temperature)?;
+        s.end()
+    }
 }
 
 impl DayTimeRange {
@@ -340,6 +388,228 @@ pub enum HeatingConfigError {
          without this the wall thermostat's internal algorithm ignores relay commands"
     )]
     RelayMissingManualControl { zone: String, relay: String },
+
+    #[error(
+        "heat_pump.{field} must be > 0 (got {value}); zero disables pump protection"
+    )]
+    ZeroProtectionTimer { field: &'static str, value: u64 },
+
+    #[error(
+        "open_window.{field} must be > 0 (got {value}); zero disables open-window protection"
+    )]
+    ZeroOpenWindowTimer { field: &'static str, value: u32 },
+
+    #[error(
+        "device {device:?}: option {key:?} has invalid value {value:?} — {reason}"
+    )]
+    InvalidDeviceOption {
+        device: String,
+        key: String,
+        value: String,
+        reason: String,
+    },
+}
+
+/// Known configurable options for Bosch BTH-RA TRVs with validation.
+pub fn validate_trv_options(
+    device: &str,
+    options: &std::collections::BTreeMap<String, serde_json::Value>,
+) -> Result<(), HeatingConfigError> {
+    for (key, value) in options {
+        match key.as_str() {
+            "operating_mode" => {
+                let valid = ["schedule", "manual", "pause"];
+                if !value.as_str().is_some_and(|v| valid.contains(&v)) {
+                    return Err(HeatingConfigError::InvalidDeviceOption {
+                        device: device.into(),
+                        key: key.clone(),
+                        value: value.to_string(),
+                        reason: format!("must be one of {valid:?}"),
+                    });
+                }
+            }
+            "display_brightness" => {
+                if !value.as_u64().is_some_and(|v| v <= 100 && v % 10 == 0) {
+                    return Err(HeatingConfigError::InvalidDeviceOption {
+                        device: device.into(),
+                        key: key.clone(),
+                        value: value.to_string(),
+                        reason: "must be 0, 10, 20, ..., 100".into(),
+                    });
+                }
+            }
+            "display_switch_on_duration" => {
+                if !value.as_u64().is_some_and(|v| (5..=30).contains(&v)) {
+                    return Err(HeatingConfigError::InvalidDeviceOption {
+                        device: device.into(),
+                        key: key.clone(),
+                        value: value.to_string(),
+                        reason: "must be 5..=30 (seconds)".into(),
+                    });
+                }
+            }
+            "display_orientation" => {
+                let valid = ["standard_arrangement", "rotated_by_180_degrees"];
+                if !value.as_str().is_some_and(|v| valid.contains(&v)) {
+                    return Err(HeatingConfigError::InvalidDeviceOption {
+                        device: device.into(),
+                        key: key.clone(),
+                        value: value.to_string(),
+                        reason: format!("must be one of {valid:?}"),
+                    });
+                }
+            }
+            "displayed_temperature" => {
+                let valid = ["set_temperature", "measured_temperature"];
+                if !value.as_str().is_some_and(|v| valid.contains(&v)) {
+                    return Err(HeatingConfigError::InvalidDeviceOption {
+                        device: device.into(),
+                        key: key.clone(),
+                        value: value.to_string(),
+                        reason: format!("must be one of {valid:?}"),
+                    });
+                }
+            }
+            "local_temperature_calibration" => {
+                if !value.as_f64().is_some_and(|v| (-5.0..=5.0).contains(&v)) {
+                    return Err(HeatingConfigError::InvalidDeviceOption {
+                        device: device.into(),
+                        key: key.clone(),
+                        value: value.to_string(),
+                        reason: "must be -5.0..=5.0".into(),
+                    });
+                }
+            }
+            "child_lock" => {
+                let valid = ["LOCK", "UNLOCK"];
+                if !value.as_str().is_some_and(|v| valid.contains(&v)) {
+                    return Err(HeatingConfigError::InvalidDeviceOption {
+                        device: device.into(),
+                        key: key.clone(),
+                        value: value.to_string(),
+                        reason: format!("must be one of {valid:?}"),
+                    });
+                }
+            }
+            // Allow unknown options through — the device might support
+            // attributes we don't validate yet.
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+/// Known configurable options for Bosch BTH-RM230Z wall thermostats.
+pub fn validate_wall_thermostat_options(
+    device: &str,
+    options: &std::collections::BTreeMap<String, serde_json::Value>,
+) -> Result<(), HeatingConfigError> {
+    for (key, value) in options {
+        match key.as_str() {
+            "heater_type" => {
+                let valid = [
+                    "underfloor_heating",
+                    "central_heating",
+                    "radiator",
+                    "manual_control",
+                ];
+                if !value.as_str().is_some_and(|v| valid.contains(&v)) {
+                    return Err(HeatingConfigError::InvalidDeviceOption {
+                        device: device.into(),
+                        key: key.clone(),
+                        value: value.to_string(),
+                        reason: format!("must be one of {valid:?}"),
+                    });
+                }
+            }
+            "operating_mode" => {
+                let valid = ["schedule", "manual", "pause"];
+                if !value.as_str().is_some_and(|v| valid.contains(&v)) {
+                    return Err(HeatingConfigError::InvalidDeviceOption {
+                        device: device.into(),
+                        key: key.clone(),
+                        value: value.to_string(),
+                        reason: format!("must be one of {valid:?}"),
+                    });
+                }
+            }
+            "display_brightness" => {
+                if !value.as_u64().is_some_and(|v| v <= 100 && v % 10 == 0) {
+                    return Err(HeatingConfigError::InvalidDeviceOption {
+                        device: device.into(),
+                        key: key.clone(),
+                        value: value.to_string(),
+                        reason: "must be 0, 10, 20, ..., 100".into(),
+                    });
+                }
+            }
+            "display_switch_on_duration" => {
+                if !value.as_u64().is_some_and(|v| (5..=30).contains(&v)) {
+                    return Err(HeatingConfigError::InvalidDeviceOption {
+                        device: device.into(),
+                        key: key.clone(),
+                        value: value.to_string(),
+                        reason: "must be 5..=30 (seconds)".into(),
+                    });
+                }
+            }
+            "valve_type" => {
+                let valid = ["normally_closed", "normally_open"];
+                if !value.as_str().is_some_and(|v| valid.contains(&v)) {
+                    return Err(HeatingConfigError::InvalidDeviceOption {
+                        device: device.into(),
+                        key: key.clone(),
+                        value: value.to_string(),
+                        reason: format!("must be one of {valid:?}"),
+                    });
+                }
+            }
+            "activity_led" => {
+                let valid = ["off", "auto", "on"];
+                if !value.as_str().is_some_and(|v| valid.contains(&v)) {
+                    return Err(HeatingConfigError::InvalidDeviceOption {
+                        device: device.into(),
+                        key: key.clone(),
+                        value: value.to_string(),
+                        reason: format!("must be one of {valid:?}"),
+                    });
+                }
+            }
+            "local_temperature_calibration" => {
+                if !value.as_f64().is_some_and(|v| (-5.0..=5.0).contains(&v)) {
+                    return Err(HeatingConfigError::InvalidDeviceOption {
+                        device: device.into(),
+                        key: key.clone(),
+                        value: value.to_string(),
+                        reason: "must be -5.0..=5.0".into(),
+                    });
+                }
+            }
+            "child_lock" => {
+                let valid = ["LOCK", "UNLOCK"];
+                if !value.as_str().is_some_and(|v| valid.contains(&v)) {
+                    return Err(HeatingConfigError::InvalidDeviceOption {
+                        device: device.into(),
+                        key: key.clone(),
+                        value: value.to_string(),
+                        reason: format!("must be one of {valid:?}"),
+                    });
+                }
+            }
+            "occupied_heating_setpoint" => {
+                if !value.as_f64().is_some_and(|v| (5.0..=30.0).contains(&v)) {
+                    return Err(HeatingConfigError::InvalidDeviceOption {
+                        device: device.into(),
+                        key: key.clone(),
+                        value: value.to_string(),
+                        reason: "must be 5.0..=30.0".into(),
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 impl TemperatureSchedule {
@@ -509,11 +779,36 @@ fn validate_day_coverage(
 }
 
 impl HeatingConfig {
-    /// Validate all schedules. Zone/device cross-references are validated
-    /// by the topology builder which has access to the device catalog.
+    /// Validate all schedules and safety timer fields. Zone/device
+    /// cross-references are validated by the topology builder.
     pub fn validate_schedules(&self) -> Result<(), HeatingConfigError> {
         for (name, schedule) in &self.schedules {
             schedule.validate(name)?;
+        }
+        // Reject zero protection timers — they silently disable safety.
+        if self.heat_pump.min_cycle_seconds == 0 {
+            return Err(HeatingConfigError::ZeroProtectionTimer {
+                field: "min_cycle_seconds",
+                value: 0,
+            });
+        }
+        if self.heat_pump.min_pause_seconds == 0 {
+            return Err(HeatingConfigError::ZeroProtectionTimer {
+                field: "min_pause_seconds",
+                value: 0,
+            });
+        }
+        if self.open_window.detection_minutes == 0 {
+            return Err(HeatingConfigError::ZeroOpenWindowTimer {
+                field: "detection_minutes",
+                value: 0,
+            });
+        }
+        if self.open_window.inhibit_minutes == 0 {
+            return Err(HeatingConfigError::ZeroOpenWindowTimer {
+                field: "inhibit_minutes",
+                value: 0,
+            });
         }
         Ok(())
     }
@@ -871,13 +1166,13 @@ mod tests {
             }],
             "schedules": {
                 "bath-sched": {
-                    "monday": [{"start_hour": 0, "start_minute": 0, "end_hour": 24, "end_minute": 0, "temperature": 20.0}],
-                    "tuesday": [{"start_hour": 0, "start_minute": 0, "end_hour": 24, "end_minute": 0, "temperature": 20.0}],
-                    "wednesday": [{"start_hour": 0, "start_minute": 0, "end_hour": 24, "end_minute": 0, "temperature": 20.0}],
-                    "thursday": [{"start_hour": 0, "start_minute": 0, "end_hour": 24, "end_minute": 0, "temperature": 20.0}],
-                    "friday": [{"start_hour": 0, "start_minute": 0, "end_hour": 24, "end_minute": 0, "temperature": 20.0}],
-                    "saturday": [{"start_hour": 0, "start_minute": 0, "end_hour": 24, "end_minute": 0, "temperature": 20.0}],
-                    "sunday": [{"start_hour": 0, "start_minute": 0, "end_hour": 24, "end_minute": 0, "temperature": 20.0}]
+                    "monday": [{"start": "00:00", "end": "24:00", "temperature": 20.0}],
+                    "tuesday": [{"start": "00:00", "end": "24:00", "temperature": 20.0}],
+                    "wednesday": [{"start": "00:00", "end": "24:00", "temperature": 20.0}],
+                    "thursday": [{"start": "00:00", "end": "24:00", "temperature": 20.0}],
+                    "friday": [{"start": "00:00", "end": "24:00", "temperature": 20.0}],
+                    "saturday": [{"start": "00:00", "end": "24:00", "temperature": 20.0}],
+                    "sunday": [{"start": "00:00", "end": "24:00", "temperature": 20.0}]
                 }
             },
             "pressure_groups": [],

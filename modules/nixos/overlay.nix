@@ -65,6 +65,13 @@
             };
             vendorHash = "sha256-Lc1Ktdqtv2VhJQssk8K1UOimeEjVNvDWePE9WkamCos=";
           });
+
+        mqtt-controller-src = pkgs.lib.cleanSourceWith {
+          src = "${cfg-meta.paths.pkg}/mqtt-controller";
+          filter = name: type:
+            let baseName = baseNameOf (toString name); in
+            ! (type == "directory" && baseName == "target");
+        };
       in
       {
         ollama = mkPinnedOllama super.ollama;
@@ -102,14 +109,6 @@
                 targets = [ "wasm32-unknown-unknown" ];
               }
             );
-            mqtt-controller-src = pkgs.lib.cleanSourceWith {
-              src = "${cfg-meta.paths.pkg}/mqtt-controller";
-              filter = name: type:
-                let baseName = baseNameOf (toString name); in
-                ! (type == "directory" && baseName == "target");
-            };
-          in
-          let
             commonArgs = {
               src = mqtt-controller-src;
               cargoToml = "${mqtt-controller-src}/crates/mqtt-controller-frontend/Cargo.toml";
@@ -131,9 +130,40 @@
             installPhaseCommand = "cp -r dist $out";
           });
 
-        mqtt-controller = pkgs.callPackage "${cfg-meta.paths.pkg}/mqtt-controller/default.nix" {
-          mqtt-controller-frontend = self.mqtt-controller-frontend;
-        };
+        mqtt-controller =
+          let
+            craneLib = (inputs.crane.mkLib pkgs).overrideToolchain (p:
+              p.rust-bin.stable.latest.default
+            );
+            commonArgs = {
+              src = mqtt-controller-src;
+              cargoExtraArgs = "-p mqtt-controller";
+              nativeBuildInputs = [ pkgs.mold ];
+            };
+            cargoArtifacts = craneLib.buildDepsOnly (commonArgs // {
+              doCheck = false;
+            });
+          in
+          craneLib.buildPackage (commonArgs // {
+            inherit cargoArtifacts;
+            cargoTestExtraArgs = "-p mqtt-controller -p mqtt-controller-wire";
+            doCheck = true;
+            postInstall = pkgs.lib.optionalString (self.mqtt-controller-frontend != null) ''
+              mkdir -p $out/share/mqtt-controller
+              cp -r ${self.mqtt-controller-frontend} $out/share/mqtt-controller/web
+              chmod -R u+w $out/share/mqtt-controller/web
+            '';
+            passthru = {
+              inherit (self) mqtt-controller-frontend;
+            };
+            meta = with pkgs.lib; {
+              description = "Unified zigbee2mqtt provisioner and runtime controller";
+              license = licenses.mit;
+              maintainers = with maintainers; [ pshirshov ];
+              mainProgram = "mqtt-controller";
+              platforms = platforms.linux;
+            };
+          });
 
         zigbee-mqtt-import = pkgs.callPackage "${cfg-meta.paths.pkg}/zigbee-mqtt-import/default.nix" { };
         linux-3-finger-drag = pkgs.callPackage "${cfg-meta.paths.pkg}/linux-3-finger-drag/default.nix" { };

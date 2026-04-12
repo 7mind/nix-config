@@ -89,6 +89,12 @@ pub enum Payload {
     /// mode on a TRV or wall thermostat that has drifted (e.g. someone
     /// pressed a button on the physical device).
     OperatingMode { operating_mode: &'static str },
+
+    /// `{"window_detection": "ON"}` or `{"window_detection": "OFF"}` —
+    /// Bosch BTH-RA/RM230Z window-open mode. When ON, the device stops
+    /// all heating and resumes cleanly when set back to OFF (no setpoint
+    /// manipulation needed).
+    WindowDetection { window_detection: &'static str },
 }
 
 impl Payload {
@@ -127,6 +133,18 @@ impl Payload {
     pub fn trv_setpoint(temp: f64) -> Self {
         Self::TrvSetpoint {
             occupied_heating_setpoint: temp,
+        }
+    }
+
+    pub fn window_detection_on() -> Self {
+        Self::WindowDetection {
+            window_detection: "ON",
+        }
+    }
+
+    pub fn window_detection_off() -> Self {
+        Self::WindowDetection {
+            window_detection: "OFF",
         }
     }
 }

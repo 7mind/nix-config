@@ -839,6 +839,9 @@ impl Topology {
                              device's internal schedule may override relay control"
                         );
                     }
+                    crate::config::heating::validate_wall_thermostat_options(
+                        &zone.relay, opts,
+                    ).map_err(TopologyError::HeatingError)?;
                 }
                 if let Some(other_zone) = relay_to_zone.insert(zone.relay.clone(), zone.name.clone()) {
                     return Err(TopologyError::HeatingError(
@@ -858,9 +861,10 @@ impl Topology {
                             },
                         ));
                     }
-                    // Validate TRV has operating_mode = manual in its options.
+                    // Validate TRV options.
                     if let Some(entry) = config.devices.get(&zt.device) {
-                        let has_manual = entry.options()
+                        let opts = entry.options();
+                        let has_manual = opts
                             .get("operating_mode")
                             .and_then(|v| v.as_str())
                             .is_some_and(|v| v == "manual");
@@ -872,6 +876,8 @@ impl Topology {
                                  device's internal schedule may override setpoint commands"
                             );
                         }
+                        crate::config::heating::validate_trv_options(&zt.device, opts)
+                            .map_err(TopologyError::HeatingError)?;
                     }
                     if !heating.schedules.contains_key(&zt.schedule) {
                         return Err(TopologyError::HeatingError(
