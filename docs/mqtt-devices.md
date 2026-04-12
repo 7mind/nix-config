@@ -30,13 +30,13 @@ Philips Hue bulbs. Generic `light` kind — the controller treats all Hue bulbs 
 |--------|-------|-----------------|
 | `hue-ts-` | Philips 8718696743133 (ZGPSWITCH) | [8718696743133](https://www.zigbee2mqtt.io/devices/8718696743133.html) |
 
-#### Sonoff Wireless Switch (4-button)
+#### Sonoff SNZB-01M (4-button wireless switch)
 
 4-button Zigbee wireless switch. Sends `single_button_N` and `double_button_N` actions (N=1..4). Referred to as "orb switch" in the codebase.
 
-| Prefix | Manufacturer | zigbee2mqtt docs |
-|--------|-------------|-----------------|
-| `sonoff-ts-` | Sonoff | [Sonoff supported devices](https://www.zigbee2mqtt.io/supported-devices/#v=Sonoff) |
+| Prefix | Model | zigbee2mqtt docs |
+|--------|-------|-----------------|
+| `sonoff-ts-` | Sonoff SNZB-01M | [SNZB-01M](https://www.zigbee2mqtt.io/devices/SNZB-01M.html) |
 
 ### Motion Sensors
 
@@ -66,7 +66,7 @@ Bosch BTH-RM230Z 230V wall thermostat used as a relay for floor heating circuits
 
 | Variant | Model | Capabilities | zigbee2mqtt docs |
 |---------|-------|-------------|-----------------|
-| `sonoff-power` | Sonoff S31ZB / S40ZBTPB | on-off, power, energy | [S31ZB](https://www.zigbee2mqtt.io/devices/S31ZB.html), [S40ZBTPB](https://www.zigbee2mqtt.io/devices/S40ZBTPB.html) |
+| `sonoff-power` | Sonoff S31ZB / S40ZBTPB / S60ZBTPG | on-off, power, energy | [S31ZB](https://www.zigbee2mqtt.io/devices/S31ZB.html), [S40ZBTPB](https://www.zigbee2mqtt.io/devices/S60ZBTPG.html), [](https://www.zigbee2mqtt.io/devices/S60ZBTPG.html) |
 | `sonoff-basic` | Sonoff ZBMINIL2 | on-off | [ZBMINIL2](https://www.zigbee2mqtt.io/devices/ZBMINIL2.html) |
 | `ikea-outlet` | IKEA TRADFRI | on-off | [IKEA outlets](https://www.zigbee2mqtt.io/supported-devices/#v=IKEA&e=state) |
 | `tuya-power` | Tuya smart plug | on-off, power, energy, voltage, current | [Tuya plugs](https://www.zigbee2mqtt.io/supported-devices/#v=Tuya&e=power) |
@@ -81,7 +81,7 @@ All Z-Wave devices communicate through Z-Wave JS UI with separate MQTT topics pe
 
 | Variant | Model | Capabilities | Z-Wave JS docs |
 |---------|-------|-------------|---------------|
-| `neo-nas-wr01ze` | Neo Electronics NAS-WR01ZE | on-off, power, energy | [Z-Wave JS device database](https://devices.zwave-js.io/) |
+| `neo-nas-wr01ze` | Neo Electronics NAS-WR01ZE | on-off, power, energy | [Z-Wave JS device database](https://devices.zwave-js.io/?jumpTo=0x0258:0x0100:0x1027:0.0) |
 
 Plug prefix: `zneo-p-`.
 
