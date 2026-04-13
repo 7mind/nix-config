@@ -123,10 +123,20 @@ in
       # --with-key=host-only. If migrating from a TPM host, delete the old key:
       #   rm /var/lib/libvirt/secrets/secrets-encryption-key
       #   systemctl restart virt-secret-init-encryption
-      systemd.services.virt-secret-init-encryption.serviceConfig.ExecStart = lib.mkForce [
-        ""
-        "${pkgs.runtimeShell} -c 'umask 0077 && (${pkgs.coreutils}/bin/dd if=/dev/random status=none bs=32 count=1 | ${pkgs.systemd}/bin/systemd-creds encrypt --with-key=host-only --name=secrets-encryption-key - /var/lib/libvirt/secrets/secrets-encryption-key)'"
-      ];
+      systemd.services.virt-secret-init-encryption = {
+        description = "Initialize libvirt secrets encryption key";
+        wantedBy = [ "multi-user.target" ];
+        before = [ "libvirtd.service" ];
+        unitConfig.ConditionPathExists = "!/var/lib/libvirt/secrets/secrets-encryption-key";
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          ExecStart = [
+            ""
+            "${pkgs.runtimeShell} -c '${pkgs.coreutils}/bin/mkdir -p /var/lib/libvirt/secrets && umask 0077 && (${pkgs.coreutils}/bin/dd if=/dev/random status=none bs=32 count=1 | ${pkgs.systemd}/bin/systemd-creds encrypt --with-key=host-only --name=secrets-encryption-key - /var/lib/libvirt/secrets/secrets-encryption-key)'"
+          ];
+        };
+      };
     }
 
     (lib.mkIf cfg.iommu.enable {

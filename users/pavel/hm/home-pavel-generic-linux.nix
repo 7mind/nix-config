@@ -8,10 +8,12 @@
       [ ];
 
   home.activation.jetbrains-keymaps = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    ${pkgs.findutils}/bin/find ${config.home.homeDirectory}/.config/JetBrains \
-      -type d \
-      -wholename '*/JetBrains/*/keymaps' '!' -path '*/settingsSync/*' \
-      -exec cp -f "${cfg-meta.paths.users}/pavel/hm/keymap-idea-linux.xml" {}/Magen.xml \;
+    if [ -d "${config.home.homeDirectory}/.config/JetBrains" ]; then
+      ${pkgs.findutils}/bin/find ${config.home.homeDirectory}/.config/JetBrains \
+        -type d \
+        -wholename '*/JetBrains/*/keymaps' '!' -path '*/settingsSync/*' \
+        -exec cp -f "${cfg-meta.paths.users}/pavel/hm/keymap-idea-linux.xml" {}/Magen.xml \;
+    fi
   '';
 
 
