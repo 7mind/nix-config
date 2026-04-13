@@ -51,7 +51,7 @@ in
         sshKey = lib.mkIf ownerSecretsEnabled "${config.age.secrets.builder-key.path}";
         publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSURRWkVOWnVzZUl6aFhrYnZNYnFhVS91ZlM0WExXOTV5WS9EUHJvZG5ZVmIgcm9vdEBuaXhvcwo=";
         speedFactor = 1;
-        supportedFeatures = [ "benchmark" "big-parallel" ];
+        supportedFeatures = [ ];
         mandatoryFeatures = [ ];
       }
 
