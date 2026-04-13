@@ -214,6 +214,8 @@
   networking.hostName = cfg-meta.hostname;
   networking.useDHCP = false;
   networking.firewall = {
+    allowedTCPPorts = [ 4001 50000 ];
+    allowedUDPPorts = [ 50000 ];
     allowedTCPPortRanges = [
       {
         from = 8000;

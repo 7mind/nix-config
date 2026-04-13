@@ -137,6 +137,7 @@
             );
             commonArgs = {
               src = mqtt-controller-src;
+              cargoToml = "${mqtt-controller-src}/crates/mqtt-controller/Cargo.toml";
               cargoExtraArgs = "-p mqtt-controller";
               nativeBuildInputs = [ pkgs.mold ];
             };

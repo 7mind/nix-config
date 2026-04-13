@@ -2,6 +2,9 @@
 members = ["crates/*"]
 resolver = "3"
 
+[workspace.package]
+version = "0.1.0"
+
 [profile.release]
 # Smaller binary on raspi5m: thin LTO is a good speed/size tradeoff and
 # stripping symbols cuts ~20-30%.
