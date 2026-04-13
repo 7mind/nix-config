@@ -18,5 +18,11 @@
         };
       };
     };
+
+    programs.zsh.envExtra = lib.mkIf (cfg-meta.isLinux && config.services.ssh-agent.enable) ''
+      if [ -z "$SSH_AUTH_SOCK" ] || ! [ -S "$SSH_AUTH_SOCK" ]; then
+        export SSH_AUTH_SOCK="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ssh-agent"
+      fi
+    '';
   };
 }
