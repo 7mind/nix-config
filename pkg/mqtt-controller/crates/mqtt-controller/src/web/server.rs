@@ -7,8 +7,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket};
-use axum::extract::{State, WebSocketUpgrade};
-use axum::response::IntoResponse;
+use axum::extract::{Request, State, WebSocketUpgrade};
+use axum::middleware;
+use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -68,6 +69,7 @@ pub async fn bind_and_start_web_server(
     let app = Router::new()
         .route("/ws", get(ws_handler))
         .fallback_service(ServeDir::new(assets_dir))
+        .layer(middleware::from_fn(cache_control))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -200,6 +202,21 @@ async fn request_snapshot(
         .await
         .ok()?;
     rx.await.ok()
+}
+
+/// Trunk uses content-hashed filenames for all assets except index.html.
+/// Mark index.html as non-cacheable so browsers always fetch the latest
+/// asset references after a deploy.
+async fn cache_control(request: Request, next: middleware::Next) -> Response {
+    let path = request.uri().path().to_owned();
+    let mut response = next.run(request).await;
+    if path == "/" || path == "/index.html" {
+        response.headers_mut().insert(
+            axum::http::header::CACHE_CONTROL,
+            axum::http::HeaderValue::from_static("no-cache"),
+        );
+    }
+    response
 }
 
 use futures_util::{SinkExt, StreamExt};
