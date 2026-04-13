@@ -211,12 +211,12 @@ in
             '';
           };
         };
-        memory.text = claudeMemoryText;
+        context = claudeMemoryText;
       };
 
       programs.codex = {
         enable = true;
-        custom-instructions = claudeMemoryText;
+        context = claudeMemoryText;
         settings = {
           model = "gpt-5.4";
           model_reasoning_effort = "xhigh";
@@ -344,7 +344,7 @@ in
             doom_loop = "allow";
           };
         };
-        rules = claudeMemoryText;
+        context = claudeMemoryText;
       };
 
       # Linux-only: bubblewrap sandbox and yolo wrapper script
