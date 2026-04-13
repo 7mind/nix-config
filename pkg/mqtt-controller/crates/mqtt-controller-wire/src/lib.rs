@@ -54,6 +54,19 @@ pub struct HeatingZoneSnapshot {
     pub relay_state_known: bool,
     pub relay_temperature: Option<f64>,
     pub trvs: Vec<TrvSnapshot>,
+    /// Seconds until `min_cycle` allows the pump to stop (0 = not blocked).
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub min_cycle_remaining_secs: u64,
+    /// Seconds until `min_pause` allows the pump to start (0 = not blocked).
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub min_pause_remaining_secs: u64,
+    /// True if the wall thermostat hasn't reported state recently.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub relay_stale: bool,
+}
+
+fn is_zero_u64(v: &u64) -> bool {
+    *v == 0
 }
 
 /// Current state of one TRV.
@@ -68,6 +81,13 @@ pub struct TrvSnapshot {
     pub battery: Option<u8>,
     /// True if open-window inhibition is active.
     pub inhibited: bool,
+    /// Name of the temperature schedule driving this TRV.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub schedule: String,
+    /// Human-readable schedule summary (today's time ranges).
+    /// e.g. `"00:00–06:00 → 21°C, 06:00–23:00 → 18°C, 23:00–24:00 → 21°C"`
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub schedule_summary: String,
 }
 
 /// Full state snapshot sent on connect or on explicit request.
@@ -267,7 +287,12 @@ mod tests {
                     setpoint: Some(22.0),
                     battery: Some(85),
                     inhibited: false,
+                    schedule: "living".into(),
+                    schedule_summary: "00:00\u{2013}07:00 \u{2192} 18\u{00b0}C, 07:00\u{2013}22:00 \u{2192} 21\u{00b0}C, 22:00\u{2013}24:00 \u{2192} 18\u{00b0}C".into(),
                 }],
+                min_cycle_remaining_secs: 0,
+                min_pause_remaining_secs: 0,
+                relay_stale: false,
             }],
             timestamp_epoch_ms: 1700000000000,
         });

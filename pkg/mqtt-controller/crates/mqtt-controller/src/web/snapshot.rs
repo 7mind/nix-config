@@ -279,24 +279,49 @@ fn build_heating_zone_snapshots(
     heating_cfg
         .zones
         .iter()
-        .map(|zone| build_one_heating_zone(zone, heating_state, now))
+        .map(|zone| build_one_heating_zone(zone, heating_cfg, heating_state, now))
         .collect()
 }
 
 fn build_one_heating_zone(
     zone: &crate::config::heating::HeatingZone,
+    heating_cfg: &crate::config::heating::HeatingConfig,
     heating_state: &crate::domain::heating_state::HeatingRuntimeState,
     now: Instant,
 ) -> HeatingZoneSnapshot {
     let zone_state = heating_state.zones.get(&zone.name);
     let relay_on = zone_state.map_or(false, |z| z.relay_on);
     let relay_state_known = zone_state.map_or(false, |z| z.relay_state_known);
+    let relay_stale = zone_state.map_or(false, |z| z.is_wt_stale(now));
+
+    // Compute pump protection remaining times.
+    let min_cycle = std::time::Duration::from_secs(heating_cfg.heat_pump.min_cycle_seconds);
+    let min_pause = std::time::Duration::from_secs(heating_cfg.heat_pump.min_pause_seconds);
+
+    let min_cycle_remaining_secs = heating_state.effective_pump_on_since()
+        .and_then(|on_at| {
+            let elapsed = now.duration_since(on_at);
+            min_cycle.checked_sub(elapsed)
+        })
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    let min_pause_remaining_secs = heating_state.effective_pump_off_since()
+        .and_then(|off_at| {
+            let elapsed = now.duration_since(off_at);
+            min_pause.checked_sub(elapsed)
+        })
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
 
     let trvs: Vec<TrvSnapshot> = zone
         .trvs
         .iter()
         .map(|zt| {
             let trv_state = zone_state.and_then(|z| z.trvs.get(&zt.device));
+            let schedule_summary = heating_cfg.schedules.get(&zt.schedule)
+                .map(|sched| format_schedule_summary(sched))
+                .unwrap_or_default();
             TrvSnapshot {
                 device: zt.device.clone(),
                 local_temperature: trv_state.and_then(|t| t.local_temperature),
@@ -316,13 +341,12 @@ fn build_one_heating_zone(
                 setpoint: trv_state.and_then(|t| t.reported_setpoint),
                 battery: trv_state.and_then(|t| t.battery),
                 inhibited: trv_state.is_some_and(|t| t.is_inhibited(now)),
+                schedule: zt.schedule.clone(),
+                schedule_summary,
             }
         })
         .collect();
 
-    // Wall thermostat temperature: not tracked in zone state (it arrives
-    // via the Event, not stored separately). We leave it None for now;
-    // the relay_on state is the main piece of information.
     HeatingZoneSnapshot {
         name: zone.name.clone(),
         relay_device: zone.relay.clone(),
@@ -330,6 +354,9 @@ fn build_one_heating_zone(
         relay_state_known,
         relay_temperature: None,
         trvs,
+        min_cycle_remaining_secs,
+        min_pause_remaining_secs,
+        relay_stale,
     }
 }
 
@@ -342,7 +369,28 @@ pub fn build_heating_zone_snapshot(
     let heating_cfg = controller.topology().heating_config()?;
     let heating_state = controller.heating_state()?;
     let zone = heating_cfg.zones.iter().find(|z| z.name == zone_name)?;
-    Some(build_one_heating_zone(zone, heating_state, now))
+    Some(build_one_heating_zone(zone, heating_cfg, heating_state, now))
+}
+
+/// Format a schedule as a compact summary string.
+/// Uses Monday as representative (all current schedules use allWeek).
+/// Format: `"00:00–06:00 → 21°C, 06:00–23:00 → 18°C, 23:00–24:00 → 21°C"`
+fn format_schedule_summary(schedule: &crate::config::heating::TemperatureSchedule) -> String {
+    use crate::config::heating::Weekday;
+    let ranges = match schedule.days.get(&Weekday::Monday) {
+        Some(r) => r,
+        None => return String::new(),
+    };
+    ranges
+        .iter()
+        .map(|r| {
+            format!(
+                "{:02}:{:02}\u{2013}{:02}:{:02} \u{2192} {:.0}\u{00b0}C",
+                r.start_hour, r.start_minute, r.end_hour, r.end_minute, r.temperature
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Extract entity names from an event (before it is consumed by handle_event).

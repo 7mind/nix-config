@@ -85,10 +85,26 @@ fn HeatingZoneCard(zone: HeatingZoneSnapshot) -> impl IntoView {
             });
 
             let device = trv.device.clone();
+            let schedule_name = if trv.schedule.is_empty() {
+                None
+            } else {
+                Some(trv.schedule.clone())
+            };
+            let schedule_tooltip = if trv.schedule_summary.is_empty() {
+                None
+            } else {
+                Some(trv.schedule_summary.clone())
+            };
 
             view! {
                 <div class="trv-row">
                     <span class="trv-device">{device}</span>
+                    {schedule_name.map(|name| view! {
+                        <span
+                            class="badge schedule-badge"
+                            title=schedule_tooltip.unwrap_or_default()
+                        >{name}</span>
+                    })}
                     <span class="trv-temp">{temp}{setpoint}</span>
                     <span class=rs_class>{trv.running_state.clone()}{demand}</span>
                     {inhibited_badge}
@@ -133,6 +149,15 @@ fn HeatingZoneCard(zone: HeatingZoneSnapshot) -> impl IntoView {
             <div class="card-meta">
                 <span>{relay_text}</span>
                 <span class="relay-device">{format!(" ({})", zone.relay_device)}</span>
+                {(zone.relay_stale).then(|| view! {
+                    <span class="badge inhibited">" stale"</span>
+                })}
+                {(zone.min_cycle_remaining_secs > 0).then(|| view! {
+                    <span class="badge unknown">{format!(" min_cycle {}s", zone.min_cycle_remaining_secs)}</span>
+                })}
+                {(zone.min_pause_remaining_secs > 0).then(|| view! {
+                    <span class="badge unknown">{format!(" min_pause {}s", zone.min_pause_remaining_secs)}</span>
+                })}
             </div>
             <div class="trv-list">
                 {trv_views}
