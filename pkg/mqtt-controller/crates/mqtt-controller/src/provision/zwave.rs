@@ -30,23 +30,36 @@ use super::{ProvisionOptions, ReconcileSummary};
 struct ZwaveNode {
     node_id: u16,
     current_name: String,
+    current_location: String,
 }
 
-/// Reconcile Z-Wave plug names against the device catalog.
+/// Reconcile Z-Wave plug names and locations against the device catalog.
 ///
-/// For each Z-Wave plug in the catalog (protocol == zwave), check if
-/// the node's current name in Z-Wave JS UI matches the desired name
-/// (the device catalog key). Rename if it doesn't.
+/// For each Z-Wave plug in the catalog (protocol == zwave):
+///   - Check if the node's current name matches the desired name and
+///     rename if it doesn't (via `setNodeName`).
+///   - If the device has a `description`, check if the node's current
+///     location matches and set it if it doesn't (via `setNodeLocation`).
+///     This maps the Nix-side `description` field to Z-Wave's location
+///     concept (z2m uses `bridge/request/device/options` for Zigbee
+///     descriptions, but Z-Wave uses a separate API).
 pub async fn reconcile_zwave_names(
     config: &Config,
     mqtt_config: &MqttConfig,
     options: &ProvisionOptions,
 ) -> anyhow::Result<ReconcileSummary> {
-    // Collect desired node_id → name mappings from the catalog.
-    let mut desired: BTreeMap<u16, &str> = BTreeMap::new();
+    // Collect desired node_id → (name, location) mappings from the catalog.
+    struct Desired<'a> {
+        name: &'a str,
+        location: Option<&'a str>,
+    }
+    let mut desired: BTreeMap<u16, Desired<'_>> = BTreeMap::new();
     for (name, entry) in &config.devices {
         if let Some(node_id) = entry.zwave_node_id() {
-            desired.insert(node_id, name.as_str());
+            desired.insert(node_id, Desired {
+                name: name.as_str(),
+                location: entry.description(),
+            });
         }
     }
 
@@ -56,12 +69,12 @@ pub async fn reconcile_zwave_names(
 
     tracing::info!(
         zwave_plugs = desired.len(),
-        "zwave: checking node names"
+        "zwave: checking node names and locations"
     );
 
     let mut conn = ZwaveConn::connect(mqtt_config, options.timeout).await?;
 
-    // Discover current node names via the getNodes API.
+    // Discover current node state via the getNodes API.
     let nodes = conn.get_nodes(options.timeout).await?;
     let nodes_by_id: BTreeMap<u16, ZwaveNode> = nodes
         .into_iter()
@@ -70,42 +83,62 @@ pub async fn reconcile_zwave_names(
 
     let mut summary = ReconcileSummary::default();
 
-    for (&node_id, &desired_name) in &desired {
+    for (&node_id, desired) in &desired {
         let Some(node) = nodes_by_id.get(&node_id) else {
             tracing::warn!(
                 node_id,
-                desired = desired_name,
+                desired = desired.name,
                 "zwave: node not found (offline or not paired); skipping"
             );
             continue;
         };
 
-        if node.current_name == desired_name {
+        // Reconcile name.
+        if node.current_name == desired.name {
             tracing::info!(
                 node_id,
-                name = desired_name,
-                "[skip] already named"
+                name = desired.name,
+                "[skip] name already matches"
             );
             summary.skipped += 1;
-            continue;
+        } else {
+            let verb = if options.dry_run { "[dry-run] would rename" } else { "rename" };
+            tracing::info!(
+                node_id,
+                from = %node.current_name,
+                to = desired.name,
+                "zwave: {verb}"
+            );
+            if !options.dry_run {
+                conn.set_node_name(node_id, desired.name, options.timeout).await?;
+                tokio::time::sleep(options.settle * 2).await;
+                summary.touched += 1;
+            }
         }
 
-        let verb = if options.dry_run {
-            "[dry-run] would rename"
-        } else {
-            "rename"
-        };
-        tracing::info!(
-            node_id,
-            from = %node.current_name,
-            to = desired_name,
-            "zwave: {verb}"
-        );
-
-        if !options.dry_run {
-            conn.set_node_name(node_id, desired_name, options.timeout).await?;
-            tokio::time::sleep(options.settle * 2).await;
-            summary.touched += 1;
+        // Reconcile location (from description field).
+        if let Some(desired_loc) = desired.location {
+            if node.current_location == desired_loc {
+                tracing::info!(
+                    node_id,
+                    location = desired_loc,
+                    "[skip] location already matches"
+                );
+                summary.skipped += 1;
+            } else {
+                let verb = if options.dry_run { "[dry-run] would set" } else { "set" };
+                tracing::info!(
+                    node_id,
+                    from = %node.current_location,
+                    to = desired_loc,
+                    "zwave: {verb} location"
+                );
+                if !options.dry_run {
+                    conn.set_node_location(node_id, desired_loc, options.timeout).await?;
+                    tokio::time::sleep(options.settle * 2).await;
+                    summary.touched += 1;
+                }
+            }
         }
     }
 
@@ -237,6 +270,53 @@ impl ZwaveConn {
         }
     }
 
+    /// Call the Z-Wave JS UI `setNodeLocation` API.
+    async fn set_node_location(
+        &mut self,
+        node_id: u16,
+        location: &str,
+        timeout: Duration,
+    ) -> anyhow::Result<()> {
+        let response_topic = format!("{}setNodeLocation", zwave_api::GATEWAY_PREFIX);
+        let request_topic = format!("{}setNodeLocation/set", zwave_api::GATEWAY_PREFIX);
+
+        self.client
+            .subscribe(&response_topic, QoS::AtLeastOnce)
+            .await?;
+        self.wait_for_suback(timeout).await?;
+
+        let payload = serde_json::json!({"args": [node_id, location]});
+        self.client
+            .publish(&request_topic, QoS::AtLeastOnce, false, serde_json::to_vec(&payload)?)
+            .await?;
+
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                anyhow::bail!("zwave: setNodeLocation timed out for node {node_id}");
+            }
+            match tokio::time::timeout(remaining, self.eventloop.poll()).await {
+                Ok(Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(p)))) => {
+                    if p.topic == response_topic {
+                        let resp: serde_json::Value = serde_json::from_slice(&p.payload)?;
+                        let success = resp.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+                        if success {
+                            return Ok(());
+                        }
+                        let msg = resp.get("message")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown error");
+                        anyhow::bail!("zwave: setNodeLocation failed for node {node_id}: {msg}");
+                    }
+                }
+                Ok(Ok(_)) => continue,
+                Ok(Err(e)) => anyhow::bail!("zwave: eventloop error during setNodeLocation: {e}"),
+                Err(_) => anyhow::bail!("zwave: setNodeLocation timed out for node {node_id}"),
+            }
+        }
+    }
+
     async fn wait_for_suback(&mut self, timeout: Duration) -> anyhow::Result<()> {
         let deadline = tokio::time::Instant::now() + timeout;
         loop {
@@ -285,9 +365,14 @@ fn parse_get_nodes_response(payload: &[u8]) -> anyhow::Result<Vec<ZwaveNode>> {
         } else {
             name.to_string()
         };
+        let current_location = entry.get("loc")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
         nodes.push(ZwaveNode {
             node_id: node_id as u16,
             current_name,
+            current_location,
         });
     }
     Ok(nodes)
@@ -304,15 +389,17 @@ mod tests {
             "message": "Success",
             "result": [
                 {"id": 1, "name": "", "loc": ""},
-                {"id": 6, "name": "Plug4", "loc": ""}
+                {"id": 6, "name": "Plug4", "loc": "attic"}
             ]
         }"#;
         let nodes = parse_get_nodes_response(payload).unwrap();
         assert_eq!(nodes.len(), 2);
         assert_eq!(nodes[0].node_id, 1);
         assert_eq!(nodes[0].current_name, "nodeID_1");
+        assert_eq!(nodes[0].current_location, "");
         assert_eq!(nodes[1].node_id, 6);
         assert_eq!(nodes[1].current_name, "Plug4");
+        assert_eq!(nodes[1].current_location, "attic");
     }
 
     #[test]
