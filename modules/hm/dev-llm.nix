@@ -290,8 +290,10 @@ in
 
       programs.opencode = {
         enable = true;
-        settings = {
+        tui = {
           theme = "dark";
+        };
+        settings = {
           autoupdate = "notify";
           model = config.smind.hm.dev.llm.opencodeDefaultModel;
           plugin = [ "opencode-gemini-auth@latest" ];
