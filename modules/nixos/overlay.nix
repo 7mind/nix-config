@@ -105,7 +105,7 @@
         mqtt-controller-frontend =
           let
             craneLib = (inputs.crane.mkLib pkgs).overrideToolchain (p:
-              p.rust-bin.stable.latest.default.override {
+              p.rust-bin.stable.latest.minimal.override {
                 targets = [ "wasm32-unknown-unknown" ];
               }
             );
@@ -133,7 +133,7 @@
         mqtt-controller =
           let
             craneLib = (inputs.crane.mkLib pkgs).overrideToolchain (p:
-              p.rust-bin.stable.latest.default
+              p.rust-bin.stable.latest.minimal
             );
             commonArgs = {
               src = mqtt-controller-src;

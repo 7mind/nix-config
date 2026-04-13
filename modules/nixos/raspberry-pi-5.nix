@@ -11,10 +11,10 @@
     inputs.nixos-raspberrypi.overlays.vendor-pkgs
     inputs.nixos-raspberrypi.overlays.pkgs
     (final: prev: {
-      # Workaround for libcamera-rpi build error: unknown option "rpi-awb-nn"
-      libcamera_rpi = prev.libcamera_rpi.overrideAttrs (old: {
-        mesonFlags = lib.filter (x: !lib.hasInfix "rpi-awb-nn" (if lib.isString x then x else "")) old.mesonFlags;
-      });
+      # The vendor-pkgs overlay globally sets libcamera = libcamera_rpi.
+      # Override pipewire to not depend on it — raspi5m is a headless
+      # server with no camera, and libcamera_rpi is expensive to build.
+      pipewire = prev.pipewire.override { libcamera = null; };
     })
   ];
 
