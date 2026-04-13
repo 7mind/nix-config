@@ -37,6 +37,7 @@ in
         serial.port = cfg.serialPort;
         serial.adapter = cfg.adapter;
         frontend = {
+          enabled = true;
           host = cfg.host;
           port = cfg.port;
         };
@@ -53,8 +54,9 @@ in
         # drop off the Zigbee network (especially mains-powered ones
         # like wall thermostats that should always be reachable).
         availability = {
+          enabled = true;
           active.timeout = 10;   # minutes — mains-powered routers
-          passive.timeout = 25;  # minutes — battery-powered end devices
+          passive.timeout = 1500;  # minutes — battery-powered end devices
         };
         advanced.log_output = [ "console" "syslog" ];
         advanced.channel = 15;

@@ -57,7 +57,7 @@ mod room;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::config::Defaults;
 use crate::domain::action::{Action, Payload};
@@ -110,6 +110,12 @@ pub struct Controller {
     /// action rule name.
     at_last_fired: BTreeMap<String, (u8, u8)>,
 
+    /// Last double-tap timestamp per (device, button). After a double
+    /// tap, single taps from the same device+button are suppressed for
+    /// `defaults.double_tap_suppression_seconds` to guard against the
+    /// Sonoff firmware's inter-sequence cooldown sending spurious singles.
+    last_double_tap: BTreeMap<(String, u8), Instant>,
+
     /// Optional heating sub-controller. Only present when the config
     /// has a `heating` section.
     heating: Option<HeatingController>,
@@ -144,6 +150,7 @@ impl Controller {
             kill_switch,
             confirm_off_pending: BTreeMap::new(),
             at_last_fired: BTreeMap::new(),
+            last_double_tap: BTreeMap::new(),
             heating,
             location,
             cached_sun: None,
@@ -168,8 +175,52 @@ impl Controller {
                 ref action,
                 ts,
             } => {
-                let mut out = self.handle_tap_action(device, button, action.as_deref(), ts);
-                out.extend(self.dispatch_tap_actions(device, button, action.as_deref(), ts));
+                if action.as_deref() == Some("double") {
+                    self.last_double_tap
+                        .insert((device.clone(), button), ts);
+                }
+                // Suppress spurious singles within the firmware cooldown
+                // window after a double tap. The Sonoff SNZB-01M sends
+                // `single` instead of `double` when the user double-taps
+                // again before the firmware's ~2 s inter-sequence cooldown
+                // has elapsed. The event is wrong at the device level so
+                // we drop it entirely — both room handlers and action
+                // rules. Topology validation ensures cycle_on_double_tap
+                // buttons don't share single-tap duties with other rooms
+                // or action rules, so nothing legitimate is lost.
+                if action.is_none() {
+                    if let Some(&last_dt) =
+                        self.last_double_tap.get(&(device.clone(), button))
+                    {
+                        let window = Duration::from_secs_f64(
+                            self.defaults.double_tap_suppression_seconds,
+                        );
+                        if ts.duration_since(last_dt) < window
+                            && self
+                                .topology
+                                .any_tap_cycle_on_double_tap(device, button)
+                        {
+                            tracing::debug!(
+                                device = device.as_str(),
+                                button,
+                                elapsed_ms =
+                                    ts.duration_since(last_dt).as_millis() as u64,
+                                window_ms = window.as_millis() as u64,
+                                "suppressing single tap within \
+                                 double-tap cooldown window"
+                            );
+                            return Vec::new();
+                        }
+                    }
+                }
+                let mut out =
+                    self.handle_tap_action(device, button, action.as_deref(), ts);
+                out.extend(self.dispatch_tap_actions(
+                    device,
+                    button,
+                    action.as_deref(),
+                    ts,
+                ));
                 out
             }
             Event::Occupancy {
@@ -1227,6 +1278,105 @@ mod tests {
         });
         assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::scene_recall(1))]);
         assert!(c.state_for("bedroom").unwrap().physically_on);
+    }
+
+    // ---- double-tap suppression guard --------------------------------------
+
+    #[test]
+    fn single_tap_suppressed_within_double_tap_cooldown() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = double_tap_controller(clk.clone());
+        // Turn on via single tap.
+        c.handle_event(Event::TapAction {
+            device: "sonoff-ts-foo".into(), button: 1, action: None, ts: clk.now(),
+        });
+        // Double tap → advance scene.
+        c.handle_event(Event::TapAction {
+            device: "sonoff-ts-foo".into(), button: 1,
+            action: Some("double".into()), ts: clk.now(),
+        });
+        // Spurious single within 2 s cooldown → suppressed, no state change.
+        clk.advance(Duration::from_millis(500));
+        let actions = c.handle_event(Event::TapAction {
+            device: "sonoff-ts-foo".into(), button: 1, action: None, ts: clk.now(),
+        });
+        assert_eq!(actions, vec![], "single tap within cooldown must be suppressed");
+        assert!(c.state_for("bedroom").unwrap().physically_on, "room must stay on");
+        assert_eq!(c.state_for("bedroom").unwrap().cycle_idx, 1, "cycle index must not change");
+    }
+
+    #[test]
+    fn single_tap_works_after_double_tap_cooldown_expires() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = double_tap_controller(clk.clone());
+        // Turn on via single tap.
+        c.handle_event(Event::TapAction {
+            device: "sonoff-ts-foo".into(), button: 1, action: None, ts: clk.now(),
+        });
+        // Double tap → advance scene.
+        c.handle_event(Event::TapAction {
+            device: "sonoff-ts-foo".into(), button: 1,
+            action: Some("double".into()), ts: clk.now(),
+        });
+        // Wait past the 2 s suppression window.
+        clk.advance(Duration::from_secs(3));
+        // Single tap → should toggle off normally.
+        let actions = c.handle_event(Event::TapAction {
+            device: "sonoff-ts-foo".into(), button: 1, action: None, ts: clk.now(),
+        });
+        assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::state_off(0.8))]);
+        assert!(!c.state_for("bedroom").unwrap().physically_on);
+    }
+
+    #[test]
+    fn suppression_does_not_affect_non_double_tap_buttons() {
+        let clk = Arc::new(FakeClock::new(12));
+        // kitchen_controller uses regular (non-cycle_on_double_tap) bindings.
+        let mut c = kitchen_controller(clk.clone());
+        // Simulate a double tap on a non-cycle_on_double_tap button.
+        c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(), button: 1, action: Some("double".into()),
+            ts: clk.now(),
+        });
+        // Single tap immediately → must NOT be suppressed.
+        let actions = c.handle_event(Event::TapAction {
+            device: "hue-ts-foo".into(), button: 1, action: None, ts: clk.now(),
+        });
+        assert!(!actions.is_empty(), "single tap on non-cycle_on_double_tap button must not be suppressed");
+    }
+
+    #[test]
+    fn double_tap_action_rule_on_same_button_is_allowed() {
+        use crate::config::{ActionRule, Effect, Trigger};
+        // Double-tap action rules on a cycle_on_double_tap button are fine —
+        // only single-tap rules are rejected.
+        let cfg = Config {
+            name_by_address: BTreeMap::new(),
+            devices: BTreeMap::from([
+                ("hue-l-a".into(), light("0xa")),
+                ("sonoff-ts-foo".into(), tap_dev("0x1")),
+                ("z2m-p-plug".into(), plug_dev("0xf", "sonoff-basic", &["on-off"])),
+            ]),
+            rooms: vec![Room {
+                name: "bedroom".into(), group_name: "hue-lz-bedroom".into(), id: 1,
+                members: vec!["hue-l-a/11".into()], parent: None,
+                devices: vec![binding_double_tap("sonoff-ts-foo", 1)],
+                scenes: day_night_scenes(), off_transition_seconds: 0.8,
+                motion_off_cooldown_seconds: 0,
+            }],
+            actions: vec![ActionRule {
+                name: "plug-off-on-double".into(),
+                trigger: Trigger::Tap {
+                    device: "sonoff-ts-foo".into(), button: 1,
+                    action: Some("double".into()),
+                },
+                effect: Effect::TurnOff { target: "z2m-p-plug".into() },
+            }],
+            defaults: Defaults::default(),
+            heating: None,
+            location: None,
+        };
+        assert!(Topology::build(&cfg).is_ok(), "double-tap action rule must be allowed");
     }
 
     // ---- startup turn-off for motion zones --------------------------------

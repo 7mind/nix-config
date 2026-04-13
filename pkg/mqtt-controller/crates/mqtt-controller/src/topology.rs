@@ -200,6 +200,11 @@ pub enum TopologyError {
     NegativeCycleWindow(f64),
 
     #[error(
+        "defaults.double_tap_suppression_seconds is negative: {0}"
+    )]
+    NegativeDoubleTapSuppression(f64),
+
+    #[error(
         "action rule {rule:?} has confirm_off_seconds negative: {value}"
     )]
     NegativeConfirmOffWindow { rule: String, value: f64 },
@@ -223,6 +228,30 @@ pub enum TopologyError {
         node_id: u16,
         first: FriendlyName,
         second: FriendlyName,
+    },
+
+    #[error(
+        "tap device {device:?} button {button} has cycle_on_double_tap in room {cdt_room:?} \
+         but a non-cycle_on_double_tap binding in room {other_room:?} — mixed modes on \
+         the same button are not allowed"
+    )]
+    MixedDoubleTapModes {
+        device: FriendlyName,
+        button: u8,
+        cdt_room: RoomName,
+        other_room: RoomName,
+    },
+
+    #[error(
+        "action rule {rule:?} has a single-tap trigger on device {device:?} button {button} \
+         which uses cycle_on_double_tap in room {room:?} — single-tap action rules conflict \
+         with double-tap suppression"
+    )]
+    ActionConflictsWithDoubleTap {
+        rule: String,
+        device: FriendlyName,
+        button: u8,
+        room: RoomName,
     },
 
     #[error("heating config error: {0}")]
@@ -471,6 +500,11 @@ impl Topology {
                 config.defaults.cycle_window_seconds,
             ));
         }
+        if config.defaults.double_tap_suppression_seconds < 0.0 {
+            return Err(TopologyError::NegativeDoubleTapSuppression(
+                config.defaults.double_tap_suppression_seconds,
+            ));
+        }
         for room in &config.rooms {
             if room.off_transition_seconds < 0.0 {
                 return Err(TopologyError::NegativeTransition {
@@ -672,6 +706,37 @@ impl Topology {
                     "tap (device, button) pair claimed by multiple rooms; \
                      each press will dispatch to every room in turn"
                 );
+            }
+        }
+
+        // 8b. cycle_on_double_tap must be uniform across all rooms
+        //     sharing the same (device, button). Mixing modes would make
+        //     the double-tap suppression guard ambiguous.
+        for ((device, button), claiming_rooms) in &tap_index {
+            let mut cdt_room: Option<&RoomName> = None;
+            let mut non_cdt_room: Option<&RoomName> = None;
+            for room_name in claiming_rooms {
+                let is_cdt = rooms
+                    .get(room_name)
+                    .map(|r| {
+                        r.bound_taps
+                            .iter()
+                            .any(|b| b.device == *device && b.button == *button && b.cycle_on_double_tap)
+                    })
+                    .unwrap_or(false);
+                if is_cdt {
+                    cdt_room = Some(room_name);
+                } else {
+                    non_cdt_room = Some(room_name);
+                }
+            }
+            if let (Some(cdt), Some(other)) = (cdt_room, non_cdt_room) {
+                return Err(TopologyError::MixedDoubleTapModes {
+                    device: device.clone(),
+                    button: *button,
+                    cdt_room: cdt.clone(),
+                    other_room: other.clone(),
+                });
             }
         }
 
@@ -1128,6 +1193,38 @@ impl Topology {
             });
         }
 
+        // Single-tap action rules must not reference a (device, button)
+        // that uses cycle_on_double_tap — the double-tap suppression
+        // guard drops the entire event, so the action rule would go dead.
+        for rule in &config.actions {
+            if let Trigger::Tap { device, button, action: None } = &rule.trigger {
+                for room_name in tap_index
+                    .get(&(device.clone(), *button))
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[])
+                {
+                    let is_cdt = rooms
+                        .get(room_name)
+                        .map(|r| {
+                            r.bound_taps.iter().any(|b| {
+                                b.device == *device
+                                    && b.button == *button
+                                    && b.cycle_on_double_tap
+                            })
+                        })
+                        .unwrap_or(false);
+                    if is_cdt {
+                        return Err(TopologyError::ActionConflictsWithDoubleTap {
+                            rule: rule.name.clone(),
+                            device: device.clone(),
+                            button: *button,
+                            room: room_name.clone(),
+                        });
+                    }
+                }
+            }
+        }
+
         // Location is required if any schedule slot or At trigger uses sun expressions.
         if needs_location && config.location.is_none() {
             return Err(TopologyError::MissingLocationForSunExpressions);
@@ -1201,6 +1298,13 @@ impl Topology {
                     .any(|b| b.device == device && b.button == button && b.cycle_on_double_tap)
             })
             .unwrap_or(false)
+    }
+
+    /// True if any room bound to this (tap, button) uses cycle_on_double_tap.
+    pub fn any_tap_cycle_on_double_tap(&self, device: &str, button: u8) -> bool {
+        self.rooms_for_tap_button(device, button)
+            .iter()
+            .any(|room| self.tap_cycle_on_double_tap(device, button, room))
     }
 
     /// Rooms driven by a motion sensor friendly_name.
@@ -1382,7 +1486,7 @@ fn kind_label(entry: &DeviceCatalogEntry) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{ActionRule, CommonFields, DeviceCatalogEntry, Effect, Room, Trigger};
+    use crate::config::{ActionRule, CommonFields, Defaults, DeviceCatalogEntry, Effect, Room, Trigger};
     use crate::config::scenes::{Scene, SceneSchedule, Slot};
     use std::collections::BTreeMap;
 
@@ -1488,6 +1592,14 @@ mod tests {
             device: device.into(),
             button,
             cycle_on_double_tap: false,
+        }
+    }
+
+    fn binding_double_tap(device: &str, button: u8) -> crate::config::DeviceBinding {
+        crate::config::DeviceBinding {
+            device: device.into(),
+            button: Some(button),
+            cycle_on_double_tap: true,
         }
     }
 
@@ -2191,5 +2303,104 @@ mod tests {
         assert_eq!(topo.descendants_of("grand"), &["child".to_string()]);
         // parent's descendants: child
         assert_eq!(topo.descendants_of("parent"), &["child".to_string()]);
+    }
+
+    #[test]
+    fn negative_double_tap_suppression_rejected() {
+        let cfg = Config {
+            name_by_address: BTreeMap::new(),
+            devices: BTreeMap::from([
+                ("hue-l-a".into(), light("0xa")),
+            ]),
+            rooms: vec![room("r", 1, vec!["hue-l-a/11"], vec![], None)],
+            actions: vec![],
+            defaults: Defaults {
+                double_tap_suppression_seconds: -1.0,
+                ..Defaults::default()
+            },
+            heating: None,
+            location: None,
+        };
+        assert_eq!(
+            Topology::build(&cfg).unwrap_err(),
+            TopologyError::NegativeDoubleTapSuppression(-1.0),
+        );
+    }
+
+    #[test]
+    fn mixed_double_tap_modes_rejected() {
+        let cfg = config(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("hue-l-b", light("0xb")),
+                ("sonoff-ts-x", tap_dev("0x1")),
+            ],
+            vec![
+                room(
+                    "room-a", 1, vec!["hue-l-a/11"],
+                    vec![binding_double_tap("sonoff-ts-x", 1)], None,
+                ),
+                room(
+                    "room-b", 2, vec!["hue-l-b/11"],
+                    vec![binding("sonoff-ts-x", Some(1))], None,
+                ),
+            ],
+        );
+        let err = Topology::build(&cfg).unwrap_err();
+        assert!(
+            matches!(err, TopologyError::MixedDoubleTapModes { .. }),
+            "expected MixedDoubleTapModes, got: {err}"
+        );
+    }
+
+    #[test]
+    fn single_tap_action_on_double_tap_button_rejected() {
+        let cfg = config_with_actions(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("sonoff-ts-x", tap_dev("0x1")),
+                ("z2m-p-plug", plug_dev("0xf", "sonoff-basic", &["on-off"])),
+            ],
+            vec![room(
+                "room-a", 1, vec!["hue-l-a/11"],
+                vec![binding_double_tap("sonoff-ts-x", 1)], None,
+            )],
+            vec![ActionRule {
+                name: "plug-on".into(),
+                trigger: Trigger::Tap {
+                    device: "sonoff-ts-x".into(), button: 1, action: None,
+                },
+                effect: Effect::TurnOn { target: "z2m-p-plug".into() },
+            }],
+        );
+        let err = Topology::build(&cfg).unwrap_err();
+        assert!(
+            matches!(err, TopologyError::ActionConflictsWithDoubleTap { .. }),
+            "expected ActionConflictsWithDoubleTap, got: {err}"
+        );
+    }
+
+    #[test]
+    fn double_tap_action_on_double_tap_button_allowed() {
+        let cfg = config_with_actions(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("sonoff-ts-x", tap_dev("0x1")),
+                ("z2m-p-plug", plug_dev("0xf", "sonoff-basic", &["on-off"])),
+            ],
+            vec![room(
+                "room-a", 1, vec!["hue-l-a/11"],
+                vec![binding_double_tap("sonoff-ts-x", 1)], None,
+            )],
+            vec![ActionRule {
+                name: "plug-off-on-double".into(),
+                trigger: Trigger::Tap {
+                    device: "sonoff-ts-x".into(), button: 1,
+                    action: Some("double".into()),
+                },
+                effect: Effect::TurnOff { target: "z2m-p-plug".into() },
+            }],
+        );
+        assert!(Topology::build(&cfg).is_ok(), "double-tap action rule on cdt button must be allowed");
     }
 }

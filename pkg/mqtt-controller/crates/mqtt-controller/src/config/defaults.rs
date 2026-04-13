@@ -34,6 +34,16 @@ pub struct Defaults {
     /// as `cycleDebounceSeconds` / `cyclePauseSeconds`.
     pub cycle_window_seconds: f64,
 
+    /// After a `double_button_N` event, suppress `single_button_N` from
+    /// the same device+button for this many seconds. Guards against the
+    /// Sonoff SNZB-01M firmware's ~2 s inter-sequence cooldown: when the
+    /// user double-taps again before the firmware fully resets, it sends
+    /// `single` instead of `double`, which would toggle the room on/off.
+    ///
+    /// Only applies to device+button pairs with at least one
+    /// `cycle_on_double_tap` room binding.
+    pub double_tap_suppression_seconds: f64,
+
     /// Wall-switch-specific brightness tuning. Taps don't have hold or
     /// up/down buttons so this section is unused for them.
     pub wall_switch: WallSwitchDefaults,
@@ -43,6 +53,7 @@ impl Default for Defaults {
     fn default() -> Self {
         Self {
             cycle_window_seconds: 1.0,
+            double_tap_suppression_seconds: 2.0,
             wall_switch: WallSwitchDefaults::default(),
         }
     }
@@ -84,6 +95,7 @@ mod tests {
     fn empty_defaults_round_trip() {
         let d: Defaults = serde_json::from_str("{}").unwrap();
         assert_eq!(d.cycle_window_seconds, 1.0);
+        assert_eq!(d.double_tap_suppression_seconds, 2.0);
         assert_eq!(d.wall_switch.brightness_step, 25);
     }
 
