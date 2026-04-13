@@ -81,6 +81,9 @@ pub struct TrvSnapshot {
     pub battery: Option<u8>,
     /// True if open-window inhibition is active.
     pub inhibited: bool,
+    /// True if the TRV is force-opened (pressure group or min_cycle hold).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub forced: bool,
     /// Name of the temperature schedule driving this TRV.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub schedule: String,
@@ -287,6 +290,7 @@ mod tests {
                     setpoint: Some(22.0),
                     battery: Some(85),
                     inhibited: false,
+                    forced: false,
                     schedule: "living".into(),
                     schedule_summary: "00:00\u{2013}07:00 \u{2192} 18\u{00b0}C, 07:00\u{2013}22:00 \u{2192} 21\u{00b0}C, 22:00\u{2013}24:00 \u{2192} 18\u{00b0}C".into(),
                 }],

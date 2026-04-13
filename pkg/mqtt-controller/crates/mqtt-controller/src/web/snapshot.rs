@@ -341,6 +341,7 @@ fn build_one_heating_zone(
                 setpoint: trv_state.and_then(|t| t.reported_setpoint),
                 battery: trv_state.and_then(|t| t.battery),
                 inhibited: trv_state.is_some_and(|t| t.is_inhibited(now)),
+                forced: trv_state.is_some_and(|t| t.pressure_forced || t.min_cycle_forced),
                 schedule: zt.schedule.clone(),
                 schedule_summary,
             }

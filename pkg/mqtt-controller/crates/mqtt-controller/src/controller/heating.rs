@@ -181,10 +181,13 @@ impl HeatingController {
                 for zt in &zone.trvs {
                     if let Some(trv) = zs.trvs.get_mut(&zt.device) {
                         if trv.is_stale(now) {
-                            // Clear pressure_release_pending if stuck
-                            // (TRV went unreachable after pressure release).
+                            // Clear release-pending flags if stuck
+                            // (TRV went unreachable after release).
                             if trv.pressure_release_pending {
                                 trv.pressure_release_pending = false;
+                            }
+                            if trv.min_cycle_release_pending {
+                                trv.min_cycle_release_pending = false;
                             }
                             if trv.has_raw_demand(md, mdf) {
                                 tracing::warn!(
@@ -310,6 +313,7 @@ impl HeatingController {
                 if (sent - sp).abs() < 0.1 {
                     trv.setpoint_confirmed = true;
                     trv.pressure_release_pending = false;
+                    trv.min_cycle_release_pending = false;
                 } else if trv.setpoint_confirmed {
                     // Post-confirmation divergence: the device moved
                     // away from our setpoint (manual knob change, device
@@ -462,6 +466,20 @@ impl HeatingController {
                 trv_state.baseline_established_at = None;
                 trv_state.open_window_checked = false;
                 trv_state.awaiting_temp_baseline = false;
+                // Relay confirmed OFF — release min_cycle-forced TRVs.
+                // Safe: no flow through this zone's circuit anymore.
+                if trv_state.min_cycle_forced {
+                    trv_state.min_cycle_forced = false;
+                    if !trv_state.pressure_forced {
+                        trv_state.min_cycle_release_pending = true;
+                        trv_state.last_sent_setpoint = None;
+                        trv_state.setpoint_confirmed = true; // schedule will re-send
+                    }
+                    tracing::info!(
+                        zone = %zone_name, relay = device,
+                        "min_cycle hold: releasing forced TRV (relay OFF confirmed)"
+                    );
+                }
             }
             // OFF echo confirms this zone's relay is off.
             zone_state.pending_on_at = None;
@@ -510,7 +528,7 @@ impl HeatingController {
                     continue;
                 };
 
-                if trv_state.pressure_forced {
+                if trv_state.pressure_forced || trv_state.min_cycle_forced {
                     continue;
                 }
                 if trv_state.is_inhibited(now) {
@@ -607,7 +625,9 @@ impl HeatingController {
             let any_organic_demand = group.trvs.iter().any(|trv_name| {
                 find_trv_in_zones(&self.state, trv_name)
                     .is_some_and(|t| {
-                        !t.pressure_forced && !t.is_inhibited(now) && t.has_raw_demand(md, mdf)
+                        !t.pressure_forced && !t.min_cycle_forced
+                            && !t.min_cycle_release_pending
+                            && !t.is_inhibited(now) && t.has_raw_demand(md, mdf)
                     })
             });
             // Safe override: release the group when the ZONE'S OWN relay is
@@ -654,6 +674,9 @@ impl HeatingController {
                     if trv_state.is_inhibited(now) {
                         continue;
                     }
+                    if trv_state.min_cycle_forced {
+                        continue; // already at 30°C via min_cycle hold
+                    }
                     if !trv_state.pressure_forced && !trv_state.has_raw_demand(md, mdf) {
                         trv_state.pressure_forced = true;
                         trv_state.last_sent_setpoint = Some(MAX_SETPOINT);
@@ -677,14 +700,24 @@ impl HeatingController {
                         continue;
                     }
                     trv_state.pressure_forced = false;
-                    trv_state.pressure_release_pending = true;
-                    trv_state.last_sent_setpoint = None;
-                    trv_state.setpoint_confirmed = true; // schedule will re-send
-                    tracing::info!(
-                        trv = %trv_name,
-                        group = %group.name,
-                        "pressure group: releasing forced TRV (demand suppressed until setpoint confirmed)"
-                    );
+                    if trv_state.min_cycle_forced {
+                        // TRV is still held open by min_cycle — don't clear
+                        // setpoint tracking; min_cycle release will handle it.
+                        tracing::info!(
+                            trv = %trv_name,
+                            group = %group.name,
+                            "pressure group: releasing (min_cycle hold still active)"
+                        );
+                    } else {
+                        trv_state.pressure_release_pending = true;
+                        trv_state.last_sent_setpoint = None;
+                        trv_state.setpoint_confirmed = true; // schedule will re-send
+                        tracing::info!(
+                            trv = %trv_name,
+                            group = %group.name,
+                            "pressure group: releasing forced TRV (demand suppressed until setpoint confirmed)"
+                        );
+                    }
                 }
             }
         }
@@ -725,7 +758,7 @@ impl HeatingController {
                 if trv_state.open_window_checked {
                     continue;
                 }
-                if trv_state.is_inhibited(now) || trv_state.pressure_forced {
+                if trv_state.is_inhibited(now) || trv_state.pressure_forced || trv_state.min_cycle_forced {
                     continue;
                 }
                 let Some(temp_at_on) = trv_state.temp_at_relay_on else {
@@ -1023,9 +1056,16 @@ impl HeatingController {
 
             if survivors > 0 {
                 // Pump stays running via other confirmed relays.
+                // min_cycle_forced TRVs are NOT released here — they
+                // stay forced until the OFF echo confirms the relay is
+                // actually off, preventing dead-head if the echo is
+                // delayed or lost.
                 for d in &want_off {
+                    { let zs = self.state.zones.get_mut(&d.zone_name).unwrap();
+                      zs.desired_relay = Some(false);
+                      zs.desired_relay_gen = self.tick_gen;
+                    }
                     actions.push(Action::for_device(d.relay.clone(), Payload::device_off()));
-                    { let zs = self.state.zones.get_mut(&d.zone_name).unwrap(); zs.desired_relay = Some(false); zs.desired_relay_gen = self.tick_gen; }
                     tracing::info!(
                         zone = %d.zone_name, relay = %d.relay,
                         "heating: requesting relay OFF (pump stays running)"
@@ -1045,23 +1085,99 @@ impl HeatingController {
                     .map(|on_at| now.duration_since(on_at) >= min_cycle)
                     .unwrap_or(true);
                 if cycle_ok {
+                    // min_cycle_forced TRVs are NOT released here — they
+                    // stay forced until the OFF echo confirms the relay is
+                    // actually off. This prevents the schedule from
+                    // restoring a normal setpoint (closing the valve)
+                    // while the pump is still physically running.
                     for d in &want_off {
-                        actions.push(Action::for_device(d.relay.clone(), Payload::device_off()));
                         { let zs = self.state.zones.get_mut(&d.zone_name).unwrap();
                           zs.desired_relay = Some(false);
                           zs.desired_relay_gen = self.tick_gen;
                           zs.pending_off_at = Some(now);
                         }
+                        actions.push(Action::for_device(d.relay.clone(), Payload::device_off()));
                         tracing::info!(
                             zone = %d.zone_name, relay = %d.relay,
                             "heating: requesting relay OFF (pump stopping)"
                         );
                     }
                 } else {
-                    tracing::debug!(
-                        zones_wanting_off = want_off.len(),
-                        "heating: relay OFF blocked by min_cycle protection"
-                    );
+                    // Pump held by min_cycle — force TRVs open to prevent
+                    // overpressure from closed valves + running pump.
+                    // Safety check: can we actually force any TRV open?
+                    // A TRV is forceable if it's not already forced, not
+                    // inhibited, and not pressure_forced. If NO TRV is
+                    // available (e.g., all inhibited by open-window), we
+                    // MUST let the relay OFF through — overpressure
+                    // prevention takes priority over min_cycle protection.
+                    let any_forceable = want_off.iter().any(|d| {
+                        self.state.zones.get(&d.zone_name)
+                            .is_some_and(|zs| zs.trvs.values().any(|t| {
+                                !t.min_cycle_forced
+                                    && !t.is_inhibited(now)
+                                    && !t.pressure_forced
+                            }))
+                    });
+                    // Also safe if at least one TRV is already forced open
+                    // (from a previous tick) or pressure_forced.
+                    let any_already_open = want_off.iter().any(|d| {
+                        self.state.zones.get(&d.zone_name)
+                            .is_some_and(|zs| zs.trvs.values().any(|t| {
+                                t.min_cycle_forced || t.pressure_forced
+                            }))
+                    });
+
+                    if !any_forceable && !any_already_open {
+                        // No open flow path possible — let relay OFF
+                        // through to prevent overpressure.
+                        for d in &want_off {
+                            { let zs = self.state.zones.get_mut(&d.zone_name).unwrap();
+                              zs.desired_relay = Some(false);
+                              zs.desired_relay_gen = self.tick_gen;
+                              zs.pending_off_at = Some(now);
+                            }
+                            actions.push(Action::for_device(d.relay.clone(), Payload::device_off()));
+                            tracing::warn!(
+                                zone = %d.zone_name, relay = %d.relay,
+                                "min_cycle hold OVERRIDDEN: no forceable TRVs \
+                                 (all inhibited), allowing relay OFF to prevent overpressure"
+                            );
+                        }
+                    } else {
+                        let tick_gen = self.tick_gen;
+                        for d in &want_off {
+                            let zs = self.state.zones.get_mut(&d.zone_name).unwrap();
+                            for (device, trv_state) in zs.trvs.iter_mut() {
+                                if trv_state.min_cycle_forced {
+                                    continue; // already forced
+                                }
+                                if trv_state.is_inhibited(now) {
+                                    continue; // open-window inhibition wins
+                                }
+                                if trv_state.pressure_forced {
+                                    continue; // already at 30°C via pressure group
+                                }
+                                trv_state.min_cycle_forced = true;
+                                trv_state.last_sent_setpoint = Some(MAX_SETPOINT);
+                                trv_state.setpoint_confirmed = false;
+                                trv_state.setpoint_dirty_gen = tick_gen;
+                                actions.push(Action::for_device(
+                                    device.clone(),
+                                    Payload::trv_setpoint(MAX_SETPOINT),
+                                ));
+                                tracing::info!(
+                                    trv = %device,
+                                    zone = %d.zone_name,
+                                    "min_cycle hold: force-opening TRV (setpoint → 30°C)"
+                                );
+                            }
+                        }
+                        tracing::debug!(
+                            zones_wanting_off = want_off.len(),
+                            "heating: relay OFF blocked by min_cycle protection, TRVs forced open"
+                        );
+                    }
                 }
             }
         }
@@ -3884,5 +4000,518 @@ mod tests {
             !z1_on.is_empty(),
             "healthy zone must not be blocked by other zone's speculative startup probe"
         );
+    }
+
+    // -- min_cycle TRV forcing tests --
+
+    #[test]
+    fn min_cycle_forces_trvs_open_when_blocking_relay_off() {
+        let cfg = simple_config();
+        let (mut hc, clk) = setup(&cfg);
+        hc.handle_tick();
+
+        // TRV demands heat → relay ON.
+        hc.handle_event(&Event::TrvState {
+            device: "trv-bath-1".into(),
+            local_temperature: Some(18.0),
+            pi_heating_demand: Some(50),
+            running_state: Some("heat".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
+        hc.handle_tick();
+        echo_relay(&mut hc, "wt-bath", true, &clk);
+
+        // TRV stops demanding.
+        hc.handle_event(&Event::TrvState {
+            device: "trv-bath-1".into(),
+            local_temperature: Some(20.5),
+            pi_heating_demand: Some(0),
+            running_state: Some("idle".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
+
+        // min_cycle not elapsed → relay OFF blocked, TRV forced to 30°C.
+        clk.advance(Duration::from_secs(60));
+        let actions = hc.handle_tick();
+
+        let relay_off: Vec<_> = actions.iter()
+            .filter(|a| a.target_name() == "wt-bath"
+                && serde_json::to_string(&a.payload).unwrap().contains("OFF"))
+            .collect();
+        assert!(relay_off.is_empty(), "relay OFF should be blocked by min_cycle");
+
+        let trv_forced: Vec<_> = actions.iter()
+            .filter(|a| a.target_name() == "trv-bath-1"
+                && serde_json::to_string(&a.payload).unwrap().contains("30"))
+            .collect();
+        assert!(!trv_forced.is_empty(), "TRV should be forced to 30°C during min_cycle hold");
+
+        let trv = hc.find_trv_state("trv-bath-1").unwrap();
+        assert!(trv.min_cycle_forced);
+        assert!(!trv.min_cycle_release_pending);
+    }
+
+    #[test]
+    fn min_cycle_releases_trvs_when_cycle_elapses() {
+        let cfg = simple_config();
+        let (mut hc, clk) = setup(&cfg);
+        hc.handle_tick();
+
+        // TRV demands heat → relay ON.
+        hc.handle_event(&Event::TrvState {
+            device: "trv-bath-1".into(),
+            local_temperature: Some(18.0),
+            pi_heating_demand: Some(50),
+            running_state: Some("heat".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
+        hc.handle_tick();
+        echo_relay(&mut hc, "wt-bath", true, &clk);
+
+        // TRV stops demanding.
+        hc.handle_event(&Event::TrvState {
+            device: "trv-bath-1".into(),
+            local_temperature: Some(20.5),
+            pi_heating_demand: Some(0),
+            running_state: Some("idle".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
+
+        // Force TRVs open during min_cycle hold.
+        clk.advance(Duration::from_secs(60));
+        hc.handle_tick();
+        assert!(hc.find_trv_state("trv-bath-1").unwrap().min_cycle_forced);
+
+        // Advance past min_cycle → relay OFF sent but TRV stays forced
+        // until OFF echo confirms relay is actually off.
+        clk.advance(Duration::from_secs(120));
+        let actions = hc.handle_tick();
+
+        let relay_off: Vec<_> = actions.iter()
+            .filter(|a| a.target_name() == "wt-bath"
+                && serde_json::to_string(&a.payload).unwrap().contains("OFF"))
+            .collect();
+        assert!(!relay_off.is_empty(), "relay OFF should go through after min_cycle");
+
+        // TRV still forced — waiting for OFF echo.
+        let trv = hc.find_trv_state("trv-bath-1").unwrap();
+        assert!(trv.min_cycle_forced, "min_cycle_forced should stay until OFF echo");
+
+        // OFF echo arrives → TRV released.
+        echo_relay(&mut hc, "wt-bath", false, &clk);
+        let trv = hc.find_trv_state("trv-bath-1").unwrap();
+        assert!(!trv.min_cycle_forced, "min_cycle_forced should be cleared on OFF echo");
+        assert!(trv.min_cycle_release_pending, "should be pending until setpoint confirmed");
+    }
+
+    #[test]
+    fn min_cycle_forcing_skips_inhibited_trvs() {
+        let cfg = simple_config();
+        let (mut hc, clk) = setup(&cfg);
+        hc.handle_tick();
+
+        // TRV demands heat → relay ON.
+        hc.handle_event(&Event::TrvState {
+            device: "trv-bath-1".into(),
+            local_temperature: Some(18.0),
+            pi_heating_demand: Some(50),
+            running_state: Some("heat".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
+        hc.handle_tick();
+        echo_relay(&mut hc, "wt-bath", true, &clk);
+
+        // Inhibit the TRV (simulate open window).
+        {
+            let trv = hc.find_trv_state_mut("trv-bath-1").unwrap();
+            trv.inhibited_until = Some(clk.now() + Duration::from_secs(3600));
+            trv.last_sent_setpoint = Some(MIN_SETPOINT);
+            trv.setpoint_confirmed = false;
+        }
+
+        // TRV stops demanding (inhibited → excluded from demand).
+        clk.advance(Duration::from_secs(60));
+        let actions = hc.handle_tick();
+
+        // TRV should NOT be forced open (inhibition wins).
+        let trv_forced: Vec<_> = actions.iter()
+            .filter(|a| a.target_name() == "trv-bath-1"
+                && serde_json::to_string(&a.payload).unwrap().contains("30"))
+            .collect();
+        assert!(trv_forced.is_empty(), "inhibited TRV should not be forced open");
+
+        let trv = hc.find_trv_state("trv-bath-1").unwrap();
+        assert!(!trv.min_cycle_forced, "inhibited TRV should not be min_cycle_forced");
+    }
+
+    #[test]
+    fn min_cycle_forcing_skips_pressure_forced_trvs() {
+        // In normal operation, pressure groups release before relay
+        // evaluation (pipeline order), so pressure_forced + min_cycle_forced
+        // overlap doesn't occur naturally. This test verifies the
+        // defense-in-depth guard by manually setting pressure_forced.
+        let cfg = make_config(
+            vec![HeatingZone {
+                name: "bath".into(),
+                relay: "wt-bath".into(),
+                trvs: vec![
+                    ZoneTrv { device: "trv-1".into(), schedule: "s".into() },
+                    ZoneTrv { device: "trv-2".into(), schedule: "s".into() },
+                ],
+            }],
+            BTreeMap::from([("s".into(), TemperatureSchedule { days: full_week(20.0) })]),
+            vec![],
+        );
+        let (mut hc, clk) = setup(&cfg);
+        hc.handle_tick();
+
+        // Both TRVs demand heat → relay ON.
+        for trv in &["trv-1", "trv-2"] {
+            hc.handle_event(&Event::TrvState {
+                device: (*trv).into(),
+                local_temperature: Some(18.0),
+                pi_heating_demand: Some(50),
+                running_state: Some("heat".into()),
+                occupied_heating_setpoint: Some(20.0),
+                operating_mode: None,
+                battery: None,
+                ts: clk.now(),
+            });
+        }
+        hc.handle_tick();
+        echo_relay(&mut hc, "wt-bath", true, &clk);
+
+        // Both TRVs stop demanding.
+        for trv in &["trv-1", "trv-2"] {
+            hc.handle_event(&Event::TrvState {
+                device: (*trv).into(),
+                local_temperature: Some(20.5),
+                pi_heating_demand: Some(0),
+                running_state: Some("idle".into()),
+                occupied_heating_setpoint: Some(20.0),
+                operating_mode: None,
+                battery: None,
+                ts: clk.now(),
+            });
+        }
+
+        // Manually set trv-2 as pressure_forced (simulating a race
+        // condition or external override).
+        hc.find_trv_state_mut("trv-2").unwrap().pressure_forced = true;
+
+        // min_cycle hold: trv-1 should be forced, trv-2 skipped.
+        clk.advance(Duration::from_secs(60));
+        hc.handle_tick();
+
+        let trv1 = hc.find_trv_state("trv-1").unwrap();
+        assert!(trv1.min_cycle_forced, "trv-1 should be min_cycle_forced");
+
+        let trv2 = hc.find_trv_state("trv-2").unwrap();
+        assert!(!trv2.min_cycle_forced, "pressure_forced trv-2 should not also be min_cycle_forced");
+        assert!(trv2.pressure_forced, "trv-2 should still be pressure_forced");
+    }
+
+    #[test]
+    fn min_cycle_forced_demand_excluded_from_relay_decisions() {
+        let cfg = simple_config();
+        let (mut hc, clk) = setup(&cfg);
+        hc.handle_tick();
+
+        // TRV demands heat → relay ON.
+        hc.handle_event(&Event::TrvState {
+            device: "trv-bath-1".into(),
+            local_temperature: Some(18.0),
+            pi_heating_demand: Some(50),
+            running_state: Some("heat".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
+        hc.handle_tick();
+        echo_relay(&mut hc, "wt-bath", true, &clk);
+
+        // TRV stops organic demand.
+        hc.handle_event(&Event::TrvState {
+            device: "trv-bath-1".into(),
+            local_temperature: Some(20.5),
+            pi_heating_demand: Some(0),
+            running_state: Some("idle".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
+
+        // Force TRV open during min_cycle hold.
+        clk.advance(Duration::from_secs(60));
+        hc.handle_tick();
+        assert!(hc.find_trv_state("trv-bath-1").unwrap().min_cycle_forced);
+
+        // Even though TRV is at 30°C and will report demand from the
+        // override, the forced flag should exclude it from relay decisions.
+        // Simulate TRV reporting demand from the 30°C override.
+        hc.handle_event(&Event::TrvState {
+            device: "trv-bath-1".into(),
+            local_temperature: Some(20.5),
+            pi_heating_demand: Some(80),
+            running_state: Some("heat".into()),
+            occupied_heating_setpoint: Some(30.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
+
+        // Advance past min_cycle → should still turn relay OFF despite
+        // the artificial demand from the 30°C override.
+        clk.advance(Duration::from_secs(120));
+        let actions = hc.handle_tick();
+
+        let relay_off: Vec<_> = actions.iter()
+            .filter(|a| a.target_name() == "wt-bath"
+                && serde_json::to_string(&a.payload).unwrap().contains("OFF"))
+            .collect();
+        assert!(!relay_off.is_empty(),
+            "relay OFF should not be blocked by artificial demand from min_cycle_forced TRV");
+    }
+
+    #[test]
+    fn min_cycle_forced_not_set_on_restart() {
+        // After restart, min_cycle_forced should default to false.
+        // The startup min_pause seed ensures we don't force TRVs
+        // based on unknown pump state.
+        let cfg = simple_config();
+        let (hc, _clk) = setup(&cfg);
+        let trv = hc.find_trv_state("trv-bath-1").unwrap();
+        assert!(!trv.min_cycle_forced, "min_cycle_forced should be false on startup");
+        assert!(!trv.min_cycle_release_pending, "min_cycle_release_pending should be false on startup");
+    }
+
+    #[test]
+    fn min_cycle_schedule_skips_forced_trv() {
+        let cfg = simple_config();
+        let (mut hc, clk) = setup(&cfg);
+        hc.handle_tick();
+        echo_setpoint(&mut hc, "trv-bath-1", 20.0, &clk);
+
+        // TRV demands heat → relay ON.
+        hc.handle_event(&Event::TrvState {
+            device: "trv-bath-1".into(),
+            local_temperature: Some(18.0),
+            pi_heating_demand: Some(50),
+            running_state: Some("heat".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
+        hc.handle_tick();
+        echo_relay(&mut hc, "wt-bath", true, &clk);
+
+        // TRV stops demanding.
+        hc.handle_event(&Event::TrvState {
+            device: "trv-bath-1".into(),
+            local_temperature: Some(20.5),
+            pi_heating_demand: Some(0),
+            running_state: Some("idle".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
+
+        // Force TRV open during min_cycle hold.
+        clk.advance(Duration::from_secs(60));
+        hc.handle_tick();
+        assert!(hc.find_trv_state("trv-bath-1").unwrap().min_cycle_forced);
+
+        // Next tick: schedule should NOT overwrite the 30°C forced setpoint.
+        let actions = hc.handle_tick();
+        let schedule_setpoint: Vec<_> = actions.iter()
+            .filter(|a| a.target_name() == "trv-bath-1"
+                && serde_json::to_string(&a.payload).unwrap().contains("20"))
+            .collect();
+        assert!(schedule_setpoint.is_empty(),
+            "schedule should not overwrite min_cycle_forced 30°C setpoint");
+    }
+
+    // -- Regression tests from adversarial review --
+
+    #[test]
+    fn min_cycle_forced_stays_until_off_echo() {
+        // Regression: min_cycle_forced must NOT be cleared when relay OFF
+        // is sent. Only the OFF echo confirms the relay is off. Clearing
+        // early lets the schedule restore normal setpoint while the pump
+        // might still be running (dead-head risk).
+        let cfg = simple_config();
+        let (mut hc, clk) = setup(&cfg);
+        hc.handle_tick();
+
+        hc.handle_event(&Event::TrvState {
+            device: "trv-bath-1".into(),
+            local_temperature: Some(18.0),
+            pi_heating_demand: Some(50),
+            running_state: Some("heat".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
+        hc.handle_tick();
+        echo_relay(&mut hc, "wt-bath", true, &clk);
+
+        // Demand stops.
+        hc.handle_event(&Event::TrvState {
+            device: "trv-bath-1".into(),
+            local_temperature: Some(20.5),
+            pi_heating_demand: Some(0),
+            running_state: Some("idle".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
+
+        // min_cycle hold → TRV forced open.
+        clk.advance(Duration::from_secs(60));
+        hc.handle_tick();
+        assert!(hc.find_trv_state("trv-bath-1").unwrap().min_cycle_forced);
+
+        // min_cycle elapses → relay OFF sent.
+        clk.advance(Duration::from_secs(120));
+        hc.handle_tick();
+
+        // TRV must STILL be forced (no echo yet).
+        assert!(hc.find_trv_state("trv-bath-1").unwrap().min_cycle_forced,
+            "TRV must stay forced until OFF echo");
+
+        // Schedule must NOT send normal setpoint while forced.
+        let actions = hc.handle_tick();
+        let schedule_restore: Vec<_> = actions.iter()
+            .filter(|a| a.target_name() == "trv-bath-1"
+                && serde_json::to_string(&a.payload).unwrap().contains("20"))
+            .collect();
+        assert!(schedule_restore.is_empty(),
+            "schedule must not restore setpoint while TRV is min_cycle_forced (relay OFF pending)");
+
+        // OFF echo → TRV released.
+        echo_relay(&mut hc, "wt-bath", false, &clk);
+        let trv = hc.find_trv_state("trv-bath-1").unwrap();
+        assert!(!trv.min_cycle_forced);
+        assert!(trv.min_cycle_release_pending);
+
+        // Now schedule can restore normal setpoint.
+        let actions = hc.handle_tick();
+        let schedule_restore: Vec<_> = actions.iter()
+            .filter(|a| a.target_name() == "trv-bath-1"
+                && serde_json::to_string(&a.payload).unwrap().contains("20"))
+            .collect();
+        assert!(!schedule_restore.is_empty(),
+            "schedule should restore normal setpoint after OFF echo");
+    }
+
+    #[test]
+    fn min_cycle_override_when_all_trvs_inhibited() {
+        // Regression: if all TRVs are inhibited (open-window) and
+        // min_cycle would hold, relay OFF must go through anyway.
+        // Overpressure prevention > pump short-cycle protection.
+        let cfg = simple_config();
+        let (mut hc, clk) = setup(&cfg);
+        hc.handle_tick();
+
+        hc.handle_event(&Event::TrvState {
+            device: "trv-bath-1".into(),
+            local_temperature: Some(18.0),
+            pi_heating_demand: Some(50),
+            running_state: Some("heat".into()),
+            occupied_heating_setpoint: Some(20.0),
+            operating_mode: None,
+            battery: None,
+            ts: clk.now(),
+        });
+        hc.handle_tick();
+        echo_relay(&mut hc, "wt-bath", true, &clk);
+
+        // Inhibit the TRV (open window).
+        {
+            let trv = hc.find_trv_state_mut("trv-bath-1").unwrap();
+            trv.inhibited_until = Some(clk.now() + Duration::from_secs(3600));
+            trv.last_sent_setpoint = Some(MIN_SETPOINT);
+            trv.setpoint_confirmed = false;
+        }
+
+        // Demand is now suppressed (inhibited). min_cycle not elapsed.
+        clk.advance(Duration::from_secs(60));
+        let actions = hc.handle_tick();
+
+        // Relay OFF should go through despite min_cycle, because no
+        // TRV can be forced open (all inhibited).
+        let relay_off: Vec<_> = actions.iter()
+            .filter(|a| a.target_name() == "wt-bath"
+                && serde_json::to_string(&a.payload).unwrap().contains("OFF"))
+            .collect();
+        assert!(!relay_off.is_empty(),
+            "relay OFF must go through when all TRVs are inhibited (overpressure safety)");
+
+        // TRV should NOT be min_cycle_forced (it's inhibited).
+        let trv = hc.find_trv_state("trv-bath-1").unwrap();
+        assert!(!trv.min_cycle_forced);
+    }
+
+    #[test]
+    fn pressure_group_ignores_min_cycle_release_pending_demand() {
+        // Regression: stale 30°C demand from a released min_cycle
+        // override must not count as organic demand in pressure groups.
+        let cfg = make_config(
+            vec![HeatingZone {
+                name: "bath".into(),
+                relay: "wt-bath".into(),
+                trvs: vec![
+                    ZoneTrv { device: "trv-1".into(), schedule: "s".into() },
+                    ZoneTrv { device: "trv-2".into(), schedule: "s".into() },
+                ],
+            }],
+            BTreeMap::from([("s".into(), TemperatureSchedule { days: full_week(20.0) })]),
+            vec![PressureGroup {
+                name: "bath-group".into(),
+                trvs: vec!["trv-1".into(), "trv-2".into()],
+            }],
+        );
+        let (mut hc, clk) = setup(&cfg);
+        hc.handle_tick();
+
+        // Simulate: trv-1 has min_cycle_release_pending with stale 30°C demand.
+        // Relay confirmed OFF already.
+        {
+            let trv = hc.find_trv_state_mut("trv-1").unwrap();
+            trv.min_cycle_release_pending = true;
+            trv.running_state = HeatingRunningState::Heat;
+            trv.running_state_seen = true;
+            trv.pi_heating_demand = Some(80);
+        }
+
+        // Pressure group should NOT count trv-1's demand as organic.
+        let actions = hc.handle_tick();
+        let trv2_forced: Vec<_> = actions.iter()
+            .filter(|a| a.target_name() == "trv-2"
+                && serde_json::to_string(&a.payload).unwrap().contains("30"))
+            .collect();
+        assert!(trv2_forced.is_empty(),
+            "pressure group must not force trv-2 based on trv-1's stale min_cycle_release_pending demand");
     }
 }

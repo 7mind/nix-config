@@ -83,6 +83,9 @@ fn HeatingZoneCard(zone: HeatingZoneSnapshot) -> impl IntoView {
             let inhibited_badge = trv.inhibited.then(|| {
                 view! { <span class="badge inhibited">"window"</span> }
             });
+            let forced_badge = trv.forced.then(|| {
+                view! { <span class="badge unknown">"forced"</span> }
+            });
 
             let device = trv.device.clone();
             let schedule_name = if trv.schedule.is_empty() {
@@ -108,6 +111,7 @@ fn HeatingZoneCard(zone: HeatingZoneSnapshot) -> impl IntoView {
                     <span class="trv-temp">{temp}{setpoint}</span>
                     <span class=rs_class>{trv.running_state.clone()}{demand}</span>
                     {inhibited_badge}
+                    {forced_badge}
                     <span class="trv-battery">{battery}</span>
                 </div>
             }

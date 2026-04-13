@@ -240,6 +240,16 @@ pub struct TrvRuntimeState {
     /// demand from the 30°C override from keeping the zone active.
     pub pressure_release_pending: bool,
 
+    /// True if this TRV's setpoint has been overridden to 30°C because
+    /// min_cycle protection is keeping the pump running after demand
+    /// stopped. The valve must stay open to prevent overpressure.
+    pub min_cycle_forced: bool,
+
+    /// True after a min_cycle release until the normal setpoint is
+    /// confirmed. Suppresses demand evaluation to prevent stale
+    /// demand from the 30°C override from latching the relay ON.
+    pub min_cycle_release_pending: bool,
+
     /// If set, this TRV is inhibited (open window detected) until this
     /// instant. Inhibited TRVs are excluded from demand evaluation and
     /// have their setpoint lowered to minimum.
@@ -289,6 +299,8 @@ impl TrvRuntimeState {
             reported_setpoint: None,
             pressure_forced: false,
             pressure_release_pending: false,
+            min_cycle_forced: false,
+            min_cycle_release_pending: false,
             inhibited_until: None,
             temp_at_relay_on: None,
             temp_high_water: None,
@@ -333,6 +345,9 @@ impl TrvRuntimeState {
             return false;
         }
         if self.pressure_forced || self.pressure_release_pending {
+            return false;
+        }
+        if self.min_cycle_forced || self.min_cycle_release_pending {
             return false;
         }
         if self.is_stale(now) {
