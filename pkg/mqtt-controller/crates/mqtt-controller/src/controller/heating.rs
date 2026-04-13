@@ -24,6 +24,7 @@
 //!   - **min_pause**: after the pump stops (all relays OFF), no relay may
 //!     turn ON for this duration.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -64,6 +65,11 @@ pub struct HeatingController {
     /// each `handle_tick`. Used by reconciliation to skip commands
     /// that were just issued in the current tick (avoids duplicates).
     tick_gen: u64,
+    /// Last published HA state per entity, keyed by state topic.
+    /// Only publish when the derived state changes.
+    ha_last_published: BTreeMap<String, String>,
+    /// True after HA discovery configs have been emitted (first tick).
+    ha_discovery_published: bool,
 }
 
 impl HeatingController {
@@ -96,6 +102,8 @@ impl HeatingController {
             startup_complete: false,
             startup_at: now,
             tick_gen: 0,
+            ha_last_published: BTreeMap::new(),
+            ha_discovery_published: false,
         }
     }
 
@@ -244,6 +252,59 @@ impl HeatingController {
 
         // 5. Reconcile relays: retry commands the wall thermostat hasn't confirmed.
         actions.extend(self.reconcile_relays());
+
+        // 6. HA discovery and state updates (after all transitions are applied).
+        actions.extend(self.emit_ha_updates(now));
+
+        actions
+    }
+
+    /// Emit HA MQTT discovery configs (first tick only) and state updates
+    /// (every tick, deduped). Called at the end of `handle_tick` so all
+    /// state transitions for this tick have been applied.
+    fn emit_ha_updates(&mut self, now: Instant) -> Vec<Action> {
+        use crate::domain::ha_discovery;
+        let mut actions = Vec::new();
+
+        if !self.ha_discovery_published {
+            self.ha_discovery_published = true;
+            for zone in &self.config.zones {
+                actions.push(ha_discovery::zone_discovery_action(&zone.name));
+                for zt in &zone.trvs {
+                    actions.push(ha_discovery::trv_discovery_action(&zt.device));
+                }
+            }
+        }
+
+        let (md, mdf) = self.min_demand();
+        let min_pause = self.config.heat_pump.min_pause_seconds;
+        for zone_cfg in &self.config.zones {
+            if let Some(zone_state) = self.state.zones.get(&zone_cfg.name) {
+                // Zone state
+                let zone_derived = ha_discovery::derive_zone_state(
+                    zone_state, &self.state, now, md, mdf, min_pause,
+                );
+                let topic = ha_discovery::state_topic("zone", &zone_cfg.name);
+                let state_str = zone_derived.as_str();
+                if self.ha_last_published.get(&topic).map_or(true, |prev| prev != state_str) {
+                    actions.push(ha_discovery::state_update_action("zone", &zone_cfg.name, state_str));
+                    self.ha_last_published.insert(topic, state_str.to_string());
+                }
+
+                // TRV states
+                for zt in &zone_cfg.trvs {
+                    if let Some(trv) = zone_state.trvs.get(&zt.device) {
+                        let trv_derived = ha_discovery::derive_trv_state(trv, now, md, mdf);
+                        let topic = ha_discovery::state_topic("trv", &zt.device);
+                        let state_str = trv_derived.as_str();
+                        if self.ha_last_published.get(&topic).map_or(true, |prev| prev != state_str) {
+                            actions.push(ha_discovery::state_update_action("trv", &zt.device, state_str));
+                            self.ha_last_published.insert(topic, state_str.to_string());
+                        }
+                    }
+                }
+            }
+        }
 
         actions
     }

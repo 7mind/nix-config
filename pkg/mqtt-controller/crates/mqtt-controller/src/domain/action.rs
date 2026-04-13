@@ -14,6 +14,9 @@ pub enum ActionTarget {
     Device(String),
     /// Publish to `zigbee2mqtt/<device_name>/get` — request fresh state.
     DeviceGet(String),
+    /// Publish to an arbitrary MQTT topic with explicit retain flag.
+    /// Used for HA discovery configs and controller state updates.
+    Raw { topic: String, retain: bool },
 }
 
 /// One thing the controller wants to publish to MQTT.
@@ -48,6 +51,7 @@ impl Action {
             ActionTarget::Group(name)
             | ActionTarget::Device(name)
             | ActionTarget::DeviceGet(name) => name,
+            ActionTarget::Raw { topic, .. } => topic,
         }
     }
 
@@ -55,6 +59,14 @@ impl Action {
     pub fn get_device_state(device_name: impl Into<String>, payload: Payload) -> Self {
         Self {
             target: ActionTarget::DeviceGet(device_name.into()),
+            payload,
+        }
+    }
+
+    /// Construct a raw MQTT publish action (for HA discovery, state updates).
+    pub fn raw(topic: impl Into<String>, payload: Payload, retain: bool) -> Self {
+        Self {
+            target: ActionTarget::Raw { topic: topic.into(), retain },
             payload,
         }
     }
@@ -111,6 +123,11 @@ pub enum Payload {
     /// `{"state": ""}` — request fresh state from a device via `/get`.
     /// Used by wall thermostat keepalive to detect offline devices.
     GetState { state: &'static str },
+
+    /// Pre-built string payload for raw MQTT publishes. Published as-is
+    /// (no JSON wrapping). Used for HA discovery configs (pre-serialized
+    /// JSON) and state updates (bare enum strings like `HEAT_DEMAND`).
+    RawString(String),
 }
 
 impl Payload {

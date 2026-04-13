@@ -35,7 +35,7 @@ body {
 header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 1rem;
     padding: 0.75rem 0;
     border-bottom: 1px solid var(--border);
     margin-bottom: 1rem;
@@ -51,18 +51,38 @@ header h1 {
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
     background: var(--surface);
+    margin-left: auto;
 }
 .connection-status.connected { color: var(--on); }
 .connection-status.disconnected { color: var(--accent); }
 
-.dashboard {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
+/* Tab bar */
+.tab-bar {
+    display: flex;
+    gap: 0.25rem;
 }
 
-@media (max-width: 900px) {
-    .dashboard { grid-template-columns: 1fr; }
+.tab-btn {
+    font-size: 0.85rem;
+    padding: 0.35rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+.tab-btn:hover { background: var(--surface-hover); color: var(--text); }
+.tab-btn.active {
+    background: var(--border);
+    color: var(--text);
+    border-color: var(--on);
+}
+
+.dashboard {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
 }
 
 /* Room and plug cards */
@@ -120,7 +140,7 @@ header h1 {
 .badge.idle { background: var(--idle); color: #000; }
 .badge.unknown { background: var(--off); color: var(--text); }
 .badge.inhibited { background: #6a5acd; color: #fff; }
-.badge.schedule-badge { background: var(--border); cursor: help; }
+.badge.schedule-badge { background: var(--border); cursor: pointer; }
 
 .card-controls {
     display: flex;
@@ -213,11 +233,56 @@ header h1 {
     font-size: 0.75rem;
 }
 
-/* Event log */
-.event-log {
-    grid-column: 1 / -1;
+/* Schedule popup (native <details>) */
+.schedule-popup {
+    display: inline-block;
+    position: relative;
 }
 
+.schedule-popup > summary {
+    list-style: none;
+}
+.schedule-popup > summary::-webkit-details-marker {
+    display: none;
+}
+
+.schedule-popup[open] > .schedule-table {
+    position: absolute;
+    z-index: 10;
+    top: 100%;
+    left: 0;
+    margin-top: 0.25rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.schedule-table {
+    border-collapse: collapse;
+    font-size: 0.75rem;
+}
+
+.schedule-table th {
+    text-align: left;
+    padding: 0.2rem 0.6rem;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    font-weight: 500;
+}
+
+.schedule-table td {
+    padding: 0.2rem 0.6rem;
+    color: var(--text);
+}
+
+.schedule-table tbody tr:hover {
+    background: var(--surface-hover);
+}
+
+/* Event log */
 .event-log h2 {
     font-size: 1rem;
     margin-bottom: 0.5rem;

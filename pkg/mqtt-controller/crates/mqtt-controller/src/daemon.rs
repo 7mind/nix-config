@@ -439,27 +439,54 @@ async fn run_event_loop(
             Vec::new()
         };
 
+        let is_user_action = matches!(
+            &event,
+            Event::SwitchAction { .. } | Event::TapAction { .. }
+        );
+
         let actions = controller.handle_event(event);
 
         // Broadcast to WebSocket clients.
         if let Some(tx) = &broadcast_tx {
             let decisions = decision_capture::drain_capture();
-            if !event_summary.is_empty() || !actions.is_empty() || !decisions.is_empty() {
-                event_seq += 1;
-                let involved_entities = snapshot::finish_involved_entities(
-                    event_entities,
-                    &actions,
-                    controller.topology(),
-                );
-                let entry = mqtt_controller_wire::DecisionLogEntry {
-                    seq: event_seq,
-                    timestamp_epoch_ms: clock.epoch_millis(),
-                    event_summary,
-                    decisions,
-                    actions_emitted: actions.iter().map(snapshot::action_to_dto).collect(),
-                    involved_entities,
-                };
-                let _ = tx.send(mqtt_controller_wire::ServerMessage::EventLog(entry));
+            // Only log events that are interesting: user button presses,
+            // or events where the controller actually did something
+            // (emitted actions or captured decision traces). This filters
+            // out the bulk of noise: zigbee state echoes, power updates,
+            // TRV telemetry, and ticks with no side effects.
+            let has_actions = !actions.is_empty();
+            let has_decisions = !decisions.is_empty();
+            if is_user_action || has_actions || has_decisions {
+                // Filter out HA discovery/state Raw actions from the log
+                // — they fire every tick and would still be noisy.
+                let visible_actions: Vec<_> = actions
+                    .iter()
+                    .filter(|a| !matches!(
+                        a.target,
+                        crate::domain::action::ActionTarget::Raw { .. }
+                    ))
+                    .map(snapshot::action_to_dto)
+                    .collect();
+                let should_log = is_user_action
+                    || !visible_actions.is_empty()
+                    || has_decisions;
+                if should_log {
+                    event_seq += 1;
+                    let involved_entities = snapshot::finish_involved_entities(
+                        event_entities,
+                        &actions,
+                        controller.topology(),
+                    );
+                    let entry = mqtt_controller_wire::DecisionLogEntry {
+                        seq: event_seq,
+                        timestamp_epoch_ms: clock.epoch_millis(),
+                        event_summary,
+                        decisions,
+                        actions_emitted: visible_actions,
+                        involved_entities,
+                    };
+                    let _ = tx.send(mqtt_controller_wire::ServerMessage::EventLog(entry));
+                }
             }
 
             // Broadcast incremental state updates for any room/plug that

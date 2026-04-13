@@ -29,18 +29,31 @@ in
       #   mandatoryFeatures = [ ];
       # }
 
-      # {
-      #   hostName = "vm.home.7mind.io";
-      #   system = "x86_64-linux";
-      #   protocol = "ssh-ng";
-      #   sshUser = "root";
-      #   maxJobs = 1;
-      #   sshKey = "${config.age.secrets.builder-key.path}";
-      #   publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSURRWkVOWnVzZUl6aFhrYnZNYnFhVS91ZlM0WExXOTV5WS9EUHJvZG5ZVmIgcm9vdEBuaXhvcwo=";
-      #   speedFactor = 2;
-      #   supportedFeatures = [ "benchmark" "big-parallel" "kvm" ];
-      #   mandatoryFeatures = [ ];
-      # }
+      {
+        hostName = "vm.home.7mind.io";
+        system = "x86_64-linux";
+        protocol = "ssh-ng";
+        sshUser = "root";
+        maxJobs = 2;
+        sshKey = lib.mkIf ownerSecretsEnabled "${config.age.secrets.builder-key.path}";
+        publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSURRWkVOWnVzZUl6aFhrYnZNYnFhVS91ZlM0WExXOTV5WS9EUHJvZG5ZVmIgcm9vdEBuaXhvcwo=";
+        speedFactor = 2;
+        supportedFeatures = [ "benchmark" "big-parallel" "kvm" ];
+        mandatoryFeatures = [ ];
+      }
+
+      {
+        hostName = "vm.home.7mind.io";
+        system = "aarch64-linux";
+        protocol = "ssh-ng";
+        sshUser = "root";
+        maxJobs = 1;
+        sshKey = lib.mkIf ownerSecretsEnabled "${config.age.secrets.builder-key.path}";
+        publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSURRWkVOWnVzZUl6aFhrYnZNYnFhVS91ZlM0WExXOTV5WS9EUHJvZG5ZVmIgcm9vdEBuaXhvcwo=";
+        speedFactor = 1;
+        supportedFeatures = [ "benchmark" "big-parallel" ];
+        mandatoryFeatures = [ ];
+      }
 
       {
         hostName = "o1.7mind.io";
@@ -50,7 +63,7 @@ in
         sshKey = lib.mkIf ownerSecretsEnabled "${config.age.secrets.builder-key.path}";
         publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSU1ybldtV3hBa25nMXp4NktjUXVHYUpnQ1JWYUxjaDl4TXZrVnpTZSs2ekkgcm9vdEBuaXhvcwo=";
         maxJobs = 4;
-        speedFactor = 4;
+        speedFactor = 8;
         supportedFeatures = [ "benchmark" "big-parallel" ];
         mandatoryFeatures = [ ];
       }
@@ -63,7 +76,7 @@ in
         sshKey = lib.mkIf ownerSecretsEnabled "${config.age.secrets.builder-key.path}";
         publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSUZPRFREbUZsUHVKM1hIVzI0TFlMY0pyVFpGNStmZzZITlVpSEtLdUpYZkQgcm9vdEBuaXhvcwo=";
         maxJobs = 4;
-        speedFactor = 2;
+        speedFactor = 4;
         supportedFeatures = [ "benchmark" "big-parallel" ];
         mandatoryFeatures = [ ];
       }

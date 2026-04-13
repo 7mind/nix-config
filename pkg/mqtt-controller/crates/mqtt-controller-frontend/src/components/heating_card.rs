@@ -88,26 +88,31 @@ fn HeatingZoneCard(zone: HeatingZoneSnapshot) -> impl IntoView {
             });
 
             let device = trv.device.clone();
-            let schedule_name = if trv.schedule.is_empty() {
-                None
+
+            let schedule_view = if !trv.schedule.is_empty() {
+                let name = trv.schedule.clone();
+                let rows = parse_schedule_rows(&trv.schedule_summary);
+                Some(view! {
+                    <details class="schedule-popup">
+                        <summary class="badge schedule-badge">{name}</summary>
+                        <table class="schedule-table">
+                            <thead><tr><th>"Time"</th><th>"Setpoint"</th></tr></thead>
+                            <tbody>
+                                {rows.into_iter().map(|(time, setpoint)| view! {
+                                    <tr><td>{time}</td><td>{setpoint}</td></tr>
+                                }).collect::<Vec<_>>()}
+                            </tbody>
+                        </table>
+                    </details>
+                })
             } else {
-                Some(trv.schedule.clone())
-            };
-            let schedule_tooltip = if trv.schedule_summary.is_empty() {
                 None
-            } else {
-                Some(trv.schedule_summary.clone())
             };
 
             view! {
                 <div class="trv-row">
                     <span class="trv-device">{device}</span>
-                    {schedule_name.map(|name| view! {
-                        <span
-                            class="badge schedule-badge"
-                            title=schedule_tooltip.unwrap_or_default()
-                        >{name}</span>
-                    })}
+                    {schedule_view}
                     <span class="trv-temp">{temp}{setpoint}</span>
                     <span class=rs_class>{trv.running_state.clone()}{demand}</span>
                     {inhibited_badge}
@@ -174,4 +179,18 @@ fn HeatingZoneCard(zone: HeatingZoneSnapshot) -> impl IntoView {
             }}
         </div>
     }
+}
+
+/// Parse "00:00–06:00 → 21°C, 06:00–23:00 → 18°C" into (time, setpoint) rows.
+fn parse_schedule_rows(summary: &str) -> Vec<(String, String)> {
+    if summary.is_empty() {
+        return Vec::new();
+    }
+    summary
+        .split(", ")
+        .filter_map(|segment| {
+            let (time, setpoint) = segment.split_once(" \u{2192} ")?;
+            Some((time.to_string(), setpoint.to_string()))
+        })
+        .collect()
 }

@@ -210,6 +210,15 @@ impl MqttBridge {
         use crate::domain::action::ActionTarget;
         let name = action.target_name();
         match &action.target {
+            ActionTarget::Raw { topic, retain } => {
+                let payload = match &action.payload {
+                    crate::domain::action::Payload::RawString(s) => s.as_bytes().to_vec(),
+                    other => serde_json::to_vec(other)?,
+                };
+                self.client
+                    .publish(topic, QoS::AtLeastOnce, *retain, payload)
+                    .await?;
+            }
             ActionTarget::DeviceGet(_) => {
                 // GET actions go to the /get topic, not /set.
                 let topic = topics::get_topic(name);

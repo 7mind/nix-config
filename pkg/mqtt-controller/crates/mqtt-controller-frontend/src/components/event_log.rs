@@ -30,7 +30,6 @@ pub fn EventLog() -> impl IntoView {
     };
 
     let ws_clear = ws.clone();
-    let ws_copy = ws.clone();
     let filter_copy = ws.filter_entities;
     let entries_copy = ws.log_entries;
 

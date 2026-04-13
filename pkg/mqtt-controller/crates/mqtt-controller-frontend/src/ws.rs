@@ -12,7 +12,7 @@ use mqtt_controller_wire::{
     ServerMessage, TopologyInfo, PlugSnapshot,
 };
 
-const MAX_LOG_ENTRIES: usize = 200;
+const MAX_LOG_ENTRIES: usize = 2000;
 const RECONNECT_BASE_MS: u32 = 1000;
 const RECONNECT_MAX_MS: u32 = 30000;
 
@@ -210,7 +210,9 @@ fn build_ws_url() -> String {
 
 fn update_room_in_snapshot(snap: &mut FullStateSnapshot, room: RoomSnapshot) {
     if let Some(existing) = snap.rooms.iter_mut().find(|r| r.name == room.name) {
-        *existing = room;
+        if *existing != room {
+            *existing = room;
+        }
     } else {
         snap.rooms.push(room);
     }
@@ -218,7 +220,9 @@ fn update_room_in_snapshot(snap: &mut FullStateSnapshot, room: RoomSnapshot) {
 
 fn update_plug_in_snapshot(snap: &mut FullStateSnapshot, plug: PlugSnapshot) {
     if let Some(existing) = snap.plugs.iter_mut().find(|p| p.device == plug.device) {
-        *existing = plug;
+        if *existing != plug {
+            *existing = plug;
+        }
     } else {
         snap.plugs.push(plug);
     }
@@ -226,7 +230,9 @@ fn update_plug_in_snapshot(snap: &mut FullStateSnapshot, plug: PlugSnapshot) {
 
 fn update_heating_zone_in_snapshot(snap: &mut FullStateSnapshot, zone: HeatingZoneSnapshot) {
     if let Some(existing) = snap.heating_zones.iter_mut().find(|z| z.name == zone.name) {
-        *existing = zone;
+        if *existing != zone {
+            *existing = zone;
+        }
     } else {
         snap.heating_zones.push(zone);
     }

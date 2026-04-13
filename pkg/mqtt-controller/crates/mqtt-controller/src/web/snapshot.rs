@@ -187,6 +187,7 @@ pub fn action_to_dto(action: &Action) -> ActionDto {
         ActionTarget::Group(name) => ("group", name.as_str()),
         ActionTarget::Device(name) => ("device", name.as_str()),
         ActionTarget::DeviceGet(name) => ("device_get", name.as_str()),
+        ActionTarget::Raw { topic, .. } => ("raw", topic.as_str()),
     };
     ActionDto {
         target: target.to_string(),
@@ -467,6 +468,7 @@ pub fn finish_involved_entities(
             crate::domain::action::ActionTarget::Group(name) => name,
             crate::domain::action::ActionTarget::Device(name) => name,
             crate::domain::action::ActionTarget::DeviceGet(name) => name,
+            crate::domain::action::ActionTarget::Raw { .. } => continue,
         };
         entities.push(target_name.clone());
         if let crate::domain::action::ActionTarget::Group(group) = &action.target {
