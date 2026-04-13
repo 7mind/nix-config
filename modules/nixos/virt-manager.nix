@@ -133,7 +133,7 @@ in
           RemainAfterExit = true;
           ExecStart = [
             ""
-            "${pkgs.runtimeShell} -c '${pkgs.coreutils}/bin/mkdir -p /var/lib/libvirt/secrets && umask 0077 && (${pkgs.coreutils}/bin/dd if=/dev/random status=none bs=32 count=1 | ${pkgs.systemd}/bin/systemd-creds encrypt --with-key=host-only --name=secrets-encryption-key - /var/lib/libvirt/secrets/secrets-encryption-key)'"
+            "${pkgs.runtimeShell} -c '${pkgs.coreutils}/bin/mkdir -p /var/lib/libvirt/secrets && umask 0077 && (${pkgs.coreutils}/bin/dd if=/dev/random status=none bs=32 count=1 | ${pkgs.systemd}/bin/systemd-creds encrypt --with-key=host --name=secrets-encryption-key - /var/lib/libvirt/secrets/secrets-encryption-key)'"
           ];
         };
       };
