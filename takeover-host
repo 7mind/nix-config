@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Takeover script for NixOS hosts not yet managed by this flake
+# Usage: ./takeover-host <FLAKE_HOSTNAME> <REMOTE_SSH_ADDR> [--no-switch]
+
+if [ "$#" -lt 2 ]; then
+    echo "Usage: $0 <FLAKE_HOSTNAME> <REMOTE_SSH_ADDR> [--no-switch]"
+    echo "Example: $0 streambox root@192.168.1.100"
+    exit 1
+fi
+
+FLAKE_HOSTNAME="$1"
+REMOTE_SSH_ADDR="$2"
+DO_SWITCH=true
+
+if [ "${3:-}" == "--no-switch" ]; then
+    DO_SWITCH=false
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
+
+echo "==> Building configuration for $FLAKE_HOSTNAME..."
+# We use a temporary gcroat to prevent immediate garbage collection
+mkdir -p .tmp/builds
+OUT_LINK=".tmp/builds/$FLAKE_HOSTNAME"
+
+nix build ".?submodules=1#nixosConfigurations.${FLAKE_HOSTNAME}.config.system.build.toplevel" \
+    --out-link "$OUT_LINK"
+
+CLOSURE=$(readlink -f "$OUT_LINK")
+
+echo "==> Copying closure $CLOSURE to $REMOTE_SSH_ADDR..."
+nix copy --to "ssh://${REMOTE_SSH_ADDR}" "$CLOSURE"
+
+if [ "$DO_SWITCH" = true ]; then
+    echo "==> Ensuring bootloader is ready on $REMOTE_SSH_ADDR..."
+    # If using systemd-boot, we might need to install it first if it wasn't used before
+    # We check if it's already installed, and if not, we try to install it.
+    ssh "$REMOTE_SSH_ADDR" "sudo bootctl status >/dev/null 2>&1 || (echo 'Installing systemd-boot...' && sudo bootctl install --esp-path=/boot)" || true
+
+    echo "==> Activating configuration on $REMOTE_SSH_ADDR..."
+    # 1. Set the system profile to point to the new closure
+    # 2. Run the activation script
+    ssh "$REMOTE_SSH_ADDR" "sudo nix-env -p /nix/var/nix/profiles/system --set $CLOSURE && sudo $CLOSURE/bin/switch-to-configuration switch"
+    echo "==> Success! Host $REMOTE_SSH_ADDR is now running the '$FLAKE_HOSTNAME' configuration."
+else
+    echo "==> Build and copy complete. To activate manually, run on the remote host:"
+    echo "    sudo nix-env -p /nix/var/nix/profiles/system --set $CLOSURE"
+    echo "    sudo $CLOSURE/bin/switch-to-configuration switch"
+fi

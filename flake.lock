@@ -114,11 +114,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1775847117,
-        "narHash": "sha256-6u2n2QYDHrTRfpEBMNZJBQIuQm/OIli2aDJR5m1lX6U=",
+        "lastModified": 1776082954,
+        "narHash": "sha256-rAy1+iyZpXeUC4GRjEWK4q4/B9YXaFh6pat8HoqREiw=",
         "owner": "neko-kai",
         "repo": "claude-code-sandbox",
-        "rev": "64404b44fdf7778f6985d99c672d633831197a53",
+        "rev": "b7832a3c2d4713102f6da455b3e8f7d572e7ccdc",
         "type": "github"
       },
       "original": {
