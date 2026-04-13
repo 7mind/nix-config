@@ -48,6 +48,14 @@ in
         homeassistant.enabled = true;
         homeassistant.experimental_event_entities = true;
         permit_join = false;
+        # Availability tracking: z2m pings devices periodically and
+        # publishes online/offline status. Helps detect devices that
+        # drop off the Zigbee network (especially mains-powered ones
+        # like wall thermostats that should always be reachable).
+        availability = {
+          active.timeout = 10;   # minutes — mains-powered routers
+          passive.timeout = 25;  # minutes — battery-powered end devices
+        };
         advanced.log_output = [ "console" "syslog" ];
         advanced.channel = 15;
         advanced.last_seen = "ISO_8601";

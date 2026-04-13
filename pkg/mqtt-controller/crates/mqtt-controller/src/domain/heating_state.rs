@@ -139,7 +139,17 @@ pub struct HeatingZoneRuntimeState {
 
     /// Per-TRV state, keyed by TRV device friendly_name.
     pub trvs: BTreeMap<String, TrvRuntimeState>,
+
+    /// When the wall thermostat last reported any state update.
+    /// Used for staleness detection — a mains-powered device that
+    /// stops reporting may have dropped off the Zigbee network.
+    pub wt_last_seen: Option<Instant>,
 }
+
+/// Wall thermostat staleness threshold: 10 minutes.
+/// Mains-powered devices should report much more frequently than
+/// battery-powered TRVs (which use 30 min).
+const WT_STALE_THRESHOLD_SECS: u64 = 10 * 60;
 
 impl HeatingZoneRuntimeState {
     pub fn new() -> Self {
@@ -153,12 +163,20 @@ impl HeatingZoneRuntimeState {
             pending_on_at: None,
             pending_off_at: None,
             trvs: BTreeMap::new(),
+            wt_last_seen: None,
         }
     }
 
+    /// True if the wall thermostat hasn't reported state for 10+ minutes.
+    pub fn is_wt_stale(&self, now: Instant) -> bool {
+        self.wt_last_seen.is_some_and(|seen| {
+            now.duration_since(seen) >= Duration::from_secs(WT_STALE_THRESHOLD_SECS)
+        })
+    }
+
     /// True if any non-inhibited TRV in this zone has heat demand.
-    pub fn has_effective_demand(&self, now: Instant) -> bool {
-        self.trvs.values().any(|t| t.has_effective_demand(now))
+    pub fn has_effective_demand(&self, now: Instant, min_demand: u8, min_demand_fallback: u8) -> bool {
+        self.trvs.values().any(|t| t.has_effective_demand(now, min_demand, min_demand_fallback))
     }
 }
 
@@ -310,7 +328,7 @@ impl TrvRuntimeState {
     /// group override). Excludes: inhibited, stale, pressure-forced,
     /// and pressure-release-pending TRVs. This is what drives relay
     /// control — only real heating demand should keep relays on.
-    pub fn has_effective_demand(&self, now: Instant) -> bool {
+    pub fn has_effective_demand(&self, now: Instant, min_demand: u8, min_demand_fallback: u8) -> bool {
         if self.is_inhibited(now) {
             return false;
         }
@@ -320,19 +338,22 @@ impl TrvRuntimeState {
         if self.is_stale(now) {
             return false;
         }
-        self.has_raw_demand()
+        self.has_raw_demand(min_demand, min_demand_fallback)
     }
 
     /// True if the TRV's PID controller is requesting heat, regardless
     /// of inhibition state. Uses a single canonical signal to avoid
     /// demand latching from stale partial updates:
-    ///   - If `running_state` has ever been reported, use it exclusively.
-    ///   - Otherwise, fall back to `pi_heating_demand > 0`.
-    pub fn has_raw_demand(&self) -> bool {
+    ///   - If `running_state` has ever been reported, use it AND require
+    ///     `pi_heating_demand >= min_demand` to filter negligible openings.
+    ///   - Otherwise, fall back to `pi_heating_demand >= min_demand_fallback`
+    ///     (higher threshold since we lack `running_state` confirmation).
+    pub fn has_raw_demand(&self, min_demand: u8, min_demand_fallback: u8) -> bool {
+        let demand = self.pi_heating_demand.unwrap_or(0);
         if self.running_state_seen {
-            self.running_state.is_heat()
+            self.running_state.is_heat() && demand >= min_demand
         } else {
-            self.pi_heating_demand.is_some_and(|d| d > 0)
+            demand >= min_demand_fallback
         }
     }
 }
@@ -352,19 +373,41 @@ mod tests {
     #[test]
     fn trv_demand_from_running_state() {
         let mut t = TrvRuntimeState::new();
-        assert!(!t.has_raw_demand());
+        assert!(!t.has_raw_demand(5, 80), "fresh TRV should have no demand");
         t.running_state = HeatingRunningState::Heat;
         t.running_state_seen = true;
-        assert!(t.has_raw_demand());
+        t.pi_heating_demand = Some(10);
+        assert!(t.has_raw_demand(5, 80));
+    }
+
+    #[test]
+    fn trv_demand_below_threshold_ignored() {
+        let mut t = TrvRuntimeState::new();
+        t.running_state = HeatingRunningState::Heat;
+        t.running_state_seen = true;
+        t.pi_heating_demand = Some(3);
+        assert!(!t.has_raw_demand(5, 80), "demand below min_demand_percent should be ignored");
+        t.pi_heating_demand = Some(5);
+        assert!(t.has_raw_demand(5, 80), "demand at min_demand_percent should count");
+    }
+
+    #[test]
+    fn trv_demand_fallback_high_threshold() {
+        let mut t = TrvRuntimeState::new();
+        // running_state never seen — fallback path
+        t.pi_heating_demand = Some(50);
+        assert!(!t.has_raw_demand(5, 80), "fallback demand below 80% should be ignored");
+        t.pi_heating_demand = Some(80);
+        assert!(t.has_raw_demand(5, 80), "fallback demand at 80% should count");
     }
 
     #[test]
     fn trv_demand_from_pi_heating_demand() {
         let mut t = TrvRuntimeState::new();
-        t.pi_heating_demand = Some(50);
-        assert!(t.has_raw_demand());
+        t.pi_heating_demand = Some(90);
+        assert!(t.has_raw_demand(5, 80));
         t.pi_heating_demand = Some(0);
-        assert!(!t.has_raw_demand());
+        assert!(!t.has_raw_demand(5, 80));
     }
 
     #[test]
@@ -373,32 +416,34 @@ mod tests {
         let mut t = TrvRuntimeState::new();
         t.running_state = HeatingRunningState::Heat;
         t.running_state_seen = true;
-        assert!(t.has_effective_demand(now));
+        t.pi_heating_demand = Some(50);
+        assert!(t.has_effective_demand(now, 5, 80));
 
         t.inhibited_until = Some(now + Duration::from_secs(60));
-        assert!(!t.has_effective_demand(now));
-        assert!(t.has_raw_demand()); // raw demand still present
+        assert!(!t.has_effective_demand(now, 5, 80));
+        assert!(t.has_raw_demand(5, 80)); // raw demand still present
 
         // After inhibition expires:
-        assert!(t.has_effective_demand(now + Duration::from_secs(61)));
+        assert!(t.has_effective_demand(now + Duration::from_secs(61), 5, 80));
     }
 
     #[test]
     fn zone_effective_demand() {
         let now = Instant::now();
         let mut zone = HeatingZoneRuntimeState::new();
-        assert!(!zone.has_effective_demand(now));
+        assert!(!zone.has_effective_demand(now, 5, 80));
 
         let mut t1 = TrvRuntimeState::new();
         t1.running_state = HeatingRunningState::Heat;
         t1.running_state_seen = true;
+        t1.pi_heating_demand = Some(50);
         zone.trvs.insert("t1".into(), t1);
-        assert!(zone.has_effective_demand(now));
+        assert!(zone.has_effective_demand(now, 5, 80));
 
         // Inhibit the only demanding TRV:
         zone.trvs.get_mut("t1").unwrap().inhibited_until =
             Some(now + Duration::from_secs(60));
-        assert!(!zone.has_effective_demand(now));
+        assert!(!zone.has_effective_demand(now, 5, 80));
     }
 
     #[test]

@@ -99,6 +99,11 @@ impl HeatingController {
         }
     }
 
+    /// The minimum demand thresholds from config, for convenience.
+    fn min_demand(&self) -> (u8, u8) {
+        (self.config.heat_pump.min_demand_percent, self.config.heat_pump.min_demand_percent_fallback)
+    }
+
     /// Handle TRV or wall thermostat state events. Returns actions.
     pub fn handle_event(&mut self, event: &Event) -> Vec<Action> {
         match event {
@@ -170,6 +175,7 @@ impl HeatingController {
         self.expire_inhibitions(now);
 
         // 0b. Warn about stale TRVs (demand suppressed automatically).
+        let (md, mdf) = self.min_demand();
         for zone in &self.config.zones {
             if let Some(zs) = self.state.zones.get_mut(&zone.name) {
                 for zt in &zone.trvs {
@@ -180,7 +186,7 @@ impl HeatingController {
                             if trv.pressure_release_pending {
                                 trv.pressure_release_pending = false;
                             }
-                            if trv.has_raw_demand() {
+                            if trv.has_raw_demand(md, mdf) {
                                 tracing::warn!(
                                     trv = %zt.device,
                                     zone = %zone.name,
@@ -192,6 +198,27 @@ impl HeatingController {
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // 0c. Wall thermostat keepalive: detect stale mains-powered
+        //     devices and send GET to provoke a state report.
+        for zone in &self.config.zones {
+            if let Some(zs) = self.state.zones.get(&zone.name) {
+                if zs.is_wt_stale(now) {
+                    tracing::warn!(
+                        zone = %zone.name,
+                        relay = %zone.relay,
+                        last_seen_secs_ago = zs.wt_last_seen
+                            .map(|s| now.duration_since(s).as_secs())
+                            .unwrap_or(0),
+                        "wall thermostat stale: sending GET to provoke state report"
+                    );
+                    actions.push(Action::get_device_state(
+                        zone.relay.clone(),
+                        Payload::GetState { state: "" },
+                    ));
                 }
             }
         }
@@ -313,6 +340,15 @@ impl HeatingController {
         relay_on: Option<bool>,
         operating_mode: Option<&str>,
     ) {
+        let now = self.clock.now();
+
+        // Record liveness for staleness detection.
+        if let Some(zn) = self.config.zones.iter().find(|z| z.relay == device).map(|z| z.name.clone()) {
+            if let Some(zs) = self.state.zones.get_mut(&zn) {
+                zs.wt_last_seen = Some(now);
+            }
+        }
+
         // Track operating mode regardless of relay transition.
         if let Some(mode) = operating_mode {
             let zone_name = self.config.zones.iter()
@@ -326,7 +362,6 @@ impl HeatingController {
         }
 
         let Some(on) = relay_on else { return };
-        let now = self.clock.now();
 
         // Find the zone for this relay.
         let zone_name = self.config.zones.iter()
@@ -568,10 +603,11 @@ impl HeatingController {
             // A stale TRV's valve might still be open → keep siblings forced.
             // BUT: exclude pressure_forced (latch prevention) and inhibited
             // (open window takes priority).
+            let (md, mdf) = self.min_demand();
             let any_organic_demand = group.trvs.iter().any(|trv_name| {
                 find_trv_in_zones(&self.state, trv_name)
                     .is_some_and(|t| {
-                        !t.pressure_forced && !t.is_inhibited(now) && t.has_raw_demand()
+                        !t.pressure_forced && !t.is_inhibited(now) && t.has_raw_demand(md, mdf)
                     })
             });
             // Safe override: release the group when the ZONE'S OWN relay is
@@ -596,7 +632,7 @@ impl HeatingController {
             // Alert if any TRV in the group is stale but still has demand.
             for trv_name in &group.trvs {
                 if let Some(t) = find_trv_in_zones(&self.state, trv_name) {
-                    if t.is_stale(now) && t.has_raw_demand() {
+                    if t.is_stale(now) && t.has_raw_demand(md, mdf) {
                         tracing::error!(
                             trv = %trv_name,
                             group = %group.name,
@@ -618,7 +654,7 @@ impl HeatingController {
                     if trv_state.is_inhibited(now) {
                         continue;
                     }
-                    if !trv_state.pressure_forced && !trv_state.has_raw_demand() {
+                    if !trv_state.pressure_forced && !trv_state.has_raw_demand(md, mdf) {
                         trv_state.pressure_forced = true;
                         trv_state.last_sent_setpoint = Some(MAX_SETPOINT);
                         trv_state.setpoint_confirmed = false;
@@ -834,6 +870,7 @@ impl HeatingController {
         let mut actions = Vec::new();
         let min_cycle = Duration::from_secs(self.config.heat_pump.min_cycle_seconds);
         let min_pause = Duration::from_secs(self.config.heat_pump.min_pause_seconds);
+        let (md, mdf) = self.min_demand();
 
         // Snapshot per-zone state to avoid borrow conflicts.
         struct ZoneDecision {
@@ -857,7 +894,7 @@ impl HeatingController {
                 Some(ZoneDecision {
                     zone_name: zone.name.clone(),
                     relay: zone.relay.clone(),
-                    has_demand: zs.has_effective_demand(now),
+                    has_demand: zs.has_effective_demand(now, md, mdf),
                     relay_on: zs.relay_on,
                     desired: zs.desired_relay,
                 })
@@ -876,7 +913,7 @@ impl HeatingController {
                 continue;
             };
             if !zs.relay_state_known && zs.desired_relay.is_none() {
-                let has_demand = zs.has_effective_demand(now);
+                let has_demand = zs.has_effective_demand(now, md, mdf);
                 if !has_demand && min_cycle_from_startup_ok {
                     actions.push(Action::for_device(
                         zone.relay.clone(),
@@ -1282,6 +1319,8 @@ mod tests {
                 heat_pump: HeatPumpProtection {
                     min_cycle_seconds: 120,
                     min_pause_seconds: 60,
+                    min_demand_percent: 5,
+                    min_demand_percent_fallback: 80,
                 },
                 open_window: OpenWindowProtection {
                     detection_minutes: 20,
@@ -2305,7 +2344,7 @@ mod tests {
             ts: clk.now(),
         });
         let trv = hc.find_trv_state("trv-bath-1").unwrap();
-        assert!(trv.has_raw_demand());
+        assert!(trv.has_raw_demand(5, 80));
 
         // Partial update: only running_state=idle (pi_heating_demand stays 50).
         hc.handle_event(&Event::TrvState {
@@ -2321,7 +2360,7 @@ mod tests {
         let trv = hc.find_trv_state("trv-bath-1").unwrap();
         // running_state_seen is true, so demand uses running_state exclusively.
         // running_state=idle → no demand, even though pi_heating_demand=50 (stale).
-        assert!(!trv.has_raw_demand(), "stale pi_heating_demand must not override running_state");
+        assert!(!trv.has_raw_demand(5, 80), "stale pi_heating_demand must not override running_state");
     }
 
     // -- Round 4 adversarial regression tests --
@@ -2579,7 +2618,7 @@ mod tests {
             ts: clk.now(),
         });
         let trv = hc.find_trv_state("trv-bath-1").unwrap();
-        assert!(trv.has_raw_demand());
+        assert!(trv.has_raw_demand(5, 80));
 
         // Pi-only update: pi=0, no running_state.
         hc.handle_event(&Event::TrvState {
@@ -2595,7 +2634,7 @@ mod tests {
 
         let trv = hc.find_trv_state("trv-bath-1").unwrap();
         assert!(
-            !trv.has_raw_demand(),
+            !trv.has_raw_demand(5, 80),
             "pi-only update with 0 demand must clear stale running_state"
         );
     }
@@ -3054,7 +3093,7 @@ mod tests {
         assert!(trv2.pressure_release_pending);
         // Its stale demand should be suppressed.
         assert!(
-            !trv2.has_effective_demand(clk.now()),
+            !trv2.has_effective_demand(clk.now(), 5, 80),
             "released TRV's stale demand must be suppressed"
         );
     }
@@ -3563,16 +3602,16 @@ mod tests {
             ts: clk.now(),
         });
         let trv = hc.find_trv_state("trv-bath-1").unwrap();
-        assert!(trv.has_effective_demand(clk.now()));
+        assert!(trv.has_effective_demand(clk.now(), 5, 80));
 
         // 31 minutes pass with no TRV update (device died).
         clk.advance(Duration::from_secs(31 * 60));
 
         let trv = hc.find_trv_state("trv-bath-1").unwrap();
         assert!(trv.is_stale(clk.now()), "TRV should be stale after 31 min");
-        assert!(trv.has_raw_demand(), "raw demand still set");
+        assert!(trv.has_raw_demand(5, 80), "raw demand still set");
         assert!(
-            !trv.has_effective_demand(clk.now()),
+            !trv.has_effective_demand(clk.now(), 5, 80),
             "stale TRV demand must be suppressed"
         );
     }
@@ -3775,14 +3814,14 @@ mod tests {
         let trv2 = hc.find_trv_state("trv-2").unwrap();
         assert!(trv2.pressure_forced);
         assert!(
-            !trv2.has_effective_demand(clk.now()),
+            !trv2.has_effective_demand(clk.now(), 5, 80),
             "pressure-forced TRV's demand must not count as effective"
         );
 
         // The zone should have no effective demand → relay turns off.
         let zone = hc.state.zones.get("bath").unwrap();
         assert!(
-            !zone.has_effective_demand(clk.now()),
+            !zone.has_effective_demand(clk.now(), 5, 80),
             "zone must not have effective demand from forced-only TRVs"
         );
     }

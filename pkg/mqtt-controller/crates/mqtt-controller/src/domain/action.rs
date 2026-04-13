@@ -12,6 +12,8 @@ pub enum ActionTarget {
     Group(String),
     /// Publish to `zigbee2mqtt/<device_name>/set`.
     Device(String),
+    /// Publish to `zigbee2mqtt/<device_name>/get` — request fresh state.
+    DeviceGet(String),
 }
 
 /// One thing the controller wants to publish to MQTT.
@@ -43,7 +45,17 @@ impl Action {
     /// Used by the MQTT bridge to build the topic.
     pub fn target_name(&self) -> &str {
         match &self.target {
-            ActionTarget::Group(name) | ActionTarget::Device(name) => name,
+            ActionTarget::Group(name)
+            | ActionTarget::Device(name)
+            | ActionTarget::DeviceGet(name) => name,
+        }
+    }
+
+    /// Construct a device GET action (request fresh state from device).
+    pub fn get_device_state(device_name: impl Into<String>, payload: Payload) -> Self {
+        Self {
+            target: ActionTarget::DeviceGet(device_name.into()),
+            payload,
         }
     }
 }
@@ -95,6 +107,10 @@ pub enum Payload {
     /// all heating and resumes cleanly when set back to OFF (no setpoint
     /// manipulation needed).
     WindowDetection { window_detection: &'static str },
+
+    /// `{"state": ""}` — request fresh state from a device via `/get`.
+    /// Used by wall thermostat keepalive to detect offline devices.
+    GetState { state: &'static str },
 }
 
 impl Payload {

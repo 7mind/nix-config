@@ -207,31 +207,43 @@ impl MqttBridge {
     /// Publish an [`Action`] to the corresponding `/set` topic.
     /// For Z-Wave plugs, translates to the Z-Wave JS UI wire format.
     pub async fn publish_action(&self, action: &Action) -> Result<(), MqttError> {
+        use crate::domain::action::ActionTarget;
         let name = action.target_name();
-        if self.topology.is_zwave_plug(name) {
-            // Z-Wave plugs: publish true/false to switch_binary targetValue
-            let on = match &action.payload {
-                crate::domain::action::Payload::DeviceStateSet { state } => *state == "ON",
-                other => {
-                    tracing::warn!(
-                        device = name,
-                        payload = ?other,
-                        "unexpected payload type for zwave plug; ignoring"
-                    );
-                    return Ok(());
-                }
-            };
-            let topic = topics::zwave_switch_set_topic(name);
-            let payload = if on { b"true".as_slice() } else { b"false".as_slice() };
-            self.client
-                .publish(topic, QoS::AtLeastOnce, false, payload)
-                .await?;
-        } else {
-            let topic = topics::set_topic(name);
-            let payload = serde_json::to_vec(&action.payload)?;
-            self.client
-                .publish(topic, QoS::AtLeastOnce, false, payload)
-                .await?;
+        match &action.target {
+            ActionTarget::DeviceGet(_) => {
+                // GET actions go to the /get topic, not /set.
+                let topic = topics::get_topic(name);
+                let payload = serde_json::to_vec(&action.payload)?;
+                self.client
+                    .publish(topic, QoS::AtLeastOnce, false, payload)
+                    .await?;
+            }
+            _ if self.topology.is_zwave_plug(name) => {
+                // Z-Wave plugs: publish true/false to switch_binary targetValue
+                let on = match &action.payload {
+                    crate::domain::action::Payload::DeviceStateSet { state } => *state == "ON",
+                    other => {
+                        tracing::warn!(
+                            device = name,
+                            payload = ?other,
+                            "unexpected payload type for zwave plug; ignoring"
+                        );
+                        return Ok(());
+                    }
+                };
+                let topic = topics::zwave_switch_set_topic(name);
+                let payload = if on { b"true".as_slice() } else { b"false".as_slice() };
+                self.client
+                    .publish(topic, QoS::AtLeastOnce, false, payload)
+                    .await?;
+            }
+            _ => {
+                let topic = topics::set_topic(name);
+                let payload = serde_json::to_vec(&action.payload)?;
+                self.client
+                    .publish(topic, QoS::AtLeastOnce, false, payload)
+                    .await?;
+            }
         }
         Ok(())
     }

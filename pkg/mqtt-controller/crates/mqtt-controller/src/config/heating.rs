@@ -205,6 +205,27 @@ pub struct HeatPumpProtection {
     /// Minimum pause (seconds) after the pump stops (all relays off)
     /// before any relay may turn on again.
     pub min_pause_seconds: u64,
+    /// Minimum `pi_heating_demand` percentage (0–100) required to
+    /// consider a TRV as having demand, when `running_state` is
+    /// available. Filters out negligible valve openings that aren't
+    /// worth starting the pump for. Defaults to 5.
+    #[serde(default = "default_min_demand_percent")]
+    pub min_demand_percent: u8,
+    /// Minimum `pi_heating_demand` percentage (0–100) required when
+    /// `running_state` has never been reported by the TRV (fallback
+    /// path). Much higher than `min_demand_percent` because without
+    /// `running_state` confirmation we rely on `pi_heating_demand`
+    /// alone, which is less reliable. Defaults to 80.
+    #[serde(default = "default_min_demand_percent_fallback")]
+    pub min_demand_percent_fallback: u8,
+}
+
+fn default_min_demand_percent() -> u8 {
+    5
+}
+
+fn default_min_demand_percent_fallback() -> u8 {
+    80
 }
 
 /// Open window protection. Per-TRV: if temperature doesn't rise within
@@ -408,6 +429,11 @@ pub enum HeatingConfigError {
         "open_window.{field} must be > 0 (got {value}); zero disables open-window protection"
     )]
     ZeroOpenWindowTimer { field: &'static str, value: u32 },
+
+    #[error(
+        "heat_pump.{field} must be <= 100 (got {value})"
+    )]
+    InvalidDemandThreshold { field: &'static str, value: u8 },
 
     #[error(
         "device {device:?}: option {key:?} has invalid value {value:?} — {reason}"
@@ -806,6 +832,18 @@ impl HeatingConfig {
             return Err(HeatingConfigError::ZeroProtectionTimer {
                 field: "min_pause_seconds",
                 value: 0,
+            });
+        }
+        if self.heat_pump.min_demand_percent > 100 {
+            return Err(HeatingConfigError::InvalidDemandThreshold {
+                field: "min_demand_percent",
+                value: self.heat_pump.min_demand_percent,
+            });
+        }
+        if self.heat_pump.min_demand_percent_fallback > 100 {
+            return Err(HeatingConfigError::InvalidDemandThreshold {
+                field: "min_demand_percent_fallback",
+                value: self.heat_pump.min_demand_percent_fallback,
             });
         }
         if self.open_window.detection_minutes == 0 {
