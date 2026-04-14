@@ -140,6 +140,7 @@ header h1 {
 .badge.idle { background: var(--idle); color: #000; }
 .badge.unknown { background: var(--off); color: var(--text); }
 .badge.inhibited { background: #6a5acd; color: #fff; }
+.badge.kill-switch { background: var(--accent); color: #fff; }
 .badge.schedule-badge { background: var(--border); cursor: pointer; }
 
 .card-controls {

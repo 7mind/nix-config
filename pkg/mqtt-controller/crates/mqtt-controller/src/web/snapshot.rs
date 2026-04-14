@@ -36,10 +36,12 @@ pub fn build_full_snapshot(controller: &Controller, now: Instant) -> FullStateSn
             let idle_since_ago_ms = controller
                 .earliest_kill_switch_idle(name)
                 .map(|t| ago_ms(now, t));
+            let kill_switch_holdoff_secs = controller.kill_switch_holdoff_secs(name);
             PlugSnapshot {
                 device: name.clone(),
                 on: state.map_or(false, |s| s.on),
                 idle_since_ago_ms,
+                kill_switch_holdoff_secs,
                 power_watts: state.and_then(|s| s.last_power),
             }
         })
@@ -127,10 +129,12 @@ pub fn build_plug_snapshot(
     let idle_since_ago_ms = controller
         .earliest_kill_switch_idle(device)
         .map(|t| ago_ms(now, t));
+    let kill_switch_holdoff_secs = controller.kill_switch_holdoff_secs(device);
     Some(PlugSnapshot {
         device: device.to_string(),
         on: state.on,
         idle_since_ago_ms,
+        kill_switch_holdoff_secs,
         power_watts: state.last_power,
     })
 }

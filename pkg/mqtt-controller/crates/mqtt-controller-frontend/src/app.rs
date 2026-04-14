@@ -15,12 +15,43 @@ pub enum Tab {
     Heating,
 }
 
+impl Tab {
+    fn from_hash(hash: &str) -> Self {
+        match hash.trim_start_matches('#') {
+            "plugs" => Tab::Plugs,
+            "heating" => Tab::Heating,
+            _ => Tab::Rooms,
+        }
+    }
+
+    fn to_hash(self) -> &'static str {
+        match self {
+            Tab::Rooms => "#rooms",
+            Tab::Plugs => "#plugs",
+            Tab::Heating => "#heating",
+        }
+    }
+}
+
 #[component]
 pub fn App() -> impl IntoView {
     let ws = WsState::new();
     provide_context(ws.clone());
 
-    let (active_tab, set_active_tab) = signal(Tab::Rooms);
+    let initial_tab = web_sys::window()
+        .and_then(|w| w.location().hash().ok())
+        .map(|h| Tab::from_hash(&h))
+        .unwrap_or(Tab::Rooms);
+
+    let (active_tab, set_active_tab) = signal(initial_tab);
+
+    // Sync tab changes to URL hash.
+    Effect::new(move |_| {
+        let tab = active_tab.get();
+        if let Some(window) = web_sys::window() {
+            let _ = window.location().set_hash(tab.to_hash());
+        }
+    });
     provide_context(active_tab);
 
     // Auto-set entity filter based on active tab + topology.

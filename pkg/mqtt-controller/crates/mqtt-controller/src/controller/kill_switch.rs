@@ -70,6 +70,26 @@ impl KillSwitchEvaluator {
             .min()
     }
 
+    /// Maximum holdoff duration across all `PowerBelow` rules targeting
+    /// `device` that are currently tracking idle. Returns `None` if no
+    /// rule is idle.
+    pub fn holdoff_secs(&self, device: &str) -> Option<u64> {
+        self.topology
+            .actions_for_power_below(device)
+            .iter()
+            .filter_map(|&idx| {
+                let resolved = &self.topology.actions()[idx];
+                if !self.idle_since.contains_key(&resolved.name) {
+                    return None;
+                }
+                match &resolved.trigger {
+                    Trigger::PowerBelow { for_seconds, .. } => Some(*for_seconds),
+                    _ => None,
+                }
+            })
+            .max()
+    }
+
     /// Clear all kill-switch tracking for a device. Called on any
     /// off-transition (explicit off, toggle off, kill-switch fire from
     /// the controller side, etc.).

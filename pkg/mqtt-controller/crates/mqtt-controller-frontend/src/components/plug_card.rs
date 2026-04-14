@@ -35,16 +35,22 @@ fn PlugCard(plug: PlugSnapshot) -> impl IntoView {
     let detail_name = plug.device.clone();
 
     let status_text = if plug.on { "ON" } else { "OFF" };
-    let idle_text = plug.idle_since_ago_ms.map(|ms| {
-        let secs = ms / 1000;
-        if secs < 60 {
-            format!(" (idle {secs}s)")
-        } else {
-            format!(" (idle {}m)", secs / 60)
-        }
-    }).unwrap_or_default();
     let power_text = plug.power_watts.map(|w| format!(" {w:.1}W")).unwrap_or_default();
-    let meta_text = format!("{status_text}{idle_text}{power_text}");
+    let meta_text = format!("{status_text}{power_text}");
+
+    // Kill-switch countdown badge: shows remaining time before auto-off.
+    let kill_switch_badge = plug.idle_since_ago_ms.and_then(|elapsed_ms| {
+        let holdoff_secs = plug.kill_switch_holdoff_secs?;
+        let elapsed_secs = elapsed_ms / 1000;
+        let remaining = holdoff_secs.saturating_sub(elapsed_secs);
+        let total_min = holdoff_secs / 60;
+        let text = if remaining < 60 {
+            format!("kill: {remaining}s / {total_min}m")
+        } else {
+            format!("kill: {}m / {total_min}m", remaining / 60)
+        };
+        Some(text)
+    });
 
     let json_text = serde_json::to_string_pretty(&plug).unwrap_or_default();
 
@@ -89,6 +95,9 @@ fn PlugCard(plug: PlugSnapshot) -> impl IntoView {
             </div>
             <div class="card-meta">
                 {meta_text}
+                {kill_switch_badge.map(|text| view! {
+                    <span class="badge kill-switch">{text}</span>
+                })}
             </div>
             <div class="card-controls">
                 <button

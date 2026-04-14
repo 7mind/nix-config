@@ -30,6 +30,7 @@ let
     sendEvents = true;
     publishNodeDetails = true;
     entityTemplate = "%nid";
+    ignoreLoc = true;
   };
 
   mqttSettingsJson = builtins.toJSON mqttSettings;

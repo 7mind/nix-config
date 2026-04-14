@@ -40,6 +40,11 @@ pub struct PlugSnapshot {
     pub on: bool,
     /// Milliseconds since the plug entered idle (power below threshold).
     pub idle_since_ago_ms: Option<u64>,
+    /// Kill-switch holdoff duration in seconds. When `idle_since_ago_ms`
+    /// is `Some`, this is the total holdoff the plug must survive before
+    /// being turned off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kill_switch_holdoff_secs: Option<u64>,
     /// Most recent power reading in watts, if available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub power_watts: Option<f64>,
@@ -274,6 +279,7 @@ mod tests {
                 device: "z2m-p-printer".into(),
                 on: true,
                 idle_since_ago_ms: Some(30000),
+                kill_switch_holdoff_secs: Some(600),
                 power_watts: Some(120.5),
             }],
             heating_zones: vec![HeatingZoneSnapshot {

@@ -331,6 +331,12 @@ impl Controller {
         self.kill_switch.earliest_idle(device)
     }
 
+    /// Maximum kill-switch holdoff duration (seconds) for idle rules
+    /// targeting `device`.
+    pub fn kill_switch_holdoff_secs(&self, device: &str) -> Option<u64> {
+        self.kill_switch.holdoff_secs(device)
+    }
+
     /// Reference to the immutable topology.
     pub fn topology(&self) -> &Arc<Topology> {
         &self.topology
