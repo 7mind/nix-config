@@ -392,6 +392,23 @@ async fn run_event_loop(
         // The select! macro requires all branches to be present at
         // compile time. We use a helper future that never completes
         // when web is disabled, so the branch is dead but compiles.
+        //
+        // The switch-press deadline branch handles deferred double-tap
+        // detection: when a button has both single and double-tap rules,
+        // the first press is buffered for a short window. This branch
+        // flushes it as a single press once the window expires.
+        let switch_deadline_sleep = async {
+            match controller.next_switch_press_deadline() {
+                Some(deadline) => {
+                    let now = std::time::Instant::now();
+                    if deadline <= now {
+                        return;
+                    }
+                    tokio::time::sleep(deadline - now).await;
+                }
+                None => std::future::pending::<()>().await,
+            }
+        };
         let event = tokio::select! {
             msg = event_rx.recv() => {
                 match msg {
@@ -400,6 +417,9 @@ async fn run_event_loop(
                 }
             }
             _ = tick.tick() => {
+                Event::Tick { ts: clock.now() }
+            }
+            _ = switch_deadline_sleep => {
                 Event::Tick { ts: clock.now() }
             }
             cmd = recv_ws_cmd(&mut ws_cmd_rx) => {

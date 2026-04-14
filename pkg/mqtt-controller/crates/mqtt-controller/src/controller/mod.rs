@@ -87,6 +87,14 @@ use kill_switch::KillSwitchEvaluator;
 // Both kinds share `defaults.cycle_window_seconds`, but that knob is
 // only meaningful for taps. For wall switches it's ignored.
 
+#[derive(Debug, Clone)]
+struct PendingSwitchPress {
+    device: String,
+    action: SwitchAction,
+    ts: Instant,
+    deadline: Instant,
+}
+
 #[derive(Debug)]
 pub struct Controller {
     topology: Arc<Topology>,
@@ -116,9 +124,12 @@ pub struct Controller {
     /// Sonoff firmware's inter-sequence cooldown sending spurious singles.
     last_double_tap: BTreeMap<(String, u8), Instant>,
 
-    /// Last switch on/off press timestamp per (device, action). Used for
-    /// software double-tap detection on Hue dimmer on/off buttons.
-    last_switch_press: BTreeMap<(String, SwitchAction), Instant>,
+    /// Pending deferred switch press. When a button has both single and
+    /// double-tap action rules, the first press is buffered here. If a
+    /// second press arrives within the double-tap window, the pending is
+    /// cancelled and only double-tap rules fire. If the window expires
+    /// (checked in `handle_tick`), the pending fires as a normal single press.
+    pending_switch_press: BTreeMap<(String, SwitchAction), PendingSwitchPress>,
 
     /// Optional heating sub-controller. Only present when the config
     /// has a `heating` section.
@@ -155,7 +166,7 @@ impl Controller {
             confirm_off_pending: BTreeMap::new(),
             at_last_fired: BTreeMap::new(),
             last_double_tap: BTreeMap::new(),
-            last_switch_press: BTreeMap::new(),
+            pending_switch_press: BTreeMap::new(),
             heating,
             location,
             cached_sun: None,
@@ -170,9 +181,7 @@ impl Controller {
                 action,
                 ts,
             } => {
-                let mut out = self.handle_switch_action(device, action, ts);
-                out.extend(self.dispatch_switch_actions(device, action, ts));
-                out
+                self.handle_switch_press(device, action, ts)
             }
             Event::TapAction {
                 ref device,
@@ -545,10 +554,134 @@ impl Controller {
         vec![action]
     }
 
+    // ----- switch double-tap deferral ----------------------------------------
+
+    /// Handle a switch press, deferring when the button has both single
+    /// and double-tap action rules.
+    fn handle_switch_press(
+        &mut self,
+        device: &str,
+        action: SwitchAction,
+        ts: Instant,
+    ) -> Vec<Action> {
+        let needs_deferral = self.switch_needs_deferral(device, action);
+        let key = (device.to_string(), action);
+
+        if let Some(pending) = self.pending_switch_press.remove(&key) {
+            // Second press within window → double-tap.
+            let window = Duration::from_secs_f64(
+                self.defaults.switch_double_tap_window_seconds,
+            );
+            if ts.duration_since(pending.ts) <= window {
+                tracing::info!(
+                    device,
+                    ?action,
+                    elapsed_ms = ts.duration_since(pending.ts).as_millis() as u64,
+                    "switch double-tap detected"
+                );
+                return self.dispatch_switch_actions_double_only(device, action, ts);
+            }
+            // Outside window — flush the stale pending as single, then
+            // handle the new press normally.
+            let mut out = self.execute_single_switch_press(&pending);
+            out.extend(self.handle_switch_press_inner(device, action, ts, needs_deferral));
+            return out;
+        }
+
+        self.handle_switch_press_inner(device, action, ts, needs_deferral)
+    }
+
+    fn handle_switch_press_inner(
+        &mut self,
+        device: &str,
+        action: SwitchAction,
+        ts: Instant,
+        needs_deferral: bool,
+    ) -> Vec<Action> {
+        if needs_deferral {
+            let window = Duration::from_secs_f64(
+                self.defaults.switch_double_tap_window_seconds,
+            );
+            tracing::debug!(
+                device,
+                ?action,
+                window_ms = window.as_millis() as u64,
+                "deferring switch press for double-tap detection"
+            );
+            self.pending_switch_press.insert(
+                (device.to_string(), action),
+                PendingSwitchPress {
+                    device: device.to_string(),
+                    action,
+                    ts,
+                    deadline: ts + window,
+                },
+            );
+            Vec::new()
+        } else {
+            let mut out = self.handle_switch_action(device, action, ts);
+            out.extend(self.dispatch_switch_actions(device, action, ts));
+            out
+        }
+    }
+
+    /// True when this device+action has both single AND double-tap rules,
+    /// requiring deferral.
+    fn switch_needs_deferral(&self, device: &str, action: SwitchAction) -> bool {
+        let (has_single, has_double) = match action {
+            SwitchAction::OnPressRelease => (
+                !self.topology.actions_for_switch_on(device).is_empty()
+                    || !self.topology.rooms_for_switch(device).is_empty(),
+                !self.topology.actions_for_switch_on_double(device).is_empty(),
+            ),
+            SwitchAction::OffPressRelease => (
+                !self.topology.actions_for_switch_off(device).is_empty()
+                    || !self.topology.rooms_for_switch(device).is_empty(),
+                !self.topology.actions_for_switch_off_double(device).is_empty(),
+            ),
+            _ => return false,
+        };
+        has_single && has_double
+    }
+
+    /// Execute a deferred single press (flush from pending).
+    fn execute_single_switch_press(&mut self, pending: &PendingSwitchPress) -> Vec<Action> {
+        tracing::debug!(
+            device = %pending.device,
+            action = ?pending.action,
+            "flushing deferred single switch press"
+        );
+        let mut out = self.handle_switch_action(&pending.device, pending.action, pending.ts);
+        out.extend(self.dispatch_switch_actions(&pending.device, pending.action, pending.ts));
+        out
+    }
+
+    /// Earliest deadline among pending switch presses, if any.
+    pub fn next_switch_press_deadline(&self) -> Option<Instant> {
+        self.pending_switch_press.values().map(|p| p.deadline).min()
+    }
+
+    /// Flush all pending switch presses whose deadline has passed.
+    fn flush_pending_switch_presses(&mut self, ts: Instant) -> Vec<Action> {
+        let expired: Vec<_> = self
+            .pending_switch_press
+            .iter()
+            .filter(|(_, p)| ts >= p.deadline)
+            .map(|(k, p)| (k.clone(), p.clone()))
+            .collect();
+        let mut out = Vec::new();
+        for (key, pending) in expired {
+            self.pending_switch_press.remove(&key);
+            out.extend(self.execute_single_switch_press(&pending));
+        }
+        out
+    }
+
     // ----- tick handler (dispatches to actions + kill_switch) ---------------
 
     fn handle_tick(&mut self, ts: Instant) -> Vec<Action> {
-        let mut out = self.evaluate_at_triggers(ts);
+        let mut out = self.flush_pending_switch_presses(ts);
+        out.extend(self.evaluate_at_triggers(ts));
 
         // Kill-switch deadline evaluation.
         let plug_states = &self.plug_states;
