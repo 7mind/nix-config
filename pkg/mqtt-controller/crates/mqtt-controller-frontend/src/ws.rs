@@ -12,7 +12,7 @@ use mqtt_controller_wire::{
     ServerMessage, TopologyInfo, PlugSnapshot,
 };
 
-const MAX_LOG_ENTRIES: usize = 2000;
+const MAX_LOG_ENTRIES: usize = 200;
 const RECONNECT_BASE_MS: u32 = 1000;
 const RECONNECT_MAX_MS: u32 = 30000;
 

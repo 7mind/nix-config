@@ -29,7 +29,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::config::heating::{HeatingConfig, Weekday};
-use crate::domain::action::{Action, Payload};
+use crate::domain::action::{Action, ActionTarget, Payload};
 use crate::domain::event::Event;
 use crate::domain::heating_state::{
     HeatingRuntimeState, HeatingRunningState, HeatingZoneRuntimeState,
@@ -57,9 +57,7 @@ pub struct HeatingController {
     /// do NOT start open-window timers (they are state synchronization,
     /// not fresh heating cycles).
     startup_complete: bool,
-    /// When the controller was created. Used for the delayed proactive
-    /// OFF for unknown-state zones: we wait at least min_cycle from
-    /// startup before sending OFF, in case the relay was physically ON.
+    /// When the controller was created.
     startup_at: Instant,
     /// Monotonic tick generation counter. Incremented at the start of
     /// each `handle_tick`. Used by reconciliation to skip commands
@@ -70,6 +68,9 @@ pub struct HeatingController {
     ha_last_published: BTreeMap<String, String>,
     /// True after HA discovery configs have been emitted (first tick).
     ha_discovery_published: bool,
+    /// When the last periodic wall thermostat GET refresh was sent.
+    /// `None` means no refresh has been sent yet (triggers on first tick).
+    last_wt_refresh: Option<Instant>,
 }
 
 impl HeatingController {
@@ -80,11 +81,9 @@ impl HeatingController {
     ) -> Self {
         let now = clock.now();
         let mut state = HeatingRuntimeState::new();
-        // Seed conservative pump_off timestamp: assume the pump might
-        // have just stopped so that min_pause is enforced on first
-        // startup. This prevents short-cycling if the daemon restarts
-        // immediately after a pump run.
-        state.pump_off_since = Some(now);
+        // pump_off_since left as None: the first wall thermostat GET
+        // response will seed it (first-contact handling in
+        // handle_wall_thermostat_state). No blind assumptions.
 
         // Pre-populate zone and TRV state entries.
         for zone in &config.zones {
@@ -104,6 +103,7 @@ impl HeatingController {
             tick_gen: 0,
             ha_last_published: BTreeMap::new(),
             ha_discovery_published: false,
+            last_wt_refresh: None,
         }
     }
 
@@ -157,21 +157,19 @@ impl HeatingController {
         let mut actions = Vec::new();
         if !self.startup_complete {
             self.startup_complete = true;
+            // Request current state from all wall thermostats. The
+            // response will set relay_state_known and seed pump
+            // timestamps — no blind assumptions about relay state.
             for zone in &self.config.zones {
-                if let Some(zs) = self.state.zones.get(&zone.name) {
-                    if !zs.relay_state_known {
-                        tracing::warn!(
-                            zone = %zone.name,
-                            relay = %zone.relay,
-                            "startup: wall thermostat never responded, \
-                             heating control disabled for this zone until first state echo"
-                        );
-                    }
-                }
-                // No startup window_detection clear needed: we don't use
-                // window_detection in automatic inhibition (setpoint-only),
-                // and a one-shot unreconciled write could strand a TRV
-                // if the publish is lost.
+                actions.push(Action::get_device_state(
+                    zone.relay.clone(),
+                    Payload::GetState { state: "" },
+                ));
+                tracing::info!(
+                    zone = %zone.name,
+                    relay = %zone.relay,
+                    "startup: requesting wall thermostat state via GET"
+                );
             }
         }
         let now = self.clock.now();
@@ -231,6 +229,23 @@ impl HeatingController {
                         Payload::GetState { state: "" },
                     ));
                 }
+            }
+        }
+
+        // 0d. Periodic wall thermostat state refresh: re-verify relay
+        //     state every 5 minutes to catch desyncs from lost MQTT
+        //     messages or stale retained state.
+        const WT_REFRESH_INTERVAL: Duration = Duration::from_secs(5 * 60);
+        let should_refresh = self.last_wt_refresh
+            .map(|t| now.duration_since(t) >= WT_REFRESH_INTERVAL)
+            .unwrap_or(true);
+        if should_refresh {
+            self.last_wt_refresh = Some(now);
+            for zone in &self.config.zones {
+                actions.push(Action::get_device_state(
+                    zone.relay.clone(),
+                    Payload::GetState { state: "" },
+                ));
             }
         }
 
@@ -434,15 +449,27 @@ impl HeatingController {
             .map(|z| z.name.clone());
         let Some(zone_name) = zone_name else { return };
 
-        // Snapshot relay count before mutation for pump tracking.
+        // Snapshot before mutation for pump tracking and first-contact.
         let relays_on_before = self.state.active_relay_count();
+        let pump_running = self.state.is_pump_running();
 
         let Some(zone_state) = self.state.zones.get_mut(&zone_name) else {
             return;
         };
+        let first_contact = !zone_state.relay_state_known;
         zone_state.relay_state_known = true;
         let was_on = zone_state.relay_on;
         if was_on == on {
+            // First contact with relay OFF: seed conservative
+            // pump_off_since so min_pause is enforced from now.
+            // Only if the pump isn't already running from another zone.
+            if first_contact && !on && !pump_running {
+                self.state.pump_off_since = self.state.pump_off_since.or(Some(now));
+                tracing::info!(
+                    zone = %zone_name, relay = device,
+                    "first contact: relay confirmed OFF, seeding pump_off_since"
+                );
+            }
             // No transition — but a repeated OFF echo can still be
             // meaningful: if this zone has a pending ON, this OFF
             // confirms the relay went off after a lost ON echo.
@@ -501,7 +528,6 @@ impl HeatingController {
             // ON echo confirms this zone's pending ON.
             zone_state.pending_on_at = None;
             // Clear desired_relay now that the echo confirmed it.
-            // This re-enables phase-0 proactive OFF for future restarts.
             if zone_state.desired_relay == Some(true) {
                 zone_state.desired_relay = None;
             }
@@ -980,11 +1006,13 @@ impl HeatingController {
             .iter()
             .filter_map(|zone| {
                 let zs = self.state.zones.get(&zone.name)?;
-                // Unknown relay state defaults to OFF (conservative).
-                // The controller proceeds normally — if demand exists it
-                // will send ON, and the echo will confirm actual state.
-                // This is self-healing: a missed startup refresh doesn't
-                // permanently strand the zone.
+                // Skip zones with unknown relay state: we don't know if
+                // the relay is on or off and must not guess. The periodic
+                // GET refresh will hydrate the state; until then, the
+                // zone is excluded from all relay decisions.
+                if !zs.relay_state_known {
+                    return None;
+                }
                 Some(ZoneDecision {
                     zone_name: zone.name.clone(),
                     relay: zone.relay.clone(),
@@ -994,46 +1022,6 @@ impl HeatingController {
                 })
             })
             .collect();
-
-        // Unknown-state zones (relay_state_known=false):
-        // - WITH demand → send ON (harmless if already on, echo self-heals)
-        // - WITHOUT demand → send OFF only after min_cycle from startup
-        //   (the relay might have been physically ON before restart; we
-        //   must wait min_cycle before sending OFF to avoid short-cycling)
-        let min_cycle_from_startup_ok =
-            now.duration_since(self.startup_at) >= min_cycle;
-        for zone in &self.config.zones {
-            let Some(zs) = self.state.zones.get_mut(&zone.name) else {
-                continue;
-            };
-            if !zs.relay_state_known && zs.desired_relay.is_none() {
-                let has_demand = zs.has_effective_demand(now, md, mdf);
-                if !has_demand && min_cycle_from_startup_ok {
-                    actions.push(Action::for_device(
-                        zone.relay.clone(),
-                        Payload::device_off(),
-                    ));
-                    zs.desired_relay = Some(false);
-                    zs.desired_relay_gen = self.tick_gen;
-                    // Record pending stop: if the relay was actually ON
-                    // and our probe turns it off, min_pause must be
-                    // enforced. Per-zone pending_off_at ensures one
-                    // zone's echo only clears its own timestamp (no
-                    // cross-zone pollution — that was the old global bug).
-                    zs.pending_off_at = Some(now);
-                    // Set pending_on_at so the reconciler keeps retrying
-                    // OFF until an echo confirms (the relay might be
-                    // physically ON with no echo path otherwise).
-                    zs.pending_on_at = Some(self.startup_at);
-                    tracing::info!(
-                        zone = %zone.name,
-                        relay = %zone.relay,
-                        "heating: delayed proactive OFF for unknown-state zone \
-                         (no demand, min_cycle from startup elapsed)"
-                    );
-                }
-            }
-        }
 
         // --- Phase 1: ON requests ---
         for d in &decisions {
@@ -1533,13 +1521,16 @@ mod tests {
         let topo = Arc::new(Topology::build(cfg).unwrap());
         let heating_cfg = cfg.heating.clone().unwrap();
         let mut hc = HeatingController::new(heating_cfg, topo, clk.clone());
-        // Simulate startup: mark all zones as relay-state-known (OFF)
-        // and advance past the conservative startup min_pause.
+        // Simulate startup: mark all zones as relay-state-known (OFF),
+        // seed pump_off_since (as first-contact OFF would), mark
+        // startup complete and WT refreshed.
         for zs in hc.state.zones.values_mut() {
             zs.relay_state_known = true;
         }
+        hc.state.pump_off_since = Some(clk.now());
         hc.startup_complete = true;
         clk.advance(Duration::from_secs(120));
+        hc.last_wt_refresh = Some(clk.now());
         (hc, clk)
     }
 
@@ -2192,15 +2183,61 @@ mod tests {
     }
 
     #[test]
-    fn startup_seeds_conservative_pump_off() {
+    fn startup_does_not_seed_pump_off() {
         let cfg = simple_config();
         let clk = Arc::new(FakeClock::new(12));
         let topo = Arc::new(Topology::build(&cfg).unwrap());
         let heating_cfg = cfg.heating.clone().unwrap();
         let hc = HeatingController::new(heating_cfg, topo, clk.clone());
 
-        // On construction, pump_off_since should be seeded.
-        assert!(hc.state.pump_off_since.is_some(), "startup should seed pump_off_since");
+        // On construction, pump_off_since must be None — the GET
+        // response will seed it (first-contact handling).
+        assert!(hc.state.pump_off_since.is_none(), "startup must not guess pump state");
+    }
+
+    #[test]
+    fn first_contact_off_seeds_pump_off() {
+        // When the first wall thermostat GET response arrives with
+        // relay OFF, pump_off_since is seeded conservatively.
+        let cfg = simple_config();
+        let clk = Arc::new(FakeClock::new(12));
+        let topo = Arc::new(Topology::build(&cfg).unwrap());
+        let heating_cfg = cfg.heating.clone().unwrap();
+        let mut hc = HeatingController::new(heating_cfg, topo, clk.clone());
+        hc.startup_complete = true;
+        hc.last_wt_refresh = Some(clk.now());
+
+        assert!(hc.state.pump_off_since.is_none());
+        // Simulate GET response: relay is OFF.
+        echo_relay(&mut hc, "wt-bath", false, &clk);
+        assert!(
+            hc.state.pump_off_since.is_some(),
+            "first-contact OFF should seed pump_off_since"
+        );
+        assert!(
+            hc.state.zones.get("bath").unwrap().relay_state_known,
+            "GET response should mark state as known"
+        );
+    }
+
+    #[test]
+    fn first_contact_on_sets_pump_on() {
+        // When the first wall thermostat GET response arrives with
+        // relay ON, pump_on_since is set via the normal transition.
+        let cfg = simple_config();
+        let clk = Arc::new(FakeClock::new(12));
+        let topo = Arc::new(Topology::build(&cfg).unwrap());
+        let heating_cfg = cfg.heating.clone().unwrap();
+        let mut hc = HeatingController::new(heating_cfg, topo, clk.clone());
+        hc.startup_complete = true;
+        hc.last_wt_refresh = Some(clk.now());
+
+        assert!(hc.state.pump_on_since.is_none());
+        echo_relay(&mut hc, "wt-bath", true, &clk);
+        assert!(
+            hc.state.pump_on_since.is_some(),
+            "first-contact ON should set pump_on_since"
+        );
     }
 
     #[test]
@@ -3162,18 +3199,17 @@ mod tests {
     // -- Round 8 adversarial regression tests --
 
     #[test]
-    fn unknown_relay_state_self_heals() {
-        // Regression: if wall thermostat never responds during startup,
-        // the zone should still participate in relay control (assuming
-        // OFF). This is self-healing — the controller sends ON if demand
-        // exists, and the echo will confirm state.
+    fn unknown_relay_state_excluded_from_relay_decisions() {
+        // Zones with unknown relay state must not participate in relay
+        // control — no ON, no OFF. The periodic GET will hydrate state.
         let cfg = simple_config();
         let clk = Arc::new(FakeClock::new(12));
         let topo = Arc::new(Topology::build(&cfg).unwrap());
         let heating_cfg = cfg.heating.clone().unwrap();
         let mut hc = HeatingController::new(heating_cfg, topo, clk.clone());
-        // Do NOT set relay_state_known — simulates missed refresh.
+        // Do NOT set relay_state_known — simulates pre-GET state.
         hc.startup_complete = true;
+        hc.last_wt_refresh = Some(clk.now());
         clk.advance(Duration::from_secs(120));
 
         // TRV demands heat.
@@ -3189,17 +3225,18 @@ mod tests {
         });
         let actions = hc.handle_tick();
 
-        // Should emit relay ON even with unknown state (assumes OFF).
-        let relay_on: Vec<_> = actions
+        // Must NOT emit relay ON/OFF for a zone whose state is unknown.
+        let relay_cmds: Vec<_> = actions
             .iter()
             .filter(|a| {
                 a.target_name() == "wt-bath"
-                    && serde_json::to_string(&a.payload).unwrap().contains("ON")
+                    && (serde_json::to_string(&a.payload).unwrap().contains("ON")
+                        || serde_json::to_string(&a.payload).unwrap().contains("OFF"))
             })
             .collect();
         assert!(
-            !relay_on.is_empty(),
-            "unknown relay state should not block heating — assumes OFF and sends ON"
+            relay_cmds.is_empty(),
+            "unknown relay state must exclude zone from relay decisions"
         );
     }
 
@@ -3391,83 +3428,60 @@ mod tests {
     // -- Round 10 adversarial regression tests --
 
     #[test]
-    fn unknown_state_zone_delayed_off_after_min_cycle() {
-        // Unknown relay state with no demand: the controller waits
-        // min_cycle from startup before sending OFF (the relay might
-        // have been physically ON before restart).
+    fn startup_emits_wt_get_requests() {
+        // First tick must emit GET requests for all wall thermostats
+        // to hydrate relay state.
         let cfg = simple_config();
         let clk = Arc::new(FakeClock::new(12));
         let topo = Arc::new(Topology::build(&cfg).unwrap());
         let heating_cfg = cfg.heating.clone().unwrap();
         let mut hc = HeatingController::new(heating_cfg, topo, clk.clone());
-        hc.startup_complete = true;
 
-        // Before min_cycle (120s): no OFF.
-        clk.advance(Duration::from_secs(60));
         let actions = hc.handle_tick();
-        let relay_off: Vec<_> = actions
+        let gets: Vec<_> = actions
             .iter()
             .filter(|a| {
                 a.target_name() == "wt-bath"
-                    && serde_json::to_string(&a.payload).unwrap().contains("OFF")
+                    && matches!(a.target, ActionTarget::DeviceGet(_))
             })
             .collect();
         assert!(
-            relay_off.is_empty(),
-            "must not send OFF before min_cycle from startup"
-        );
-
-        // After min_cycle: send OFF.
-        clk.advance(Duration::from_secs(70)); // total 130s > 120s
-        let actions = hc.handle_tick();
-        let relay_off: Vec<_> = actions
-            .iter()
-            .filter(|a| {
-                a.target_name() == "wt-bath"
-                    && serde_json::to_string(&a.payload).unwrap().contains("OFF")
-            })
-            .collect();
-        assert!(
-            !relay_off.is_empty(),
-            "must send delayed OFF after min_cycle from startup"
+            !gets.is_empty(),
+            "first tick must emit GET for wall thermostats"
         );
     }
 
     #[test]
-    fn unknown_state_zone_with_demand_sends_on() {
-        // Unknown relay state WITH demand: the controller sends ON
-        // (harmless if already on, self-healing via echo).
+    fn periodic_wt_refresh() {
+        // After initial hydration, GET requests are sent every 5 minutes.
         let cfg = simple_config();
-        let clk = Arc::new(FakeClock::new(12));
-        let topo = Arc::new(Topology::build(&cfg).unwrap());
-        let heating_cfg = cfg.heating.clone().unwrap();
-        let mut hc = HeatingController::new(heating_cfg, topo, clk.clone());
-        hc.startup_complete = true;
-        clk.advance(Duration::from_secs(120));
+        let (mut hc, clk) = setup(&cfg);
 
-        hc.handle_event(&Event::TrvState {
-            device: "trv-bath-1".into(),
-            local_temperature: Some(18.0),
-            pi_heating_demand: Some(50),
-            running_state: Some("heat".into()),
-            occupied_heating_setpoint: Some(20.0),
-            operating_mode: None,
-            battery: None,
-            ts: clk.now(),
-        });
+        // First tick after setup: no refresh (setup set last_wt_refresh).
         let actions = hc.handle_tick();
-
-        let relay_on: Vec<_> = actions
+        let gets: Vec<_> = actions
             .iter()
-            .filter(|a| {
-                a.target_name() == "wt-bath"
-                    && serde_json::to_string(&a.payload).unwrap().contains("ON")
-            })
+            .filter(|a| matches!(a.target, ActionTarget::DeviceGet(_)))
             .collect();
-        assert!(
-            !relay_on.is_empty(),
-            "unknown-state zone with demand should send ON (self-healing)"
-        );
+        assert!(gets.is_empty(), "no refresh right after setup");
+
+        // Advance 4 minutes: still no refresh.
+        clk.advance(Duration::from_secs(4 * 60));
+        let actions = hc.handle_tick();
+        let gets: Vec<_> = actions
+            .iter()
+            .filter(|a| matches!(a.target, ActionTarget::DeviceGet(_)))
+            .collect();
+        assert!(gets.is_empty(), "no refresh before 5 minutes");
+
+        // Advance past 5 minutes total: refresh fires.
+        clk.advance(Duration::from_secs(2 * 60));
+        let actions = hc.handle_tick();
+        let gets: Vec<_> = actions
+            .iter()
+            .filter(|a| matches!(a.target, ActionTarget::DeviceGet(_)))
+            .collect();
+        assert!(!gets.is_empty(), "refresh should fire after 5 minutes");
     }
 
     #[test]
@@ -3858,74 +3872,6 @@ mod tests {
     }
 
     #[test]
-    fn unknown_relay_delayed_off_records_pending_stop() {
-        // The startup OFF probe sets pending_off_at (per-zone) so
-        // min_pause is enforced if the relay was actually ON and our
-        // probe stops it. Per-zone tracking prevents cross-zone pollution.
-        let cfg = simple_config();
-        let clk = Arc::new(FakeClock::new(12));
-        let topo = Arc::new(Topology::build(&cfg).unwrap());
-        let heating_cfg = cfg.heating.clone().unwrap();
-        let mut hc = HeatingController::new(heating_cfg, topo, clk.clone());
-        hc.startup_complete = true;
-        clk.advance(Duration::from_secs(130));
-        hc.handle_tick(); // fires delayed OFF
-
-        let zs = hc.state.zones.get("bath").unwrap();
-        assert!(
-            zs.pending_off_at.is_some(),
-            "startup OFF probe must set pending_off_at for min_pause"
-        );
-        assert!(
-            zs.pending_on_at.is_some(),
-            "startup OFF must set pending_on_at for reconciler retries"
-        );
-        assert!(
-            hc.state.effective_pump_off_since().is_some(),
-            "effective_pump_off_since must reflect the startup probe"
-        );
-    }
-
-    #[test]
-    fn unknown_relay_delayed_off_retries_on_lost_publish() {
-        // If the delayed OFF publish is lost, the reconciler must keep
-        // retrying because pending_on_at is set (relay might be ON).
-        let cfg = simple_config();
-        let clk = Arc::new(FakeClock::new(12));
-        let topo = Arc::new(Topology::build(&cfg).unwrap());
-        let heating_cfg = cfg.heating.clone().unwrap();
-        let mut hc = HeatingController::new(heating_cfg, topo, clk.clone());
-        hc.startup_complete = true;
-        clk.advance(Duration::from_secs(130));
-        hc.handle_tick(); // fires delayed OFF (first publish)
-
-        let zs = hc.state.zones.get("bath").unwrap();
-        assert!(
-            zs.pending_on_at.is_some(),
-            "pending_on_at must be set for reconciler retry"
-        );
-
-        // Next tick: reconciler should retry the OFF.
-        let actions = hc.handle_tick();
-        let off_retries: Vec<_> = actions
-            .iter()
-            .filter(|a| {
-                a.target_name() == "wt-bath"
-                    && serde_json::to_string(&a.payload).unwrap().contains("OFF")
-            })
-            .collect();
-        assert!(
-            !off_retries.is_empty(),
-            "reconciler must retry OFF for unknown-state zone until echo confirms"
-        );
-
-        // After an OFF echo, retries stop.
-        echo_relay(&mut hc, "wt-bath", false, &clk);
-        let zs = hc.state.zones.get("bath").unwrap();
-        assert!(zs.pending_on_at.is_none(), "echo should clear pending_on_at");
-        assert!(zs.relay_state_known, "echo should mark state as known");
-    }
-
     // -- Redesign regression tests --
 
     #[test]
@@ -4004,10 +3950,9 @@ mod tests {
     }
 
     #[test]
-    fn multi_zone_startup_probes_do_not_block_healthy_zones() {
-        // Two unknown zones get delayed OFF. These are speculative
-        // probes — they must NOT set pending_off_at, so a healthy
-        // zone that needs heat can turn on immediately.
+    fn multi_zone_unknown_does_not_block_known_zone() {
+        // When one zone has confirmed state and demand, it must not
+        // be blocked by another zone that hasn't responded to GET yet.
         let cfg = make_config(
             vec![
                 HeatingZone {
@@ -4029,17 +3974,17 @@ mod tests {
         let heating_cfg = cfg.heating.clone().unwrap();
         let mut hc = HeatingController::new(heating_cfg, topo, clk.clone());
         hc.startup_complete = true;
+        hc.last_wt_refresh = Some(clk.now());
         clk.advance(Duration::from_secs(130));
-        hc.handle_tick(); // delayed OFF for both zones
 
-        // Both zones have pending_off_at (conservative: relay might be ON).
-        assert!(hc.state.zones.get("z1").unwrap().pending_off_at.is_some());
-        assert!(hc.state.zones.get("z2").unwrap().pending_off_at.is_some());
-
-        // Zone 1's echo confirms it was already OFF. This sets
-        // pump_off_since (conservative). Advance past min_pause.
+        // Zone 1's GET response arrives: relay OFF. Seeds pump_off_since.
         echo_relay(&mut hc, "wt-1", false, &clk);
-        clk.advance(Duration::from_secs(70)); // > min_pause (60s)
+        // Zone 2 hasn't responded yet — stays unknown.
+
+        // Advance past min_pause (60s in test config).
+        clk.advance(Duration::from_secs(70));
+
+        // Zone 1 TRV demands heat.
         hc.handle_event(&Event::TrvState {
             device: "trv-1".into(),
             local_temperature: Some(18.0),
@@ -4059,7 +4004,20 @@ mod tests {
             .collect();
         assert!(
             !z1_on.is_empty(),
-            "healthy zone must not be blocked by other zone's speculative startup probe"
+            "known zone must not be blocked by unknown zone"
+        );
+        // Zone 2 must not get any relay commands.
+        let z2_cmds: Vec<_> = actions
+            .iter()
+            .filter(|a| {
+                a.target_name() == "wt-2"
+                    && (serde_json::to_string(&a.payload).unwrap().contains("ON")
+                        || serde_json::to_string(&a.payload).unwrap().contains("OFF"))
+            })
+            .collect();
+        assert!(
+            z2_cmds.is_empty(),
+            "unknown zone must not get relay commands"
         );
     }
 

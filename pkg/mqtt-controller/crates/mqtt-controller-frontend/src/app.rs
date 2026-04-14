@@ -94,6 +94,15 @@ pub fn App() -> impl IntoView {
                     <TabButton tab=Tab::Rooms active=active_tab set_active=set_active_tab label="Rooms" />
                     <TabButton tab=Tab::Plugs active=active_tab set_active=set_active_tab label="Plugs" />
                     <TabButton tab=Tab::Heating active=active_tab set_active=set_active_tab label="Heating" />
+                    <button
+                        class="btn"
+                        on:click={
+                            let set_filter = ws.set_filter_entities;
+                            move |_| set_filter.set(std::collections::BTreeSet::new())
+                        }
+                    >
+                        "Unselect all"
+                    </button>
                 </div>
                 <ConnectionBadge ws=ws.clone() />
             </header>
