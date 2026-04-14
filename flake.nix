@@ -50,6 +50,11 @@
       inputs.flake-utils.follows = "flake-utils";
     };
 
+    mqtt-spc = {
+      url = "github:pshirshov/mqtt-spc";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     nix-apple-fonts = {
       url = "github:braindefender/nix-apple-fonts/6f1a4b74cb889c7bc28d378715c79b4d0b35f5b8";
       inputs.nixpkgs.follows = "nixpkgs";

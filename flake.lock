@@ -700,6 +700,26 @@
         "type": "github"
       }
     },
+    "mqtt-spc": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1776159695,
+        "narHash": "sha256-UHuXYnHBr6/yPFjRlqPmlvTE7DDw3HR9KF5+NbAITds=",
+        "owner": "pshirshov",
+        "repo": "mqtt-spc",
+        "rev": "b8fd4cf670b1f74734d334f0f970eadc6af07afd",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pshirshov",
+        "repo": "mqtt-spc",
+        "type": "github"
+      }
+    },
     "niri": {
       "inputs": {
         "niri-stable": "niri-stable",
@@ -1167,6 +1187,7 @@
         "kanata-switcher": "kanata-switcher",
         "lanzaboote": "lanzaboote",
         "mac-app-util": "mac-app-util",
+        "mqtt-spc": "mqtt-spc",
         "niri": "niri",
         "nix-apple-fonts": "nix-apple-fonts",
         "nix-vscode-extensions": "nix-vscode-extensions",

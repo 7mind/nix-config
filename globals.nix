@@ -172,6 +172,7 @@ rec {
 
         pylontech = inputs.pylontech.packages."${arch}";
         qendercore-adapter = inputs.qendercore-adapter;
+        mqtt-spc = inputs.mqtt-spc;
         nix-apple-fonts = inputs.nix-apple-fonts.packages."${arch}";
         browservice = inputs.browservice;
         fractal = inputs.fractal.packages."${arch}";
