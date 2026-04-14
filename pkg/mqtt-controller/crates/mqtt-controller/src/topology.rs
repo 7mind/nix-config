@@ -364,8 +364,12 @@ pub struct Topology {
 
     /// Switch action → action rule indexes. Keyed by switch
     /// friendly_name; value is a list of indexes into `actions`.
+    /// "Single" indexes fire on every press; "double" indexes fire
+    /// only when software double-tap is detected.
     action_switch_on_index: BTreeMap<FriendlyName, Vec<usize>>,
     action_switch_off_index: BTreeMap<FriendlyName, Vec<usize>>,
+    action_switch_on_double_index: BTreeMap<FriendlyName, Vec<usize>>,
+    action_switch_off_double_index: BTreeMap<FriendlyName, Vec<usize>>,
 
     /// Tap action → action rule indexes. Keyed by (tap, button, action).
     /// `action` is `None` for single/press, `Some("double")` for double-tap.
@@ -1027,6 +1031,8 @@ impl Topology {
         let mut actions: Vec<ResolvedAction> = Vec::new();
         let mut action_switch_on_index: BTreeMap<FriendlyName, Vec<usize>> = BTreeMap::new();
         let mut action_switch_off_index: BTreeMap<FriendlyName, Vec<usize>> = BTreeMap::new();
+        let mut action_switch_on_double_index: BTreeMap<FriendlyName, Vec<usize>> = BTreeMap::new();
+        let mut action_switch_off_double_index: BTreeMap<FriendlyName, Vec<usize>> = BTreeMap::new();
         let mut action_tap_index: BTreeMap<(FriendlyName, u8, Option<String>), Vec<usize>> = BTreeMap::new();
         let mut action_power_below_index: BTreeMap<FriendlyName, Vec<usize>> = BTreeMap::new();
 
@@ -1067,7 +1073,7 @@ impl Topology {
                         .or_default()
                         .push(idx);
                 }
-                Trigger::SwitchOn { device } => {
+                Trigger::SwitchOn { device, action } => {
                     let trigger_entry = trigger_entry.unwrap();
                     if !trigger_entry.is_switch() {
                         return Err(TopologyError::ActionTriggerWrongDeviceKind {
@@ -1079,12 +1085,17 @@ impl Topology {
                         });
                     }
                     let idx = actions.len();
-                    action_switch_on_index
+                    let index = if action.as_deref() == Some("double") {
+                        &mut action_switch_on_double_index
+                    } else {
+                        &mut action_switch_on_index
+                    };
+                    index
                         .entry(device.clone())
                         .or_default()
                         .push(idx);
                 }
-                Trigger::SwitchOff { device } => {
+                Trigger::SwitchOff { device, action } => {
                     let trigger_entry = trigger_entry.unwrap();
                     if !trigger_entry.is_switch() {
                         return Err(TopologyError::ActionTriggerWrongDeviceKind {
@@ -1096,7 +1107,12 @@ impl Topology {
                         });
                     }
                     let idx = actions.len();
-                    action_switch_off_index
+                    let index = if action.as_deref() == Some("double") {
+                        &mut action_switch_off_double_index
+                    } else {
+                        &mut action_switch_off_index
+                    };
+                    index
                         .entry(device.clone())
                         .or_default()
                         .push(idx);
@@ -1240,6 +1256,8 @@ impl Topology {
             actions,
             action_switch_on_index,
             action_switch_off_index,
+            action_switch_on_double_index,
+            action_switch_off_double_index,
             action_tap_index,
             action_power_below_index,
             plug_names,
@@ -1337,6 +1355,8 @@ impl Topology {
         let mut names: BTreeSet<&str> = self.switch_index.keys().map(String::as_str).collect();
         names.extend(self.action_switch_on_index.keys().map(String::as_str));
         names.extend(self.action_switch_off_index.keys().map(String::as_str));
+        names.extend(self.action_switch_on_double_index.keys().map(String::as_str));
+        names.extend(self.action_switch_off_double_index.keys().map(String::as_str));
         names
     }
 
@@ -1427,9 +1447,25 @@ impl Topology {
             .unwrap_or(&[])
     }
 
-    /// Action rule indexes triggered by a switch "off" press.
+    /// Action rule indexes triggered by a switch "off" press (single).
     pub fn actions_for_switch_off(&self, switch: &str) -> &[usize] {
         self.action_switch_off_index
+            .get(switch)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
+    /// Action rule indexes triggered by a switch "on" double-tap.
+    pub fn actions_for_switch_on_double(&self, switch: &str) -> &[usize] {
+        self.action_switch_on_double_index
+            .get(switch)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
+    /// Action rule indexes triggered by a switch "off" double-tap.
+    pub fn actions_for_switch_off_double(&self, switch: &str) -> &[usize] {
+        self.action_switch_off_double_index
             .get(switch)
             .map(Vec::as_slice)
             .unwrap_or(&[])
@@ -1451,6 +1487,8 @@ impl Topology {
     pub fn has_switch_actions(&self, switch: &str) -> bool {
         self.action_switch_on_index.contains_key(switch)
             || self.action_switch_off_index.contains_key(switch)
+            || self.action_switch_on_double_index.contains_key(switch)
+            || self.action_switch_off_double_index.contains_key(switch)
     }
 
     /// Action rule indexes with PowerBelow triggers for a plug device.
@@ -2044,12 +2082,12 @@ mod tests {
             vec![
                 ActionRule {
                     name: "lamp-on".into(),
-                    trigger: Trigger::SwitchOn { device: "hue-s-office".into() },
+                    trigger: Trigger::SwitchOn { device: "hue-s-office".into(), action: None },
                     effect: Effect::TurnOn { target: "z2m-p-lamp".into() },
                 },
                 ActionRule {
                     name: "lamp-off".into(),
-                    trigger: Trigger::SwitchOff { device: "hue-s-office".into() },
+                    trigger: Trigger::SwitchOff { device: "hue-s-office".into(), action: None },
                     effect: Effect::TurnOff { target: "z2m-p-lamp".into() },
                 },
             ],

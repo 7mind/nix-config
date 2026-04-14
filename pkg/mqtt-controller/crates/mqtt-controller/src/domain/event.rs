@@ -105,7 +105,7 @@ pub enum Event {
 /// One of the action codes a Hue dimmer publishes on
 /// `zigbee2mqtt/<friendly_name>/action`. Mirrors the bento switch
 /// dispatch cases one-to-one.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SwitchAction {
     OnPressRelease,

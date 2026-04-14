@@ -44,6 +44,11 @@ pub struct Defaults {
     /// `cycle_on_double_tap` room binding.
     pub double_tap_suppression_seconds: f64,
 
+    /// Window for software-detected double-taps on Hue dimmer on/off
+    /// buttons. Two presses within this window fire action rules with
+    /// `action: "double"`. Single-press rules always fire immediately.
+    pub switch_double_tap_window_seconds: f64,
+
     /// Wall-switch-specific brightness tuning. Taps don't have hold or
     /// up/down buttons so this section is unused for them.
     pub wall_switch: WallSwitchDefaults,
@@ -54,6 +59,7 @@ impl Default for Defaults {
         Self {
             cycle_window_seconds: 1.0,
             double_tap_suppression_seconds: 2.0,
+            switch_double_tap_window_seconds: 0.8,
             wall_switch: WallSwitchDefaults::default(),
         }
     }

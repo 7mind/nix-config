@@ -61,7 +61,7 @@ use std::time::{Duration, Instant};
 
 use crate::config::Defaults;
 use crate::domain::action::{Action, Payload};
-use crate::domain::event::Event;
+use crate::domain::event::{Event, SwitchAction};
 use crate::domain::state::{PlugRuntimeState, ZoneState};
 use crate::time::Clock;
 use crate::topology::{RoomName, Topology};
@@ -116,6 +116,10 @@ pub struct Controller {
     /// Sonoff firmware's inter-sequence cooldown sending spurious singles.
     last_double_tap: BTreeMap<(String, u8), Instant>,
 
+    /// Last switch on/off press timestamp per (device, action). Used for
+    /// software double-tap detection on Hue dimmer on/off buttons.
+    last_switch_press: BTreeMap<(String, SwitchAction), Instant>,
+
     /// Optional heating sub-controller. Only present when the config
     /// has a `heating` section.
     heating: Option<HeatingController>,
@@ -151,6 +155,7 @@ impl Controller {
             confirm_off_pending: BTreeMap::new(),
             at_last_fired: BTreeMap::new(),
             last_double_tap: BTreeMap::new(),
+            last_switch_press: BTreeMap::new(),
             heating,
             location,
             cached_sun: None,
@@ -1673,8 +1678,8 @@ mod tests {
     fn switch_on_off_actions() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = plug_controller(clk.clone(), vec![
-            ActionRule { name: "lamp-on".into(), trigger: Trigger::SwitchOn { device: "hue-s-office".into() }, effect: Effect::TurnOn { target: "z2m-p-lamp".into() } },
-            ActionRule { name: "lamp-off".into(), trigger: Trigger::SwitchOff { device: "hue-s-office".into() }, effect: Effect::TurnOff { target: "z2m-p-lamp".into() } },
+            ActionRule { name: "lamp-on".into(), trigger: Trigger::SwitchOn { device: "hue-s-office".into(), action: None }, effect: Effect::TurnOn { target: "z2m-p-lamp".into() } },
+            ActionRule { name: "lamp-off".into(), trigger: Trigger::SwitchOff { device: "hue-s-office".into(), action: None }, effect: Effect::TurnOff { target: "z2m-p-lamp".into() } },
         ]);
         let actions = c.handle_event(Event::SwitchAction { device: "hue-s-office".into(), action: SwitchAction::OnPressRelease, ts: clk.now() });
         assert!(actions.iter().any(|a| *a == Action::for_device("z2m-p-lamp", Payload::device_on())));
@@ -1906,7 +1911,7 @@ mod tests {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = plug_controller(clk.clone(), vec![ActionRule {
             name: "lamp-on".into(),
-            trigger: Trigger::SwitchOn { device: "hue-s-office".into() },
+            trigger: Trigger::SwitchOn { device: "hue-s-office".into(), action: None },
             effect: Effect::TurnOn { target: "z2m-p-lamp".into() },
         }]);
         let actions = c.handle_event(Event::SwitchAction { device: "hue-s-office".into(), action: SwitchAction::UpPressRelease, ts: clk.now() });
@@ -1989,7 +1994,7 @@ mod tests {
             }],
             actions: vec![ActionRule {
                 name: "lamp-on".into(),
-                trigger: Trigger::SwitchOn { device: "hue-s-standalone".into() },
+                trigger: Trigger::SwitchOn { device: "hue-s-standalone".into(), action: None },
                 effect: Effect::TurnOn { target: "z2m-p-lamp".into() },
             }],
             defaults: Defaults::default(),

@@ -11,22 +11,50 @@ use super::Controller;
 
 impl Controller {
     /// Execute action rules triggered by a switch press.
+    /// Single-press rules always fire. Double-tap rules fire additionally
+    /// when two presses of the same button land within the configured window.
     pub(super) fn dispatch_switch_actions(
         &mut self,
         device: &str,
         action: SwitchAction,
         ts: Instant,
     ) -> Vec<Action> {
-        let indexes = match action {
-            SwitchAction::OnPressRelease => {
-                self.topology.actions_for_switch_on(device).to_vec()
-            }
-            SwitchAction::OffPressRelease => {
-                self.topology.actions_for_switch_off(device).to_vec()
-            }
+        let (single_indexes, double_indexes) = match action {
+            SwitchAction::OnPressRelease => (
+                self.topology.actions_for_switch_on(device).to_vec(),
+                self.topology.actions_for_switch_on_double(device).to_vec(),
+            ),
+            SwitchAction::OffPressRelease => (
+                self.topology.actions_for_switch_off(device).to_vec(),
+                self.topology.actions_for_switch_off_double(device).to_vec(),
+            ),
             _ => return Vec::new(),
         };
-        self.execute_action_rules(&indexes, ts)
+        let mut out = self.execute_action_rules(&single_indexes, ts);
+
+        // Software double-tap detection.
+        if !double_indexes.is_empty() {
+            let key = (device.to_string(), action);
+            let window = Duration::from_secs_f64(
+                self.defaults.switch_double_tap_window_seconds,
+            );
+            if let Some(&prev) = self.last_switch_press.get(&key) {
+                if ts.duration_since(prev) <= window {
+                    tracing::info!(
+                        device,
+                        ?action,
+                        elapsed_ms = ts.duration_since(prev).as_millis() as u64,
+                        "switch double-tap detected"
+                    );
+                    out.extend(self.execute_action_rules(&double_indexes, ts));
+                    self.last_switch_press.remove(&key);
+                    return out;
+                }
+            }
+            self.last_switch_press.insert(key, ts);
+        }
+
+        out
     }
 
     /// Execute action rules triggered by a tap button press.

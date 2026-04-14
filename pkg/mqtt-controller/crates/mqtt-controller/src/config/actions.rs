@@ -55,11 +55,19 @@ pub enum Trigger {
     /// A Hue dimmer wall switch "on" button was pressed.
     SwitchOn {
         device: String,
+        /// `None` matches every press. `Some("double")` matches
+        /// software-detected double-taps only.
+        #[serde(default)]
+        action: Option<String>,
     },
 
     /// A Hue dimmer wall switch "off" button was pressed.
     SwitchOff {
         device: String,
+        /// `None` matches every press. `Some("double")` matches
+        /// software-detected double-taps only.
+        #[serde(default)]
+        action: Option<String>,
     },
 
     /// A plug's real-time power reading stayed below `watts` for at
@@ -117,8 +125,8 @@ impl Trigger {
     pub fn device(&self) -> Option<&str> {
         match self {
             Self::Tap { device, .. }
-            | Self::SwitchOn { device }
-            | Self::SwitchOff { device }
+            | Self::SwitchOn { device, .. }
+            | Self::SwitchOff { device, .. }
             | Self::PowerBelow { device, .. } => Some(device),
             Self::At { .. } => None,
         }
@@ -176,7 +184,7 @@ mod tests {
         }"#;
         let rule: ActionRule = serde_json::from_str(json).unwrap();
         match &rule.trigger {
-            Trigger::SwitchOn { device } => assert_eq!(device, "hue-s-office"),
+            Trigger::SwitchOn { device, .. } => assert_eq!(device, "hue-s-office"),
             other => panic!("expected SwitchOn, got {other:?}"),
         }
         match &rule.effect {
@@ -194,7 +202,7 @@ mod tests {
         }"#;
         let rule: ActionRule = serde_json::from_str(json).unwrap();
         match &rule.trigger {
-            Trigger::SwitchOff { device } => assert_eq!(device, "hue-s-office"),
+            Trigger::SwitchOff { device, .. } => assert_eq!(device, "hue-s-office"),
             other => panic!("expected SwitchOff, got {other:?}"),
         }
     }
