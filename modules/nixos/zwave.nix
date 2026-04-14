@@ -11,7 +11,7 @@ let
     prefix = "zwave";
     name = "zwave";
     qos = 1;
-    retain = false;
+    retain = true;
     clean = true;
     reconnectPeriod = 3000;
     store = false;
@@ -25,7 +25,7 @@ let
     nodeNames = true;
     hassDiscovery = true;
     discoveryPrefix = "homeassistant";
-    retainedDiscovery = false;
+    retainedDiscovery = true;
     includeNodeInfo = true;
     sendEvents = true;
     publishNodeDetails = true;

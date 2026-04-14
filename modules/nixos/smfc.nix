@@ -73,9 +73,13 @@ let
     CPU = cfg.zones.cpu;
     HD = cfg.zones.hd // {
       smartctl_path = "${pkgs.smartmontools}/bin/smartctl";
+      # smfc parses hd_names with str.split() (whitespace), not commas
+      hd_names = lib.concatStringsSep " " cfg.zones.hd.hd_names;
     };
   } // lib.optionalAttrs (cfg.zones.nvme != null) {
-    NVME = cfg.zones.nvme;
+    NVME = cfg.zones.nvme // {
+      nvme_names = lib.concatStringsSep " " cfg.zones.nvme.nvme_names;
+    };
   } // lib.optionalAttrs (cfg.zones.gpu != null) {
     GPU = cfg.zones.gpu;
   } // lib.optionalAttrs (cfg.zones.const != null) {

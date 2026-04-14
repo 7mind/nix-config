@@ -173,12 +173,32 @@
         # The device randomly sets bit 31 in 4-byte meter report mantissa,
         # causing values near -21,474,836 instead of small positive numbers.
         # We mask off the MSB when the parsed meter value is implausibly negative.
+        # Pin zwave-js-ui to 11.16.0 (ahead of our nixpkgs pin) for:
+        #   - zwave-js 15.22.1: targetValue optimistic update fix
+        #   - zwave-js 15.22.5: pollValue delay fix
+        # Workaround for NAS-WR01ZE bit-31 firmware bug (zwave-js/zwave-js#2692).
+        # The device randomly sets bit 31 in 4-byte meter report mantissa,
+        # causing values near -21,474,836 instead of small positive numbers.
+        # We mask off the MSB when the parsed meter value is implausibly negative.
         zwave-js-ui =
           let
+            pinnedVersion = "11.16.0";
+            pinnedSrc = super.fetchFromGitHub {
+              owner = "zwave-js";
+              repo = "zwave-js-ui";
+              tag = "v${pinnedVersion}";
+              hash = "sha256-6pPC500ZQmtCC3ATiWD79DTh5cagdqLoDwTHivHgfWg=";
+            };
             bit31Fix = "if (value < -1e6) { const _p = data.subarray(offset + 1); const _prec = (_p[0] & 224) >>> 5; const _sz = _p[0] & 7; if (_sz === 4) value = (((_p[1] & 0x7F) << 24) | (_p[2] << 16) | (_p[3] << 8) | _p[4]) / Math.pow(10, _prec); }";
             meterCCPath = "lib/node_modules/zwave-js-ui/node_modules/@zwave-js/cc/build";
           in
           super.zwave-js-ui.overrideAttrs (old: {
+            version = pinnedVersion;
+            src = pinnedSrc;
+            npmDeps = super.fetchNpmDeps {
+              src = pinnedSrc;
+              hash = "sha256-Qeh5sk2aLWrsmMShE26jz7nzWg6YWcPeUNhTg3u411I=";
+            };
             postInstall = (old.postInstall or "") + ''
               substituteInPlace "$out/${meterCCPath}/cjs/cc/MeterCC.js" \
                 --replace-fail \
