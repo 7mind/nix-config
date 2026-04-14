@@ -46,9 +46,9 @@ let
       description = "Maximum fan speed (%).";
     };
     smoothing = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable smoothing for fan speed transitions.";
+      type = lib.types.ints.positive;
+      default = 1;
+      description = "Moving average window size for temperature readings (1=disabled).";
     };
   };
 
