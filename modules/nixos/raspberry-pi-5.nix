@@ -9,13 +9,9 @@
 
   nixpkgs.overlays = [
     inputs.nixos-raspberrypi.overlays.vendor-pkgs
-    inputs.nixos-raspberrypi.overlays.pkgs
-    (final: prev: {
-      # The vendor-pkgs overlay globally sets libcamera = libcamera_rpi.
-      # Override pipewire to not depend on it — raspi5m is a headless
-      # server with no camera, and libcamera_rpi is expensive to build.
-      pipewire = prev.pipewire.override { libcamera = null; };
-    })
+    # Skip overlays.pkgs — it replaces all ffmpeg/libcamera/kodi/vlc
+    # variants with RPi-specific builds that are expensive to compile
+    # and unnecessary on a headless server.
   ];
 
   # Recommended by nixos-raspberrypi for new RPi 5 installs

@@ -707,11 +707,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1776159695,
-        "narHash": "sha256-UHuXYnHBr6/yPFjRlqPmlvTE7DDw3HR9KF5+NbAITds=",
+        "lastModified": 1776163820,
+        "narHash": "sha256-U6CClfJhWlh2v7o2SnzuaoQSFKUg7Z5nuykDcVXx9mY=",
         "owner": "pshirshov",
         "repo": "mqtt-spc",
-        "rev": "b8fd4cf670b1f74734d334f0f970eadc6af07afd",
+        "rev": "26989f93d0754034aacfe691cb968c733a8b3252",
         "type": "github"
       },
       "original": {

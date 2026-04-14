@@ -50,7 +50,7 @@ else
 fi
 
 trusted_keys=$(echo "$nix_config" | grep '^trusted-public-keys ' | cut -d= -f2-)
-if echo "$trusted_keys" | grep -q "nas.home.7mind.io"; then
+if echo "$trusted_keys" | grep -q "main:EF5cnoxTpeY23deCWlU5ywj32Wf+nOL483aMq2OC14Q="; then
     ok "Attic cache public key is trusted"
 else
     fail "Attic cache public key not found in trusted-public-keys"

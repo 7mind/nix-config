@@ -308,64 +308,69 @@ do_refresh() {
     fi
 }
 
+decrypt_password_key() {
+    local password_key="${HOME}/age-key.age"
+    if [[ ! -f "$password_key" ]]; then
+        return 1
+    fi
+
+    echo "    Decrypting master key (enter password)..." >&2
+    if age -d -o "$AGE_DECRYPTED_KEY" "$password_key"; then
+        chmod 600 "$AGE_DECRYPTED_KEY"
+        echo "$AGE_DECRYPTED_KEY"
+        return 0
+    else
+        echo "Error: Failed to decrypt master key" >&2
+        rm -f "$AGE_DECRYPTED_KEY"
+        return 1
+    fi
+}
+
+decrypt_tpm_key() {
+    if [[ ! -f "$AGE_MASTER_KEY_TPM" || ! -f "$AGE_TPM_IDENTITY" ]]; then
+        return 1
+    fi
+
+    if ! command -v age-plugin-tpm &>/dev/null; then
+        echo "    Warning: age-plugin-tpm not found, skipping TPM" >&2
+        return 1
+    fi
+
+    echo "    Decrypting master key via TPM..." >&2
+    if age -d -i "$AGE_TPM_IDENTITY" -o "$AGE_DECRYPTED_KEY" "$AGE_MASTER_KEY_TPM" 2>/dev/null; then
+        chmod 600 "$AGE_DECRYPTED_KEY"
+        echo "$AGE_DECRYPTED_KEY"
+        return 0
+    else
+        echo "    Warning: TPM decryption failed, trying password key..." >&2
+        rm -f "$AGE_DECRYPTED_KEY"
+        return 1
+    fi
+}
+
 get_master_identity() {
     # Returns path to the master identity file
-    # Linux: Uses TPM to decrypt
-    # macOS: Prompts for password to decrypt
+    # Tries TPM first (Linux only), then falls back to password-protected key
 
     AGE_DECRYPTED_KEY="$AGE_RUNTIME_KEY"
     trap 'rm -f "$AGE_DECRYPTED_KEY"' EXIT
 
-    if [[ "$(uname -s)" == "Darwin" ]]; then
-        # macOS: Use password-protected key
-        local password_key="${HOME}/age-key.age"
-        if [[ ! -f "$password_key" ]]; then
-            echo "Error: Password-protected master key not found: $password_key" >&2
-            return 1
-        fi
-
-        echo "    Decrypting master key (enter password)..." >&2
-        if age -d -o "$AGE_DECRYPTED_KEY" "$password_key"; then
-            chmod 600 "$AGE_DECRYPTED_KEY"
-            echo "$AGE_DECRYPTED_KEY"
+    # Linux: try TPM first
+    if [[ "$(uname -s)" != "Darwin" ]]; then
+        if decrypt_tpm_key; then
             return 0
-        else
-            echo "Error: Failed to decrypt master key" >&2
-            rm -f "$AGE_DECRYPTED_KEY"
-            return 1
-        fi
-    else
-        # Linux: Use TPM
-        if [[ ! -f "$AGE_MASTER_KEY_TPM" ]]; then
-            echo "Error: TPM-encrypted master key not found: $AGE_MASTER_KEY_TPM" >&2
-            echo "Run ./enroll-tpm to set up TPM protection" >&2
-            return 1
-        fi
-
-        if [[ ! -f "$AGE_TPM_IDENTITY" ]]; then
-            echo "Error: TPM identity not found: $AGE_TPM_IDENTITY" >&2
-            echo "Run ./enroll-tpm to set up TPM protection" >&2
-            return 1
-        fi
-
-        if ! command -v age-plugin-tpm &>/dev/null; then
-            echo "Error: age-plugin-tpm not found" >&2
-            echo "Install it or run: nix shell nixpkgs#age-plugin-tpm" >&2
-            return 1
-        fi
-
-        echo "    Decrypting master key via TPM..." >&2
-        if age -d -i "$AGE_TPM_IDENTITY" -o "$AGE_DECRYPTED_KEY" "$AGE_MASTER_KEY_TPM" 2>/dev/null; then
-            chmod 600 "$AGE_DECRYPTED_KEY"
-            echo "$AGE_DECRYPTED_KEY"
-            return 0
-        else
-            echo "Error: Failed to decrypt master key with TPM" >&2
-            echo "Is the TPM available? Try: age -d -i $AGE_TPM_IDENTITY $AGE_MASTER_KEY_TPM" >&2
-            rm -f "$AGE_DECRYPTED_KEY"
-            return 1
         fi
     fi
+
+    # Fallback (all platforms): password-protected key
+    if decrypt_password_key; then
+        return 0
+    fi
+
+    echo "Error: No usable master key found" >&2
+    echo "Either run ./enroll-tpm for TPM protection," >&2
+    echo "or create a password-protected key: age -p -o ~/age-key.age ~/age-key.txt" >&2
+    return 1
 }
 
 cleanup_decrypted_key() {
