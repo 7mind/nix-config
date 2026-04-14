@@ -340,6 +340,37 @@
           ];
         });
 
+        smfc = super.python3Packages.buildPythonApplication rec {
+          pname = "smfc";
+          version = "5.3.0";
+          pyproject = true;
+
+          src = super.fetchFromGitHub {
+            owner = "petersulyok";
+            repo = "smfc";
+            tag = "v${version}";
+            hash = "sha256-PgWihVpxzy5gPWkaCKikJ9rNy3xXeFJpWPfdyg2ypAM=";
+          };
+
+          build-system = [ super.python3Packages.setuptools ];
+          dependencies = [ super.python3Packages.pyudev ];
+
+          nativeBuildInputs = [ super.makeWrapper ];
+          postFixup = ''
+            wrapProgram $out/bin/smfc \
+              --prefix LD_LIBRARY_PATH : ${super.lib.makeLibraryPath [ super.systemd ]}
+          '';
+
+          doCheck = false;
+
+          meta = {
+            description = "Supermicro Fan Control for Linux";
+            homepage = "https://github.com/petersulyok/smfc";
+            license = super.lib.licenses.gpl3Only;
+            platforms = [ "x86_64-linux" ];
+          };
+        };
+
       }
     )
   ];

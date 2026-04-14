@@ -60,6 +60,7 @@
   ./qmk-keyboard.nix
   ./rocm.nix
   ./router.nix
+  ./smfc.nix
   ./smartd.nix
   ./sdr.nix
   ./ssh.nix
