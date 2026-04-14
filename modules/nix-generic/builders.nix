@@ -2,20 +2,13 @@
 
 let
   ownerSecretsEnabled = config.smind.age.enable && config.smind.age.load-owner-secrets;
-in
-{
-  options = {
-    smind.infra.nix-build.enable = lib.mkEnableOption "distributed nix builds";
-  };
 
-  config = lib.mkIf config.smind.infra.nix-build.enable {
-    nix.distributedBuilds = true;
-    nix.extraOptions = ''
-      	  builders-use-substitutes = true
-      	'';
+  # Prevent a host from using itself as a remote builder (causes deadlock).
+  # Compare short hostnames: extract first component of builder FQDN (e.g. "vm" from "vm.home.7mind.io").
+  builderShortName = machine: builtins.head (lib.splitString "." machine.hostName);
+  isSelf = machine: builderShortName machine == config.networking.hostName;
 
-    # obtain host public key: base64 -w0 /etc/ssh/ssh_host_ed25519_key.pub
-    nix.buildMachines = [
+  allBuildMachines = [
       # {
       #   hostName = "pavel-nix.home.7mind.io";
       #   system = "x86_64-linux";
@@ -82,7 +75,20 @@ in
       }
 
     ];
+in
+{
+  options = {
+    smind.infra.nix-build.enable = lib.mkEnableOption "distributed nix builds";
+  };
 
+  config = lib.mkIf config.smind.infra.nix-build.enable {
+    nix.distributedBuilds = true;
+    nix.extraOptions = ''
+      	  builders-use-substitutes = true
+      	'';
+
+    # obtain host public key: base64 -w0 /etc/ssh/ssh_host_ed25519_key.pub
+    nix.buildMachines = builtins.filter (machine: !isSelf machine) allBuildMachines;
 
   };
 }
