@@ -9,9 +9,10 @@ let
 
   atticConfigSnippet = ''
     TOKEN=$(cat ${cfg.push.tokenFile}) || { ${log} -p user.err "failed to read token"; exit 1; }
-    export ATTIC_CONFIG_DIR=$(mktemp -d)
-    trap 'rm -rf "$ATTIC_CONFIG_DIR"' EXIT
-    cat > "$ATTIC_CONFIG_DIR/config.toml" <<TOML
+    export XDG_CONFIG_HOME=$(mktemp -d)
+    trap 'rm -rf "$XDG_CONFIG_HOME"' EXIT
+    mkdir -p "$XDG_CONFIG_HOME/attic"
+    cat > "$XDG_CONFIG_HOME/attic/config.toml" <<TOML
 default-server = "nas"
 [servers.nas]
 endpoint = "${cfg.server-url}"
