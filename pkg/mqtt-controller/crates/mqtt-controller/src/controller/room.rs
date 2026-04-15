@@ -59,6 +59,60 @@ impl Controller {
         vec![action]
     }
 
+    /// `SceneToggle` effect — pure on/off toggle. If room is off, turn
+    /// on with the first scene in the active slot. If room is on, turn
+    /// off. No cycle window, no scene advancement. Designed for buttons
+    /// that use hardware double-tap for scene cycling.
+    pub(super) fn execute_scene_toggle(&mut self, room_name: &str, ts: Instant) -> Vec<Action> {
+        let sun = self.sun_times();
+        let (group_name, scenes_for_now, off_transition) = {
+            let Some(room) = self.topology.room_by_name(room_name) else {
+                return Vec::new();
+            };
+            let hour = self.clock.local_hour();
+            let minute = self.clock.local_minute();
+            (
+                room.group_name.clone(),
+                active_slot_scene_ids(&room.scenes, hour, minute, sun.as_ref()),
+                room.off_transition_seconds,
+            )
+        };
+        if scenes_for_now.is_empty() {
+            return Vec::new();
+        }
+
+        let state_snapshot = self.states.get(room_name).cloned().unwrap_or_default();
+
+        if !state_snapshot.physically_on {
+            let first = scenes_for_now[0];
+            tracing::info!(
+                room = room_name,
+                group = %group_name,
+                scene = first,
+                branch = "on (was off)",
+                "scene_toggle → scene_recall"
+            );
+            let action = Action::new(
+                group_name.clone(),
+                Payload::scene_recall(first),
+            );
+            self.write_after_on(room_name, ts, 0);
+            self.propagate_to_descendants(room_name, true, ts);
+            vec![action]
+        } else {
+            tracing::info!(
+                room = room_name,
+                group = %group_name,
+                transition = off_transition,
+                branch = "off (was on)",
+                "scene_toggle → state OFF"
+            );
+            let mut out = Vec::new();
+            self.publish_off(room_name, &group_name, off_transition, ts, &mut out);
+            out
+        }
+    }
+
     /// `SceneToggleCycle` effect — tap button three-branch behavior:
     /// 1. If room is off → turn on with first scene
     /// 2. If within cycle window → advance to next scene

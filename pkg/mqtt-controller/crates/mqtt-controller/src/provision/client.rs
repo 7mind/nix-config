@@ -518,8 +518,10 @@ impl Z2mClient {
     }
 
     /// Read a device's current state via its retained
-    /// `zigbee2mqtt/<friendly_name>` topic. Returns `None` if no retained
-    /// state is available within the timeout.
+    /// `zigbee2mqtt/<friendly_name>` topic. Falls back to an explicit
+    /// `get` request when the retained message is missing (e.g. after
+    /// a broker restart without persistence). Returns `None` only if
+    /// both attempts fail to produce a state within the timeout.
     ///
     /// Unlike `bridge/devices` and `bridge/groups`, per-device state
     /// topics aren't pre-subscribed at connect time (we don't know which
@@ -542,17 +544,48 @@ impl Z2mClient {
 
         match self.fetch_retained(&topic, false).await {
             Ok(payload) => {
-                let parsed = serde_json::from_slice(&payload).map_err(|e| {
-                    Z2mClientError::BadPayload {
-                        topic: topic.clone(),
-                        detail: e.to_string(),
-                    }
-                })?;
-                Ok(Some(parsed))
+                return Self::parse_device_state(&topic, &payload);
             }
+            Err(Z2mClientError::FetchTimeout { .. }) => {
+                // No retained message — fall through to `get` request.
+            }
+            Err(e) => return Err(e),
+        }
+
+        // Fallback: publish an empty `get` request. z2m responds with
+        // the device's cached state from its internal database — no
+        // device wake-up needed for battery-powered sensors.
+        tracing::info!(
+            device = friendly_name,
+            "no retained state; requesting via get"
+        );
+        let get_topic = format!("zigbee2mqtt/{friendly_name}/get");
+        // Clear the stale cache entry so fetch_retained waits for the
+        // fresh response rather than returning the absence.
+        self.client
+            .publish(
+                &get_topic,
+                QoS::AtLeastOnce,
+                false,
+                serde_json::to_vec(&serde_json::json!({}))?,
+            )
+            .await?;
+
+        match self.fetch_retained(&topic, false).await {
+            Ok(payload) => Self::parse_device_state(&topic, &payload),
             Err(Z2mClientError::FetchTimeout { .. }) => Ok(None),
             Err(e) => Err(e),
         }
+    }
+
+    fn parse_device_state(topic: &str, payload: &[u8]) -> Result<Option<Value>, Z2mClientError> {
+        let parsed = serde_json::from_slice(payload).map_err(|e| {
+            Z2mClientError::BadPayload {
+                topic: topic.to_string(),
+                detail: e.to_string(),
+            }
+        })?;
+        Ok(Some(parsed))
     }
 
     /// Set device-level configuration via `bridge/request/device/options`.

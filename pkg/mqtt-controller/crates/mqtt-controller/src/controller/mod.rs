@@ -670,6 +670,7 @@ impl Controller {
         use crate::config::Effect;
         match effect {
             Effect::SceneCycle { room } => self.execute_scene_cycle(room, ts),
+            Effect::SceneToggle { room } => self.execute_scene_toggle(room, ts),
             Effect::SceneToggleCycle { room } => {
                 self.execute_scene_toggle_cycle(room, ts)
             }
@@ -1566,7 +1567,7 @@ mod tests {
                 motion_off_cooldown_seconds: 0,
             }],
             bindings: vec![
-                Binding { name: "bedroom-press".into(), trigger: Trigger::Button { device: "sonoff-ts-foo".into(), button: "1".into(), gesture: Gesture::Press }, effect: Effect::SceneToggleCycle { room: "bedroom".into() } },
+                Binding { name: "bedroom-press".into(), trigger: Trigger::Button { device: "sonoff-ts-foo".into(), button: "1".into(), gesture: Gesture::Press }, effect: Effect::SceneToggle { room: "bedroom".into() } },
                 Binding { name: "bedroom-double".into(), trigger: Trigger::Button { device: "sonoff-ts-foo".into(), button: "1".into(), gesture: Gesture::DoubleTap }, effect: Effect::SceneCycle { room: "bedroom".into() } },
             ],
             defaults: Defaults::default(),
@@ -1577,8 +1578,10 @@ mod tests {
         Controller::new(topo, clock, cfg.defaults, None)
     }
 
+    // ---- SceneToggle: pure on/off toggle (no cycle window) ------------------
+
     #[test]
-    fn hw_double_tap_press_turns_on_first_scene() {
+    fn scene_toggle_press_when_off_turns_on() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = hw_double_tap_controller(clk.clone());
         let actions = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
@@ -1587,12 +1590,56 @@ mod tests {
     }
 
     #[test]
-    fn hw_double_tap_cycles_scenes() {
+    fn scene_toggle_press_when_on_turns_off() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = hw_double_tap_controller(clk.clone());
-        // Turn on via press.
         c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
-        // Double tap → advance to scene 2.
+        clk.advance(Duration::from_millis(100));
+        let actions = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::state_off(0.8))]);
+        assert!(!c.state_for("bedroom").unwrap().physically_on);
+    }
+
+    #[test]
+    fn scene_toggle_never_cycles_on_repeated_presses() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = hw_double_tap_controller(clk.clone());
+        // Press 1: on (scene 1).
+        let a1 = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        assert_eq!(a1, vec![Action::new("hue-lz-bedroom", Payload::scene_recall(1))]);
+        // Press 2 within what would be the cycle window: must turn OFF, not cycle.
+        clk.advance(Duration::from_millis(200));
+        let a2 = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        assert_eq!(a2, vec![Action::new("hue-lz-bedroom", Payload::state_off(0.8))]);
+        // Press 3: back on with scene 1 again, not scene 2.
+        clk.advance(Duration::from_millis(200));
+        let a3 = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        assert_eq!(a3, vec![Action::new("hue-lz-bedroom", Payload::scene_recall(1))]);
+        assert_eq!(c.state_for("bedroom").unwrap().cycle_idx, 0, "cycle_idx must stay at 0");
+    }
+
+    #[test]
+    fn scene_toggle_on_off_regardless_of_timing() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = hw_double_tap_controller(clk.clone());
+        // Press on.
+        c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        // Wait much longer than any cycle window.
+        clk.advance(Duration::from_secs(30));
+        // Press → must still toggle off.
+        let actions = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::state_off(0.8))]);
+    }
+
+    // ---- SceneToggle + hardware double-tap integration ----------------------
+
+    #[test]
+    fn hw_double_tap_cycles_scenes_with_scene_toggle() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = hw_double_tap_controller(clk.clone());
+        // Press → on with scene 1 (SceneToggle).
+        c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        // DoubleTap → advance to scene 2 (SceneCycle).
         let actions = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::DoubleTap, clk.now()));
         assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::scene_recall(2))]);
         assert_eq!(c.state_for("bedroom").unwrap().cycle_idx, 1);
@@ -1623,10 +1670,31 @@ mod tests {
         c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::DoubleTap, clk.now()));
         // Wait past the 2 s suppression window.
         clk.advance(Duration::from_secs(3));
-        // Press → should toggle off normally.
+        // Press → should toggle off normally (SceneToggle: room is on → off).
         let actions = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
         assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::state_off(0.8))]);
         assert!(!c.state_for("bedroom").unwrap().physically_on);
+    }
+
+    #[test]
+    fn double_tap_then_double_tap_cycles_twice() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = hw_double_tap_controller(clk.clone());
+        // Press → on.
+        c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        // DoubleTap → scene 2.
+        c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::DoubleTap, clk.now()));
+        assert_eq!(c.state_for("bedroom").unwrap().cycle_idx, 1);
+        // Wait past suppression window then another double-tap sequence.
+        clk.advance(Duration::from_secs(3));
+        // Press from second double-tap (SceneToggle: room is on → off).
+        c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        // DoubleTap → scene cycle (room is off, so fresh on → scene 1).
+        // Actually, the press just turned it off. DoubleTap fires SceneCycle
+        // which resets to scene 1 because physically_on is false.
+        let actions = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::DoubleTap, clk.now()));
+        assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::scene_recall(1))]);
+        assert!(c.state_for("bedroom").unwrap().physically_on);
     }
 
     #[test]
