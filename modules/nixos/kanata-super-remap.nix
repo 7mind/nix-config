@@ -56,6 +56,9 @@ let
   switcherServiceNames = map (
     keyboardName: "kanata-switcher-${keyboardName}.service"
   ) switcherKeyboardNames;
+  nonNullPorts = lib.filter (p: p != null) (
+    lib.mapAttrsToList (_: kb: kb.port) cfg.kanata.keyboards
+  );
   switcherModuleKeyboards = lib.mapAttrs (
     keyboardName: keyboardCfg:
     let
@@ -139,6 +142,12 @@ in
         {
           assertion = (switcherKeyboardNames == [ ]) || owner != null;
           message = "smind.keyboard.super-remap.kanata-switcher requires smind.host.owner to be set";
+        }
+        {
+          assertion = builtins.length nonNullPorts == builtins.length (lib.unique nonNullPorts);
+          message = "smind.keyboard.super-remap.kanata.keyboards: port conflict — each keyboard must use a unique port. Current assignments: ${
+            lib.concatStringsSep ", " (lib.mapAttrsToList (name: kb: "${name}=${toString kb.port}") (lib.filterAttrs (_: kb: kb.port != null) cfg.kanata.keyboards))
+          }";
         }
       ]
       ++ lib.mapAttrsToList (keyboardName: keyboardCfg: {
