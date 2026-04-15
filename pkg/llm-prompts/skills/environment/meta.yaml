@@ -1,0 +1,5 @@
+name: environment
+description: >-
+  Sandbox detection, bubblewrap sandbox workflow, nix/direnv environment setup.
+  TRIGGER when: $SMIND_SANDBOXED is set, working in a sandbox, need to run system
+  commands outside sandbox, or setting up nix/direnv environment.

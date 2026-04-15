@@ -1,0 +1,9 @@
+name: baboon
+description: >-
+  Baboon data model compiler reference. Covers model syntax, multi-version
+  evolution, code generation, wire-format conversions, database migrations,
+  backward compatibility, and version negotiation. TRIGGER when: designing,
+  changing, or discussing any external API, working with .baboon model files,
+  updating data models, adding new fields or types, bumping model versions,
+  running code generation, implementing conversions, writing database migrations,
+  or discussing API versioning strategy.
