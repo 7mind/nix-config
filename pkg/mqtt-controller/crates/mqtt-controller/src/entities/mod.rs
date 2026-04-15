@@ -17,7 +17,7 @@ pub use heating_zone::{HeatingZoneActual, HeatingZoneEntity, HeatingZoneTarget};
 pub use light_zone::{LightZoneActual, LightZoneEntity, LightZoneTarget};
 pub use motion_sensor::{MotionActual, MotionSensorEntity};
 pub use plug::{KillSwitchRuleState, PlugActual, PlugEntity, PlugTarget};
-pub use trv::{ForceOpenReason, TrvActual, TrvEntity, TrvTarget};
+pub use trv::{ForceOpenReason, HeatingRunningState, TrvActual, TrvEntity, TrvTarget};
 
 /// Deferred button press (for soft/hardware double-tap detection).
 #[derive(Debug, Clone)]
@@ -26,15 +26,9 @@ pub struct PendingPress {
     pub button: String,
     pub ts: Instant,
     pub deadline: Instant,
-}
-
-/// Global heating pump state (shared across zones).
-#[derive(Debug, Clone, Default)]
-pub struct HeatingPumpState {
-    /// When the first relay turned on (pump started).
-    pub pump_on_since: Option<Instant>,
-    /// When the last relay turned off (pump stopped).
-    pub pump_off_since: Option<Instant>,
+    /// When true, Press bindings were already dispatched at deferral time
+    /// (early-fire optimization for hw-double-tap buttons targeting OFF rooms).
+    pub already_fired: bool,
 }
 
 /// The complete state of all TASS entities plus transient event-processing state.
@@ -57,10 +51,6 @@ pub struct WorldState {
     pub at_last_fired: BTreeMap<String, (u8, u8)>,
     /// Confirm-off pending timestamps per binding rule name.
     pub confirm_off_pending: BTreeMap<String, Instant>,
-    /// Global heating pump timing state.
-    pub heating_pump: HeatingPumpState,
-    /// Heating tick generation counter.
-    pub heating_tick_gen: u64,
 }
 
 impl WorldState {
@@ -75,8 +65,6 @@ impl WorldState {
             last_double_tap: BTreeMap::new(),
             at_last_fired: BTreeMap::new(),
             confirm_off_pending: BTreeMap::new(),
-            heating_pump: HeatingPumpState::default(),
-            heating_tick_gen: 0,
         }
     }
 
@@ -109,19 +97,6 @@ impl WorldState {
     /// Get or create a TRV entity.
     pub fn trv(&mut self, name: &str) -> &mut TrvEntity {
         self.trvs.entry(name.to_string()).or_default()
-    }
-
-    /// True if any heating zone relay is on (pump running).
-    pub fn is_pump_running(&self) -> bool {
-        self.heating_zones.values().any(|z| z.is_relay_on())
-    }
-
-    /// Count of zones with relay currently on.
-    pub fn active_relay_count(&self) -> usize {
-        self.heating_zones
-            .values()
-            .filter(|z| z.is_relay_on())
-            .count()
     }
 
     /// Earliest pending press deadline, if any.

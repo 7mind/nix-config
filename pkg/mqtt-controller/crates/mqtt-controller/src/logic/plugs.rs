@@ -1,8 +1,7 @@
-//! Plug state tracking and kill-switch evaluation (TASS version).
+//! Plug state tracking and kill-switch evaluation.
 //!
-//! Ports [`crate::controller::plug`] and [`crate::controller::kill_switch`]
-//! into `impl EventProcessor` methods operating on [`PlugEntity`] with
-//! per-rule [`KillSwitchRuleState`] instead of three separate BTreeMaps.
+//! Operates on [`PlugEntity`] TASS entities with per-rule
+//! [`KillSwitchRuleState`] enum.
 
 use std::time::{Duration, Instant};
 
@@ -400,7 +399,7 @@ impl EventProcessor {
     fn maybe_confirm_plug_target(&mut self, device: &str, ts: Instant) {
         let plug = self.world.plug(device);
         let phase = plug.target.phase();
-        if phase != TargetPhase::Commanded {
+        if !matches!(phase, TargetPhase::Commanded | TargetPhase::Stale) {
             return;
         }
         let target_val = plug.target.value().copied();

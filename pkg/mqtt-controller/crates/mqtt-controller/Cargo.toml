@@ -67,6 +67,9 @@ tower-http = { version = "0.6", features = ["fs"] }
 # Stream combinators for WebSocket split send/receive.
 futures-util = "0.3"
 
+# WebSocket client for z2m's frontend API (bulk device state fetch).
+tokio-tungstenite = { version = "0.26", features = ["connect"] }
+
 [dev-dependencies]
 # Embedded MQTT broker for end-to-end tests. Lets us run the full daemon
 # against a real broker without spawning mosquitto from a child process.

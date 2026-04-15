@@ -415,3 +415,183 @@ async fn parent_on_propagates_to_children_actual() {
         "child press after parent on should toggle off (expire branch), got: {child_off}"
     );
 }
+
+/// Regression: parent group OFF echo must clear child target so the
+/// child's is_on() returns false. Without this, a stale target=On
+/// from a prior child activation makes the next child press take the
+/// wrong branch.
+///
+/// The parent must first be seen as ON (via echo) so the OFF echo
+/// triggers a real on→off transition with soft propagation.
+#[tokio::test]
+async fn parent_off_echo_clears_child_target() {
+    let (_broker, test_client, _shutdown) = start_kitchen_setup().await;
+
+    // 1. Press child button (cooker, btn 2) → scene_recall:1.
+    test_client
+        .publish("zigbee2mqtt/hue-ts-foo/action", "press_2")
+        .await;
+    test_client
+        .inbox
+        .wait_for(
+            "zigbee2mqtt/hue-lz-kitchen-cooker/set",
+            1,
+            Duration::from_secs(3),
+        )
+        .await;
+
+    // 2. Simulate z2m reporting parent group as ON (z2m aggregates
+    //    member states into the parent group's retained message).
+    test_client
+        .publish(
+            "zigbee2mqtt/hue-lz-kitchen-all",
+            r#"{"state":"ON"}"#,
+        )
+        .await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // 3. Parent group OFF echo arrives (e.g., user turns off via z2m GUI).
+    //    The daemon detects on→off transition and soft-propagates to
+    //    children, clearing the child's stale target.
+    test_client
+        .publish(
+            "zigbee2mqtt/hue-lz-kitchen-all",
+            r#"{"state":"OFF"}"#,
+        )
+        .await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // 4. Press child button again. Because parent OFF cleared the
+    //    child's target+actual, is_on() is false → fresh-on → scene 1.
+    test_client
+        .publish("zigbee2mqtt/hue-ts-foo/action", "press_2")
+        .await;
+    let msgs = test_client
+        .inbox
+        .wait_for(
+            "zigbee2mqtt/hue-lz-kitchen-cooker/set",
+            2,
+            Duration::from_secs(3),
+        )
+        .await;
+    let second: serde_json::Value = serde_json::from_slice(&msgs[1]).unwrap();
+    assert_eq!(
+        second,
+        serde_json::json!({ "scene_recall": 1 }),
+        "child press after parent OFF echo should be fresh-on (scene 1), got: {second}"
+    );
+}
+
+/// Regression: parent ON propagation must clear child's stale motion
+/// ownership so a subsequent motion-off doesn't turn the child back off.
+#[tokio::test]
+async fn parent_on_clears_child_motion_ownership() {
+    let (_broker, test_client, _shutdown) = start_kitchen_with_motion_setup().await;
+
+    // 1. Motion turns on child (cooker) → motion-owned.
+    test_client
+        .publish(
+            "zigbee2mqtt/hue-ms-kitchen",
+            r#"{"occupancy":true,"illuminance":10}"#,
+        )
+        .await;
+    test_client
+        .inbox
+        .wait_for(
+            "zigbee2mqtt/hue-lz-kitchen-cooker/set",
+            1,
+            Duration::from_secs(3),
+        )
+        .await;
+
+    // 2. User presses parent on (kitchen-all, btn 1). This propagates
+    //    to child with Owner::System, overriding motion ownership.
+    test_client
+        .publish("zigbee2mqtt/hue-ts-foo/action", "press_1")
+        .await;
+    test_client
+        .inbox
+        .wait_for(
+            "zigbee2mqtt/hue-lz-kitchen-all/set",
+            1,
+            Duration::from_secs(3),
+        )
+        .await;
+
+    // 3. Motion OFF arrives. Because parent propagation cleared motion
+    //    ownership on the child, this should NOT turn the child off.
+    test_client
+        .publish(
+            "zigbee2mqtt/hue-ms-kitchen",
+            r#"{"occupancy":false}"#,
+        )
+        .await;
+
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    // Verify no OFF was published for the child.
+    let count = test_client
+        .inbox
+        .count("zigbee2mqtt/hue-lz-kitchen-cooker/set")
+        .await;
+    assert_eq!(
+        count, 1,
+        "motion-off after parent press should NOT turn child off (count should stay at 1, got {count})"
+    );
+}
+
+/// Verify that a parent OFF echo without prior ON does NOT clear a child
+/// that was independently activated. In z2m, activating a child group
+/// does not activate the parent group, so the parent OFF echo is a
+/// non-event — the child's state should be preserved.
+#[tokio::test]
+async fn parent_off_without_prior_on_preserves_child() {
+    let (_broker, test_client, _shutdown) = start_kitchen_setup().await;
+
+    // 1. Press child button (cooker, btn 2) → scene_recall:1.
+    test_client
+        .publish("zigbee2mqtt/hue-ts-foo/action", "press_2")
+        .await;
+    test_client
+        .inbox
+        .wait_for(
+            "zigbee2mqtt/hue-lz-kitchen-cooker/set",
+            1,
+            Duration::from_secs(3),
+        )
+        .await;
+
+    // 2. Parent OFF echo arrives WITHOUT any prior parent ON echo.
+    //    This is a non-event: parent was never ON, child was activated
+    //    independently. Child state must NOT be cleared.
+    test_client
+        .publish(
+            "zigbee2mqtt/hue-lz-kitchen-all",
+            r#"{"state":"OFF"}"#,
+        )
+        .await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // 3. Press child button again. Child is still on (target=On from
+    //    step 1, parent OFF didn't clear it). last_press_at is still
+    //    within cycle window (~200ms < 2s) → cycles to scene 2.
+    test_client
+        .publish("zigbee2mqtt/hue-ts-foo/action", "press_2")
+        .await;
+    let msgs = test_client
+        .inbox
+        .wait_for(
+            "zigbee2mqtt/hue-lz-kitchen-cooker/set",
+            2,
+            Duration::from_secs(3),
+        )
+        .await;
+    let second: serde_json::Value = serde_json::from_slice(&msgs[1]).unwrap();
+    // Child is still on, within cycle window → cycle advance to scene 2
+    // (NOT scene 1 which would mean the parent OFF erroneously cleared child)
+    assert_eq!(
+        second,
+        serde_json::json!({ "scene_recall": 2 }),
+        "child should still be on after parent OFF (no prior ON), got: {second}"
+    );
+}

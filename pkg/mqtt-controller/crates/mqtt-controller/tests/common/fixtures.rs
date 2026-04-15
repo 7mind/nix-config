@@ -77,22 +77,6 @@ fn tap_model() -> SwitchModel {
     }
 }
 
-fn dimmer_model() -> SwitchModel {
-    SwitchModel {
-        buttons: vec!["on".into(), "off".into(), "up".into(), "down".into()],
-        z2m_action_map: BTreeMap::from([
-            ("on_press_release".into(), ActionMapping { button: "on".into(), gesture: Gesture::Press }),
-            ("off_press_release".into(), ActionMapping { button: "off".into(), gesture: Gesture::Press }),
-            ("up_press_release".into(), ActionMapping { button: "up".into(), gesture: Gesture::Press }),
-            ("down_press_release".into(), ActionMapping { button: "down".into(), gesture: Gesture::Press }),
-            ("up_hold".into(), ActionMapping { button: "up".into(), gesture: Gesture::Hold }),
-            ("up_hold_release".into(), ActionMapping { button: "up".into(), gesture: Gesture::HoldRelease }),
-            ("down_hold".into(), ActionMapping { button: "down".into(), gesture: Gesture::Hold }),
-            ("down_hold_release".into(), ActionMapping { button: "down".into(), gesture: Gesture::HoldRelease }),
-        ]),
-    }
-}
-
 fn scene_toggle_cycle_binding(name: &str, device: &str, button: &str, room: &str) -> Binding {
     Binding {
         name: name.into(),
@@ -102,30 +86,6 @@ fn scene_toggle_cycle_binding(name: &str, device: &str, button: &str, room: &str
             gesture: Gesture::Press,
         },
         effect: Effect::SceneToggleCycle { room: room.into() },
-    }
-}
-
-fn scene_cycle_binding(name: &str, device: &str, button: &str, room: &str) -> Binding {
-    Binding {
-        name: name.into(),
-        trigger: Trigger::Button {
-            device: device.into(),
-            button: button.into(),
-            gesture: Gesture::Press,
-        },
-        effect: Effect::SceneCycle { room: room.into() },
-    }
-}
-
-fn turn_off_room_binding(name: &str, device: &str, button: &str, room: &str) -> Binding {
-    Binding {
-        name: name.into(),
-        trigger: Trigger::Button {
-            device: device.into(),
-            button: button.into(),
-            gesture: Gesture::Press,
-        },
-        effect: Effect::TurnOffRoom { room: room.into() },
     }
 }
 
@@ -188,93 +148,6 @@ pub fn kitchen_config() -> Config {
             scene_toggle_cycle_binding("cooker-tap", "hue-ts-foo", "2", "kitchen-cooker"),
             scene_toggle_cycle_binding("dining-tap", "hue-ts-foo", "3", "kitchen-dining"),
             scene_toggle_cycle_binding("all-tap", "hue-ts-foo", "1", "kitchen-all"),
-        ],
-        defaults: Defaults::default(),
-        heating: None,
-        location: None,
-    }
-}
-
-/// Single-room layout with one wall switch — used for switch action
-/// dispatch tests.
-pub fn study_switch_config() -> Config {
-    Config {
-        name_by_address: BTreeMap::new(),
-        devices: BTreeMap::from([
-            ("hue-l-a".into(), light("0xa")),
-            ("hue-s-study".into(), switch_dev("0x1", "test-dimmer")),
-        ]),
-        switch_models: BTreeMap::from([
-            ("test-dimmer".into(), dimmer_model()),
-        ]),
-        rooms: vec![Room {
-            name: "study".into(),
-            group_name: "hue-lz-study".into(),
-            id: 1,
-            members: vec!["hue-l-a/11".into()],
-            parent: None,
-            motion_sensors: vec![],
-            scenes: day_scenes(vec![1, 2, 3]),
-            off_transition_seconds: 0.8,
-            motion_off_cooldown_seconds: 0,
-        }],
-        bindings: vec![
-            scene_cycle_binding("study-on", "hue-s-study", "on", "study"),
-            turn_off_room_binding("study-off", "hue-s-study", "off", "study"),
-            Binding {
-                name: "study-up".into(),
-                trigger: Trigger::Button {
-                    device: "hue-s-study".into(),
-                    button: "up".into(),
-                    gesture: Gesture::Press,
-                },
-                effect: Effect::BrightnessStep { room: "study".into(), step: 25, transition: 0.2 },
-            },
-            Binding {
-                name: "study-down".into(),
-                trigger: Trigger::Button {
-                    device: "hue-s-study".into(),
-                    button: "down".into(),
-                    gesture: Gesture::Press,
-                },
-                effect: Effect::BrightnessStep { room: "study".into(), step: -25, transition: 0.2 },
-            },
-            Binding {
-                name: "study-up-hold".into(),
-                trigger: Trigger::Button {
-                    device: "hue-s-study".into(),
-                    button: "up".into(),
-                    gesture: Gesture::Hold,
-                },
-                effect: Effect::BrightnessMove { room: "study".into(), rate: 40 },
-            },
-            Binding {
-                name: "study-down-hold".into(),
-                trigger: Trigger::Button {
-                    device: "hue-s-study".into(),
-                    button: "down".into(),
-                    gesture: Gesture::Hold,
-                },
-                effect: Effect::BrightnessMove { room: "study".into(), rate: -40 },
-            },
-            Binding {
-                name: "study-up-release".into(),
-                trigger: Trigger::Button {
-                    device: "hue-s-study".into(),
-                    button: "up".into(),
-                    gesture: Gesture::HoldRelease,
-                },
-                effect: Effect::BrightnessStop { room: "study".into() },
-            },
-            Binding {
-                name: "study-down-release".into(),
-                trigger: Trigger::Button {
-                    device: "hue-s-study".into(),
-                    button: "down".into(),
-                    gesture: Gesture::HoldRelease,
-                },
-                effect: Effect::BrightnessStop { room: "study".into() },
-            },
         ],
         defaults: Defaults::default(),
         heating: None,

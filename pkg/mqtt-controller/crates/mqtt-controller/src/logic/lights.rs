@@ -1,9 +1,8 @@
 //! Light zone logic: scene cycling, toggle, brightness, group state echo,
 //! and descendant propagation.
 //!
-//! Ports [`crate::controller::room`] to TASS entities. State access goes
-//! through [`WorldState`] / [`LightZoneEntity`] instead of the ad-hoc
-//! `ZoneState` map.
+//! State access goes through [`WorldState`] / [`LightZoneEntity`] TASS
+//! entities with target/actual separation.
 
 use std::time::{Duration, Instant};
 
@@ -102,7 +101,7 @@ impl EventProcessor {
                 "scene_toggle → state OFF"
             );
             let mut out = Vec::new();
-            self.publish_off(room_name, &group_name, off_transition, ts, &mut out);
+            self.publish_off(room_name, &group_name, off_transition, ts, &mut out, Owner::User);
             out
         }
     }
@@ -188,7 +187,7 @@ impl EventProcessor {
                 "scene_toggle_cycle → state OFF"
             );
             let mut out = Vec::new();
-            self.publish_off(room_name, &group_name, off_transition, ts, &mut out);
+            self.publish_off(room_name, &group_name, off_transition, ts, &mut out, Owner::User);
             out
         }
     }
@@ -208,7 +207,7 @@ impl EventProcessor {
             "turn_off_room → state OFF"
         );
         let mut out = Vec::new();
-        self.publish_off(room_name, &group_name, off_transition, ts, &mut out);
+        self.publish_off(room_name, &group_name, off_transition, ts, &mut out, Owner::User);
         out
     }
 
@@ -267,12 +266,13 @@ impl EventProcessor {
         off_transition: f64,
         ts: Instant,
         out: &mut Vec<Action>,
+        owner: Owner,
     ) {
         out.push(Action::new(
             group_name.to_string(),
             Payload::state_off(off_transition),
         ));
-        self.write_after_off(room_name, ts);
+        self.write_after_off(room_name, ts, owner);
         self.propagate_to_descendants(room_name, false, ts);
     }
 
@@ -288,10 +288,11 @@ impl EventProcessor {
         zone.last_press_at = Some(ts);
     }
 
-    /// TASS write-after-off: set target to Off, update timestamps.
-    fn write_after_off(&mut self, room_name: &str, ts: Instant) {
+    /// TASS write-after-off: set target to Off with the given owner,
+    /// update timestamps.
+    fn write_after_off(&mut self, room_name: &str, ts: Instant, owner: Owner) {
         let zone = self.world.light_zone(room_name);
-        zone.target.set_and_command(LightZoneTarget::Off, Owner::User, ts);
+        zone.target.set_and_command(LightZoneTarget::Off, owner, ts);
         zone.last_press_at = Some(ts);
         zone.last_off_at = Some(ts);
     }
@@ -318,17 +319,13 @@ impl EventProcessor {
         let was_on = zone.is_on();
         zone.actual.update(new_actual, ts);
 
-        // If actual now matches target and target is Commanded (awaiting
-        // confirmation), advance to Confirmed. Skip if already Confirmed
-        // (avoids churning timestamps) or if target is Unset/Pending.
-        let should_confirm = zone.target.phase() == crate::tass::TargetPhase::Commanded
-            && match (zone.target.value(), on) {
-                (Some(LightZoneTarget::On { .. }), true) => true,
-                (Some(LightZoneTarget::Off), false) => true,
-                _ => false,
-            };
-        if should_confirm {
-            zone.target.confirm(ts);
+        // If actual now matches target and target is Commanded, advance
+        // to Confirmed. Only for ON echoes — OFF transitions overwrite
+        // the target below (making a confirm here redundant).
+        if on && matches!(zone.target.phase(), crate::tass::TargetPhase::Commanded | crate::tass::TargetPhase::Stale) {
+            if let Some(LightZoneTarget::On { .. }) = zone.target.value() {
+                zone.target.confirm(ts);
+            }
         }
 
         if was_on == on {
@@ -353,6 +350,7 @@ impl EventProcessor {
             // Off transition: reset zone to clean state.
             let zone = self.world.light_zone(&room_name);
             zone.target.set_and_command(LightZoneTarget::Off, Owner::System, ts);
+            zone.target.confirm(ts);
             zone.last_off_at = Some(ts);
             tracing::info!(
                 group = group_name,
@@ -390,10 +388,15 @@ impl EventProcessor {
         for desc in descendants {
             let zone = self.world.light_zone(&desc);
             if on {
-                // Propagate on: mark descendant as on with reset cycle.
-                // scene_id is not meaningful here — the parent's scene_recall
-                // command drove the bulbs; this just tracks that the zone is
-                // physically on so the next press takes the toggle-off path.
+                // Propagate on: set target to System-owned On (clears any
+                // stale motion ownership or cycle state from a prior session)
+                // and update actual. scene_id 0 is a placeholder — the
+                // parent's scene_recall command drove the bulbs.
+                zone.target.set_and_command(
+                    LightZoneTarget::On { scene_id: 0, cycle_idx: 0 },
+                    Owner::System,
+                    ts,
+                );
                 zone.actual.update(LightZoneActual::On, ts);
             } else {
                 zone.target.set_and_command(LightZoneTarget::Off, Owner::System, ts);
@@ -430,6 +433,10 @@ impl EventProcessor {
             let new_actual = if on { LightZoneActual::On } else { LightZoneActual::Off };
             zone.actual.update(new_actual, ts);
             if !on {
+                // Clear descendant target on OFF echo — prevents stale
+                // target=On from making is_on() return true after the
+                // parent group physically went off.
+                zone.target.set_and_command(LightZoneTarget::Off, Owner::System, ts);
                 zone.last_off_at = Some(ts);
             }
         }

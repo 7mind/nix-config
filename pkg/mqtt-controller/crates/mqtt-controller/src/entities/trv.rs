@@ -2,8 +2,29 @@
 
 use std::time::{Duration, Instant};
 
-use crate::domain::heating_state::HeatingRunningState;
 use crate::tass::{TassActual, TassTarget, TargetPhase};
+
+/// Running state reported by a TRV's internal PID controller.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HeatingRunningState {
+    #[default]
+    Idle,
+    Heat,
+}
+
+impl HeatingRunningState {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "idle" => Some(Self::Idle),
+            "heat" => Some(Self::Heat),
+            _ => None,
+        }
+    }
+
+    pub fn is_heat(self) -> bool {
+        self == Self::Heat
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TrvTarget {
@@ -82,6 +103,10 @@ pub struct TrvEntity {
     pub last_seen: Option<Instant>,
     /// Tick generation when setpoint was last changed (for dedup).
     pub setpoint_dirty_gen: u64,
+    /// Remembers which force type was last applied (PressureGroup or MinCycle).
+    /// Set when ForcedOpen is applied, cleared when the post-release setpoint
+    /// is confirmed. Used by HA discovery to distinguish release states.
+    pub last_force_reason: Option<ForceOpenReason>,
 }
 
 impl Default for TrvEntity {
@@ -92,6 +117,7 @@ impl Default for TrvEntity {
             open_window: OpenWindowState::default(),
             last_seen: None,
             setpoint_dirty_gen: 0,
+            last_force_reason: None,
         }
     }
 }
@@ -180,6 +206,13 @@ impl TrvEntity {
 mod tests {
     use super::*;
     use crate::tass::Owner;
+
+    #[test]
+    fn running_state_parse() {
+        assert_eq!(HeatingRunningState::parse("idle"), Some(HeatingRunningState::Idle));
+        assert_eq!(HeatingRunningState::parse("heat"), Some(HeatingRunningState::Heat));
+        assert_eq!(HeatingRunningState::parse("cool"), None);
+    }
 
     #[test]
     fn trv_inhibition() {

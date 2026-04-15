@@ -1,9 +1,8 @@
 //! Motion-sensor dispatch: occupancy gating, multi-sensor OR-gate,
 //! illuminance gate, cooldown gate.
 //!
-//! Ports [`crate::controller::motion`] to TASS entities. Per-sensor
-//! occupancy flags are now stored in [`MotionSensorEntity`] actual
-//! state instead of the `motion_active_by_sensor` map. Motion
+//! Per-sensor occupancy is tracked in [`MotionSensorEntity`] actual
+//! state (freshness-aware). Motion
 //! ownership is tracked via [`LightZoneEntity::is_motion_owned()`]
 //! (target owner == Motion).
 

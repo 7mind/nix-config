@@ -214,8 +214,12 @@ in
         wants = [ "zigbee2mqtt.service" "mosquitto.service" "network-online.target" ];
         restartTriggers = [ configFile ];
         before = [ "mqtt-controller.service" ];
-        script = ''
-          exec ${cfg.package}/bin/mqtt-controller --verbose provision ${commonArgs}
+        script = let
+          z2mPort = config.smind.services.zigbee2mqtt.port;
+          z2mWsUrl = "ws://localhost:${toString z2mPort}/api";
+        in ''
+          exec ${cfg.package}/bin/mqtt-controller --verbose provision ${commonArgs} \
+            --z2m-ws-url ${z2mWsUrl}
         '';
         unitConfig = {
           # When the provisioner is active, ensure the daemon is

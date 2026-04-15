@@ -320,32 +320,28 @@ fn build_heating_zone_snapshots(
     let Some(heating_cfg) = processor.topology().heating_config() else {
         return Vec::new();
     };
-    let Some(heating_state) = processor.heating_state() else {
-        return Vec::new();
-    };
     heating_cfg
         .zones
         .iter()
-        .map(|zone| build_one_heating_zone(zone, heating_cfg, heating_state, now))
+        .map(|zone| build_one_heating_zone(zone, heating_cfg, processor, now))
         .collect()
 }
 
 fn build_one_heating_zone(
     zone: &crate::config::heating::HeatingZone,
     heating_cfg: &crate::config::heating::HeatingConfig,
-    heating_state: &crate::domain::heating_state::HeatingRuntimeState,
+    processor: &EventProcessor,
     now: Instant,
 ) -> HeatingZoneSnapshot {
-    let zone_state = heating_state.zones.get(&zone.name);
-    let relay_on = zone_state.map_or(false, |z| z.relay_on);
-    let relay_state_known = zone_state.map_or(false, |z| z.relay_state_known);
-    let relay_stale = zone_state.map_or(false, |z| z.is_wt_stale(now));
+    let hz = processor.world().heating_zones.get(&zone.name);
+    let relay_on = hz.is_some_and(|h| h.is_relay_on());
+    let relay_state_known = hz.map_or(false, |h| h.relay_state_known);
+    let relay_stale = hz.is_some_and(|h| h.is_wt_stale(now));
 
-    // Compute pump protection remaining times.
     let min_cycle = std::time::Duration::from_secs(heating_cfg.heat_pump.min_cycle_seconds);
     let min_pause = std::time::Duration::from_secs(heating_cfg.heat_pump.min_pause_seconds);
 
-    let min_cycle_remaining_secs = heating_state.effective_pump_on_since()
+    let min_cycle_remaining_secs = processor.effective_pump_on_since()
         .and_then(|on_at| {
             let elapsed = now.duration_since(on_at);
             min_cycle.checked_sub(elapsed)
@@ -353,7 +349,7 @@ fn build_one_heating_zone(
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
-    let min_pause_remaining_secs = heating_state.effective_pump_off_since()
+    let min_pause_remaining_secs = processor.effective_pump_off_since()
         .and_then(|off_at| {
             let elapsed = now.duration_since(off_at);
             min_pause.checked_sub(elapsed)
@@ -365,19 +361,20 @@ fn build_one_heating_zone(
         .trvs
         .iter()
         .map(|zt| {
-            let trv_state = zone_state.and_then(|z| z.trvs.get(&zt.device));
+            let trv = processor.world().trvs.get(&zt.device);
             let schedule_summary = heating_cfg.schedules.get(&zt.schedule)
                 .map(|sched| format_schedule_summary(sched))
                 .unwrap_or_default();
+            let actual = trv.and_then(|t| t.actual.value());
             TrvSnapshot {
                 device: zt.device.clone(),
-                local_temperature: trv_state.and_then(|t| t.local_temperature),
-                pi_heating_demand: trv_state.and_then(|t| t.pi_heating_demand),
-                running_state: trv_state
-                    .map(|t| {
-                        if !t.running_state_seen {
+                local_temperature: actual.and_then(|a| a.local_temperature),
+                pi_heating_demand: actual.and_then(|a| a.pi_heating_demand),
+                running_state: actual
+                    .map(|a| {
+                        if !a.running_state_seen {
                             "unknown"
-                        } else if t.running_state.is_heat() {
+                        } else if a.running_state.is_heat() {
                             "heat"
                         } else {
                             "idle"
@@ -385,10 +382,10 @@ fn build_one_heating_zone(
                     })
                     .unwrap_or("unknown")
                     .to_string(),
-                setpoint: trv_state.and_then(|t| t.reported_setpoint),
-                battery: trv_state.and_then(|t| t.battery),
-                inhibited: trv_state.is_some_and(|t| t.is_inhibited(now)),
-                forced: trv_state.is_some_and(|t| t.pressure_forced || t.min_cycle_forced),
+                setpoint: actual.and_then(|a| a.setpoint),
+                battery: actual.and_then(|a| a.battery),
+                inhibited: trv.is_some_and(|t| t.is_inhibited(now)),
+                forced: trv.is_some_and(|t| t.is_forced_open()),
                 schedule: zt.schedule.clone(),
                 schedule_summary,
             }
@@ -400,7 +397,7 @@ fn build_one_heating_zone(
         relay_device: zone.relay.clone(),
         relay_on,
         relay_state_known,
-        relay_temperature: None,
+        relay_temperature: hz.and_then(|h| h.actual.value()).and_then(|a| a.temperature),
         trvs,
         min_cycle_remaining_secs,
         min_pause_remaining_secs,
@@ -415,9 +412,8 @@ pub fn build_heating_zone_snapshot(
     now: Instant,
 ) -> Option<HeatingZoneSnapshot> {
     let heating_cfg = processor.topology().heating_config()?;
-    let heating_state = processor.heating_state()?;
     let zone = heating_cfg.zones.iter().find(|z| z.name == zone_name)?;
-    Some(build_one_heating_zone(zone, heating_cfg, heating_state, now))
+    Some(build_one_heating_zone(zone, heating_cfg, processor, now))
 }
 
 /// Format a schedule as a compact summary string.

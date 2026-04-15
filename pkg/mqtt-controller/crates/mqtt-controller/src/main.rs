@@ -107,6 +107,11 @@ struct ProvisionArgs {
     /// Delay between fetch retries, seconds.
     #[arg(long, default_value_t = 5.0)]
     fetch_retry_seconds: f64,
+
+    /// z2m WebSocket API URL for bulk device state fetch.
+    /// Example: ws://localhost:8080/api
+    #[arg(long)]
+    z2m_ws_url: String,
 }
 
 #[derive(Debug, Parser)]
@@ -222,7 +227,7 @@ async fn run_provision(args: ProvisionArgs) -> Result<()> {
         fetch_retry: Duration::from_secs_f64(args.fetch_retry_seconds),
     };
 
-    let summary = reconcile(&config, mqtt, options)
+    let summary = reconcile(&config, mqtt, &args.z2m_ws_url, options)
         .await
         .context("reconciling z2m state")?;
 

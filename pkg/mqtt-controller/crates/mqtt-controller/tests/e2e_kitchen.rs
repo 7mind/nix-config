@@ -6,7 +6,7 @@
 //! production daemon would see — so the parser, state machine, and
 //! publisher are all exercised end-to-end.
 //!
-//! The state-machine logic itself is unit-tested in `controller.rs`;
+//! The state-machine logic itself is unit-tested in `logic/` modules;
 //! these tests cover the layers BELOW the controller: MQTT subscription,
 //! topic dispatch, payload parsing, action serialization, and the
 //! startup state refresh.

@@ -174,10 +174,6 @@ impl<T> TassTarget<T> {
         self.value.as_ref()
     }
 
-    pub fn value_mut(&mut self) -> Option<&mut T> {
-        self.value.as_mut()
-    }
-
     pub fn phase(&self) -> TargetPhase {
         self.phase
     }
@@ -455,16 +451,6 @@ mod tests {
     }
 
     #[test]
-    fn target_value_mut() {
-        let mut t: TassTarget<Vec<u8>> = TassTarget::new();
-        let ts = Instant::now();
-
-        t.set_and_command(vec![1, 2], Owner::User, ts);
-        t.value_mut().unwrap().push(3);
-        assert_eq!(t.value(), Some(&vec![1, 2, 3]));
-    }
-
-    #[test]
     fn target_since_tracks_each_transition() {
         let mut t: TassTarget<u8> = TassTarget::new();
         let t0 = Instant::now();
@@ -582,6 +568,7 @@ mod tests {
         assert_eq!(TargetPhase::Unset.to_string(), "unset");
         assert_eq!(TargetPhase::Pending.to_string(), "pending");
         assert_eq!(TargetPhase::Commanded.to_string(), "commanded");
+        assert_eq!(TargetPhase::Stale.to_string(), "stale");
         assert_eq!(TargetPhase::Confirmed.to_string(), "confirmed");
     }
 

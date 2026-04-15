@@ -42,6 +42,7 @@ mod devices;
 mod groups;
 mod names;
 mod scenes;
+pub mod state_cache;
 pub mod zwave;
 
 use std::time::Duration;
@@ -127,6 +128,7 @@ impl std::ops::AddAssign for ReconcileSummary {
 pub async fn reconcile(
     config: &Config,
     mqtt: MqttConfig,
+    z2m_ws_url: &str,
     options: ProvisionOptions,
 ) -> anyhow::Result<ReconcileSummary> {
     let mut summary = ReconcileSummary::default();
@@ -199,8 +201,44 @@ pub async fn reconcile(
         scenes::reconcile_scenes(&client, config, &existing_groups_for_scenes, &options).await?;
     summary += scene_summary;
 
+    // Bulk-fetch all device state via z2m's WebSocket API before the
+    // per-device options phase so we can dedup without N sequential
+    // MQTT subscribe+wait round-trips.
+    let state_cache = {
+        let ws_timeout = options.timeout.mul_f64(3.0);
+        let mut result = std::collections::HashMap::new();
+        for attempt in 1..=options.fetch_attempts {
+            match state_cache::fetch_device_states(z2m_ws_url, ws_timeout).await {
+                Ok(cache) if cache.is_empty() => {
+                    tracing::warn!(attempt, max = options.fetch_attempts, "WebSocket cache returned empty; retrying");
+                    if attempt < options.fetch_attempts {
+                        tokio::time::sleep(options.fetch_retry).await;
+                    }
+                }
+                Ok(cache) => {
+                    tracing::info!(devices = cache.len(), attempt, "device state cache loaded via WebSocket");
+                    result = cache;
+                    break;
+                }
+                Err(e) => {
+                    tracing::warn!(attempt, max = options.fetch_attempts, error = %e, "WebSocket cache fetch failed");
+                    if attempt < options.fetch_attempts {
+                        tokio::time::sleep(options.fetch_retry).await;
+                    }
+                }
+            }
+        }
+        if result.is_empty() {
+            anyhow::bail!(
+                "failed to fetch device state cache after {} attempts; refusing to proceed with unconditional writes",
+                options.fetch_attempts
+            );
+        }
+        result
+    };
+
     // Phase 4: per-device options.
-    let device_summary = devices::reconcile_devices(&client, config, &options).await?;
+    let device_summary = devices::reconcile_devices(&client, config, &state_cache, &options).await?;
     summary += device_summary;
 
     client.shutdown().await;

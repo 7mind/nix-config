@@ -11,7 +11,7 @@ use crate::config::Effect;
 use crate::config::switch_model::Gesture;
 use crate::domain::action::{Action, Payload};
 use crate::entities::PendingPress;
-use crate::entities::light_zone::{LightZoneActual, LightZoneTarget};
+use crate::entities::light_zone::LightZoneTarget;
 use crate::entities::plug::PlugTarget;
 use crate::tass::Owner;
 
@@ -38,7 +38,17 @@ impl EventProcessor {
                 // the single was the first tap of this double-tap, not a
                 // standalone press.
                 let key = (device.to_string(), button.to_string());
-                if self.world.pending_presses.remove(&key).is_some() {
+                if let Some(pending) = self.world.pending_presses.remove(&key) {
+                    if pending.already_fired {
+                        // Press was early-fired (room was OFF); the room is
+                        // now turning on, so DoubleTap would be redundant.
+                        tracing::info!(
+                            device,
+                            button,
+                            "suppressing double-tap (press was already early-fired)"
+                        );
+                        return Vec::new();
+                    }
                     tracing::info!(
                         device,
                         button,
@@ -98,6 +108,12 @@ impl EventProcessor {
     /// Defer a press on a hardware-double-tap button. If a previous
     /// deferred press is still pending (user tapped again before the
     /// deferral window expired), flush it first, then buffer the new one.
+    ///
+    /// Early-fire optimization: when all Press bindings target rooms that
+    /// are currently OFF, dispatch Press immediately (the result is the
+    /// same for both Press and DoubleTap — turn on). The pending entry is
+    /// kept with `already_fired: true` so that a late DoubleTap is
+    /// suppressed and `flush_pending_presses` skips re-dispatch.
     fn handle_hw_double_tap_deferred_press(
         &mut self,
         device: &str,
@@ -110,24 +126,36 @@ impl EventProcessor {
         let mut out = Vec::new();
         // Flush any stale pending press before buffering the new one.
         if let Some(stale) = self.world.pending_presses.remove(&key) {
-            tracing::info!(
-                device = %stale.device,
-                button = %stale.button,
-                "flushing stale deferred press (new press arrived)"
-            );
-            out.extend(self.dispatch_bindings(
-                &stale.device,
-                &stale.button,
-                Gesture::Press,
-                stale.ts,
-            ));
+            if !stale.already_fired {
+                tracing::info!(
+                    device = %stale.device,
+                    button = %stale.button,
+                    "flushing stale deferred press (new press arrived)"
+                );
+                out.extend(self.dispatch_bindings(
+                    &stale.device,
+                    &stale.button,
+                    Gesture::Press,
+                    stale.ts,
+                ));
+            }
         }
-        tracing::info!(
-            device,
-            button,
-            window_ms = window.as_millis() as u64,
-            "deferring press for hardware double-tap detection"
-        );
+        let early_fire = self.can_early_fire_press(device, button);
+        if early_fire {
+            tracing::info!(
+                device,
+                button,
+                "early-firing press (all target rooms are OFF)"
+            );
+            out.extend(self.dispatch_bindings(device, button, Gesture::Press, ts));
+        } else {
+            tracing::info!(
+                device,
+                button,
+                window_ms = window.as_millis() as u64,
+                "deferring press for hardware double-tap detection"
+            );
+        }
         self.world.pending_presses.insert(
             key,
             PendingPress {
@@ -135,6 +163,7 @@ impl EventProcessor {
                 button: button.to_string(),
                 ts,
                 deadline: ts + window,
+                already_fired: early_fire,
             },
         );
         out
@@ -184,6 +213,7 @@ impl EventProcessor {
                     button: button.to_string(),
                     ts,
                     deadline: ts + window,
+                    already_fired: false,
                 },
             );
             return out;
@@ -204,9 +234,37 @@ impl EventProcessor {
                 button: button.to_string(),
                 ts,
                 deadline: ts + window,
+                already_fired: false,
             },
         );
         Vec::new()
+    }
+
+    /// Returns true if all Press bindings for (device, button) target rooms
+    /// that are currently OFF. When true, firing Press immediately is safe
+    /// because both Press and DoubleTap would produce the same result (turn on).
+    fn can_early_fire_press(&self, device: &str, button: &str) -> bool {
+        let indexes = self.topology.bindings_for_button(device, button, Gesture::Press);
+        if indexes.is_empty() {
+            return false;
+        }
+        for &idx in indexes {
+            let binding = &self.topology.bindings()[idx];
+            match &binding.effect {
+                Effect::SceneToggle { room }
+                | Effect::SceneCycle { room }
+                | Effect::SceneToggleCycle { room } => {
+                    match self.world.light_zones.get(room.as_str()) {
+                        Some(z) if !z.is_on() && z.actual.is_known() => {
+                            // Room exists, is known to be off — safe to early-fire
+                        }
+                        _ => return false, // Unknown, missing, or on — defer
+                    }
+                }
+                _ => return false,
+            }
+        }
+        true
     }
 
     /// Unified binding dispatch. Looks up matching bindings for the
@@ -356,9 +414,10 @@ impl EventProcessor {
                             group = room.group_name.as_str(),
                             "turning off zone"
                         );
+                        // Only set target — actual updates come from
+                        // z2m group echoes (TASS: actual = observations).
                         zone.target
-                            .set_and_command(LightZoneTarget::Off, Owner::User, ts);
-                        zone.actual.update(LightZoneActual::Off, ts);
+                            .set_and_command(LightZoneTarget::Off, Owner::Schedule, ts);
                         zone.last_press_at = None;
                         zone.last_off_at = Some(ts);
                         out.push(Action::new(
@@ -384,6 +443,14 @@ impl EventProcessor {
         let mut out = Vec::new();
         for (key, pending) in expired {
             self.world.pending_presses.remove(&key);
+            if pending.already_fired {
+                tracing::info!(
+                    device = %pending.device,
+                    button = %pending.button,
+                    "skipping flush for already early-fired press"
+                );
+                continue;
+            }
             tracing::info!(
                 device = %pending.device,
                 button = %pending.button,

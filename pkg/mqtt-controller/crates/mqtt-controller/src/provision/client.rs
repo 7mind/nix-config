@@ -517,52 +517,6 @@ impl Z2mClient {
         Ok(())
     }
 
-    /// Read a device's current state via its retained
-    /// `zigbee2mqtt/<friendly_name>` topic. Returns `None` if no retained
-    /// state is available within the timeout.
-    ///
-    /// Battery-powered devices (motion sensors) keep their state as
-    /// retained messages published by z2m from its internal database.
-    /// If the MQTT broker lost retained messages (restart without
-    /// persistence), the state won't be available until the device
-    /// wakes up and reports — `get` requests don't help because z2m
-    /// queues reads for sleeping devices rather than responding from
-    /// cache.
-    ///
-    /// Unlike `bridge/devices` and `bridge/groups`, per-device state
-    /// topics aren't pre-subscribed at connect time (we don't know which
-    /// devices the caller will want until reconcile_devices runs). We
-    /// subscribe lazily here, then fall through to the same cache+notify
-    /// path as the bridge fetches.
-    pub async fn fetch_device_state(
-        &self,
-        friendly_name: &str,
-    ) -> Result<Option<Value>, Z2mClientError> {
-        let topic = format!("zigbee2mqtt/{friendly_name}");
-
-        // Subscribe so the broker delivers the retained payload (if any)
-        // and any subsequent updates flow into the cache. Idempotent:
-        // re-subscribing to an already-subscribed topic is fine and
-        // re-triggers retained delivery.
-        self.client
-            .subscribe(&topic, QoS::AtLeastOnce)
-            .await?;
-
-        match self.fetch_retained(&topic, false).await {
-            Ok(payload) => {
-                let parsed = serde_json::from_slice(&payload).map_err(|e| {
-                    Z2mClientError::BadPayload {
-                        topic: topic.clone(),
-                        detail: e.to_string(),
-                    }
-                })?;
-                Ok(Some(parsed))
-            }
-            Err(Z2mClientError::FetchTimeout { .. }) => Ok(None),
-            Err(e) => Err(e),
-        }
-    }
-
     /// Set device-level configuration via `bridge/request/device/options`.
     /// This is the bridge API endpoint for device metadata like
     /// `description`, `retain`, etc. — distinct from `set_device_options`

@@ -1,4 +1,4 @@
-//! TASS-based event processor. Replaces [`crate::controller::Controller`].
+//! TASS-based event processor.
 //!
 //! The processor is the main entry point for the daemon's event loop.
 //! It holds the [`WorldState`] (all TASS entities) and dispatches events
@@ -27,7 +27,6 @@ use std::time::{Duration, Instant};
 
 use crate::config::Defaults;
 use crate::config::heating::HeatingConfig;
-use crate::controller::heating::HeatingController;
 use crate::domain::action::Action;
 use crate::domain::event::Event;
 use crate::entities::WorldState;
@@ -43,8 +42,14 @@ pub struct EventProcessor {
     pub(crate) location: Option<crate::sun::Location>,
     pub(crate) heating_config: Option<HeatingConfig>,
 
-    // Existing heating controller (adapter pattern — wraps battle-tested logic)
-    pub(crate) heating_controller: Option<HeatingController>,
+    // Pump tracking (shared across all heating zones)
+    pub(crate) pump_on_since: Option<Instant>,
+    pub(crate) pump_off_since: Option<Instant>,
+    pub(crate) heating_tick_gen: u64,
+    pub(crate) startup_complete: bool,
+    pub(crate) last_wt_refresh: Option<Instant>,
+    pub(crate) ha_last_published: BTreeMap<String, String>,
+    pub(crate) ha_discovery_published: bool,
 
     // Sun cache
     pub(crate) cached_sun: Option<(chrono::NaiveDate, i32, crate::sun::SunTimes)>,
@@ -58,9 +63,6 @@ impl EventProcessor {
         location: Option<crate::sun::Location>,
     ) -> Self {
         let heating_config = topology.heating_config().cloned();
-        let heating_controller = heating_config.as_ref().map(|cfg| {
-            HeatingController::new(cfg.clone(), topology.clone(), clock.clone())
-        });
         Self {
             world: WorldState::new(),
             topology,
@@ -68,7 +70,13 @@ impl EventProcessor {
             defaults,
             location,
             heating_config,
-            heating_controller,
+            pump_on_since: None,
+            pump_off_since: None,
+            heating_tick_gen: 0,
+            startup_complete: false,
+            last_wt_refresh: None,
+            ha_last_published: BTreeMap::new(),
+            ha_discovery_published: false,
             cached_sun: None,
         }
     }
@@ -183,6 +191,10 @@ impl EventProcessor {
                 );
                 zone.target
                     .set_and_command(LightZoneTarget::Off, Owner::System, ts);
+                // Deliberate TASS bypass: fabricate actual=Off at startup so
+                // motion sensors can immediately re-trigger if someone is in
+                // the room. Without this, actual stays On (from retained echo)
+                // and motion-on gates block.
                 zone.actual.update(LightZoneActual::Off, ts);
                 out.push(Action::new(
                     &room.group_name,
@@ -286,6 +298,7 @@ impl EventProcessor {
 
     /// Web UI: turn a room off.
     pub fn web_set_room_off(&mut self, room_name: &str, ts: Instant) -> Vec<Action> {
+        use crate::tass::Owner;
         let Some(room) = self.topology.room_by_name(room_name) else {
             return Vec::new();
         };
@@ -300,7 +313,7 @@ impl EventProcessor {
         );
 
         let mut out = Vec::new();
-        self.publish_off(room_name, &group_name, off_transition, ts, &mut out);
+        self.publish_off(room_name, &group_name, off_transition, ts, &mut out, Owner::WebUI);
         out
     }
 
@@ -334,6 +347,7 @@ impl EventProcessor {
         out.extend(self.evaluate_at_triggers(ts));
         out.extend(self.evaluate_kill_switch_ticks(ts));
         self.evaluate_target_staleness(ts);
+        out.extend(self.evaluate_actual_staleness(ts));
 
         if self.heating_config.is_some() {
             out.extend(self.handle_heating_tick());
@@ -371,6 +385,118 @@ impl EventProcessor {
                 }
             }
         }
+        // Heating zone targets: wall thermostats respond slower than lights.
+        const HEATING_TARGET_STALE_THRESHOLD: Duration = Duration::from_secs(60);
+        for (name, zone) in &mut self.world.heating_zones {
+            if zone.target.phase() == crate::tass::TargetPhase::Commanded {
+                if let Some(since) = zone.target.since() {
+                    if now.duration_since(since) >= HEATING_TARGET_STALE_THRESHOLD {
+                        tracing::info!(zone = name.as_str(), "heating zone target stale: no relay confirmation within threshold");
+                        zone.target.mark_stale();
+                    }
+                }
+            }
+        }
+    }
+
+    /// Motion sensors report every ~10-30s (temperature/battery updates).
+    /// If no update arrives for 2 minutes, the sensor may be offline.
+    const MOTION_SENSOR_STALE_THRESHOLD: Duration = Duration::from_secs(120);
+
+    /// Plugs with power monitoring report every few seconds when on.
+    /// 10 minutes without any update is suspicious.
+    const PLUG_ACTUAL_STALE_THRESHOLD: Duration = Duration::from_secs(600);
+
+    /// Age actual state freshness for entities that have expected
+    /// periodic reporting. Light zones are NOT aged because z2m only
+    /// publishes group state on changes — a stable group can go hours
+    /// without an update and that's normal.
+    ///
+    /// When a motion sensor goes stale, re-evaluates motion-owned rooms
+    /// to trigger motion-off if the stale sensor was the last occupied
+    /// sensor in its room.
+    fn evaluate_actual_staleness(&mut self, now: Instant) -> Vec<Action> {
+        let mut newly_stale_sensors = Vec::new();
+        for (name, sensor) in &mut self.world.motion_sensors {
+            if sensor.actual.freshness() == crate::tass::ActualFreshness::Fresh {
+                if let Some(since) = sensor.actual.since() {
+                    if now.duration_since(since) >= Self::MOTION_SENSOR_STALE_THRESHOLD {
+                        tracing::info!(sensor = name.as_str(), "motion sensor actual stale — treating as not occupied");
+                        sensor.actual.mark_stale();
+                        newly_stale_sensors.push(name.clone());
+                    }
+                }
+            }
+        }
+        for (name, plug) in &mut self.world.plugs {
+            if plug.actual.freshness() == crate::tass::ActualFreshness::Fresh {
+                if let Some(since) = plug.actual.since() {
+                    if now.duration_since(since) >= Self::PLUG_ACTUAL_STALE_THRESHOLD {
+                        tracing::debug!(plug = name.as_str(), "plug actual stale");
+                        plug.actual.mark_stale();
+                    }
+                }
+            }
+        }
+
+        // Re-evaluate motion-off for rooms affected by newly stale sensors.
+        // A sensor going stale while occupied=true means is_occupied() now
+        // returns false, so if all other sensors are also inactive/stale,
+        // the motion-owned room should turn off.
+        let mut actions = Vec::new();
+        for sensor_name in newly_stale_sensors {
+            let rooms: Vec<String> = self
+                .topology
+                .rooms_for_motion(&sensor_name)
+                .to_vec();
+            for room_name in &rooms {
+                let zone = self.world.light_zones.get(room_name);
+                let is_motion_owned = zone.is_some_and(|z| z.is_motion_owned());
+                let is_on = zone.is_some_and(|z| z.is_on());
+                if !is_motion_owned || !is_on {
+                    continue;
+                }
+                // Check if ALL sensors for this room are now inactive/stale.
+                let all_inactive = self
+                    .topology
+                    .room_by_name(room_name)
+                    .map_or(true, |room| {
+                        room.bound_motion.iter().all(|bm| {
+                            !self
+                                .world
+                                .motion_sensors
+                                .get(&bm.sensor)
+                                .is_some_and(|s| s.is_occupied())
+                        })
+                    });
+                if all_inactive {
+                    if let Some(room) = self.topology.room_by_name(room_name) {
+                        let group_name = room.group_name.clone();
+                        let off_transition = room.off_transition_seconds;
+                        tracing::info!(
+                            room = room_name.as_str(),
+                            sensor = sensor_name.as_str(),
+                            "stale sensor triggered motion-off (all sensors inactive/stale)"
+                        );
+                        actions.push(Action::new(
+                            group_name,
+                            crate::domain::action::Payload::state_off(off_transition),
+                        ));
+                        // Only set target — do NOT fabricate actual=Off.
+                        // Actual state updates come from z2m group echoes
+                        // (handle_group_state). If the OFF command is lost,
+                        // actual stays On and the mismatch is visible.
+                        let zone = self.world.light_zone(room_name);
+                        zone.target.set_and_command(
+                            crate::entities::light_zone::LightZoneTarget::Off,
+                            crate::tass::Owner::System,
+                            now,
+                        );
+                    }
+                }
+            }
+        }
+        actions
     }
 
     // ----- sun time helpers --------------------------------------------------

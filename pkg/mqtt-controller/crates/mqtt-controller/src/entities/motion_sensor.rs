@@ -1,6 +1,6 @@
 //! Motion sensor TASS entity. Read-only (no target state).
 
-use crate::tass::TassActual;
+use crate::tass::{ActualFreshness, TassActual};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MotionActual {
@@ -23,8 +23,13 @@ impl Default for MotionSensorEntity {
 }
 
 impl MotionSensorEntity {
+    /// True only if the sensor is reporting occupied AND the reading
+    /// is fresh. A stale occupied sensor (dropped off zigbee) is NOT
+    /// treated as occupied — this prevents a dead sensor from keeping
+    /// lights on indefinitely.
     pub fn is_occupied(&self) -> bool {
-        self.actual.value().is_some_and(|a| a.occupied)
+        self.actual.freshness() == ActualFreshness::Fresh
+            && self.actual.value().is_some_and(|a| a.occupied)
     }
 
     pub fn illuminance(&self) -> Option<u32> {

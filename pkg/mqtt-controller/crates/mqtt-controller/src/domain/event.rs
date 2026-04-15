@@ -30,8 +30,8 @@ pub enum Event {
     },
 
     /// z2m published a state update for a group we subscribe to. The
-    /// controller uses this as ground truth for `physically_on` and
-    /// reconciles its internal state machine accordingly.
+    /// controller uses this to update the light zone's actual state
+    /// and confirm the target if it matches.
     GroupState {
         group: String,
         on: bool,
