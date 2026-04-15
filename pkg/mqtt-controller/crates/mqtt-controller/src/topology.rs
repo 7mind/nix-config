@@ -4,17 +4,14 @@
 //! Responsibilities:
 //!
 //!   * **Validation:** every `parent` reference resolves; the parent
-//!     graph is acyclic; every device referenced by a room exists in the
+//!     graph is acyclic; every device referenced by a binding exists in the
 //!     catalog and has a compatible kind; group ids and friendly_names
-//!     are unique; member references point at known lights. A (tap,
-//!     button) pair MAY be claimed by more than one room — the runtime
-//!     dispatches the press to every claiming room in turn — but a
-//!     warning is logged so an accidentally-shared button is still
-//!     visible at startup.
+//!     are unique; member references point at known lights.
 //!   * **Indexing:** fast lookups for the runtime hot path:
 //!       - room lookup by name
 //!       - room lookup by group friendly_name (incoming z2m group state)
-//!       - device → bindings (incoming switch / tap / motion events)
+//!       - (device, button, gesture) → binding indexes (incoming switch events)
+//!       - motion sensor → rooms (incoming motion events)
 //!       - transitive descendants per room (filtered to those with rules)
 //!
 //! Most validation logic mirrors the existing `defineRooms` validation in
@@ -28,14 +25,15 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use thiserror::Error;
 
-use crate::config::{Config, DeviceCatalogEntry, Room, Trigger};
+use crate::config::{Config, DeviceCatalogEntry, Effect, Room, Trigger};
 use crate::config::catalog::PlugProtocol;
+use crate::config::switch_model::{Gesture, SwitchModel};
 
 /// Stable name → resolved room data. Built from the raw `Config::rooms`
 /// after validation; the controller indexes everything by room name.
 pub type RoomName = String;
 
-/// Friendly name of a tap, switch, light, or motion sensor.
+/// Friendly name of a switch, light, or motion sensor.
 pub type FriendlyName = String;
 
 /// All the validation failures the topology builder can produce. Surfaced
@@ -78,35 +76,19 @@ pub enum TopologyError {
     #[error("parent chain cycle: {chain}")]
     ParentChainCycle { chain: String },
 
-    #[error("room {room:?} references device {device:?} which is not in the device catalog")]
-    UnknownDevice {
+    #[error("room {room:?} references motion sensor {sensor:?} which is not in the device catalog")]
+    MotionSensorNotInCatalog {
         room: RoomName,
-        device: FriendlyName,
+        sensor: FriendlyName,
     },
 
     #[error(
-        "room {room:?} references device {device:?} as an input but it is a {kind} \
-         (rooms can only bind switches, taps, and motion sensors as inputs)"
+        "room {room:?} references motion sensor {sensor:?} but it is a {kind} \
+         (expected motion-sensor)"
     )]
-    WrongDeviceKind {
+    MotionSensorWrongKind {
         room: RoomName,
-        device: FriendlyName,
-        kind: &'static str,
-    },
-
-    #[error("room {room:?} declares tap device {device:?} without a button number")]
-    TapMissingButton {
-        room: RoomName,
-        device: FriendlyName,
-    },
-
-    #[error(
-        "room {room:?} declares non-tap device {device:?} (kind {kind}) with a button \
-         number — only Hue Tap devices have buttons"
-    )]
-    NonTapWithButton {
-        room: RoomName,
-        device: FriendlyName,
+        sensor: FriendlyName,
         kind: &'static str,
     },
 
@@ -137,54 +119,68 @@ pub enum TopologyError {
     #[error("sun-relative schedule expressions require a `location` in the config")]
     MissingLocationForSunExpressions,
 
-    #[error("duplicate action rule name {0:?}")]
-    DuplicateActionName(String),
+    #[error("duplicate binding name {0:?}")]
+    DuplicateBindingName(String),
 
     #[error(
-        "action rule {rule:?} trigger references device {device:?} which is not in the catalog"
+        "binding {binding:?} trigger references device {device:?} which is not in the catalog"
     )]
-    ActionTriggerUnknownDevice { rule: String, device: String },
+    BindingTriggerUnknownDevice { binding: String, device: String },
 
     #[error(
-        "action rule {rule:?} trigger kind {trigger_kind} requires a {expected_kind} device \
+        "binding {binding:?} trigger requires a switch device \
          but {device:?} is a {actual_kind}"
     )]
-    ActionTriggerWrongDeviceKind {
-        rule: String,
+    BindingTriggerWrongDeviceKind {
+        binding: String,
         device: String,
-        trigger_kind: &'static str,
-        expected_kind: &'static str,
         actual_kind: &'static str,
     },
 
     #[error(
-        "action rule {rule:?} effect targets device {device:?} which is not in the catalog"
+        "binding {binding:?} references button {button:?} on device {device:?} \
+         (model {model:?}) which does not have that button"
     )]
-    ActionEffectUnknownDevice { rule: String, device: String },
+    BindingButtonNotInModel {
+        binding: String,
+        device: String,
+        model: String,
+        button: String,
+    },
 
     #[error(
-        "action rule {rule:?} effect targets device {device:?} which is a {kind} \
-         (only plugs can be action targets)"
+        "binding {binding:?} references room {room:?} which is not defined"
     )]
-    ActionEffectNotPlug { rule: String, device: String, kind: &'static str },
+    BindingRoomNotFound { binding: String, room: String },
 
     #[error(
-        "action rule {rule:?} uses power_below trigger on device {device:?} which \
+        "binding {binding:?} effect targets device {device:?} which is not in the catalog"
+    )]
+    BindingEffectUnknownDevice { binding: String, device: String },
+
+    #[error(
+        "binding {binding:?} effect targets device {device:?} which is a {kind} \
+         (only plugs can be binding targets)"
+    )]
+    BindingEffectNotPlug { binding: String, device: String, kind: &'static str },
+
+    #[error(
+        "binding {binding:?} uses power_below trigger on device {device:?} which \
          lacks the \"power\" capability (variant: {variant})"
     )]
-    ActionPowerBelowWithoutCapability {
-        rule: String,
+    BindingPowerBelowWithoutCapability {
+        binding: String,
         device: String,
         variant: String,
     },
 
     #[error(
-        "action rule {rule:?} has power_below trigger on device {trigger_device:?} but \
+        "binding {binding:?} has power_below trigger on device {trigger_device:?} but \
          effect targets device {effect_target:?} — kill-switch rules must target the \
          same plug they monitor"
     )]
     PowerBelowCrossTarget {
-        rule: String,
+        binding: String,
         trigger_device: String,
         effect_target: String,
     },
@@ -205,14 +201,14 @@ pub enum TopologyError {
     NegativeDoubleTapSuppression(f64),
 
     #[error(
-        "action rule {rule:?} has confirm_off_seconds negative: {value}"
+        "binding {binding:?} has confirm_off_seconds negative: {value}"
     )]
-    NegativeConfirmOffWindow { rule: String, value: f64 },
+    NegativeConfirmOffWindow { binding: String, value: f64 },
 
     #[error(
-        "action rule {rule:?} has At trigger with invalid time: {time}"
+        "binding {binding:?} has At trigger with invalid time: {time}"
     )]
-    InvalidAtTime { rule: String, time: String },
+    InvalidAtTime { binding: String, time: String },
 
     #[error(
         "plug {device:?} has protocol zwave but no node_id"
@@ -231,42 +227,15 @@ pub enum TopologyError {
     },
 
     #[error(
-        "tap device {device:?} button {button} has cycle_on_double_tap in room {cdt_room:?} \
-         but a non-cycle_on_double_tap binding in room {other_room:?} — mixed modes on \
-         the same button are not allowed"
+        "switch device {device:?} references unknown model {model:?}"
     )]
-    MixedDoubleTapModes {
+    UnknownSwitchModel {
         device: FriendlyName,
-        button: u8,
-        cdt_room: RoomName,
-        other_room: RoomName,
-    },
-
-    #[error(
-        "action rule {rule:?} has a single-tap trigger on device {device:?} button {button} \
-         which uses cycle_on_double_tap in room {room:?} — single-tap action rules conflict \
-         with double-tap suppression"
-    )]
-    ActionConflictsWithDoubleTap {
-        rule: String,
-        device: FriendlyName,
-        button: u8,
-        room: RoomName,
+        model: String,
     },
 
     #[error("heating config error: {0}")]
     HeatingError(#[from] crate::config::heating::HeatingConfigError),
-}
-
-/// One tap button → room binding. The catalog lookup of the tap device
-/// itself happens once at build time and isn't re-stored here.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TapButtonBinding {
-    pub device: FriendlyName,
-    pub button: u8,
-    pub room: RoomName,
-    /// When true, single tap toggles on/off and double tap cycles scenes.
-    pub cycle_on_double_tap: bool,
 }
 
 /// One motion sensor → room binding. Carries the per-sensor settings the
@@ -294,12 +263,6 @@ pub struct ResolvedRoom {
     pub off_transition_seconds: f64,
     pub motion_off_cooldown_seconds: u32,
 
-    /// Friendly names of wall switches bound to this room. Empty if none.
-    pub bound_switches: Vec<FriendlyName>,
-
-    /// (tap, button) bindings claimed by this room. Empty if none.
-    pub bound_taps: Vec<TapButtonBinding>,
-
     /// Motion sensors bound to this room. Empty if none.
     pub bound_motion: Vec<MotionBinding>,
 }
@@ -309,24 +272,14 @@ impl ResolvedRoom {
     pub fn has_motion_sensor(&self) -> bool {
         !self.bound_motion.is_empty()
     }
-
-    /// True if any device (switch / tap / motion) is bound — i.e. this
-    /// room has runtime rules. Rule-less rooms are still valid (the z2m
-    /// group exists, scenes get provisioned), they just don't get
-    /// invalidated when an ancestor fires (no per-room state to clear).
-    pub fn has_rules(&self) -> bool {
-        !self.bound_switches.is_empty()
-            || !self.bound_taps.is_empty()
-            || !self.bound_motion.is_empty()
-    }
 }
 
-/// One resolved action rule, ready for runtime dispatch.
+/// One resolved binding, ready for runtime dispatch.
 #[derive(Debug, Clone)]
-pub struct ResolvedAction {
+pub struct ResolvedBinding {
     pub name: String,
     pub trigger: Trigger,
-    pub effect: crate::config::Effect,
+    pub effect: Effect,
 }
 
 /// The validated topology. Owned as `Arc<Topology>` by the daemon.
@@ -338,20 +291,8 @@ pub struct Topology {
     /// room.
     by_group_name: BTreeMap<FriendlyName, RoomName>,
 
-    /// Wall-switch friendly_name → list of rooms it drives. A single
-    /// switch can technically drive multiple rooms (the schema allows it),
-    /// though in production each switch is bound to exactly one.
-    switch_index: BTreeMap<FriendlyName, Vec<RoomName>>,
-
-    /// (tap_friendly_name, button) → list of rooms it drives. The
-    /// runtime dispatches each press to every room in the list, in the
-    /// order they appear in the config. A list with more than one entry
-    /// is allowed but unusual; the topology builder logs a warning so
-    /// an accidental shared binding is visible at startup.
-    tap_index: BTreeMap<(FriendlyName, u8), Vec<RoomName>>,
-
     /// Motion sensor friendly_name → list of rooms it drives. Same shape
-    /// as `switch_index`; production has each sensor in one room.
+    /// as the old switch_index; production has each sensor in one room.
     motion_index: BTreeMap<FriendlyName, Vec<RoomName>>,
 
     /// Transitive descendants per room. Filtered to descendants that
@@ -359,24 +300,42 @@ pub struct Topology {
     /// "physically_on" to them would be pointless.
     descendants_by_room: BTreeMap<RoomName, Vec<RoomName>>,
 
-    /// Validated action rules, in config order.
-    actions: Vec<ResolvedAction>,
+    /// Validated bindings, in config order.
+    bindings: Vec<ResolvedBinding>,
 
-    /// Switch action → action rule indexes. Keyed by switch
-    /// friendly_name; value is a list of indexes into `actions`.
-    /// "Single" indexes fire on every press; "double" indexes fire
-    /// only when software double-tap is detected.
-    action_switch_on_index: BTreeMap<FriendlyName, Vec<usize>>,
-    action_switch_off_index: BTreeMap<FriendlyName, Vec<usize>>,
-    action_switch_on_double_index: BTreeMap<FriendlyName, Vec<usize>>,
-    action_switch_off_double_index: BTreeMap<FriendlyName, Vec<usize>>,
+    /// (device, button, gesture) → binding indexes. The runtime dispatches
+    /// each button event by looking up all matching bindings and executing
+    /// them in order.
+    button_binding_index: BTreeMap<(String, String, Gesture), Vec<usize>>,
 
-    /// Tap action → action rule indexes. Keyed by (tap, button, action).
-    /// `action` is `None` for single/press, `Some("double")` for double-tap.
-    action_tap_index: BTreeMap<(FriendlyName, u8, Option<String>), Vec<usize>>,
+    /// PowerBelow binding indexes, keyed by plug device name.
+    power_below_index: BTreeMap<FriendlyName, Vec<usize>>,
 
-    /// PowerBelow action rule indexes, keyed by plug device name.
-    action_power_below_index: BTreeMap<FriendlyName, Vec<usize>>,
+    /// All switch device names from catalog. Used for MQTT subscriptions.
+    switch_names: BTreeSet<FriendlyName>,
+
+    /// (device, button) pairs that have at least one soft_double_tap
+    /// binding. The runtime uses this to activate the software
+    /// double-tap detection window.
+    soft_double_tap_buttons: BTreeSet<(String, String)>,
+
+    /// (device, button) pairs from switch models that have both press and
+    /// double_tap gestures mapped. The runtime uses this to activate the
+    /// hardware double-tap suppression guard.
+    hw_double_tap_buttons: BTreeSet<(String, String)>,
+
+    /// Rooms that have at least one binding targeting them. Used by
+    /// `ResolvedRoom::has_rules()` (via the topology) to determine
+    /// whether a room participates in descendant propagation.
+    rooms_with_bindings: BTreeSet<RoomName>,
+
+    /// Device name → switch model name mapping.
+    device_models: BTreeMap<String, String>,
+
+    /// Switch model descriptors, keyed by model name. Stored so we can
+    /// resolve raw z2m action strings to (button, gesture) pairs at
+    /// parse time without needing the full Config.
+    switch_models: BTreeMap<String, SwitchModel>,
 
     /// All plug friendly_names from the device catalog.
     plug_names: BTreeSet<FriendlyName>,
@@ -496,7 +455,7 @@ impl Topology {
                 needs_location = true;
             }
         }
-        // Location check deferred until after action rules (At triggers may also need it).
+        // Location check deferred until after bindings (At triggers may also need it).
 
         // 4b. Duration and defaults validation.
         if config.defaults.cycle_window_seconds < 0.0 {
@@ -551,126 +510,216 @@ impl Topology {
             }
         }
 
-        // 6. Device bindings: catalog membership, kind matching, button
-        //    presence/absence. Tap (device, button) pairs MAY be shared
-        //    across rooms — we collect every claimant and warn (not
-        //    fail) if a pair has more than one.
-        let mut tap_binding_owners: BTreeMap<(FriendlyName, u8), Vec<RoomName>> = BTreeMap::new();
-        let mut switch_index: BTreeMap<FriendlyName, Vec<RoomName>> = BTreeMap::new();
+        // 6. Motion sensor bindings from room.motion_sensors.
         let mut motion_index: BTreeMap<FriendlyName, Vec<RoomName>> = BTreeMap::new();
-        let mut bound_per_room: BTreeMap<
-            RoomName,
-            (Vec<FriendlyName>, Vec<TapButtonBinding>, Vec<MotionBinding>),
-        > = BTreeMap::new();
+        let mut bound_motion_per_room: BTreeMap<RoomName, Vec<MotionBinding>> = BTreeMap::new();
 
         for room in &config.rooms {
-            let entry = bound_per_room
-                .entry(room.name.clone())
-                .or_insert_with(|| (Vec::new(), Vec::new(), Vec::new()));
-
-            for binding in &room.devices {
-                let catalog = config.devices.get(&binding.device).ok_or_else(|| {
-                    TopologyError::UnknownDevice {
+            for sensor_name in &room.motion_sensors {
+                let catalog = config.devices.get(sensor_name).ok_or_else(|| {
+                    TopologyError::MotionSensorNotInCatalog {
                         room: room.name.clone(),
-                        device: binding.device.clone(),
+                        sensor: sensor_name.clone(),
                     }
                 })?;
                 match catalog {
-                    DeviceCatalogEntry::Light(_) => {
-                        return Err(TopologyError::WrongDeviceKind {
-                            room: room.name.clone(),
-                            device: binding.device.clone(),
-                            kind: "light",
-                        });
-                    }
-                    DeviceCatalogEntry::Plug { .. } => {
-                        return Err(TopologyError::WrongDeviceKind {
-                            room: room.name.clone(),
-                            device: binding.device.clone(),
-                            kind: "plug",
-                        });
-                    }
-                    DeviceCatalogEntry::Trv(_) => {
-                        return Err(TopologyError::WrongDeviceKind {
-                            room: room.name.clone(),
-                            device: binding.device.clone(),
-                            kind: "trv",
-                        });
-                    }
-                    DeviceCatalogEntry::WallThermostat(_) => {
-                        return Err(TopologyError::WrongDeviceKind {
-                            room: room.name.clone(),
-                            device: binding.device.clone(),
-                            kind: "wall-thermostat",
-                        });
-                    }
-                    DeviceCatalogEntry::Switch(_) => {
-                        if binding.button.is_some() {
-                            return Err(TopologyError::NonTapWithButton {
-                                room: room.name.clone(),
-                                device: binding.device.clone(),
-                                kind: "switch",
-                            });
-                        }
-                        entry.0.push(binding.device.clone());
-                        switch_index
-                            .entry(binding.device.clone())
-                            .or_default()
-                            .push(room.name.clone());
-                    }
-                    DeviceCatalogEntry::Tap(_) => {
-                        let button = binding.button.ok_or_else(|| {
-                            TopologyError::TapMissingButton {
-                                room: room.name.clone(),
-                                device: binding.device.clone(),
-                            }
-                        })?;
-                        let key = (binding.device.clone(), button);
-                        tap_binding_owners
-                            .entry(key)
-                            .or_default()
-                            .push(room.name.clone());
-                        entry.1.push(TapButtonBinding {
-                            device: binding.device.clone(),
-                            button,
-                            room: room.name.clone(),
-                            cycle_on_double_tap: binding.cycle_on_double_tap,
-                        });
-                    }
                     DeviceCatalogEntry::MotionSensor {
-                        common: _,
                         occupancy_timeout_seconds,
                         max_illuminance,
+                        ..
                     } => {
-                        if binding.button.is_some() {
-                            return Err(TopologyError::NonTapWithButton {
+                        bound_motion_per_room
+                            .entry(room.name.clone())
+                            .or_default()
+                            .push(MotionBinding {
+                                sensor: sensor_name.clone(),
                                 room: room.name.clone(),
-                                device: binding.device.clone(),
-                                kind: "motion-sensor",
+                                occupancy_timeout_seconds: *occupancy_timeout_seconds,
+                                max_illuminance: *max_illuminance,
                             });
-                        }
-                        entry.2.push(MotionBinding {
-                            sensor: binding.device.clone(),
-                            room: room.name.clone(),
-                            occupancy_timeout_seconds: *occupancy_timeout_seconds,
-                            max_illuminance: *max_illuminance,
-                        });
                         motion_index
-                            .entry(binding.device.clone())
+                            .entry(sensor_name.clone())
                             .or_default()
                             .push(room.name.clone());
+                    }
+                    other => {
+                        return Err(TopologyError::MotionSensorWrongKind {
+                            room: room.name.clone(),
+                            sensor: sensor_name.clone(),
+                            kind: kind_label(other),
+                        });
                     }
                 }
             }
         }
 
-        // 7. Build resolved rooms now that all per-room data has been
-        //    validated and split.
+        // 7. Validate bindings and build dispatch indexes.
+        let mut binding_names: BTreeSet<String> = BTreeSet::new();
+        let mut resolved_bindings: Vec<ResolvedBinding> = Vec::new();
+        let mut button_binding_index: BTreeMap<(String, String, Gesture), Vec<usize>> = BTreeMap::new();
+        let mut power_below_index: BTreeMap<FriendlyName, Vec<usize>> = BTreeMap::new();
+        let mut soft_double_tap_buttons: BTreeSet<(String, String)> = BTreeSet::new();
+        let mut rooms_with_bindings: BTreeSet<RoomName> = BTreeSet::new();
+
+        for rule in &config.bindings {
+            // Name uniqueness.
+            if !binding_names.insert(rule.name.clone()) {
+                return Err(TopologyError::DuplicateBindingName(rule.name.clone()));
+            }
+
+            // Validate trigger device (if the trigger references one).
+            let trigger_entry = if let Some(trigger_device) = rule.trigger.device() {
+                let entry = config.devices.get(trigger_device).ok_or_else(|| {
+                    TopologyError::BindingTriggerUnknownDevice {
+                        binding: rule.name.clone(),
+                        device: trigger_device.to_string(),
+                    }
+                })?;
+                Some(entry)
+            } else {
+                None
+            };
+
+            match &rule.trigger {
+                Trigger::Button { device, button, gesture } => {
+                    let trigger_entry = trigger_entry.unwrap();
+                    if !trigger_entry.is_switch() {
+                        return Err(TopologyError::BindingTriggerWrongDeviceKind {
+                            binding: rule.name.clone(),
+                            device: device.clone(),
+                            actual_kind: kind_label(trigger_entry),
+                        });
+                    }
+                    // Validate button name exists in the device's model.
+                    if let Some(model_name) = trigger_entry.switch_model() {
+                        if let Some(model) = config.switch_models.get(model_name) {
+                            if !model.buttons.contains(button) {
+                                return Err(TopologyError::BindingButtonNotInModel {
+                                    binding: rule.name.clone(),
+                                    device: device.clone(),
+                                    model: model_name.to_string(),
+                                    button: button.clone(),
+                                });
+                            }
+                        }
+                    }
+                    let idx = resolved_bindings.len();
+                    button_binding_index
+                        .entry((device.clone(), button.clone(), *gesture))
+                        .or_default()
+                        .push(idx);
+                    if *gesture == Gesture::SoftDoubleTap {
+                        soft_double_tap_buttons.insert((device.clone(), button.clone()));
+                    }
+                }
+                Trigger::PowerBelow { device, .. } => {
+                    let trigger_entry = trigger_entry.unwrap();
+                    if !trigger_entry.is_plug() {
+                        return Err(TopologyError::BindingTriggerWrongDeviceKind {
+                            binding: rule.name.clone(),
+                            device: device.clone(),
+                            actual_kind: kind_label(trigger_entry),
+                        });
+                    }
+                    if !trigger_entry.has_capability("power") {
+                        let variant = match trigger_entry {
+                            DeviceCatalogEntry::Plug { variant, .. } => variant.clone(),
+                            _ => "unknown".into(),
+                        };
+                        return Err(TopologyError::BindingPowerBelowWithoutCapability {
+                            binding: rule.name.clone(),
+                            device: device.clone(),
+                            variant,
+                        });
+                    }
+                    // Kill-switch rules must target the same plug they
+                    // monitor. Cross-target rules would mutate the wrong
+                    // runtime state and are not covered by the TLA model.
+                    if let Some(effect_target) = rule.effect.target() {
+                        if effect_target != device {
+                            return Err(TopologyError::PowerBelowCrossTarget {
+                                binding: rule.name.clone(),
+                                trigger_device: device.clone(),
+                                effect_target: effect_target.to_string(),
+                            });
+                        }
+                    }
+                    let idx = resolved_bindings.len();
+                    power_below_index
+                        .entry(device.clone())
+                        .or_default()
+                        .push(idx);
+                }
+                Trigger::At { time } => {
+                    if let crate::config::time_expr::TimeExpr::Fixed { minute_of_day } = time {
+                        // Reject >= 1440 (24:00): the clock's local_hour is
+                        // 0-23 so minute 1440 would resolve to hour=24 and
+                        // never match, creating a silently dead rule.
+                        if *minute_of_day >= 1440 {
+                            return Err(TopologyError::InvalidAtTime {
+                                binding: rule.name.clone(),
+                                time: time.to_string(),
+                            });
+                        }
+                    }
+                    if time.uses_sun() {
+                        needs_location = true;
+                    }
+                }
+            }
+
+            // Validate room-targeting effects: the room must exist.
+            if let Some(room_name) = rule.effect.room() {
+                if !rooms_by_name.contains_key(room_name) {
+                    return Err(TopologyError::BindingRoomNotFound {
+                        binding: rule.name.clone(),
+                        room: room_name.to_string(),
+                    });
+                }
+                rooms_with_bindings.insert(room_name.to_string());
+            }
+
+            // Validate device-targeting effects: target must be a plug.
+            if let Some(effect_target) = rule.effect.target() {
+                let effect_entry = config.devices.get(effect_target).ok_or_else(|| {
+                    TopologyError::BindingEffectUnknownDevice {
+                        binding: rule.name.clone(),
+                        device: effect_target.to_string(),
+                    }
+                })?;
+                if !effect_entry.is_plug() {
+                    return Err(TopologyError::BindingEffectNotPlug {
+                        binding: rule.name.clone(),
+                        device: effect_target.to_string(),
+                        kind: kind_label(effect_entry),
+                    });
+                }
+            }
+
+            // Validate confirm_off_seconds if present.
+            if let Some(secs) = rule.effect.confirm_off_seconds() {
+                if secs < 0.0 {
+                    return Err(TopologyError::NegativeConfirmOffWindow {
+                        binding: rule.name.clone(),
+                        value: secs,
+                    });
+                }
+            }
+
+            resolved_bindings.push(ResolvedBinding {
+                name: rule.name.clone(),
+                trigger: rule.trigger.clone(),
+                effect: rule.effect.clone(),
+            });
+        }
+
+        // 7b. Build resolved rooms now that all per-room data has been
+        //     validated and split.
         let mut rooms: BTreeMap<RoomName, ResolvedRoom> = BTreeMap::new();
         for room in &config.rooms {
-            let (bound_switches, bound_taps, bound_motion) = bound_per_room
+            let bound_motion = bound_motion_per_room
                 .remove(&room.name)
-                .unwrap_or_else(|| (Vec::new(), Vec::new(), Vec::new()));
+                .unwrap_or_default();
             rooms.insert(
                 room.name.clone(),
                 ResolvedRoom {
@@ -682,8 +731,6 @@ impl Topology {
                     scenes: room.scenes.clone(),
                     off_transition_seconds: room.off_transition_seconds,
                     motion_off_cooldown_seconds: room.motion_off_cooldown_seconds,
-                    bound_switches,
-                    bound_taps,
                     bound_motion,
                 },
             );
@@ -694,55 +741,6 @@ impl Topology {
             .values()
             .map(|r| (r.group_name.clone(), r.name.clone()))
             .collect();
-
-        // 8b. Tap binding index. Each (tap, button) pair maps to one or
-        //     more rooms; multi-room bindings get a startup warning so
-        //     accidentally-shared buttons are visible without failing
-        //     the build (the user might genuinely want one tap to drive
-        //     several zones with a single press).
-        let tap_index: BTreeMap<(FriendlyName, u8), Vec<RoomName>> = tap_binding_owners;
-        for ((device, button), claiming_rooms) in &tap_index {
-            if claiming_rooms.len() > 1 {
-                tracing::warn!(
-                    device = %device,
-                    button,
-                    rooms = ?claiming_rooms,
-                    "tap (device, button) pair claimed by multiple rooms; \
-                     each press will dispatch to every room in turn"
-                );
-            }
-        }
-
-        // 8b. cycle_on_double_tap must be uniform across all rooms
-        //     sharing the same (device, button). Mixing modes would make
-        //     the double-tap suppression guard ambiguous.
-        for ((device, button), claiming_rooms) in &tap_index {
-            let mut cdt_room: Option<&RoomName> = None;
-            let mut non_cdt_room: Option<&RoomName> = None;
-            for room_name in claiming_rooms {
-                let is_cdt = rooms
-                    .get(room_name)
-                    .map(|r| {
-                        r.bound_taps
-                            .iter()
-                            .any(|b| b.device == *device && b.button == *button && b.cycle_on_double_tap)
-                    })
-                    .unwrap_or(false);
-                if is_cdt {
-                    cdt_room = Some(room_name);
-                } else {
-                    non_cdt_room = Some(room_name);
-                }
-            }
-            if let (Some(cdt), Some(other)) = (cdt_room, non_cdt_room) {
-                return Err(TopologyError::MixedDoubleTapModes {
-                    device: device.clone(),
-                    button: *button,
-                    cdt_room: cdt.clone(),
-                    other_room: other.clone(),
-                });
-            }
-        }
 
         // 9. Transitive descendants. Walk each room and gather every
         //    room reachable via the *inverse* of the parent edge.
@@ -771,7 +769,9 @@ impl Topology {
                         continue;
                     }
                     if let Some(room) = rooms.get(&curr) {
-                        if room.has_rules() {
+                        let has_rules = !room.bound_motion.is_empty()
+                            || rooms_with_bindings.contains(&curr);
+                        if has_rules {
                             out.push(curr.clone());
                         }
                     }
@@ -1026,216 +1026,38 @@ impl Topology {
             None
         };
 
-        // 11. Validate action rules and build dispatch indexes.
-        let mut action_names: BTreeSet<String> = BTreeSet::new();
-        let mut actions: Vec<ResolvedAction> = Vec::new();
-        let mut action_switch_on_index: BTreeMap<FriendlyName, Vec<usize>> = BTreeMap::new();
-        let mut action_switch_off_index: BTreeMap<FriendlyName, Vec<usize>> = BTreeMap::new();
-        let mut action_switch_on_double_index: BTreeMap<FriendlyName, Vec<usize>> = BTreeMap::new();
-        let mut action_switch_off_double_index: BTreeMap<FriendlyName, Vec<usize>> = BTreeMap::new();
-        let mut action_tap_index: BTreeMap<(FriendlyName, u8, Option<String>), Vec<usize>> = BTreeMap::new();
-        let mut action_power_below_index: BTreeMap<FriendlyName, Vec<usize>> = BTreeMap::new();
+        // 11. Build switch_names, device_models, and hw_double_tap_buttons
+        //     from the device catalog.
+        let mut switch_names: BTreeSet<FriendlyName> = BTreeSet::new();
+        let mut device_models: BTreeMap<String, String> = BTreeMap::new();
+        let mut hw_double_tap_buttons: BTreeSet<(String, String)> = BTreeSet::new();
 
-        for rule in &config.actions {
-            // Name uniqueness.
-            if !action_names.insert(rule.name.clone()) {
-                return Err(TopologyError::DuplicateActionName(rule.name.clone()));
-            }
+        for (name, entry) in &config.devices {
+            if let DeviceCatalogEntry::Switch { model, .. } = entry {
+                switch_names.insert(name.clone());
+                device_models.insert(name.clone(), model.clone());
 
-            // Validate trigger device (if the trigger references one).
-            let trigger_entry = if let Some(trigger_device) = rule.trigger.device() {
-                let entry = config.devices.get(trigger_device).ok_or_else(|| {
-                    TopologyError::ActionTriggerUnknownDevice {
-                        rule: rule.name.clone(),
-                        device: trigger_device.to_string(),
+                // Validate that the model exists in switch_models.
+                let switch_model = config.switch_models.get(model).ok_or_else(|| {
+                    TopologyError::UnknownSwitchModel {
+                        device: name.clone(),
+                        model: model.clone(),
                     }
                 })?;
-                Some(entry)
-            } else {
-                None
-            };
 
-            match &rule.trigger {
-                Trigger::Tap { device, button, action } => {
-                    let trigger_entry = trigger_entry.unwrap();
-                    if !trigger_entry.is_tap() {
-                        return Err(TopologyError::ActionTriggerWrongDeviceKind {
-                            rule: rule.name.clone(),
-                            device: device.clone(),
-                            trigger_kind: "tap",
-                            expected_kind: "tap",
-                            actual_kind: kind_label(trigger_entry),
-                        });
-                    }
-                    let idx = actions.len();
-                    action_tap_index
-                        .entry((device.clone(), *button, action.clone()))
-                        .or_default()
-                        .push(idx);
-                }
-                Trigger::SwitchOn { device, action } => {
-                    let trigger_entry = trigger_entry.unwrap();
-                    if !trigger_entry.is_switch() {
-                        return Err(TopologyError::ActionTriggerWrongDeviceKind {
-                            rule: rule.name.clone(),
-                            device: device.clone(),
-                            trigger_kind: "switch_on",
-                            expected_kind: "switch",
-                            actual_kind: kind_label(trigger_entry),
-                        });
-                    }
-                    let idx = actions.len();
-                    let index = if action.as_deref() == Some("double") {
-                        &mut action_switch_on_double_index
-                    } else {
-                        &mut action_switch_on_index
-                    };
-                    index
-                        .entry(device.clone())
-                        .or_default()
-                        .push(idx);
-                }
-                Trigger::SwitchOff { device, action } => {
-                    let trigger_entry = trigger_entry.unwrap();
-                    if !trigger_entry.is_switch() {
-                        return Err(TopologyError::ActionTriggerWrongDeviceKind {
-                            rule: rule.name.clone(),
-                            device: device.clone(),
-                            trigger_kind: "switch_off",
-                            expected_kind: "switch",
-                            actual_kind: kind_label(trigger_entry),
-                        });
-                    }
-                    let idx = actions.len();
-                    let index = if action.as_deref() == Some("double") {
-                        &mut action_switch_off_double_index
-                    } else {
-                        &mut action_switch_off_index
-                    };
-                    index
-                        .entry(device.clone())
-                        .or_default()
-                        .push(idx);
-                }
-                Trigger::PowerBelow { device, .. } => {
-                    let trigger_entry = trigger_entry.unwrap();
-                    if !trigger_entry.is_plug() {
-                        return Err(TopologyError::ActionTriggerWrongDeviceKind {
-                            rule: rule.name.clone(),
-                            device: device.clone(),
-                            trigger_kind: "power_below",
-                            expected_kind: "plug",
-                            actual_kind: kind_label(trigger_entry),
-                        });
-                    }
-                    if !trigger_entry.has_capability("power") {
-                        let variant = match trigger_entry {
-                            DeviceCatalogEntry::Plug { variant, .. } => variant.clone(),
-                            _ => "unknown".into(),
-                        };
-                        return Err(TopologyError::ActionPowerBelowWithoutCapability {
-                            rule: rule.name.clone(),
-                            device: device.clone(),
-                            variant,
-                        });
-                    }
-                    // Kill-switch rules must target the same plug they
-                    // monitor. Cross-target rules would mutate the wrong
-                    // runtime state and are not covered by the TLA model.
-                    if let Some(effect_target) = rule.effect.target() {
-                        if effect_target != device {
-                            return Err(TopologyError::PowerBelowCrossTarget {
-                                rule: rule.name.clone(),
-                                trigger_device: device.clone(),
-                                effect_target: effect_target.to_string(),
-                            });
-                        }
-                    }
-                    let idx = actions.len();
-                    action_power_below_index
-                        .entry(device.clone())
-                        .or_default()
-                        .push(idx);
-                }
-                Trigger::At { time } => {
-                    if let crate::config::time_expr::TimeExpr::Fixed { minute_of_day } = time {
-                        // Reject >= 1440 (24:00): the clock's local_hour is
-                        // 0-23 so minute 1440 would resolve to hour=24 and
-                        // never match, creating a silently dead rule.
-                        if *minute_of_day >= 1440 {
-                            return Err(TopologyError::InvalidAtTime {
-                                rule: rule.name.clone(),
-                                time: time.to_string(),
-                            });
-                        }
-                    }
-                    if time.uses_sun() {
-                        needs_location = true;
-                    }
-                }
-            }
-
-            // Validate effect target (if the effect has one — TurnOffAllZones doesn't).
-            if let Some(effect_target) = rule.effect.target() {
-                let effect_entry = config.devices.get(effect_target).ok_or_else(|| {
-                    TopologyError::ActionEffectUnknownDevice {
-                        rule: rule.name.clone(),
-                        device: effect_target.to_string(),
-                    }
-                })?;
-                if !effect_entry.is_plug() {
-                    return Err(TopologyError::ActionEffectNotPlug {
-                        rule: rule.name.clone(),
-                        device: effect_target.to_string(),
-                        kind: kind_label(effect_entry),
+                // Register per-button hardware double-tap suppression.
+                // Only buttons that have both press AND double_tap gestures
+                // mapped in the model get suppression — not all buttons on
+                // a model that happens to have double-tap somewhere.
+                for button in &switch_model.buttons {
+                    let has_press = switch_model.z2m_action_map.values().any(|m| {
+                        m.button == *button && m.gesture == Gesture::Press
                     });
-                }
-            }
-
-            // Validate confirm_off_seconds if present.
-            if let Some(secs) = rule.effect.confirm_off_seconds() {
-                if secs < 0.0 {
-                    return Err(TopologyError::NegativeConfirmOffWindow {
-                        rule: rule.name.clone(),
-                        value: secs,
+                    let has_double = switch_model.z2m_action_map.values().any(|m| {
+                        m.button == *button && m.gesture == Gesture::DoubleTap
                     });
-                }
-            }
-
-            actions.push(ResolvedAction {
-                name: rule.name.clone(),
-                trigger: rule.trigger.clone(),
-                effect: rule.effect.clone(),
-            });
-        }
-
-        // Single-tap action rules must not reference a (device, button)
-        // that uses cycle_on_double_tap — the double-tap suppression
-        // guard drops the entire event, so the action rule would go dead.
-        for rule in &config.actions {
-            if let Trigger::Tap { device, button, action: None } = &rule.trigger {
-                for room_name in tap_index
-                    .get(&(device.clone(), *button))
-                    .map(Vec::as_slice)
-                    .unwrap_or(&[])
-                {
-                    let is_cdt = rooms
-                        .get(room_name)
-                        .map(|r| {
-                            r.bound_taps.iter().any(|b| {
-                                b.device == *device
-                                    && b.button == *button
-                                    && b.cycle_on_double_tap
-                            })
-                        })
-                        .unwrap_or(false);
-                    if is_cdt {
-                        return Err(TopologyError::ActionConflictsWithDoubleTap {
-                            rule: rule.name.clone(),
-                            device: device.clone(),
-                            button: *button,
-                            room: room_name.clone(),
-                        });
+                    if has_press && has_double {
+                        hw_double_tap_buttons.insert((name.clone(), button.clone()));
                     }
                 }
             }
@@ -1249,17 +1071,17 @@ impl Topology {
         Ok(Self {
             rooms,
             by_group_name,
-            switch_index,
-            tap_index,
             motion_index,
             descendants_by_room,
-            actions,
-            action_switch_on_index,
-            action_switch_off_index,
-            action_switch_on_double_index,
-            action_switch_off_double_index,
-            action_tap_index,
-            action_power_below_index,
+            bindings: resolved_bindings,
+            button_binding_index,
+            power_below_index,
+            switch_names,
+            soft_double_tap_buttons,
+            hw_double_tap_buttons,
+            rooms_with_bindings,
+            device_models,
+            switch_models: config.switch_models.clone(),
             plug_names,
             zigbee_plug_names,
             zwave_plug_names,
@@ -1288,43 +1110,6 @@ impl Topology {
             .and_then(|n| self.rooms.get(n))
     }
 
-    /// Rooms driven by a wall-switch friendly_name.
-    pub fn rooms_for_switch(&self, switch: &str) -> &[RoomName] {
-        self.switch_index
-            .get(switch)
-            .map(Vec::as_slice)
-            .unwrap_or(&[])
-    }
-
-    /// Rooms bound to a (tap, button) pair. Empty if the pair is
-    /// unclaimed; almost always a single-element slice; longer when
-    /// the user has intentionally bound one button to several zones.
-    pub fn rooms_for_tap_button(&self, tap: &str, button: u8) -> &[RoomName] {
-        self.tap_index
-            .get(&(tap.to_string(), button))
-            .map(Vec::as_slice)
-            .unwrap_or(&[])
-    }
-
-    /// Check if a (tap, button, room) binding has cycle_on_double_tap.
-    pub fn tap_cycle_on_double_tap(&self, device: &str, button: u8, room: &str) -> bool {
-        self.rooms
-            .get(room)
-            .map(|r| {
-                r.bound_taps
-                    .iter()
-                    .any(|b| b.device == device && b.button == button && b.cycle_on_double_tap)
-            })
-            .unwrap_or(false)
-    }
-
-    /// True if any room bound to this (tap, button) uses cycle_on_double_tap.
-    pub fn any_tap_cycle_on_double_tap(&self, device: &str, button: u8) -> bool {
-        self.rooms_for_tap_button(device, button)
-            .iter()
-            .any(|room| self.tap_cycle_on_double_tap(device, button, room))
-    }
-
     /// Rooms driven by a motion sensor friendly_name.
     pub fn rooms_for_motion(&self, sensor: &str) -> &[RoomName] {
         self.motion_index
@@ -1349,28 +1134,75 @@ impl Topology {
         self.rooms.values().map(|r| r.group_name.as_str()).collect()
     }
 
-    /// All distinct switch friendly names (from both room bindings and
-    /// action rules). Used to subscribe to action topics.
-    pub fn all_switch_names(&self) -> BTreeSet<&str> {
-        let mut names: BTreeSet<&str> = self.switch_index.keys().map(String::as_str).collect();
-        names.extend(self.action_switch_on_index.keys().map(String::as_str));
-        names.extend(self.action_switch_off_index.keys().map(String::as_str));
-        names.extend(self.action_switch_on_double_index.keys().map(String::as_str));
-        names.extend(self.action_switch_off_double_index.keys().map(String::as_str));
-        names
-    }
-
-    /// All distinct tap friendly names (from both room bindings and
-    /// action rules).
-    pub fn all_tap_names(&self) -> BTreeSet<&str> {
-        let mut names: BTreeSet<&str> = self.tap_index.keys().map(|(d, _)| d.as_str()).collect();
-        names.extend(self.action_tap_index.keys().map(|(d, _, _)| d.as_str()));
-        names
+    /// All switch device names from the catalog. Used for MQTT
+    /// subscriptions to action topics.
+    pub fn all_switch_device_names(&self) -> &BTreeSet<FriendlyName> {
+        &self.switch_names
     }
 
     /// All distinct motion sensor friendly names.
     pub fn all_motion_sensor_names(&self) -> BTreeSet<&str> {
         self.motion_index.keys().map(String::as_str).collect()
+    }
+
+    /// All resolved bindings.
+    pub fn bindings(&self) -> &[ResolvedBinding] {
+        &self.bindings
+    }
+
+    /// Binding indexes triggered by a (device, button, gesture) triple.
+    pub fn bindings_for_button(&self, device: &str, button: &str, gesture: Gesture) -> &[usize] {
+        self.button_binding_index
+            .get(&(device.to_string(), button.to_string(), gesture))
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
+    /// Binding indexes with PowerBelow triggers for a plug device.
+    pub fn bindings_for_power_below(&self, plug: &str) -> &[usize] {
+        self.power_below_index
+            .get(plug)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
+    /// True if this (device, button) pair has at least one soft_double_tap
+    /// binding. Used by the runtime to activate the software double-tap
+    /// detection window.
+    pub fn is_soft_double_tap_button(&self, device: &str, button: &str) -> bool {
+        self.soft_double_tap_buttons.contains(&(device.to_string(), button.to_string()))
+    }
+
+    /// True if this (device, button) pair comes from a model with hardware
+    /// double-tap support. Used by the runtime to activate the double-tap
+    /// suppression guard.
+    pub fn is_hw_double_tap_button(&self, device: &str, button: &str) -> bool {
+        self.hw_double_tap_buttons.contains(&(device.to_string(), button.to_string()))
+    }
+
+    /// The switch model name for a device, if it's a switch.
+    pub fn switch_model_for(&self, device: &str) -> Option<&str> {
+        self.device_models.get(device).map(String::as_str)
+    }
+
+    /// Resolve a raw z2m action string for a switch device into a
+    /// semantic `(button, gesture)` pair. Returns `None` if the device
+    /// is not a known switch, has no model, or the action string is
+    /// unrecognized.
+    pub fn resolve_button_event(&self, device: &str, z2m_action: &str) -> Option<(String, Gesture)> {
+        let model_name = self.device_models.get(device)?;
+        let model = self.switch_models.get(model_name)?;
+        let mapping = model.resolve(z2m_action)?;
+        Some((mapping.button.clone(), mapping.gesture))
+    }
+
+    /// True if the given room has runtime rules (bindings or motion sensors).
+    pub fn room_has_rules(&self, room_name: &str) -> bool {
+        let has_motion = self.rooms
+            .get(room_name)
+            .map(|r| !r.bound_motion.is_empty())
+            .unwrap_or(false);
+        has_motion || self.rooms_with_bindings.contains(room_name)
     }
 
     /// All plug device friendly names from the catalog.
@@ -1433,71 +1265,6 @@ impl Topology {
     pub fn heating_config(&self) -> Option<&crate::config::HeatingConfig> {
         self.heating_config.as_ref()
     }
-
-    /// All resolved action rules.
-    pub fn actions(&self) -> &[ResolvedAction] {
-        &self.actions
-    }
-
-    /// Action rule indexes triggered by a switch "on" press.
-    pub fn actions_for_switch_on(&self, switch: &str) -> &[usize] {
-        self.action_switch_on_index
-            .get(switch)
-            .map(Vec::as_slice)
-            .unwrap_or(&[])
-    }
-
-    /// Action rule indexes triggered by a switch "off" press (single).
-    pub fn actions_for_switch_off(&self, switch: &str) -> &[usize] {
-        self.action_switch_off_index
-            .get(switch)
-            .map(Vec::as_slice)
-            .unwrap_or(&[])
-    }
-
-    /// Action rule indexes triggered by a switch "on" double-tap.
-    pub fn actions_for_switch_on_double(&self, switch: &str) -> &[usize] {
-        self.action_switch_on_double_index
-            .get(switch)
-            .map(Vec::as_slice)
-            .unwrap_or(&[])
-    }
-
-    /// Action rule indexes triggered by a switch "off" double-tap.
-    pub fn actions_for_switch_off_double(&self, switch: &str) -> &[usize] {
-        self.action_switch_off_double_index
-            .get(switch)
-            .map(Vec::as_slice)
-            .unwrap_or(&[])
-    }
-
-    /// Action rule indexes triggered by a tap button press with a
-    /// specific action qualifier (None = single/press, Some("double") =
-    /// double-tap).
-    pub fn actions_for_tap(&self, tap: &str, button: u8, action: Option<&str>) -> &[usize] {
-        self.action_tap_index
-            .get(&(tap.to_string(), button, action.map(String::from)))
-            .map(Vec::as_slice)
-            .unwrap_or(&[])
-    }
-
-    /// True if this switch has any action rules (SwitchOn or SwitchOff).
-    /// Used by the MQTT parser to dispatch action-rule-only switches that
-    /// aren't bound to any room.
-    pub fn has_switch_actions(&self, switch: &str) -> bool {
-        self.action_switch_on_index.contains_key(switch)
-            || self.action_switch_off_index.contains_key(switch)
-            || self.action_switch_on_double_index.contains_key(switch)
-            || self.action_switch_off_double_index.contains_key(switch)
-    }
-
-    /// Action rule indexes with PowerBelow triggers for a plug device.
-    pub fn actions_for_power_below(&self, plug: &str) -> &[usize] {
-        self.action_power_below_index
-            .get(plug)
-            .map(Vec::as_slice)
-            .unwrap_or(&[])
-    }
 }
 
 /// Split a `"friendly_name/endpoint"` member key into its parts. Returns
@@ -1512,8 +1279,7 @@ fn parse_member_key(member: &str) -> Option<(&str, u32)> {
 fn kind_label(entry: &DeviceCatalogEntry) -> &'static str {
     match entry {
         DeviceCatalogEntry::Light(_) => "light",
-        DeviceCatalogEntry::Switch(_) => "switch",
-        DeviceCatalogEntry::Tap(_) => "tap",
+        DeviceCatalogEntry::Switch { .. } => "switch",
         DeviceCatalogEntry::MotionSensor { .. } => "motion-sensor",
         DeviceCatalogEntry::Trv(_) => "trv",
         DeviceCatalogEntry::WallThermostat(_) => "wall-thermostat",
@@ -1524,8 +1290,9 @@ fn kind_label(entry: &DeviceCatalogEntry) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{ActionRule, CommonFields, Defaults, DeviceCatalogEntry, Effect, Room, Trigger};
+    use crate::config::{Binding, CommonFields, Defaults, DeviceCatalogEntry, Effect, Room, Trigger};
     use crate::config::scenes::{Scene, SceneSchedule, Slot};
+    use crate::config::switch_model::{ActionMapping, Gesture, SwitchModel};
     use std::collections::BTreeMap;
 
     fn light(ieee: &str) -> DeviceCatalogEntry {
@@ -1535,21 +1302,29 @@ mod tests {
             options: BTreeMap::new(),
         })
     }
+
     fn switch_dev(ieee: &str) -> DeviceCatalogEntry {
-        DeviceCatalogEntry::Switch(CommonFields {
-            ieee_address: ieee.into(),
-            description: None,
-            options: BTreeMap::new(),
-        })
+        DeviceCatalogEntry::Switch {
+            common: CommonFields {
+                ieee_address: ieee.into(),
+                description: None,
+                options: BTreeMap::new(),
+            },
+            model: "test-dimmer".into(),
+        }
     }
-    fn tap_dev(ieee: &str) -> DeviceCatalogEntry {
-        DeviceCatalogEntry::Tap(CommonFields {
-            ieee_address: ieee.into(),
-            description: None,
-            options: BTreeMap::new(),
-        })
+
+    fn switch_dev_model(ieee: &str, model: &str) -> DeviceCatalogEntry {
+        DeviceCatalogEntry::Switch {
+            common: CommonFields {
+                ieee_address: ieee.into(),
+                description: None,
+                options: BTreeMap::new(),
+            },
+            model: model.into(),
+        }
     }
-    #[allow(dead_code)]
+
     fn motion(ieee: &str) -> DeviceCatalogEntry {
         DeviceCatalogEntry::MotionSensor {
             common: CommonFields {
@@ -1588,7 +1363,7 @@ mod tests {
         name: &str,
         id: u8,
         members: Vec<&str>,
-        devices: Vec<crate::config::DeviceBinding>,
+        motion_sensors: Vec<&str>,
         parent: Option<&str>,
     ) -> Room {
         Room {
@@ -1597,7 +1372,7 @@ mod tests {
             id,
             members: members.into_iter().map(String::from).collect(),
             parent: parent.map(String::from),
-            devices,
+            motion_sensors: motion_sensors.into_iter().map(String::from).collect(),
             scenes: day_scenes(),
             off_transition_seconds: 0.8,
             motion_off_cooldown_seconds: 0,
@@ -1609,7 +1384,6 @@ mod tests {
         id: u8,
         group_name: &str,
         members: Vec<&str>,
-        devices: Vec<crate::config::DeviceBinding>,
         parent: Option<&str>,
     ) -> Room {
         Room {
@@ -1618,26 +1392,10 @@ mod tests {
             id,
             members: members.into_iter().map(String::from).collect(),
             parent: parent.map(String::from),
-            devices,
+            motion_sensors: vec![],
             scenes: day_scenes(),
             off_transition_seconds: 0.8,
             motion_off_cooldown_seconds: 0,
-        }
-    }
-
-    fn binding(device: &str, button: Option<u8>) -> crate::config::DeviceBinding {
-        crate::config::DeviceBinding {
-            device: device.into(),
-            button,
-            cycle_on_double_tap: false,
-        }
-    }
-
-    fn binding_double_tap(device: &str, button: u8) -> crate::config::DeviceBinding {
-        crate::config::DeviceBinding {
-            device: device.into(),
-            button: Some(button),
-            cycle_on_double_tap: true,
         }
     }
 
@@ -1669,14 +1427,61 @@ mod tests {
         }
     }
 
-    fn config(devices: Vec<(&str, DeviceCatalogEntry)>, rooms: Vec<Room>) -> Config {
-        config_with_actions(devices, rooms, vec![])
+    /// Minimal switch model with on/off/up/down buttons, press-only gestures.
+    fn test_dimmer_model() -> SwitchModel {
+        SwitchModel {
+            buttons: vec!["on".into(), "off".into(), "up".into(), "down".into()],
+            z2m_action_map: BTreeMap::from([
+                ("on_press_release".into(), ActionMapping { button: "on".into(), gesture: Gesture::Press }),
+                ("off_press_release".into(), ActionMapping { button: "off".into(), gesture: Gesture::Press }),
+                ("up_press_release".into(), ActionMapping { button: "up".into(), gesture: Gesture::Press }),
+                ("down_press_release".into(), ActionMapping { button: "down".into(), gesture: Gesture::Press }),
+            ]),
+        }
     }
 
-    fn config_with_actions(
+    /// Model with hardware double-tap (Sonoff-style).
+    fn test_hw_double_tap_model() -> SwitchModel {
+        SwitchModel {
+            buttons: vec!["1".into(), "2".into()],
+            z2m_action_map: BTreeMap::from([
+                ("single_button_1".into(), ActionMapping { button: "1".into(), gesture: Gesture::Press }),
+                ("single_button_2".into(), ActionMapping { button: "2".into(), gesture: Gesture::Press }),
+                ("double_button_1".into(), ActionMapping { button: "1".into(), gesture: Gesture::DoubleTap }),
+                ("double_button_2".into(), ActionMapping { button: "2".into(), gesture: Gesture::DoubleTap }),
+            ]),
+        }
+    }
+
+    /// Minimal tap model with numbered buttons.
+    fn test_tap_model() -> SwitchModel {
+        SwitchModel {
+            buttons: vec!["1".into(), "2".into(), "3".into(), "4".into()],
+            z2m_action_map: BTreeMap::from([
+                ("1_single".into(), ActionMapping { button: "1".into(), gesture: Gesture::Press }),
+                ("2_single".into(), ActionMapping { button: "2".into(), gesture: Gesture::Press }),
+                ("3_single".into(), ActionMapping { button: "3".into(), gesture: Gesture::Press }),
+                ("4_single".into(), ActionMapping { button: "4".into(), gesture: Gesture::Press }),
+            ]),
+        }
+    }
+
+    fn default_switch_models() -> BTreeMap<String, SwitchModel> {
+        BTreeMap::from([
+            ("test-dimmer".into(), test_dimmer_model()),
+            ("test-tap".into(), test_tap_model()),
+            ("test-hw-dbl".into(), test_hw_double_tap_model()),
+        ])
+    }
+
+    fn config(devices: Vec<(&str, DeviceCatalogEntry)>, rooms: Vec<Room>) -> Config {
+        config_with_bindings(devices, rooms, vec![])
+    }
+
+    fn config_with_bindings(
         devices: Vec<(&str, DeviceCatalogEntry)>,
         rooms: Vec<Room>,
-        actions: Vec<ActionRule>,
+        bindings: Vec<Binding>,
     ) -> Config {
         let devices = devices
             .into_iter()
@@ -1685,8 +1490,9 @@ mod tests {
         Config {
             name_by_address: BTreeMap::new(),
             devices,
+            switch_models: default_switch_models(),
             rooms,
-            actions,
+            bindings,
             defaults: Default::default(),
             heating: None,
             location: None,
@@ -1701,67 +1507,125 @@ mod tests {
     }
 
     #[test]
-    fn single_switch_room_builds_and_indexes() {
+    fn room_with_switch_binding_builds_and_indexes() {
+        let cfg = config_with_bindings(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("hue-s-a", switch_dev("0x1")),
+            ],
+            vec![room("study", 1, vec!["hue-l-a/11"], vec![], None)],
+            vec![Binding {
+                name: "study-on".into(),
+                trigger: Trigger::Button {
+                    device: "hue-s-a".into(),
+                    button: "on".into(),
+                    gesture: Gesture::Press,
+                },
+                effect: Effect::SceneCycle { room: "study".into() },
+            }],
+        );
+        let topo = Topology::build(&cfg).unwrap();
+        let r = topo.room_by_name("study").unwrap();
+        assert!(r.bound_motion.is_empty());
+        assert!(topo.room_has_rules("study"));
+
+        assert_eq!(
+            topo.bindings_for_button("hue-s-a", "on", Gesture::Press),
+            &[0]
+        );
+        assert_eq!(topo.room_by_group_name("hue-lz-study").unwrap().name, "study");
+    }
+
+    #[test]
+    fn motion_sensor_binding_routes_to_room() {
+        let cfg = config(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("hue-ms-a", motion("0x3")),
+            ],
+            vec![room("study", 1, vec!["hue-l-a/11"], vec!["hue-ms-a"], None)],
+        );
+        let topo = Topology::build(&cfg).unwrap();
+        let r = topo.room_by_name("study").unwrap();
+        assert!(r.has_motion_sensor());
+        assert_eq!(r.bound_motion.len(), 1);
+        assert_eq!(r.bound_motion[0].sensor, "hue-ms-a");
+        assert_eq!(topo.rooms_for_motion("hue-ms-a"), &["study".to_string()]);
+    }
+
+    #[test]
+    fn motion_sensor_not_in_catalog_rejected() {
+        let cfg = config(
+            vec![("hue-l-a", light("0xa"))],
+            vec![room("study", 1, vec!["hue-l-a/11"], vec!["hue-ms-ghost"], None)],
+        );
+        let err = Topology::build(&cfg).unwrap_err();
+        assert!(matches!(err, TopologyError::MotionSensorNotInCatalog { .. }));
+    }
+
+    #[test]
+    fn motion_sensor_wrong_kind_rejected() {
         let cfg = config(
             vec![
                 ("hue-l-a", light("0xa")),
                 ("hue-s-a", switch_dev("0x1")),
             ],
-            vec![room(
-                "study",
-                1,
-                vec!["hue-l-a/11"],
-                vec![binding("hue-s-a", None)],
-                None,
-            )],
+            vec![room("study", 1, vec!["hue-l-a/11"], vec!["hue-s-a"], None)],
         );
-        let topo = Topology::build(&cfg).unwrap();
-        let r = topo.room_by_name("study").unwrap();
-        assert_eq!(r.bound_switches, vec!["hue-s-a"]);
-        assert!(r.bound_taps.is_empty());
-        assert!(r.bound_motion.is_empty());
-        assert!(r.has_rules());
-
-        assert_eq!(topo.rooms_for_switch("hue-s-a"), &["study".to_string()]);
-        assert_eq!(topo.room_by_group_name("hue-lz-study").unwrap().name, "study");
+        let err = Topology::build(&cfg).unwrap_err();
+        assert!(matches!(err, TopologyError::MotionSensorWrongKind { kind: "switch", .. }));
     }
 
     #[test]
-    fn tap_button_binding_routes_to_room() {
-        let cfg = config(
+    fn button_binding_routes_to_correct_index() {
+        let cfg = config_with_bindings(
             vec![
                 ("hue-l-a", light("0xa")),
                 ("hue-l-b", light("0xb")),
-                ("hue-ts-foo", tap_dev("0x1")),
+                ("hue-ts-foo", switch_dev_model("0x1", "test-tap")),
             ],
             vec![
                 room(
-                    "kitchen-cooker",
-                    1,
-                    vec!["hue-l-a/11"],
-                    vec![binding("hue-ts-foo", Some(2))],
+                    "kitchen-cooker", 1, vec!["hue-l-a/11"], vec![],
                     Some("kitchen-all"),
                 ),
                 room(
-                    "kitchen-all",
-                    2,
-                    vec!["hue-l-a/11", "hue-l-b/11"],
-                    vec![binding("hue-ts-foo", Some(1))],
+                    "kitchen-all", 2, vec!["hue-l-a/11", "hue-l-b/11"], vec![],
                     None,
                 ),
+            ],
+            vec![
+                Binding {
+                    name: "cooker-tap".into(),
+                    trigger: Trigger::Button {
+                        device: "hue-ts-foo".into(),
+                        button: "2".into(),
+                        gesture: Gesture::Press,
+                    },
+                    effect: Effect::SceneToggleCycle { room: "kitchen-cooker".into() },
+                },
+                Binding {
+                    name: "all-tap".into(),
+                    trigger: Trigger::Button {
+                        device: "hue-ts-foo".into(),
+                        button: "1".into(),
+                        gesture: Gesture::Press,
+                    },
+                    effect: Effect::SceneToggleCycle { room: "kitchen-all".into() },
+                },
             ],
         );
         let topo = Topology::build(&cfg).unwrap();
 
         assert_eq!(
-            topo.rooms_for_tap_button("hue-ts-foo", 1),
-            &["kitchen-all".to_string()]
+            topo.bindings_for_button("hue-ts-foo", "1", Gesture::Press),
+            &[1]
         );
         assert_eq!(
-            topo.rooms_for_tap_button("hue-ts-foo", 2),
-            &["kitchen-cooker".to_string()]
+            topo.bindings_for_button("hue-ts-foo", "2", Gesture::Press),
+            &[0]
         );
-        assert!(topo.rooms_for_tap_button("hue-ts-foo", 3).is_empty());
+        assert!(topo.bindings_for_button("hue-ts-foo", "3", Gesture::Press).is_empty());
     }
 
     #[test]
@@ -1770,12 +1634,10 @@ mod tests {
             vec![
                 ("hue-l-a", light("0xa")),
                 ("hue-l-b", light("0xb")),
-                ("hue-s-a", switch_dev("0x1")),
-                ("hue-s-b", switch_dev("0x2")),
             ],
             vec![
-                room("a", 1, vec!["hue-l-a/11"], vec![binding("hue-s-a", None)], None),
-                room("b", 1, vec!["hue-l-b/11"], vec![binding("hue-s-b", None)], None),
+                room("a", 1, vec!["hue-l-a/11"], vec![], None),
+                room("b", 1, vec!["hue-l-b/11"], vec![], None),
             ],
         );
         let err = Topology::build(&cfg).unwrap_err();
@@ -1785,11 +1647,7 @@ mod tests {
     #[test]
     fn duplicate_group_friendly_name_rejected() {
         let cfg = config(
-            vec![
-                ("hue-l-a", light("0xa")),
-                ("hue-s-a", switch_dev("0x1")),
-                ("hue-s-b", switch_dev("0x2")),
-            ],
+            vec![("hue-l-a", light("0xa"))],
             vec![
                 Room {
                     name: "a".into(),
@@ -1797,7 +1655,7 @@ mod tests {
                     id: 1,
                     members: vec!["hue-l-a/11".into()],
                     parent: None,
-                    devices: vec![binding("hue-s-a", None)],
+                    motion_sensors: vec![],
                     scenes: day_scenes(),
                     off_transition_seconds: 0.8,
                     motion_off_cooldown_seconds: 0,
@@ -1808,7 +1666,7 @@ mod tests {
                     id: 2,
                     members: vec!["hue-l-a/11".into()],
                     parent: None,
-                    devices: vec![binding("hue-s-b", None)],
+                    motion_sensors: vec![],
                     scenes: day_scenes(),
                     off_transition_seconds: 0.8,
                     motion_off_cooldown_seconds: 0,
@@ -1828,16 +1686,11 @@ mod tests {
         let cfg = config(
             vec![
                 ("hue-l-a", light("0xa")),
-                ("hue-s-a", switch_dev("0x1")),
                 ("z2m-p-foo", plug_dev("0xf", "sonoff-basic", &["on-off"])),
             ],
             vec![room_with_group_name(
-                "a",
-                1,
-                "z2m-p-foo",
-                vec!["hue-l-a/11"],
-                vec![binding("hue-s-a", None)],
-                None,
+                "a", 1, "z2m-p-foo",
+                vec!["hue-l-a/11"], None,
             )],
         );
         let err = Topology::build(&cfg).unwrap_err();
@@ -1847,14 +1700,8 @@ mod tests {
     #[test]
     fn unknown_parent_rejected() {
         let cfg = config(
-            vec![("hue-l-a", light("0xa")), ("hue-s-a", switch_dev("0x1"))],
-            vec![room(
-                "child",
-                1,
-                vec!["hue-l-a/11"],
-                vec![binding("hue-s-a", None)],
-                Some("ghost"),
-            )],
+            vec![("hue-l-a", light("0xa"))],
+            vec![room("child", 1, vec!["hue-l-a/11"], vec![], Some("ghost"))],
         );
         let err = Topology::build(&cfg).unwrap_err();
         assert!(matches!(err, TopologyError::UnknownParent { .. }));
@@ -1863,14 +1710,8 @@ mod tests {
     #[test]
     fn self_parent_rejected() {
         let cfg = config(
-            vec![("hue-l-a", light("0xa")), ("hue-s-a", switch_dev("0x1"))],
-            vec![room(
-                "loop",
-                1,
-                vec!["hue-l-a/11"],
-                vec![binding("hue-s-a", None)],
-                Some("loop"),
-            )],
+            vec![("hue-l-a", light("0xa"))],
+            vec![room("loop", 1, vec!["hue-l-a/11"], vec![], Some("loop"))],
         );
         let err = Topology::build(&cfg).unwrap_err();
         assert!(matches!(err, TopologyError::SelfParent(_)));
@@ -1882,12 +1723,10 @@ mod tests {
             vec![
                 ("hue-l-a", light("0xa")),
                 ("hue-l-b", light("0xb")),
-                ("hue-s-a", switch_dev("0x1")),
-                ("hue-s-b", switch_dev("0x2")),
             ],
             vec![
-                room("a", 1, vec!["hue-l-a/11"], vec![binding("hue-s-a", None)], Some("b")),
-                room("b", 2, vec!["hue-l-b/11"], vec![binding("hue-s-b", None)], Some("a")),
+                room("a", 1, vec!["hue-l-a/11"], vec![], Some("b")),
+                room("b", 2, vec!["hue-l-b/11"], vec![], Some("a")),
             ],
         );
         let err = Topology::build(&cfg).unwrap_err();
@@ -1895,115 +1734,10 @@ mod tests {
     }
 
     #[test]
-    fn unknown_device_rejected() {
-        let cfg = config(
-            vec![("hue-l-a", light("0xa"))],
-            vec![room(
-                "study",
-                1,
-                vec!["hue-l-a/11"],
-                vec![binding("hue-s-ghost", None)],
-                None,
-            )],
-        );
-        let err = Topology::build(&cfg).unwrap_err();
-        assert!(matches!(err, TopologyError::UnknownDevice { .. }));
-    }
-
-    #[test]
-    fn light_in_devices_slot_rejected() {
-        let cfg = config(
-            vec![("hue-l-a", light("0xa"))],
-            vec![room(
-                "study",
-                1,
-                vec!["hue-l-a/11"],
-                vec![binding("hue-l-a", None)],
-                None,
-            )],
-        );
-        let err = Topology::build(&cfg).unwrap_err();
-        assert!(matches!(
-            err,
-            TopologyError::WrongDeviceKind { kind: "light", .. }
-        ));
-    }
-
-    #[test]
-    fn shared_tap_binding_routes_to_every_claiming_room() {
-        // Same (tap, button) pair claimed by two rooms — used to be a
-        // hard error, now allowed (with a startup warning emitted via
-        // tracing). The runtime dispatches each press to every room.
-        let cfg = config(
-            vec![
-                ("hue-l-a", light("0xa")),
-                ("hue-l-b", light("0xb")),
-                ("hue-ts-foo", tap_dev("0x1")),
-            ],
-            vec![
-                room("a", 1, vec!["hue-l-a/11"], vec![binding("hue-ts-foo", Some(1))], None),
-                room("b", 2, vec!["hue-l-b/11"], vec![binding("hue-ts-foo", Some(1))], None),
-            ],
-        );
-        let topo = Topology::build(&cfg).unwrap();
-        assert_eq!(
-            topo.rooms_for_tap_button("hue-ts-foo", 1),
-            &["a".to_string(), "b".to_string()]
-        );
-    }
-
-    #[test]
-    fn tap_without_button_rejected() {
-        let cfg = config(
-            vec![
-                ("hue-l-a", light("0xa")),
-                ("hue-ts-foo", tap_dev("0x1")),
-            ],
-            vec![room(
-                "a",
-                1,
-                vec!["hue-l-a/11"],
-                vec![binding("hue-ts-foo", None)],
-                None,
-            )],
-        );
-        let err = Topology::build(&cfg).unwrap_err();
-        assert!(matches!(err, TopologyError::TapMissingButton { .. }));
-    }
-
-    #[test]
-    fn switch_with_button_rejected() {
-        let cfg = config(
-            vec![
-                ("hue-l-a", light("0xa")),
-                ("hue-s-a", switch_dev("0x1")),
-            ],
-            vec![room(
-                "a",
-                1,
-                vec!["hue-l-a/11"],
-                vec![binding("hue-s-a", Some(1))],
-                None,
-            )],
-        );
-        let err = Topology::build(&cfg).unwrap_err();
-        assert!(matches!(
-            err,
-            TopologyError::NonTapWithButton { kind: "switch", .. }
-        ));
-    }
-
-    #[test]
     fn member_referencing_non_light_rejected() {
         let cfg = config(
             vec![("hue-s-a", switch_dev("0x1"))],
-            vec![room(
-                "a",
-                1,
-                vec!["hue-s-a/11"],
-                vec![binding("hue-s-a", None)],
-                None,
-            )],
+            vec![room("a", 1, vec!["hue-s-a/11"], vec![], None)],
         );
         let err = Topology::build(&cfg).unwrap_err();
         assert!(matches!(err, TopologyError::UnknownMemberLight { .. }));
@@ -2012,67 +1746,43 @@ mod tests {
     #[test]
     fn malformed_member_rejected() {
         let cfg = config(
-            vec![
-                ("hue-l-a", light("0xa")),
-                ("hue-s-a", switch_dev("0x1")),
-            ],
-            vec![room(
-                "a",
-                1,
-                vec!["hue-l-a"],
-                vec![binding("hue-s-a", None)],
-                None,
-            )],
+            vec![("hue-l-a", light("0xa"))],
+            vec![room("a", 1, vec!["hue-l-a"], vec![], None)],
         );
         let err = Topology::build(&cfg).unwrap_err();
         assert!(matches!(err, TopologyError::MalformedMember { .. }));
     }
 
     #[test]
-    fn plug_in_room_devices_rejected() {
-        let cfg = config(
+    fn binding_toggle_plug_builds_and_indexes() {
+        let cfg = config_with_bindings(
             vec![
                 ("hue-l-a", light("0xa")),
-                ("z2m-p-foo", plug_dev("0xf", "sonoff-power", &["on-off", "power"])),
-            ],
-            vec![room(
-                "a",
-                1,
-                vec!["hue-l-a/11"],
-                vec![binding("z2m-p-foo", None)],
-                None,
-            )],
-        );
-        let err = Topology::build(&cfg).unwrap_err();
-        assert!(matches!(err, TopologyError::WrongDeviceKind { kind: "plug", .. }));
-    }
-
-    #[test]
-    fn action_tap_toggle_builds_and_indexes() {
-        let cfg = config_with_actions(
-            vec![
-                ("hue-l-a", light("0xa")),
-                ("hue-ts-foo", tap_dev("0x1")),
+                ("hue-ts-foo", switch_dev_model("0x1", "test-tap")),
                 ("z2m-p-printer", plug_dev("0xf", "sonoff-power", &["on-off", "power"])),
             ],
             vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
-            vec![ActionRule {
+            vec![Binding {
                 name: "printer-toggle".into(),
-                trigger: Trigger::Tap { action: None, device: "hue-ts-foo".into(), button: 3 },
+                trigger: Trigger::Button {
+                    device: "hue-ts-foo".into(),
+                    button: "3".into(),
+                    gesture: Gesture::Press,
+                },
                 effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-printer".into() },
             }],
         );
         let topo = Topology::build(&cfg).unwrap();
-        assert_eq!(topo.actions().len(), 1);
-        assert_eq!(topo.actions_for_tap("hue-ts-foo", 3, None), &[0]);
-        assert!(topo.actions_for_tap("hue-ts-foo", 1, None).is_empty());
+        assert_eq!(topo.bindings().len(), 1);
+        assert_eq!(topo.bindings_for_button("hue-ts-foo", "3", Gesture::Press), &[0]);
+        assert!(topo.bindings_for_button("hue-ts-foo", "1", Gesture::Press).is_empty());
         assert!(topo.is_plug("z2m-p-printer"));
         assert!(!topo.is_plug("hue-l-a"));
     }
 
     #[test]
-    fn action_switch_on_off_builds_and_indexes() {
-        let cfg = config_with_actions(
+    fn binding_switch_on_off_builds_and_indexes() {
+        let cfg = config_with_bindings(
             vec![
                 ("hue-l-a", light("0xa")),
                 ("hue-s-office", switch_dev("0x1")),
@@ -2080,33 +1790,41 @@ mod tests {
             ],
             vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
             vec![
-                ActionRule {
+                Binding {
                     name: "lamp-on".into(),
-                    trigger: Trigger::SwitchOn { device: "hue-s-office".into(), action: None },
+                    trigger: Trigger::Button {
+                        device: "hue-s-office".into(),
+                        button: "on".into(),
+                        gesture: Gesture::Press,
+                    },
                     effect: Effect::TurnOn { target: "z2m-p-lamp".into() },
                 },
-                ActionRule {
+                Binding {
                     name: "lamp-off".into(),
-                    trigger: Trigger::SwitchOff { device: "hue-s-office".into(), action: None },
+                    trigger: Trigger::Button {
+                        device: "hue-s-office".into(),
+                        button: "off".into(),
+                        gesture: Gesture::Press,
+                    },
                     effect: Effect::TurnOff { target: "z2m-p-lamp".into() },
                 },
             ],
         );
         let topo = Topology::build(&cfg).unwrap();
-        assert_eq!(topo.actions().len(), 2);
-        assert_eq!(topo.actions_for_switch_on("hue-s-office"), &[0]);
-        assert_eq!(topo.actions_for_switch_off("hue-s-office"), &[1]);
+        assert_eq!(topo.bindings().len(), 2);
+        assert_eq!(topo.bindings_for_button("hue-s-office", "on", Gesture::Press), &[0]);
+        assert_eq!(topo.bindings_for_button("hue-s-office", "off", Gesture::Press), &[1]);
     }
 
     #[test]
-    fn action_power_below_builds_and_indexes() {
-        let cfg = config_with_actions(
+    fn binding_power_below_builds_and_indexes() {
+        let cfg = config_with_bindings(
             vec![
                 ("hue-l-a", light("0xa")),
                 ("z2m-p-printer", plug_dev("0xf", "sonoff-power", &["on-off", "power"])),
             ],
             vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
-            vec![ActionRule {
+            vec![Binding {
                 name: "printer-kill".into(),
                 trigger: Trigger::PowerBelow {
                     device: "z2m-p-printer".into(),
@@ -2117,18 +1835,18 @@ mod tests {
             }],
         );
         let topo = Topology::build(&cfg).unwrap();
-        assert_eq!(topo.actions_for_power_below("z2m-p-printer"), &[0]);
+        assert_eq!(topo.bindings_for_power_below("z2m-p-printer"), &[0]);
     }
 
     #[test]
-    fn action_power_below_without_capability_rejected() {
-        let cfg = config_with_actions(
+    fn binding_power_below_without_capability_rejected() {
+        let cfg = config_with_bindings(
             vec![
                 ("hue-l-a", light("0xa")),
                 ("z2m-p-basic", plug_dev("0xf", "sonoff-basic", &["on-off"])),
             ],
             vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
-            vec![ActionRule {
+            vec![Binding {
                 name: "kill".into(),
                 trigger: Trigger::PowerBelow {
                     device: "z2m-p-basic".into(),
@@ -2139,111 +1857,179 @@ mod tests {
             }],
         );
         let err = Topology::build(&cfg).unwrap_err();
-        assert!(matches!(err, TopologyError::ActionPowerBelowWithoutCapability { .. }));
+        assert!(matches!(err, TopologyError::BindingPowerBelowWithoutCapability { .. }));
     }
 
     #[test]
-    fn action_trigger_wrong_device_kind_rejected() {
-        let cfg = config_with_actions(
+    fn binding_trigger_wrong_device_kind_rejected() {
+        let cfg = config_with_bindings(
             vec![
                 ("hue-l-a", light("0xa")),
-                ("hue-s-foo", switch_dev("0x1")),
                 ("z2m-p-printer", plug_dev("0xf", "sonoff-power", &["on-off", "power"])),
             ],
             vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
-            vec![ActionRule {
+            vec![Binding {
                 name: "bad".into(),
-                trigger: Trigger::Tap { action: None, device: "hue-s-foo".into(), button: 1 },
+                trigger: Trigger::Button {
+                    device: "hue-l-a".into(),
+                    button: "1".into(),
+                    gesture: Gesture::Press,
+                },
                 effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-printer".into() },
             }],
         );
         let err = Topology::build(&cfg).unwrap_err();
-        assert!(matches!(err, TopologyError::ActionTriggerWrongDeviceKind { .. }));
+        assert!(matches!(err, TopologyError::BindingTriggerWrongDeviceKind { .. }));
     }
 
     #[test]
-    fn action_effect_not_plug_rejected() {
-        let cfg = config_with_actions(
+    fn binding_button_not_in_model_rejected() {
+        let cfg = config_with_bindings(
             vec![
                 ("hue-l-a", light("0xa")),
-                ("hue-ts-foo", tap_dev("0x1")),
-            ],
-            vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
-            vec![ActionRule {
-                name: "bad".into(),
-                trigger: Trigger::Tap { action: None, device: "hue-ts-foo".into(), button: 1 },
-                effect: Effect::Toggle { confirm_off_seconds: None, target: "hue-l-a".into() },
-            }],
-        );
-        let err = Topology::build(&cfg).unwrap_err();
-        assert!(matches!(err, TopologyError::ActionEffectNotPlug { .. }));
-    }
-
-    #[test]
-    fn duplicate_action_name_rejected() {
-        let cfg = config_with_actions(
-            vec![
-                ("hue-l-a", light("0xa")),
-                ("hue-ts-foo", tap_dev("0x1")),
+                ("hue-ts-foo", switch_dev_model("0x1", "test-tap")),
                 ("z2m-p-a", plug_dev("0xf", "sonoff-basic", &["on-off"])),
             ],
             vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
-            vec![
-                ActionRule {
-                    name: "dupe".into(),
-                    trigger: Trigger::Tap { action: None, device: "hue-ts-foo".into(), button: 1 },
-                    effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-a".into() },
-                },
-                ActionRule {
-                    name: "dupe".into(),
-                    trigger: Trigger::Tap { action: None, device: "hue-ts-foo".into(), button: 2 },
-                    effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-a".into() },
-                },
-            ],
-        );
-        let err = Topology::build(&cfg).unwrap_err();
-        assert!(matches!(err, TopologyError::DuplicateActionName(_)));
-    }
-
-    #[test]
-    fn action_trigger_unknown_device_rejected() {
-        let cfg = config_with_actions(
-            vec![
-                ("hue-l-a", light("0xa")),
-                ("z2m-p-a", plug_dev("0xf", "sonoff-basic", &["on-off"])),
-            ],
-            vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
-            vec![ActionRule {
+            vec![Binding {
                 name: "bad".into(),
-                trigger: Trigger::Tap { action: None, device: "ghost".into(), button: 1 },
+                trigger: Trigger::Button {
+                    device: "hue-ts-foo".into(),
+                    button: "nonexistent".into(),
+                    gesture: Gesture::Press,
+                },
                 effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-a".into() },
             }],
         );
         let err = Topology::build(&cfg).unwrap_err();
-        assert!(matches!(err, TopologyError::ActionTriggerUnknownDevice { .. }));
+        assert!(matches!(err, TopologyError::BindingButtonNotInModel { .. }));
     }
 
     #[test]
-    fn action_effect_unknown_device_rejected() {
-        let cfg = config_with_actions(
+    fn binding_effect_not_plug_rejected() {
+        let cfg = config_with_bindings(
             vec![
                 ("hue-l-a", light("0xa")),
-                ("hue-ts-foo", tap_dev("0x1")),
+                ("hue-ts-foo", switch_dev_model("0x1", "test-tap")),
             ],
             vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
-            vec![ActionRule {
+            vec![Binding {
                 name: "bad".into(),
-                trigger: Trigger::Tap { action: None, device: "hue-ts-foo".into(), button: 1 },
+                trigger: Trigger::Button {
+                    device: "hue-ts-foo".into(),
+                    button: "1".into(),
+                    gesture: Gesture::Press,
+                },
+                effect: Effect::Toggle { confirm_off_seconds: None, target: "hue-l-a".into() },
+            }],
+        );
+        let err = Topology::build(&cfg).unwrap_err();
+        assert!(matches!(err, TopologyError::BindingEffectNotPlug { .. }));
+    }
+
+    #[test]
+    fn duplicate_binding_name_rejected() {
+        let cfg = config_with_bindings(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("hue-ts-foo", switch_dev_model("0x1", "test-tap")),
+                ("z2m-p-a", plug_dev("0xf", "sonoff-basic", &["on-off"])),
+            ],
+            vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+            vec![
+                Binding {
+                    name: "dupe".into(),
+                    trigger: Trigger::Button {
+                        device: "hue-ts-foo".into(),
+                        button: "1".into(),
+                        gesture: Gesture::Press,
+                    },
+                    effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-a".into() },
+                },
+                Binding {
+                    name: "dupe".into(),
+                    trigger: Trigger::Button {
+                        device: "hue-ts-foo".into(),
+                        button: "2".into(),
+                        gesture: Gesture::Press,
+                    },
+                    effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-a".into() },
+                },
+            ],
+        );
+        let err = Topology::build(&cfg).unwrap_err();
+        assert!(matches!(err, TopologyError::DuplicateBindingName(_)));
+    }
+
+    #[test]
+    fn binding_trigger_unknown_device_rejected() {
+        let cfg = config_with_bindings(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("z2m-p-a", plug_dev("0xf", "sonoff-basic", &["on-off"])),
+            ],
+            vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+            vec![Binding {
+                name: "bad".into(),
+                trigger: Trigger::Button {
+                    device: "ghost".into(),
+                    button: "1".into(),
+                    gesture: Gesture::Press,
+                },
+                effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-a".into() },
+            }],
+        );
+        let err = Topology::build(&cfg).unwrap_err();
+        assert!(matches!(err, TopologyError::BindingTriggerUnknownDevice { .. }));
+    }
+
+    #[test]
+    fn binding_effect_unknown_device_rejected() {
+        let cfg = config_with_bindings(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("hue-ts-foo", switch_dev_model("0x1", "test-tap")),
+            ],
+            vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+            vec![Binding {
+                name: "bad".into(),
+                trigger: Trigger::Button {
+                    device: "hue-ts-foo".into(),
+                    button: "1".into(),
+                    gesture: Gesture::Press,
+                },
                 effect: Effect::Toggle { confirm_off_seconds: None, target: "ghost".into() },
             }],
         );
         let err = Topology::build(&cfg).unwrap_err();
-        assert!(matches!(err, TopologyError::ActionEffectUnknownDevice { .. }));
+        assert!(matches!(err, TopologyError::BindingEffectUnknownDevice { .. }));
+    }
+
+    #[test]
+    fn binding_room_not_found_rejected() {
+        let cfg = config_with_bindings(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("hue-s-a", switch_dev("0x1")),
+            ],
+            vec![room("study", 1, vec!["hue-l-a/11"], vec![], None)],
+            vec![Binding {
+                name: "ghost-room".into(),
+                trigger: Trigger::Button {
+                    device: "hue-s-a".into(),
+                    button: "on".into(),
+                    gesture: Gesture::Press,
+                },
+                effect: Effect::SceneCycle { room: "nonexistent".into() },
+            }],
+        );
+        let err = Topology::build(&cfg).unwrap_err();
+        assert!(matches!(err, TopologyError::BindingRoomNotFound { .. }));
     }
 
     #[test]
     fn descendants_filter_rule_less_rooms() {
-        let cfg = config(
+        let cfg = config_with_bindings(
             vec![
                 ("hue-l-a", light("0xa")),
                 ("hue-l-b", light("0xb")),
@@ -2253,27 +2039,39 @@ mod tests {
             ],
             vec![
                 room(
-                    "kitchen-cooker",
-                    1,
-                    vec!["hue-l-a/11"],
-                    vec![binding("hue-s-cooker", None)],
+                    "kitchen-cooker", 1, vec!["hue-l-a/11"], vec![],
                     Some("kitchen-all"),
                 ),
-                // Rule-less child: no devices.
+                // Rule-less child: no bindings, no motion sensors.
                 room(
-                    "kitchen-empty",
-                    2,
-                    vec!["hue-l-b/11"],
-                    vec![],
+                    "kitchen-empty", 2, vec!["hue-l-b/11"], vec![],
                     Some("kitchen-all"),
                 ),
                 room(
-                    "kitchen-all",
-                    3,
+                    "kitchen-all", 3,
                     vec!["hue-l-a/11", "hue-l-b/11", "hue-l-c/11"],
-                    vec![binding("hue-s-all", None)],
-                    None,
+                    vec![], None,
                 ),
+            ],
+            vec![
+                Binding {
+                    name: "cooker-on".into(),
+                    trigger: Trigger::Button {
+                        device: "hue-s-cooker".into(),
+                        button: "on".into(),
+                        gesture: Gesture::Press,
+                    },
+                    effect: Effect::SceneCycle { room: "kitchen-cooker".into() },
+                },
+                Binding {
+                    name: "all-on".into(),
+                    trigger: Trigger::Button {
+                        device: "hue-s-all".into(),
+                        button: "on".into(),
+                        gesture: Gesture::Press,
+                    },
+                    effect: Effect::SceneCycle { room: "kitchen-all".into() },
+                },
             ],
         );
         let topo = Topology::build(&cfg).unwrap();
@@ -2286,14 +2084,14 @@ mod tests {
 
     #[test]
     fn power_below_cross_target_rejected() {
-        let cfg = config_with_actions(
+        let cfg = config_with_bindings(
             vec![
                 ("hue-l-a", light("0xa")),
                 ("z2m-p-monitor", plug_dev("0xf1", "sonoff-power", &["on-off", "power"])),
                 ("z2m-p-target", plug_dev("0xf2", "sonoff-power", &["on-off", "power"])),
             ],
             vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
-            vec![ActionRule {
+            vec![Binding {
                 name: "cross-kill".into(),
                 trigger: Trigger::PowerBelow {
                     device: "z2m-p-monitor".into(),
@@ -2310,7 +2108,7 @@ mod tests {
     #[test]
     fn transitive_descendants_through_rule_less_intermediate() {
         // grandparent → parent (rule-less) → child (with rules)
-        let cfg = config(
+        let cfg = config_with_bindings(
             vec![
                 ("hue-l-a", light("0xa")),
                 ("hue-l-b", light("0xb")),
@@ -2319,21 +2117,29 @@ mod tests {
                 ("hue-s-grand", switch_dev("0x2")),
             ],
             vec![
-                room(
-                    "child",
-                    1,
-                    vec!["hue-l-a/11"],
-                    vec![binding("hue-s-child", None)],
-                    Some("parent"),
-                ),
+                room("child", 1, vec!["hue-l-a/11"], vec![], Some("parent")),
                 room("parent", 2, vec!["hue-l-b/11"], vec![], Some("grand")),
-                room(
-                    "grand",
-                    3,
-                    vec!["hue-l-c/11"],
-                    vec![binding("hue-s-grand", None)],
-                    None,
-                ),
+                room("grand", 3, vec!["hue-l-c/11"], vec![], None),
+            ],
+            vec![
+                Binding {
+                    name: "child-on".into(),
+                    trigger: Trigger::Button {
+                        device: "hue-s-child".into(),
+                        button: "on".into(),
+                        gesture: Gesture::Press,
+                    },
+                    effect: Effect::SceneCycle { room: "child".into() },
+                },
+                Binding {
+                    name: "grand-on".into(),
+                    trigger: Trigger::Button {
+                        device: "hue-s-grand".into(),
+                        button: "on".into(),
+                        gesture: Gesture::Press,
+                    },
+                    effect: Effect::SceneCycle { room: "grand".into() },
+                },
             ],
         );
         let topo = Topology::build(&cfg).unwrap();
@@ -2350,8 +2156,9 @@ mod tests {
             devices: BTreeMap::from([
                 ("hue-l-a".into(), light("0xa")),
             ]),
+            switch_models: default_switch_models(),
             rooms: vec![room("r", 1, vec!["hue-l-a/11"], vec![], None)],
-            actions: vec![],
+            bindings: vec![],
             defaults: Defaults {
                 double_tap_suppression_seconds: -1.0,
                 ..Defaults::default()
@@ -2366,79 +2173,160 @@ mod tests {
     }
 
     #[test]
-    fn mixed_double_tap_modes_rejected() {
-        let cfg = config(
+    fn soft_double_tap_buttons_tracked() {
+        let cfg = config_with_bindings(
             vec![
                 ("hue-l-a", light("0xa")),
-                ("hue-l-b", light("0xb")),
-                ("sonoff-ts-x", tap_dev("0x1")),
+                ("hue-s-a", switch_dev("0x1")),
             ],
+            vec![room("study", 1, vec!["hue-l-a/11"], vec![], None)],
             vec![
-                room(
-                    "room-a", 1, vec!["hue-l-a/11"],
-                    vec![binding_double_tap("sonoff-ts-x", 1)], None,
-                ),
-                room(
-                    "room-b", 2, vec!["hue-l-b/11"],
-                    vec![binding("sonoff-ts-x", Some(1))], None,
-                ),
+                Binding {
+                    name: "study-on".into(),
+                    trigger: Trigger::Button {
+                        device: "hue-s-a".into(),
+                        button: "on".into(),
+                        gesture: Gesture::Press,
+                    },
+                    effect: Effect::SceneCycle { room: "study".into() },
+                },
+                Binding {
+                    name: "all-off-dbl".into(),
+                    trigger: Trigger::Button {
+                        device: "hue-s-a".into(),
+                        button: "on".into(),
+                        gesture: Gesture::SoftDoubleTap,
+                    },
+                    effect: Effect::TurnOffAllZones,
+                },
             ],
         );
-        let err = Topology::build(&cfg).unwrap_err();
-        assert!(
-            matches!(err, TopologyError::MixedDoubleTapModes { .. }),
-            "expected MixedDoubleTapModes, got: {err}"
-        );
+        let topo = Topology::build(&cfg).unwrap();
+        assert!(topo.is_soft_double_tap_button("hue-s-a", "on"));
+        assert!(!topo.is_soft_double_tap_button("hue-s-a", "off"));
     }
 
     #[test]
-    fn single_tap_action_on_double_tap_button_rejected() {
-        let cfg = config_with_actions(
+    fn hw_double_tap_buttons_tracked() {
+        let cfg = config_with_bindings(
             vec![
                 ("hue-l-a", light("0xa")),
-                ("sonoff-ts-x", tap_dev("0x1")),
-                ("z2m-p-plug", plug_dev("0xf", "sonoff-basic", &["on-off"])),
+                ("sonoff-orb", switch_dev_model("0x1", "test-hw-dbl")),
             ],
-            vec![room(
-                "room-a", 1, vec!["hue-l-a/11"],
-                vec![binding_double_tap("sonoff-ts-x", 1)], None,
-            )],
-            vec![ActionRule {
-                name: "plug-on".into(),
-                trigger: Trigger::Tap {
-                    device: "sonoff-ts-x".into(), button: 1, action: None,
+            vec![room("study", 1, vec!["hue-l-a/11"], vec![], None)],
+            vec![Binding {
+                name: "orb-1".into(),
+                trigger: Trigger::Button {
+                    device: "sonoff-orb".into(),
+                    button: "1".into(),
+                    gesture: Gesture::Press,
                 },
-                effect: Effect::TurnOn { target: "z2m-p-plug".into() },
+                effect: Effect::SceneCycle { room: "study".into() },
             }],
         );
-        let err = Topology::build(&cfg).unwrap_err();
-        assert!(
-            matches!(err, TopologyError::ActionConflictsWithDoubleTap { .. }),
-            "expected ActionConflictsWithDoubleTap, got: {err}"
-        );
+        let topo = Topology::build(&cfg).unwrap();
+        assert!(topo.is_hw_double_tap_button("sonoff-orb", "1"));
+        assert!(topo.is_hw_double_tap_button("sonoff-orb", "2"));
     }
 
     #[test]
-    fn double_tap_action_on_double_tap_button_allowed() {
-        let cfg = config_with_actions(
+    fn hw_double_tap_is_per_button() {
+        // Model where only button "1" has both press+double_tap,
+        // button "2" only has press.
+        let partial_model = SwitchModel {
+            buttons: vec!["1".into(), "2".into()],
+            z2m_action_map: BTreeMap::from([
+                ("single_button_1".into(), ActionMapping { button: "1".into(), gesture: Gesture::Press }),
+                ("single_button_2".into(), ActionMapping { button: "2".into(), gesture: Gesture::Press }),
+                ("double_button_1".into(), ActionMapping { button: "1".into(), gesture: Gesture::DoubleTap }),
+                // no double_button_2 — button "2" lacks HW double-tap
+            ]),
+        };
+        let mut models = default_switch_models();
+        models.insert("partial-dbl".into(), partial_model);
+        let cfg = Config {
+            name_by_address: BTreeMap::new(),
+            switch_models: models,
+            devices: BTreeMap::from([
+                ("hue-l-a".into(), light("0xa")),
+                ("sw-partial".into(), switch_dev_model("0x1", "partial-dbl")),
+            ]),
+            rooms: vec![room("study", 1, vec!["hue-l-a/11"], vec![], None)],
+            bindings: vec![Binding {
+                name: "partial-1".into(),
+                trigger: Trigger::Button {
+                    device: "sw-partial".into(),
+                    button: "1".into(),
+                    gesture: Gesture::Press,
+                },
+                effect: Effect::SceneCycle { room: "study".into() },
+            }],
+            defaults: Defaults::default(),
+            heating: None,
+            location: None,
+        };
+        let topo = Topology::build(&cfg).unwrap();
+        assert!(topo.is_hw_double_tap_button("sw-partial", "1"));
+        assert!(!topo.is_hw_double_tap_button("sw-partial", "2"));
+    }
+
+    #[test]
+    fn switch_model_lookup() {
+        let cfg = config_with_bindings(
             vec![
                 ("hue-l-a", light("0xa")),
-                ("sonoff-ts-x", tap_dev("0x1")),
-                ("z2m-p-plug", plug_dev("0xf", "sonoff-basic", &["on-off"])),
+                ("hue-s-a", switch_dev("0x1")),
             ],
-            vec![room(
-                "room-a", 1, vec!["hue-l-a/11"],
-                vec![binding_double_tap("sonoff-ts-x", 1)], None,
-            )],
-            vec![ActionRule {
-                name: "plug-off-on-double".into(),
-                trigger: Trigger::Tap {
-                    device: "sonoff-ts-x".into(), button: 1,
-                    action: Some("double".into()),
-                },
-                effect: Effect::TurnOff { target: "z2m-p-plug".into() },
-            }],
+            vec![room("study", 1, vec!["hue-l-a/11"], vec![], None)],
+            vec![],
         );
-        assert!(Topology::build(&cfg).is_ok(), "double-tap action rule on cdt button must be allowed");
+        let topo = Topology::build(&cfg).unwrap();
+        assert_eq!(topo.switch_model_for("hue-s-a"), Some("test-dimmer"));
+        assert_eq!(topo.switch_model_for("hue-l-a"), None);
+    }
+
+    #[test]
+    fn unknown_switch_model_rejected() {
+        let devices: BTreeMap<String, DeviceCatalogEntry> = BTreeMap::from([
+            ("hue-l-a".into(), light("0xa")),
+            ("hue-s-a".into(), DeviceCatalogEntry::Switch {
+                common: CommonFields {
+                    ieee_address: "0x1".into(),
+                    description: None,
+                    options: BTreeMap::new(),
+                },
+                model: "nonexistent-model".into(),
+            }),
+        ]);
+        let cfg = Config {
+            name_by_address: BTreeMap::new(),
+            devices,
+            switch_models: default_switch_models(),
+            rooms: vec![room("study", 1, vec!["hue-l-a/11"], vec![], None)],
+            bindings: vec![],
+            defaults: Default::default(),
+            heating: None,
+            location: None,
+        };
+        let err = Topology::build(&cfg).unwrap_err();
+        assert!(matches!(err, TopologyError::UnknownSwitchModel { .. }));
+    }
+
+    #[test]
+    fn all_switch_device_names_populated() {
+        let cfg = config_with_bindings(
+            vec![
+                ("hue-l-a", light("0xa")),
+                ("hue-s-a", switch_dev("0x1")),
+                ("hue-s-b", switch_dev("0x2")),
+            ],
+            vec![room("study", 1, vec!["hue-l-a/11"], vec![], None)],
+            vec![],
+        );
+        let topo = Topology::build(&cfg).unwrap();
+        let names = topo.all_switch_device_names();
+        assert!(names.contains("hue-s-a"));
+        assert!(names.contains("hue-s-b"));
+        assert!(!names.contains("hue-l-a"));
     }
 }

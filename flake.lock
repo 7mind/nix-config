@@ -707,11 +707,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1776183512,
-        "narHash": "sha256-0BvtCVTupvdMjttS7nMVlQZHSH8kGHZ4Yt6DVyDPJDw=",
+        "lastModified": 1776211307,
+        "narHash": "sha256-W20aU2VVAnkYPVtukQ9gbGPWAnV2MEcehigrUXtK/Ls=",
         "owner": "pshirshov",
         "repo": "mqtt-spc",
-        "rev": "78d5226948ae66101378abf4937278cdb913e51d",
+        "rev": "f1deb19781c8c4ae4b9588b164e55a8ac1d514a8",
         "type": "github"
       },
       "original": {
@@ -1136,11 +1136,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1775731193,
-        "narHash": "sha256-LOM1n8IQGxX31in/dAB02/cysI7vrl0wOS0489WcCDc=",
+        "lastModified": 1776210020,
+        "narHash": "sha256-TSwDbbUnM8sD3fpJ1AG5l3Wre0kdSPr4WDSFDEGuqow=",
         "owner": "pshirshov",
         "repo": "mqtt-pylontech",
-        "rev": "ad726b65d77f76c931452ea418f739ced00e3645",
+        "rev": "6dc68860d92233b7dd0043838bb0397ff2fec1a1",
         "type": "github"
       },
       "original": {
@@ -1159,11 +1159,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1775728250,
-        "narHash": "sha256-SdcgJVM2CDmDavxTQewaMmbm/Nvv2O0apuEl8A2XJqI=",
+        "lastModified": 1776211334,
+        "narHash": "sha256-5cOp2/k+YdcQ8ET+Pb29fuAU7CVYRqQg+ZRVH1ZCPIM=",
         "owner": "pshirshov",
         "repo": "mqtt-qendercore",
-        "rev": "f75428f8a2f06a2e2b64b58d94882517071a4195",
+        "rev": "2d34263e5393cbfa1644748826d137c74b653afd",
         "type": "github"
       },
       "original": {

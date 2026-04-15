@@ -57,13 +57,16 @@ pub enum DeviceCatalogEntry {
     /// every member reference points at a real device.
     Light(CommonFields),
 
-    /// Hue dimmer wall switch. Press handlers: on/off + brightness up/down.
-    Switch(CommonFields),
-
-    /// Hue Tap. Each of the 4 buttons can bind to a (possibly different)
-    /// room. The catalog entry has no per-button state; the room's
-    /// `devices` list carries the (device, button) pair.
-    Tap(CommonFields),
+    /// Any switch device (Hue dimmer, Hue Tap, Sonoff orb, etc).
+    /// The `model` field references a switch model descriptor in
+    /// `Config::switch_models` that defines the button layout and
+    /// z2m action string mapping.
+    Switch {
+        #[serde(flatten)]
+        common: CommonFields,
+        /// References a key in `Config::switch_models`.
+        model: String,
+    },
 
     /// Hue motion sensor. Per-sensor options get written by the
     /// provisioner; the runtime needs the timeout (for the auto-off
@@ -153,9 +156,10 @@ fn default_occupancy_timeout() -> u32 {
 impl DeviceCatalogEntry {
     pub fn common(&self) -> &CommonFields {
         match self {
-            Self::Light(c) | Self::Switch(c) | Self::Tap(c) | Self::Trv(c)
-            | Self::WallThermostat(c) => c,
-            Self::MotionSensor { common, .. } | Self::Plug { common, .. } => common,
+            Self::Light(c) | Self::Trv(c) | Self::WallThermostat(c) => c,
+            Self::Switch { common, .. }
+            | Self::MotionSensor { common, .. }
+            | Self::Plug { common, .. } => common,
         }
     }
 
@@ -171,21 +175,17 @@ impl DeviceCatalogEntry {
         &self.common().options
     }
 
-    /// True for the kinds that can be put in a room's `devices` list as a
-    /// runtime input (i.e. switches, taps, and motion sensors — not lights
-    /// or plugs). Useful for topology validation.
-    pub fn is_runtime_input(&self) -> bool {
-        !matches!(self, Self::Light(_) | Self::Plug { .. })
-    }
-
-    /// True if this kind is a Hue Tap.
-    pub fn is_tap(&self) -> bool {
-        matches!(self, Self::Tap(_))
-    }
-
-    /// True if this kind is a wall switch (Hue dimmer).
+    /// True if this kind is a switch (any model: dimmer, tap, orb, etc).
     pub fn is_switch(&self) -> bool {
-        matches!(self, Self::Switch(_))
+        matches!(self, Self::Switch { .. })
+    }
+
+    /// The switch model name, if this is a switch.
+    pub fn switch_model(&self) -> Option<&str> {
+        match self {
+            Self::Switch { model, .. } => Some(model),
+            _ => None,
+        }
     }
 
     /// True if this kind is a motion sensor.
@@ -286,30 +286,11 @@ mod tests {
     }
 
     #[test]
-    fn deserialize_each_kind() {
-        for (json, expected_predicate) in [
-            (
-                r#"{"kind":"light","ieee_address":"0x1"}"#,
-                DeviceCatalogEntry::is_runtime_input as fn(&DeviceCatalogEntry) -> bool,
-            ),
-            (
-                r#"{"kind":"switch","ieee_address":"0x2"}"#,
-                DeviceCatalogEntry::is_switch,
-            ),
-            (
-                r#"{"kind":"tap","ieee_address":"0x3"}"#,
-                DeviceCatalogEntry::is_tap,
-            ),
-        ] {
-            let entry: DeviceCatalogEntry = serde_json::from_str(json).unwrap();
-            // Light should NOT match is_runtime_input; the others should
-            // match their respective predicates.
-            if json.contains("\"light\"") {
-                assert!(!entry.is_runtime_input());
-            } else {
-                assert!(expected_predicate(&entry), "predicate failed for {json}");
-            }
-        }
+    fn deserialize_switch_with_model() {
+        let json = r#"{"kind":"switch","ieee_address":"0x2","model":"hue-dimmer-v2"}"#;
+        let entry: DeviceCatalogEntry = serde_json::from_str(json).unwrap();
+        assert!(entry.is_switch());
+        assert_eq!(entry.switch_model(), Some("hue-dimmer-v2"));
     }
 
     #[test]
@@ -334,6 +315,7 @@ mod tests {
         let json = r#"{
             "kind": "switch",
             "ieee_address": "0x2",
+            "model": "hue-dimmer-v2",
             "ghost_field": 42
         }"#;
         let result: Result<DeviceCatalogEntry, _> = serde_json::from_str(json);
@@ -391,7 +373,7 @@ mod tests {
             "capabilities": ["on-off", "power"]
         }"#;
         let entry: DeviceCatalogEntry = serde_json::from_str(json).unwrap();
-        assert!(!entry.is_runtime_input());
+        assert!(!entry.is_switch());
     }
 
     #[test]
@@ -428,20 +410,23 @@ mod tests {
 
     #[test]
     fn classifier_helpers() {
-        let switch = DeviceCatalogEntry::Switch(CommonFields {
-            ieee_address: "0x1".into(),
-            description: None,
-            options: BTreeMap::new(),
-        });
-        assert!(switch.is_runtime_input());
+        let switch = DeviceCatalogEntry::Switch {
+            common: CommonFields {
+                ieee_address: "0x1".into(),
+                description: None,
+                options: BTreeMap::new(),
+            },
+            model: "hue-dimmer-v2".into(),
+        };
         assert!(switch.is_switch());
+        assert_eq!(switch.switch_model(), Some("hue-dimmer-v2"));
 
         let light = DeviceCatalogEntry::Light(CommonFields {
             ieee_address: "0x2".into(),
             description: None,
             options: BTreeMap::new(),
         });
-        assert!(!light.is_runtime_input());
+        assert!(!light.is_switch());
 
         let ms = DeviceCatalogEntry::MotionSensor {
             common: CommonFields {
@@ -453,6 +438,5 @@ mod tests {
             max_illuminance: None,
         };
         assert!(ms.is_motion_sensor());
-        assert!(ms.is_runtime_input());
     }
 }

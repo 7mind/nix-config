@@ -302,6 +302,14 @@ impl HeatingController {
                 let topic = ha_discovery::state_topic("zone", &zone_cfg.name);
                 let state_str = zone_derived.as_str();
                 if self.ha_last_published.get(&topic).map_or(true, |prev| prev != state_str) {
+                    tracing::info!(
+                        zone = %zone_cfg.name,
+                        from = self.ha_last_published.get(&topic).map(String::as_str).unwrap_or("(none)"),
+                        to = state_str,
+                        relay_on = zone_state.relay_on,
+                        relay_state_known = zone_state.relay_state_known,
+                        "HA zone state transition"
+                    );
                     actions.push(ha_discovery::state_update_action("zone", &zone_cfg.name, state_str));
                     self.ha_last_published.insert(topic, state_str.to_string());
                 }
@@ -846,6 +854,15 @@ impl HeatingController {
                     continue;
                 }
                 if trv_state.is_inhibited(now) || trv_state.pressure_forced || trv_state.min_cycle_forced {
+                    continue;
+                }
+                // Skip TRVs with no heat demand: their valve is closed,
+                // so temperature won't rise from heating — that's expected,
+                // not an open window.
+                let has_demand = trv_state.pi_heating_demand.unwrap_or(0) > 0
+                    || trv_state.running_state == HeatingRunningState::Heat;
+                if !has_demand {
+                    trv_state.open_window_checked = true;
                     continue;
                 }
                 let Some(temp_at_on) = trv_state.temp_at_relay_on else {
@@ -1475,7 +1492,8 @@ mod tests {
             name_by_address: BTreeMap::new(),
             devices,
             rooms: vec![],
-            actions: vec![],
+            switch_models: BTreeMap::new(),
+            bindings: vec![],
             defaults: Defaults::default(),
             heating: Some(HeatingConfig {
                 zones,

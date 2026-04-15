@@ -203,15 +203,9 @@ pub fn action_to_dto(action: &Action) -> ActionDto {
 /// Summarize an event for the decision log.
 pub fn summarize_event(event: &crate::domain::event::Event) -> String {
     match event {
-        crate::domain::event::Event::SwitchAction {
-            device, action, ..
-        } => format!("switch {action:?} on {device}"),
-        crate::domain::event::Event::TapAction {
-            device, button, action, ..
-        } => {
-            let kind = action.as_deref().unwrap_or("press");
-            format!("tap {kind}_{button} on {device}")
-        }
+        crate::domain::event::Event::ButtonPress {
+            device, button, gesture, ..
+        } => format!("button {gesture:?} {button} on {device}"),
         crate::domain::event::Event::Occupancy {
             sensor,
             occupied,
@@ -406,18 +400,16 @@ pub fn extract_event_entities(
 ) -> Vec<String> {
     let mut entities = Vec::new();
     match event {
-        crate::domain::event::Event::SwitchAction { device, .. } => {
-            entities.push(device.clone());
-            for room in topology.rooms_for_switch(device) {
-                entities.push(room.clone());
-            }
-        }
-        crate::domain::event::Event::TapAction {
-            device, button, ..
+        crate::domain::event::Event::ButtonPress {
+            device, button, gesture, ..
         } => {
             entities.push(device.clone());
-            for room in topology.rooms_for_tap_button(device, *button) {
-                entities.push(room.clone());
+            // Derive related rooms from bindings for this button event.
+            for &idx in topology.bindings_for_button(device, button, *gesture) {
+                let binding = &topology.bindings()[idx];
+                if let Some(room) = binding.effect.room() {
+                    entities.push(room.to_string());
+                }
             }
         }
         crate::domain::event::Event::Occupancy { sensor, .. } => {

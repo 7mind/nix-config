@@ -22,18 +22,14 @@
 //! ## Topic conventions
 //!
 //! z2m publishes to:
-//!   - `zigbee2mqtt/<friendly_name>/action` for switch and tap action
-//!     codes (plain text payload like `"on_press_release"` / `"press_1"`)
+//!   - `zigbee2mqtt/<friendly_name>/action` for switch button action
+//!     codes (plain text payload like `"on_press_release"`)
 //!   - `zigbee2mqtt/<friendly_name>` for device state (motion sensors)
 //!     and group state (z2m aggregates member states into per-group state)
 //!
 //! We dispatch by suffix:
-//!   - `/action` → look up the friendly name in switch / tap indexes
+//!   - `/action` → resolve via the device's switch model descriptor
 //!   - bare → look up in motion sensor / group indexes
-//!
-//! Each name is unique across all four kinds (the topology validator
-//! enforces this implicitly: the same friendly name can't be both a
-//! switch and a tap).
 
 pub mod codec;
 pub mod topics;
@@ -46,7 +42,7 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 
 use crate::domain::action::Action;
-use crate::domain::event::{Event, SwitchAction, parse_tap_action};
+use crate::domain::event::Event;
 use crate::time::Clock;
 use crate::topology::Topology;
 
@@ -147,16 +143,10 @@ impl MqttBridge {
         client: &AsyncClient,
         topology: &Topology,
     ) -> Result<(), MqttError> {
-        // Switches: action topics
-        for sw in topology.all_switch_names() {
+        // Switches (all models): action topics
+        for sw in topology.all_switch_device_names() {
             client
                 .subscribe(topics::device_action_topic(sw), QoS::AtLeastOnce)
-                .await?;
-        }
-        // Taps: action topics
-        for tap in topology.all_tap_names() {
-            client
-                .subscribe(topics::device_action_topic(tap), QoS::AtLeastOnce)
                 .await?;
         }
         // Motion sensors: state topic
@@ -348,34 +338,18 @@ fn parse_event(topology: &Topology, p: &Publish, clock: &dyn Clock) -> Option<Ev
     // under that namespace.
     let rest = topic.strip_prefix("zigbee2mqtt/")?;
 
-    // Action topics → switch or tap. The friendly name is everything
-    // between the prefix and `/action`.
+    // Action topics → button press. The friendly name is everything
+    // between the prefix and `/action`. The topology resolves the raw
+    // z2m action string via the device's model descriptor.
     if let Some(name) = rest.strip_suffix("/action") {
         let payload_text = std::str::from_utf8(&p.payload).ok()?.trim_matches('"');
-        // Switch dispatch first (action set is disjoint from tap's, so
-        // even if the same name appeared as both — which is impossible —
-        // we'd recognize the right one). A switch qualifies if it's bound
-        // to a room OR if it has action rules (SwitchOn/SwitchOff).
-        if !topology.rooms_for_switch(name).is_empty()
-            || topology.has_switch_actions(name)
-        {
-            let action = SwitchAction::parse(payload_text)?;
-            return Some(Event::SwitchAction {
-                device: name.to_string(),
-                action,
-                ts: now,
-            });
-        }
-        if topology.all_tap_names().contains(name) {
-            let parsed = parse_tap_action(payload_text)?;
-            return Some(Event::TapAction {
-                device: name.to_string(),
-                button: parsed.button,
-                action: parsed.action,
-                ts: now,
-            });
-        }
-        return None;
+        let (button, gesture) = topology.resolve_button_event(name, payload_text)?;
+        return Some(Event::ButtonPress {
+            device: name.to_string(),
+            button,
+            gesture,
+            ts: now,
+        });
     }
 
     // State topic → motion sensor or group. The friendly name is the
@@ -543,8 +517,9 @@ mod tests {
     use super::*;
     use crate::config::catalog::PlugProtocol;
     use crate::config::scenes::{Scene, SceneSchedule, Slot};
+    use crate::config::switch_model::{ActionMapping, Gesture, SwitchModel};
     use crate::config::{
-        ActionRule, CommonFields, Config, DeviceBinding, DeviceCatalogEntry, Defaults,
+        Binding, CommonFields, Config, DeviceCatalogEntry, Defaults,
         Effect, Room, Trigger,
     };
     use crate::time::FakeClock;
@@ -575,6 +550,23 @@ mod tests {
         }
     }
 
+    /// Build a switch model descriptor for a Hue dimmer (4-button).
+    fn hue_dimmer_model() -> SwitchModel {
+        SwitchModel {
+            buttons: vec!["on".into(), "off".into(), "up".into(), "down".into()],
+            z2m_action_map: BTreeMap::from([
+                ("on_press_release".into(), ActionMapping { button: "on".into(), gesture: Gesture::Press }),
+                ("off_press_release".into(), ActionMapping { button: "off".into(), gesture: Gesture::Press }),
+                ("up_press_release".into(), ActionMapping { button: "up".into(), gesture: Gesture::Press }),
+                ("up_hold".into(), ActionMapping { button: "up".into(), gesture: Gesture::Hold }),
+                ("up_hold_release".into(), ActionMapping { button: "up".into(), gesture: Gesture::HoldRelease }),
+                ("down_press_release".into(), ActionMapping { button: "down".into(), gesture: Gesture::Press }),
+                ("down_hold".into(), ActionMapping { button: "down".into(), gesture: Gesture::Hold }),
+                ("down_hold_release".into(), ActionMapping { button: "down".into(), gesture: Gesture::HoldRelease }),
+            ]),
+        }
+    }
+
     fn small_topology() -> Arc<Topology> {
         let cfg = Config {
             name_by_address: BTreeMap::new(),
@@ -589,19 +581,14 @@ mod tests {
                 ),
                 (
                     "hue-s-study".into(),
-                    DeviceCatalogEntry::Switch(CommonFields {
-                        ieee_address: "0x1".into(),
-                        description: None,
-                        options: BTreeMap::new(),
-                    }),
-                ),
-                (
-                    "hue-ts-foo".into(),
-                    DeviceCatalogEntry::Tap(CommonFields {
-                        ieee_address: "0x2".into(),
-                        description: None,
-                        options: BTreeMap::new(),
-                    }),
+                    DeviceCatalogEntry::Switch {
+                        common: CommonFields {
+                            ieee_address: "0x1".into(),
+                            description: None,
+                            options: BTreeMap::new(),
+                        },
+                        model: "hue-dimmer".into(),
+                    },
                 ),
                 (
                     "hue-ms-study".into(),
@@ -644,44 +631,55 @@ mod tests {
                     },
                 ),
             ]),
+            switch_models: BTreeMap::from([
+                ("hue-dimmer".into(), hue_dimmer_model()),
+            ]),
             rooms: vec![Room {
                 name: "study".into(),
                 group_name: "hue-lz-study".into(),
                 id: 1,
                 members: vec!["hue-l-a/11".into()],
                 parent: None,
-                devices: vec![
-                    DeviceBinding {
-                        device: "hue-s-study".into(),
-                        button: None,
-                        cycle_on_double_tap: false,
-                    },
-                    DeviceBinding {
-                        device: "hue-ts-foo".into(),
-                        button: Some(1),
-                        cycle_on_double_tap: false,
-                    },
-                    DeviceBinding {
-                        device: "hue-ms-study".into(),
-                        button: None,
-                        cycle_on_double_tap: false,
-                    },
-                ],
+                motion_sensors: vec!["hue-ms-study".into()],
                 scenes: day_scenes(),
                 off_transition_seconds: 0.8,
                 motion_off_cooldown_seconds: 0,
             }],
-            actions: vec![ActionRule {
-                name: "printer-kill".into(),
-                trigger: Trigger::PowerBelow {
-                    device: "z2m-p-printer".into(),
-                    watts: 5.0,
-                    for_seconds: 300,
+            bindings: vec![
+                Binding {
+                    name: "study-on".into(),
+                    trigger: Trigger::Button {
+                        device: "hue-s-study".into(),
+                        button: "on".into(),
+                        gesture: Gesture::Press,
+                    },
+                    effect: Effect::SceneToggleCycle {
+                        room: "study".into(),
+                    },
                 },
-                effect: Effect::TurnOff {
-                    target: "z2m-p-printer".into(),
+                Binding {
+                    name: "study-off".into(),
+                    trigger: Trigger::Button {
+                        device: "hue-s-study".into(),
+                        button: "off".into(),
+                        gesture: Gesture::Press,
+                    },
+                    effect: Effect::TurnOffRoom {
+                        room: "study".into(),
+                    },
                 },
-            }],
+                Binding {
+                    name: "printer-kill".into(),
+                    trigger: Trigger::PowerBelow {
+                        device: "z2m-p-printer".into(),
+                        watts: 5.0,
+                        for_seconds: 300,
+                    },
+                    effect: Effect::TurnOff {
+                        target: "z2m-p-printer".into(),
+                    },
+                },
+            ],
             defaults: Defaults::default(),
             heating: None,
             location: None,
@@ -694,31 +692,42 @@ mod tests {
     }
 
     #[test]
-    fn parse_switch_action() {
+    fn parse_button_press() {
         let topo = small_topology();
         let p = publish("zigbee2mqtt/hue-s-study/action", "on_press_release");
         let event = parse_event(&topo, &p, &clock()).unwrap();
         match event {
-            Event::SwitchAction {
+            Event::ButtonPress {
                 device,
-                action: SwitchAction::OnPressRelease,
+                button,
+                gesture,
                 ..
-            } => assert_eq!(device, "hue-s-study"),
-            other => panic!("expected SwitchAction OnPressRelease, got {other:?}"),
+            } => {
+                assert_eq!(device, "hue-s-study");
+                assert_eq!(button, "on");
+                assert_eq!(gesture, Gesture::Press);
+            }
+            other => panic!("expected ButtonPress, got {other:?}"),
         }
     }
 
     #[test]
-    fn parse_tap_action() {
+    fn parse_button_hold() {
         let topo = small_topology();
-        let p = publish("zigbee2mqtt/hue-ts-foo/action", "press_1");
+        let p = publish("zigbee2mqtt/hue-s-study/action", "up_hold");
         let event = parse_event(&topo, &p, &clock()).unwrap();
         match event {
-            Event::TapAction { device, button, .. } => {
-                assert_eq!(device, "hue-ts-foo");
-                assert_eq!(button, 1);
+            Event::ButtonPress {
+                device,
+                button,
+                gesture,
+                ..
+            } => {
+                assert_eq!(device, "hue-s-study");
+                assert_eq!(button, "up");
+                assert_eq!(gesture, Gesture::Hold);
             }
-            other => panic!("expected TapAction, got {other:?}"),
+            other => panic!("expected ButtonPress Hold, got {other:?}"),
         }
     }
 
@@ -803,7 +812,7 @@ mod tests {
     }
 
     #[test]
-    fn unknown_switch_action_returns_none() {
+    fn unrecognized_action_string_returns_none() {
         let topo = small_topology();
         let p = publish("zigbee2mqtt/hue-s-study/action", "long_press");
         assert!(parse_event(&topo, &p, &clock()).is_none());

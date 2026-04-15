@@ -79,14 +79,13 @@ pub async fn run(
 
     tracing::info!(
         rooms = topology.rooms().count(),
-        switches = topology.all_switch_names().len(),
-        taps = topology.all_tap_names().len(),
+        switches = topology.all_switch_device_names().len(),
         motion_sensors = topology.all_motion_sensor_names().len(),
         groups = topology.all_group_names().len(),
         plugs = topology.all_plug_names().len(),
         trvs = topology.all_trv_names().len(),
         wall_thermostats = topology.all_wall_thermostat_names().len(),
-        actions = topology.actions().len(),
+        bindings = topology.bindings().len(),
         heating = topology.heating_config().is_some(),
         "topology built"
     );
@@ -393,12 +392,12 @@ async fn run_event_loop(
         // compile time. We use a helper future that never completes
         // when web is disabled, so the branch is dead but compiles.
         //
-        // The switch-press deadline branch handles deferred double-tap
-        // detection: when a button has both single and double-tap rules,
+        // The press deadline branch handles deferred soft-double-tap
+        // detection: when a button has soft_double_tap bindings,
         // the first press is buffered for a short window. This branch
         // flushes it as a single press once the window expires.
         let switch_deadline_sleep = async {
-            match controller.next_switch_press_deadline() {
+            match controller.next_press_deadline() {
                 Some(deadline) => {
                     let now = std::time::Instant::now();
                     if deadline <= now {
@@ -461,7 +460,7 @@ async fn run_event_loop(
 
         let is_user_action = matches!(
             &event,
-            Event::SwitchAction { .. } | Event::TapAction { .. }
+            Event::ButtonPress { .. }
         );
 
         let actions = controller.handle_event(event);

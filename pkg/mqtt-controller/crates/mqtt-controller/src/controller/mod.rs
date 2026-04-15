@@ -15,12 +15,12 @@
 //!
 //! Handler logic is split by concern:
 //!
-//!   * [`room`]    — wall-switch and tap-button scene cycling
+//!   * [`room`]    — room-targeting effect executors (scene cycling,
+//!     brightness, turn-off)
 //!   * [`motion`]  — motion-sensor dispatch (occupancy gating,
 //!     multi-sensor OR-gate, illuminance gate, cooldown)
 //!   * [`plug`]    — plug state tracking and kill-switch integration
-//!   * [`actions`] — action-rule dispatch (trigger matching, effect
-//!     execution, confirm-off toggle, scheduled `At` triggers)
+//!   * [`actions`] — scheduled `At` trigger evaluation
 //!   * [`kill_switch`] — the kill-switch evaluator: power-below
 //!     threshold monitoring with holdoff, arming, and warmup
 //!     suppression (extracted from the controller to eliminate
@@ -60,8 +60,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::config::Defaults;
+use crate::config::switch_model::Gesture;
 use crate::domain::action::{Action, Payload};
-use crate::domain::event::{Event, SwitchAction};
+use crate::domain::event::Event;
 use crate::domain::state::{PlugRuntimeState, ZoneState};
 use crate::time::Clock;
 use crate::topology::{RoomName, Topology};
@@ -69,28 +70,28 @@ use crate::topology::{RoomName, Topology};
 use heating::HeatingController;
 use kill_switch::KillSwitchEvaluator;
 
-// ## Why wall switch on and tap press take different code paths
+// ## Unified button dispatch
 //
-// Wall switches have a dedicated `off_press_release` button. The
-// `on_press_release` button is then a pure "scene cycle" button: every
-// press advances the active slot's cycle by one, indefinitely, with no
-// time component at all. The cycle index only resets when the lights
-// physically go off (via the dedicated off button, an external action,
-// or `cycle_idx = 0` reseed in `handle_group_state`).
+// All switch/tap events arrive as `Event::ButtonPress { device, button,
+// gesture, ts }`. The controller dispatches via `bindings_for_button`
+// which returns matching binding indexes for the (device, button, gesture)
+// triple. Two deferral mechanisms exist:
 //
-// Tap remotes only have four buttons total — burning one per room for
-// "off" would waste the device. So the same tap button does triple
-// duty: fresh-on when off, cycle-next within a window, expire-to-off
-// after the window. The window matters because it's the only way the
-// device can distinguish "I want the next scene" from "I want it off".
+//   * **Hardware double-tap suppression**: after a `DoubleTap` gesture,
+//     subsequent `Press` events from the same (device, button) are
+//     suppressed for `double_tap_suppression_seconds` to guard against
+//     the Sonoff firmware's inter-sequence cooldown quirk.
 //
-// Both kinds share `defaults.cycle_window_seconds`, but that knob is
-// only meaningful for taps. For wall switches it's ignored.
+//   * **Soft double-tap detection**: when a (device, button) pair has
+//     `SoftDoubleTap` bindings, `Press` events are buffered for
+//     `soft_double_tap_window_seconds`. A second `Press` within the
+//     window fires `SoftDoubleTap` bindings; expiry flushes the
+//     buffered press as a normal `Press`.
 
 #[derive(Debug, Clone)]
-struct PendingSwitchPress {
+struct PendingPress {
     device: String,
-    action: SwitchAction,
+    button: String,
     ts: Instant,
     deadline: Instant,
 }
@@ -118,18 +119,20 @@ pub struct Controller {
     /// action rule name.
     at_last_fired: BTreeMap<String, (u8, u8)>,
 
-    /// Last double-tap timestamp per (device, button). After a double
-    /// tap, single taps from the same device+button are suppressed for
-    /// `defaults.double_tap_suppression_seconds` to guard against the
-    /// Sonoff firmware's inter-sequence cooldown sending spurious singles.
-    last_double_tap: BTreeMap<(String, u8), Instant>,
+    /// Last hardware double-tap timestamp per (device, button). After a
+    /// hardware double-tap, press events from the same device+button are
+    /// suppressed for `defaults.double_tap_suppression_seconds` to guard
+    /// against the Sonoff firmware's inter-sequence cooldown sending
+    /// spurious singles.
+    last_double_tap: BTreeMap<(String, String), Instant>,
 
-    /// Pending deferred switch press. When a button has both single and
-    /// double-tap action rules, the first press is buffered here. If a
-    /// second press arrives within the double-tap window, the pending is
-    /// cancelled and only double-tap rules fire. If the window expires
-    /// (checked in `handle_tick`), the pending fires as a normal single press.
-    pending_switch_press: BTreeMap<(String, SwitchAction), PendingSwitchPress>,
+    /// Pending deferred press. When a (device, button) pair has
+    /// soft_double_tap bindings, the first press is buffered here. If a
+    /// second press arrives within the soft double-tap window, the
+    /// pending is cancelled and SoftDoubleTap bindings fire. If the
+    /// window expires (checked in `handle_tick`), the pending fires as
+    /// a normal Press.
+    pending_press: BTreeMap<(String, String), PendingPress>,
 
     /// Optional heating sub-controller. Only present when the config
     /// has a `heating` section.
@@ -166,7 +169,7 @@ impl Controller {
             confirm_off_pending: BTreeMap::new(),
             at_last_fired: BTreeMap::new(),
             last_double_tap: BTreeMap::new(),
-            pending_switch_press: BTreeMap::new(),
+            pending_press: BTreeMap::new(),
             heating,
             location,
             cached_sun: None,
@@ -176,66 +179,13 @@ impl Controller {
     /// Single entry point for the daemon's event loop.
     pub fn handle_event(&mut self, event: Event) -> Vec<Action> {
         match event {
-            Event::SwitchAction {
+            Event::ButtonPress {
                 ref device,
-                action,
+                ref button,
+                gesture,
                 ts,
             } => {
-                self.handle_switch_press(device, action, ts)
-            }
-            Event::TapAction {
-                ref device,
-                button,
-                ref action,
-                ts,
-            } => {
-                if action.as_deref() == Some("double") {
-                    self.last_double_tap
-                        .insert((device.clone(), button), ts);
-                }
-                // Suppress spurious singles within the firmware cooldown
-                // window after a double tap. The Sonoff SNZB-01M sends
-                // `single` instead of `double` when the user double-taps
-                // again before the firmware's ~2 s inter-sequence cooldown
-                // has elapsed. The event is wrong at the device level so
-                // we drop it entirely — both room handlers and action
-                // rules. Topology validation ensures cycle_on_double_tap
-                // buttons don't share single-tap duties with other rooms
-                // or action rules, so nothing legitimate is lost.
-                if action.is_none() {
-                    if let Some(&last_dt) =
-                        self.last_double_tap.get(&(device.clone(), button))
-                    {
-                        let window = Duration::from_secs_f64(
-                            self.defaults.double_tap_suppression_seconds,
-                        );
-                        if ts.duration_since(last_dt) < window
-                            && self
-                                .topology
-                                .any_tap_cycle_on_double_tap(device, button)
-                        {
-                            tracing::debug!(
-                                device = device.as_str(),
-                                button,
-                                elapsed_ms =
-                                    ts.duration_since(last_dt).as_millis() as u64,
-                                window_ms = window.as_millis() as u64,
-                                "suppressing single tap within \
-                                 double-tap cooldown window"
-                            );
-                            return Vec::new();
-                        }
-                    }
-                }
-                let mut out =
-                    self.handle_tap_action(device, button, action.as_deref(), ts);
-                out.extend(self.dispatch_tap_actions(
-                    device,
-                    button,
-                    action.as_deref(),
-                    ts,
-                ));
-                out
+                self.handle_button_press(device, button, gesture, ts)
             }
             Event::Occupancy {
                 sensor,
@@ -554,125 +504,333 @@ impl Controller {
         vec![action]
     }
 
-    // ----- switch double-tap deferral ----------------------------------------
+    // ----- unified button press dispatch ------------------------------------
 
-    /// Handle a switch press, deferring when the button has both single
-    /// and double-tap action rules.
-    fn handle_switch_press(
+    /// Handle a button press event. Routes through hardware double-tap
+    /// suppression, soft double-tap deferral, or direct dispatch
+    /// depending on gesture and topology configuration.
+    fn handle_button_press(
         &mut self,
         device: &str,
-        action: SwitchAction,
+        button: &str,
+        gesture: Gesture,
         ts: Instant,
     ) -> Vec<Action> {
-        let needs_deferral = self.switch_needs_deferral(device, action);
-        let key = (device.to_string(), action);
+        match gesture {
+            Gesture::DoubleTap => {
+                // Hardware double-tap. Record timestamp for suppression.
+                self.last_double_tap
+                    .insert((device.to_string(), button.to_string()), ts);
+                // Fire double_tap bindings directly.
+                self.dispatch_bindings(device, button, Gesture::DoubleTap, ts)
+            }
+            Gesture::Press => {
+                // Check hardware double-tap suppression (Sonoff quirk).
+                if self.topology.is_hw_double_tap_button(device, button) {
+                    if let Some(&last_dt) = self
+                        .last_double_tap
+                        .get(&(device.to_string(), button.to_string()))
+                    {
+                        let window = Duration::from_secs_f64(
+                            self.defaults.double_tap_suppression_seconds,
+                        );
+                        if ts.duration_since(last_dt) < window {
+                            tracing::debug!(
+                                device,
+                                button,
+                                "suppressing press within double-tap suppression window"
+                            );
+                            return Vec::new();
+                        }
+                    }
+                }
+                // Check if soft-double-tap deferral is needed.
+                if self.topology.is_soft_double_tap_button(device, button) {
+                    self.handle_soft_double_tap_press(device, button, ts)
+                } else {
+                    self.dispatch_bindings(device, button, Gesture::Press, ts)
+                }
+            }
+            Gesture::SoftDoubleTap => {
+                // This gesture is synthesized by the controller, never
+                // from MQTT. Should not arrive here.
+                Vec::new()
+            }
+            other => {
+                // Hold, HoldRelease — dispatch directly, no deferral.
+                self.dispatch_bindings(device, button, other, ts)
+            }
+        }
+    }
 
-        if let Some(pending) = self.pending_switch_press.remove(&key) {
-            // Second press within window → double-tap.
-            let window = Duration::from_secs_f64(
-                self.defaults.switch_double_tap_window_seconds,
-            );
+    /// Handle a press event for a button that has soft-double-tap
+    /// bindings. Buffers the first press; fires SoftDoubleTap on the
+    /// second press within the window; flushes as Press on expiry.
+    fn handle_soft_double_tap_press(
+        &mut self,
+        device: &str,
+        button: &str,
+        ts: Instant,
+    ) -> Vec<Action> {
+        let key = (device.to_string(), button.to_string());
+        if let Some(pending) = self.pending_press.remove(&key) {
+            let window =
+                Duration::from_secs_f64(self.defaults.soft_double_tap_window_seconds);
             if ts.duration_since(pending.ts) <= window {
                 tracing::info!(
                     device,
-                    ?action,
+                    button,
                     elapsed_ms = ts.duration_since(pending.ts).as_millis() as u64,
-                    "switch double-tap detected"
+                    "soft double-tap detected"
                 );
-                return self.dispatch_switch_actions_double_only(device, action, ts);
+                return self.dispatch_bindings(
+                    device,
+                    button,
+                    Gesture::SoftDoubleTap,
+                    ts,
+                );
             }
-            // Outside window — flush the stale pending as single, then
-            // handle the new press normally.
-            let mut out = self.execute_single_switch_press(&pending);
-            out.extend(self.handle_switch_press_inner(device, action, ts, needs_deferral));
-            return out;
-        }
-
-        self.handle_switch_press_inner(device, action, ts, needs_deferral)
-    }
-
-    fn handle_switch_press_inner(
-        &mut self,
-        device: &str,
-        action: SwitchAction,
-        ts: Instant,
-        needs_deferral: bool,
-    ) -> Vec<Action> {
-        if needs_deferral {
-            let window = Duration::from_secs_f64(
-                self.defaults.switch_double_tap_window_seconds,
+            // Outside window — flush stale pending as press, then handle
+            // new press (which also needs deferral).
+            let mut out = self.dispatch_bindings(
+                &pending.device,
+                &pending.button,
+                Gesture::Press,
+                pending.ts,
             );
-            tracing::debug!(
-                device,
-                ?action,
-                window_ms = window.as_millis() as u64,
-                "deferring switch press for double-tap detection"
-            );
-            self.pending_switch_press.insert(
-                (device.to_string(), action),
-                PendingSwitchPress {
+            let window =
+                Duration::from_secs_f64(self.defaults.soft_double_tap_window_seconds);
+            self.pending_press.insert(
+                key,
+                PendingPress {
                     device: device.to_string(),
-                    action,
+                    button: button.to_string(),
                     ts,
                     deadline: ts + window,
                 },
             );
-            Vec::new()
-        } else {
-            let mut out = self.handle_switch_action(device, action, ts);
-            out.extend(self.dispatch_switch_actions(device, action, ts));
-            out
+            return out;
         }
-    }
-
-    /// True when this device+action has both single AND double-tap rules,
-    /// requiring deferral.
-    fn switch_needs_deferral(&self, device: &str, action: SwitchAction) -> bool {
-        let (has_single, has_double) = match action {
-            SwitchAction::OnPressRelease => (
-                !self.topology.actions_for_switch_on(device).is_empty()
-                    || !self.topology.rooms_for_switch(device).is_empty(),
-                !self.topology.actions_for_switch_on_double(device).is_empty(),
-            ),
-            SwitchAction::OffPressRelease => (
-                !self.topology.actions_for_switch_off(device).is_empty()
-                    || !self.topology.rooms_for_switch(device).is_empty(),
-                !self.topology.actions_for_switch_off_double(device).is_empty(),
-            ),
-            _ => return false,
-        };
-        has_single && has_double
-    }
-
-    /// Execute a deferred single press (flush from pending).
-    fn execute_single_switch_press(&mut self, pending: &PendingSwitchPress) -> Vec<Action> {
+        // First press — buffer it.
+        let window =
+            Duration::from_secs_f64(self.defaults.soft_double_tap_window_seconds);
         tracing::debug!(
-            device = %pending.device,
-            action = ?pending.action,
-            "flushing deferred single switch press"
+            device,
+            button,
+            window_ms = window.as_millis() as u64,
+            "deferring press for soft double-tap detection"
         );
-        let mut out = self.handle_switch_action(&pending.device, pending.action, pending.ts);
-        out.extend(self.dispatch_switch_actions(&pending.device, pending.action, pending.ts));
+        self.pending_press.insert(
+            key,
+            PendingPress {
+                device: device.to_string(),
+                button: button.to_string(),
+                ts,
+                deadline: ts + window,
+            },
+        );
+        Vec::new()
+    }
+
+    /// Unified binding dispatch. Looks up matching bindings for the
+    /// (device, button, gesture) triple and executes their effects.
+    fn dispatch_bindings(
+        &mut self,
+        device: &str,
+        button: &str,
+        gesture: Gesture,
+        ts: Instant,
+    ) -> Vec<Action> {
+        let indexes: Vec<usize> = self
+            .topology
+            .bindings_for_button(device, button, gesture)
+            .to_vec();
+        let bindings: Vec<(String, crate::config::Effect)> = indexes
+            .iter()
+            .map(|&idx| {
+                let b = &self.topology.bindings()[idx];
+                (b.name.clone(), b.effect.clone())
+            })
+            .collect();
+        let mut out = Vec::new();
+        for (name, effect) in &bindings {
+            out.extend(self.execute_effect(name, effect, ts));
+        }
         out
     }
 
-    /// Earliest deadline among pending switch presses, if any.
-    pub fn next_switch_press_deadline(&self) -> Option<Instant> {
-        self.pending_switch_press.values().map(|p| p.deadline).min()
+    /// Execute a single effect. Handles both room-targeting and
+    /// device-targeting effect variants.
+    fn execute_effect(
+        &mut self,
+        rule_name: &str,
+        effect: &crate::config::Effect,
+        ts: Instant,
+    ) -> Vec<Action> {
+        use crate::config::Effect;
+        match effect {
+            Effect::SceneCycle { room } => self.execute_scene_cycle(room, ts),
+            Effect::SceneToggleCycle { room } => {
+                self.execute_scene_toggle_cycle(room, ts)
+            }
+            Effect::TurnOffRoom { room } => self.execute_turn_off_room(room, ts),
+            Effect::BrightnessStep {
+                room,
+                step,
+                transition,
+            } => self.execute_brightness_step(room, *step, *transition),
+            Effect::BrightnessMove { room, rate } => {
+                self.execute_brightness_move(room, *rate)
+            }
+            Effect::BrightnessStop { room } => self.execute_brightness_stop(room),
+            Effect::Toggle {
+                target,
+                confirm_off_seconds,
+            } => {
+                let plug_state =
+                    self.plug_states.entry(target.to_string()).or_default();
+                if plug_state.on {
+                    if let Some(window) = confirm_off_seconds {
+                        let window_dur = Duration::from_secs_f64(*window);
+                        if let Some(pending_ts) =
+                            self.confirm_off_pending.remove(rule_name)
+                        {
+                            if ts.duration_since(pending_ts) <= window_dur {
+                                tracing::info!(
+                                    rule = rule_name,
+                                    target = target.as_str(),
+                                    "action rule → confirm-off: second tap, turning off"
+                                );
+                                plug_state.on = false;
+                                plug_state.seen_explicit_off = true;
+                                plug_state.last_power = None;
+                                self.kill_switch.on_plug_off(target);
+                                return vec![Action::for_device(
+                                    target,
+                                    Payload::device_off(),
+                                )];
+                            }
+                        }
+                        tracing::info!(
+                            rule = rule_name,
+                            target = target.as_str(),
+                            window_seconds = window,
+                            "action rule → confirm-off: armed, tap again to turn off"
+                        );
+                        self.confirm_off_pending
+                            .insert(rule_name.to_string(), ts);
+                        return Vec::new();
+                    }
+                }
+                self.confirm_off_pending.remove(rule_name);
+                let new_on = !plug_state.on;
+                let payload = if new_on {
+                    Payload::device_on()
+                } else {
+                    Payload::device_off()
+                };
+                tracing::info!(
+                    rule = rule_name,
+                    target = target.as_str(),
+                    from = plug_state.on,
+                    to = new_on,
+                    "action rule → toggle plug"
+                );
+                plug_state.on = new_on;
+                if !new_on {
+                    plug_state.seen_explicit_off = true;
+                    plug_state.last_power = None;
+                    self.kill_switch.on_plug_off(target);
+                } else if plug_state.seen_explicit_off {
+                    plug_state.last_power = None;
+                    plug_state.seen_explicit_off = false;
+                }
+                vec![Action::for_device(target, payload)]
+            }
+            Effect::TurnOn { target } => {
+                let plug_state =
+                    self.plug_states.entry(target.to_string()).or_default();
+                tracing::info!(
+                    rule = rule_name,
+                    target = target.as_str(),
+                    "action rule → turn on plug"
+                );
+                if plug_state.seen_explicit_off {
+                    plug_state.last_power = None;
+                }
+                plug_state.on = true;
+                plug_state.seen_explicit_off = false;
+                vec![Action::for_device(target, Payload::device_on())]
+            }
+            Effect::TurnOff { target } => {
+                let plug_state =
+                    self.plug_states.entry(target.to_string()).or_default();
+                tracing::info!(
+                    rule = rule_name,
+                    target = target.as_str(),
+                    "action rule → turn off plug"
+                );
+                plug_state.on = false;
+                plug_state.seen_explicit_off = true;
+                plug_state.last_power = None;
+                self.kill_switch.on_plug_off(target);
+                vec![Action::for_device(target, Payload::device_off())]
+            }
+            Effect::TurnOffAllZones => {
+                tracing::info!(rule = rule_name, "action rule → turn off all zones");
+                let mut out = Vec::new();
+                for room in self.topology.rooms() {
+                    let state =
+                        self.states.entry(room.name.clone()).or_default();
+                    if state.physically_on {
+                        tracing::info!(
+                            rule = rule_name,
+                            room = room.name.as_str(),
+                            group = room.group_name.as_str(),
+                            "turning off zone"
+                        );
+                        state.physically_on = false;
+                        state.motion_owned = false;
+                        state.cycle_idx = 0;
+                        state.last_off_at = Some(ts);
+                        out.push(Action::new(
+                            &room.group_name,
+                            Payload::state_off(room.off_transition_seconds),
+                        ));
+                    }
+                }
+                out
+            }
+        }
     }
 
-    /// Flush all pending switch presses whose deadline has passed.
-    fn flush_pending_switch_presses(&mut self, ts: Instant) -> Vec<Action> {
+    /// Earliest deadline among pending presses, if any.
+    pub fn next_press_deadline(&self) -> Option<Instant> {
+        self.pending_press.values().map(|p| p.deadline).min()
+    }
+
+    /// Flush all pending presses whose deadline has passed.
+    fn flush_pending_presses(&mut self, ts: Instant) -> Vec<Action> {
         let expired: Vec<_> = self
-            .pending_switch_press
+            .pending_press
             .iter()
             .filter(|(_, p)| ts >= p.deadline)
             .map(|(k, p)| (k.clone(), p.clone()))
             .collect();
         let mut out = Vec::new();
         for (key, pending) in expired {
-            self.pending_switch_press.remove(&key);
-            out.extend(self.execute_single_switch_press(&pending));
+            self.pending_press.remove(&key);
+            tracing::debug!(
+                device = %pending.device,
+                button = %pending.button,
+                "flushing deferred single press"
+            );
+            out.extend(self.dispatch_bindings(
+                &pending.device,
+                &pending.button,
+                Gesture::Press,
+                pending.ts,
+            ));
         }
         out
     }
@@ -680,7 +838,7 @@ impl Controller {
     // ----- tick handler (dispatches to actions + kill_switch) ---------------
 
     fn handle_tick(&mut self, ts: Instant) -> Vec<Action> {
-        let mut out = self.flush_pending_switch_presses(ts);
+        let mut out = self.flush_pending_presses(ts);
         out.extend(self.evaluate_at_triggers(ts));
 
         // Kill-switch deadline evaluation.
@@ -799,10 +957,11 @@ mod tests {
     use super::*;
     use crate::config::scenes::{Scene, SceneSchedule, Slot};
     use crate::config::{
-        CommonFields, Config, DeviceBinding, DeviceCatalogEntry, Defaults, Room,
+        Binding, CommonFields, Config, Defaults, DeviceCatalogEntry, Effect, Room,
+        SwitchModel, Trigger,
     };
+    use crate::config::switch_model::ActionMapping;
     use crate::domain::action::Payload;
-    use crate::domain::event::SwitchAction;
     use crate::time::FakeClock;
     use pretty_assertions::assert_eq;
     use std::time::Duration;
@@ -856,10 +1015,10 @@ mod tests {
         DeviceCatalogEntry::Light(CommonFields { ieee_address: ieee.into(), description: None, options: BTreeMap::new() })
     }
     fn switch_dev(ieee: &str) -> DeviceCatalogEntry {
-        DeviceCatalogEntry::Switch(CommonFields { ieee_address: ieee.into(), description: None, options: BTreeMap::new() })
+        DeviceCatalogEntry::Switch { common: CommonFields { ieee_address: ieee.into(), description: None, options: BTreeMap::new() }, model: "test-dimmer".into() }
     }
     fn tap_dev(ieee: &str) -> DeviceCatalogEntry {
-        DeviceCatalogEntry::Tap(CommonFields { ieee_address: ieee.into(), description: None, options: BTreeMap::new() })
+        DeviceCatalogEntry::Switch { common: CommonFields { ieee_address: ieee.into(), description: None, options: BTreeMap::new() }, model: "test-tap".into() }
     }
     fn motion(ieee: &str) -> DeviceCatalogEntry {
         DeviceCatalogEntry::MotionSensor {
@@ -869,12 +1028,63 @@ mod tests {
         }
     }
 
-    fn binding(device: &str, button: Option<u8>) -> DeviceBinding {
-        DeviceBinding { device: device.into(), button, cycle_on_double_tap: false }
+    /// A Hue dimmer switch model: on, off, up, down buttons with
+    /// press, hold, and hold_release gestures.
+    fn test_dimmer_model() -> SwitchModel {
+        SwitchModel {
+            buttons: vec!["on".into(), "off".into(), "up".into(), "down".into()],
+            z2m_action_map: BTreeMap::from([
+                ("on_press_release".into(), ActionMapping { button: "on".into(), gesture: Gesture::Press }),
+                ("off_press_release".into(), ActionMapping { button: "off".into(), gesture: Gesture::Press }),
+                ("up_press_release".into(), ActionMapping { button: "up".into(), gesture: Gesture::Press }),
+                ("up_hold".into(), ActionMapping { button: "up".into(), gesture: Gesture::Hold }),
+                ("up_hold_release".into(), ActionMapping { button: "up".into(), gesture: Gesture::HoldRelease }),
+                ("down_press_release".into(), ActionMapping { button: "down".into(), gesture: Gesture::Press }),
+                ("down_hold".into(), ActionMapping { button: "down".into(), gesture: Gesture::Hold }),
+                ("down_hold_release".into(), ActionMapping { button: "down".into(), gesture: Gesture::HoldRelease }),
+            ]),
+        }
     }
 
-    fn binding_double_tap(device: &str, button: u8) -> DeviceBinding {
-        DeviceBinding { device: device.into(), button: Some(button), cycle_on_double_tap: true }
+    /// A Hue Tap model: buttons 1-4, press only.
+    fn test_tap_model() -> SwitchModel {
+        SwitchModel {
+            buttons: vec!["1".into(), "2".into(), "3".into(), "4".into()],
+            z2m_action_map: BTreeMap::from([
+                ("press_1".into(), ActionMapping { button: "1".into(), gesture: Gesture::Press }),
+                ("press_2".into(), ActionMapping { button: "2".into(), gesture: Gesture::Press }),
+                ("press_3".into(), ActionMapping { button: "3".into(), gesture: Gesture::Press }),
+                ("press_4".into(), ActionMapping { button: "4".into(), gesture: Gesture::Press }),
+            ]),
+        }
+    }
+
+    /// A Sonoff SNZB-01M model with hardware double-tap.
+    fn test_sonoff_model() -> SwitchModel {
+        SwitchModel {
+            buttons: vec!["1".into()],
+            z2m_action_map: BTreeMap::from([
+                ("single".into(), ActionMapping { button: "1".into(), gesture: Gesture::Press }),
+                ("double".into(), ActionMapping { button: "1".into(), gesture: Gesture::DoubleTap }),
+            ]),
+        }
+    }
+
+    fn test_switch_models() -> BTreeMap<String, SwitchModel> {
+        BTreeMap::from([
+            ("test-dimmer".into(), test_dimmer_model()),
+            ("test-tap".into(), test_tap_model()),
+            ("test-sonoff".into(), test_sonoff_model()),
+        ])
+    }
+
+    fn btn_at(device: &str, button: &str, gesture: Gesture, ts: std::time::Instant) -> Event {
+        Event::ButtonPress {
+            device: device.into(),
+            button: button.into(),
+            gesture,
+            ts,
+        }
     }
 
     fn kitchen_controller(clock: Arc<FakeClock>) -> Controller {
@@ -886,27 +1096,32 @@ mod tests {
                 ("hue-l-empty".into(), light("0xc")),
                 ("hue-ts-foo".into(), tap_dev("0x1")),
             ]),
+            switch_models: test_switch_models(),
             rooms: vec![
                 Room {
                     name: "kitchen-cooker".into(), group_name: "hue-lz-kitchen-cooker".into(), id: 1,
                     members: vec!["hue-l-cooker/11".into()], parent: Some("kitchen-all".into()),
-                    devices: vec![binding("hue-ts-foo", Some(2))],
+                    motion_sensors: vec![],
                     scenes: day_scenes(vec![1, 2, 3]), off_transition_seconds: 0.8, motion_off_cooldown_seconds: 0,
                 },
                 Room {
                     name: "kitchen-dining".into(), group_name: "hue-lz-kitchen-dining".into(), id: 2,
                     members: vec!["hue-l-dining/11".into()], parent: Some("kitchen-all".into()),
-                    devices: vec![binding("hue-ts-foo", Some(3))],
+                    motion_sensors: vec![],
                     scenes: day_scenes(vec![1, 2, 3]), off_transition_seconds: 0.8, motion_off_cooldown_seconds: 0,
                 },
                 Room {
                     name: "kitchen-all".into(), group_name: "hue-lz-kitchen-all".into(), id: 3,
                     members: vec!["hue-l-cooker/11".into(), "hue-l-dining/11".into(), "hue-l-empty/11".into()],
-                    parent: None, devices: vec![binding("hue-ts-foo", Some(1))],
+                    parent: None, motion_sensors: vec![],
                     scenes: day_scenes(vec![1, 2, 3]), off_transition_seconds: 0.8, motion_off_cooldown_seconds: 0,
                 },
             ],
-            actions: vec![],
+            bindings: vec![
+                Binding { name: "kitchen-cooker-press".into(), trigger: Trigger::Button { device: "hue-ts-foo".into(), button: "2".into(), gesture: Gesture::Press }, effect: Effect::SceneToggleCycle { room: "kitchen-cooker".into() } },
+                Binding { name: "kitchen-dining-press".into(), trigger: Trigger::Button { device: "hue-ts-foo".into(), button: "3".into(), gesture: Gesture::Press }, effect: Effect::SceneToggleCycle { room: "kitchen-dining".into() } },
+                Binding { name: "kitchen-all-press".into(), trigger: Trigger::Button { device: "hue-ts-foo".into(), button: "1".into(), gesture: Gesture::Press }, effect: Effect::SceneToggleCycle { room: "kitchen-all".into() } },
+            ],
             defaults: Defaults::default(),
             heating: None,
             location: None,
@@ -923,13 +1138,23 @@ mod tests {
                 ("hue-s-study".into(), switch_dev("0x1")),
                 ("hue-ms-study".into(), motion("0x2")),
             ]),
+            switch_models: test_switch_models(),
             rooms: vec![Room {
                 name: "study".into(), group_name: "hue-lz-study".into(), id: 1,
                 members: vec!["hue-l-a/11".into()], parent: None,
-                devices: vec![binding("hue-s-study", None), binding("hue-ms-study", None)],
+                motion_sensors: vec!["hue-ms-study".into()],
                 scenes: day_night_scenes(), off_transition_seconds: 0.8, motion_off_cooldown_seconds: 30,
             }],
-            actions: vec![],
+            bindings: vec![
+                Binding { name: "study-on".into(), trigger: Trigger::Button { device: "hue-s-study".into(), button: "on".into(), gesture: Gesture::Press }, effect: Effect::SceneCycle { room: "study".into() } },
+                Binding { name: "study-off".into(), trigger: Trigger::Button { device: "hue-s-study".into(), button: "off".into(), gesture: Gesture::Press }, effect: Effect::TurnOffRoom { room: "study".into() } },
+                Binding { name: "study-up".into(), trigger: Trigger::Button { device: "hue-s-study".into(), button: "up".into(), gesture: Gesture::Press }, effect: Effect::BrightnessStep { room: "study".into(), step: 25, transition: 0.2 } },
+                Binding { name: "study-down".into(), trigger: Trigger::Button { device: "hue-s-study".into(), button: "down".into(), gesture: Gesture::Press }, effect: Effect::BrightnessStep { room: "study".into(), step: -25, transition: 0.2 } },
+                Binding { name: "study-up-hold".into(), trigger: Trigger::Button { device: "hue-s-study".into(), button: "up".into(), gesture: Gesture::Hold }, effect: Effect::BrightnessMove { room: "study".into(), rate: 40 } },
+                Binding { name: "study-down-hold".into(), trigger: Trigger::Button { device: "hue-s-study".into(), button: "down".into(), gesture: Gesture::Hold }, effect: Effect::BrightnessMove { room: "study".into(), rate: -40 } },
+                Binding { name: "study-up-hold-rel".into(), trigger: Trigger::Button { device: "hue-s-study".into(), button: "up".into(), gesture: Gesture::HoldRelease }, effect: Effect::BrightnessStop { room: "study".into() } },
+                Binding { name: "study-down-hold-rel".into(), trigger: Trigger::Button { device: "hue-s-study".into(), button: "down".into(), gesture: Gesture::HoldRelease }, effect: Effect::BrightnessStop { room: "study".into() } },
+            ],
             defaults: Defaults::default(),
             heating: None,
             location: None,
@@ -944,7 +1169,7 @@ mod tests {
     fn tap_press_on_off_zone_publishes_first_scene() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = kitchen_controller(clk.clone());
-        let actions = c.handle_event(Event::TapAction { action: None, device: "hue-ts-foo".into(), button: 2, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-ts-foo", "2", Gesture::Press, clk.now()));
         assert_eq!(actions, vec![Action::new("hue-lz-kitchen-cooker", Payload::scene_recall(1))]);
         let s = c.state_for("kitchen-cooker").unwrap();
         assert!(s.physically_on);
@@ -956,9 +1181,9 @@ mod tests {
     fn tap_press_within_window_cycles_scene() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = kitchen_controller(clk.clone());
-        c.handle_event(Event::TapAction { action: None, device: "hue-ts-foo".into(), button: 2, ts: clk.now() });
+        c.handle_event(btn_at("hue-ts-foo", "2", Gesture::Press, clk.now()));
         clk.advance(Duration::from_millis(200));
-        let actions = c.handle_event(Event::TapAction { action: None, device: "hue-ts-foo".into(), button: 2, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-ts-foo", "2", Gesture::Press, clk.now()));
         assert_eq!(actions, vec![Action::new("hue-lz-kitchen-cooker", Payload::scene_recall(2))]);
         assert_eq!(c.state_for("kitchen-cooker").unwrap().cycle_idx, 1);
     }
@@ -967,9 +1192,9 @@ mod tests {
     fn tap_press_outside_window_expires_to_off() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = kitchen_controller(clk.clone());
-        c.handle_event(Event::TapAction { action: None, device: "hue-ts-foo".into(), button: 2, ts: clk.now() });
+        c.handle_event(btn_at("hue-ts-foo", "2", Gesture::Press, clk.now()));
         clk.advance(Duration::from_millis(1500));
-        let actions = c.handle_event(Event::TapAction { action: None, device: "hue-ts-foo".into(), button: 2, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-ts-foo", "2", Gesture::Press, clk.now()));
         assert_eq!(actions, vec![Action::new("hue-lz-kitchen-cooker", Payload::state_off(0.8))]);
         assert!(!c.state_for("kitchen-cooker").unwrap().physically_on);
     }
@@ -979,10 +1204,10 @@ mod tests {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = kitchen_controller(clk.clone());
         for _ in 0..3 {
-            c.handle_event(Event::TapAction { action: None, device: "hue-ts-foo".into(), button: 2, ts: clk.now() });
+            c.handle_event(btn_at("hue-ts-foo", "2", Gesture::Press, clk.now()));
             clk.advance(Duration::from_millis(100));
         }
-        let actions = c.handle_event(Event::TapAction { action: None, device: "hue-ts-foo".into(), button: 2, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-ts-foo", "2", Gesture::Press, clk.now()));
         assert_eq!(actions, vec![Action::new("hue-lz-kitchen-cooker", Payload::scene_recall(1))]);
     }
 
@@ -992,12 +1217,12 @@ mod tests {
     fn parent_on_then_child_press_toggles_child_off() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = kitchen_controller(clk.clone());
-        let p = c.handle_event(Event::TapAction { action: None, device: "hue-ts-foo".into(), button: 1, ts: clk.now() });
+        let p = c.handle_event(btn_at("hue-ts-foo", "1", Gesture::Press, clk.now()));
         assert_eq!(p, vec![Action::new("hue-lz-kitchen-all", Payload::scene_recall(1))]);
         assert!(c.state_for("kitchen-cooker").unwrap().physically_on);
         assert!(c.state_for("kitchen-cooker").unwrap().last_press_at.is_none());
         clk.advance(Duration::from_millis(150));
-        let actions = c.handle_event(Event::TapAction { action: None, device: "hue-ts-foo".into(), button: 2, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-ts-foo", "2", Gesture::Press, clk.now()));
         assert_eq!(actions, vec![Action::new("hue-lz-kitchen-cooker", Payload::state_off(0.8))]);
         assert!(!c.state_for("kitchen-cooker").unwrap().physically_on);
     }
@@ -1006,9 +1231,9 @@ mod tests {
     fn parent_on_then_delayed_child_press_still_toggles_off() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = kitchen_controller(clk.clone());
-        c.handle_event(Event::TapAction { action: None, device: "hue-ts-foo".into(), button: 1, ts: clk.now() });
+        c.handle_event(btn_at("hue-ts-foo", "1", Gesture::Press, clk.now()));
         clk.advance(Duration::from_millis(2500));
-        let actions = c.handle_event(Event::TapAction { action: None, device: "hue-ts-foo".into(), button: 2, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-ts-foo", "2", Gesture::Press, clk.now()));
         assert_eq!(actions, vec![Action::new("hue-lz-kitchen-cooker", Payload::state_off(0.8))]);
     }
 
@@ -1016,11 +1241,11 @@ mod tests {
     fn parent_on_then_child_off_then_child_on_fresh() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = kitchen_controller(clk.clone());
-        c.handle_event(Event::TapAction { action: None, device: "hue-ts-foo".into(), button: 1, ts: clk.now() });
+        c.handle_event(btn_at("hue-ts-foo", "1", Gesture::Press, clk.now()));
         clk.advance(Duration::from_millis(100));
-        c.handle_event(Event::TapAction { action: None, device: "hue-ts-foo".into(), button: 2, ts: clk.now() });
+        c.handle_event(btn_at("hue-ts-foo", "2", Gesture::Press, clk.now()));
         clk.advance(Duration::from_millis(100));
-        let actions = c.handle_event(Event::TapAction { action: None, device: "hue-ts-foo".into(), button: 2, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-ts-foo", "2", Gesture::Press, clk.now()));
         assert_eq!(actions, vec![Action::new("hue-lz-kitchen-cooker", Payload::scene_recall(1))]);
     }
 
@@ -1028,9 +1253,9 @@ mod tests {
     fn child_press_does_not_alter_parent_state() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = kitchen_controller(clk.clone());
-        c.handle_event(Event::TapAction { action: None, device: "hue-ts-foo".into(), button: 2, ts: clk.now() });
+        c.handle_event(btn_at("hue-ts-foo", "2", Gesture::Press, clk.now()));
         clk.advance(Duration::from_millis(100));
-        let actions = c.handle_event(Event::TapAction { action: None, device: "hue-ts-foo".into(), button: 1, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-ts-foo", "1", Gesture::Press, clk.now()));
         assert_eq!(actions, vec![Action::new("hue-lz-kitchen-all", Payload::scene_recall(1))]);
     }
 
@@ -1038,11 +1263,11 @@ mod tests {
     fn parent_cycle_keeps_descendants_marked_on() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = kitchen_controller(clk.clone());
-        c.handle_event(Event::TapAction { action: None, device: "hue-ts-foo".into(), button: 1, ts: clk.now() });
+        c.handle_event(btn_at("hue-ts-foo", "1", Gesture::Press, clk.now()));
         clk.advance(Duration::from_millis(200));
-        c.handle_event(Event::TapAction { action: None, device: "hue-ts-foo".into(), button: 1, ts: clk.now() });
+        c.handle_event(btn_at("hue-ts-foo", "1", Gesture::Press, clk.now()));
         clk.advance(Duration::from_millis(200));
-        let actions = c.handle_event(Event::TapAction { action: None, device: "hue-ts-foo".into(), button: 2, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-ts-foo", "2", Gesture::Press, clk.now()));
         assert_eq!(actions, vec![Action::new("hue-lz-kitchen-cooker", Payload::state_off(0.8))]);
     }
 
@@ -1050,9 +1275,9 @@ mod tests {
     fn sibling_press_independent_of_other_sibling() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = kitchen_controller(clk.clone());
-        c.handle_event(Event::TapAction { action: None, device: "hue-ts-foo".into(), button: 2, ts: clk.now() });
+        c.handle_event(btn_at("hue-ts-foo", "2", Gesture::Press, clk.now()));
         clk.advance(Duration::from_millis(100));
-        let actions = c.handle_event(Event::TapAction { action: None, device: "hue-ts-foo".into(), button: 3, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-ts-foo", "3", Gesture::Press, clk.now()));
         assert_eq!(actions, vec![Action::new("hue-lz-kitchen-dining", Payload::scene_recall(1))]);
     }
 
@@ -1062,7 +1287,7 @@ mod tests {
     fn wall_switch_on_press_from_off_publishes_first_scene() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = study_with_motion_controller(clk.clone());
-        let actions = c.handle_event(Event::SwitchAction { device: "hue-s-study".into(), action: SwitchAction::OnPressRelease, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-s-study", "on", Gesture::Press, clk.now()));
         assert_eq!(actions, vec![Action::new("hue-lz-study", Payload::scene_recall(1))]);
         let s = c.state_for("study").unwrap();
         assert!(s.physically_on);
@@ -1073,9 +1298,9 @@ mod tests {
     fn wall_switch_on_press_within_window_cycles_scene() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = study_with_motion_controller(clk.clone());
-        c.handle_event(Event::SwitchAction { device: "hue-s-study".into(), action: SwitchAction::OnPressRelease, ts: clk.now() });
+        c.handle_event(btn_at("hue-s-study", "on", Gesture::Press, clk.now()));
         clk.advance(Duration::from_millis(200));
-        let actions = c.handle_event(Event::SwitchAction { device: "hue-s-study".into(), action: SwitchAction::OnPressRelease, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-s-study", "on", Gesture::Press, clk.now()));
         assert_eq!(actions, vec![Action::new("hue-lz-study", Payload::scene_recall(2))]);
         assert_eq!(c.state_for("study").unwrap().cycle_idx, 1);
     }
@@ -1084,17 +1309,17 @@ mod tests {
     fn wall_switch_on_press_advances_cycle_with_no_time_component() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = study_with_motion_controller(clk.clone());
-        let a1 = c.handle_event(Event::SwitchAction { device: "hue-s-study".into(), action: SwitchAction::OnPressRelease, ts: clk.now() });
+        let a1 = c.handle_event(btn_at("hue-s-study", "on", Gesture::Press, clk.now()));
         assert_eq!(a1, vec![Action::new("hue-lz-study", Payload::scene_recall(1))]);
         clk.advance(Duration::from_secs(60));
-        let a2 = c.handle_event(Event::SwitchAction { device: "hue-s-study".into(), action: SwitchAction::OnPressRelease, ts: clk.now() });
+        let a2 = c.handle_event(btn_at("hue-s-study", "on", Gesture::Press, clk.now()));
         assert_eq!(a2, vec![Action::new("hue-lz-study", Payload::scene_recall(2))],
             "wall switch press should always advance the cycle, regardless of how long ago the previous press was");
         clk.advance(Duration::from_secs(300));
-        let a3 = c.handle_event(Event::SwitchAction { device: "hue-s-study".into(), action: SwitchAction::OnPressRelease, ts: clk.now() });
+        let a3 = c.handle_event(btn_at("hue-s-study", "on", Gesture::Press, clk.now()));
         assert_eq!(a3, vec![Action::new("hue-lz-study", Payload::scene_recall(3))]);
         clk.advance(Duration::from_secs(10));
-        let a4 = c.handle_event(Event::SwitchAction { device: "hue-s-study".into(), action: SwitchAction::OnPressRelease, ts: clk.now() });
+        let a4 = c.handle_event(btn_at("hue-s-study", "on", Gesture::Press, clk.now()));
         assert_eq!(a4, vec![Action::new("hue-lz-study", Payload::scene_recall(1))]);
     }
 
@@ -1103,13 +1328,13 @@ mod tests {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = study_with_motion_controller(clk.clone());
         for _ in 0..3 {
-            c.handle_event(Event::SwitchAction { device: "hue-s-study".into(), action: SwitchAction::OnPressRelease, ts: clk.now() });
+            c.handle_event(btn_at("hue-s-study", "on", Gesture::Press, clk.now()));
             clk.advance(Duration::from_millis(100));
         }
         assert_eq!(c.state_for("study").unwrap().cycle_idx, 2);
-        c.handle_event(Event::SwitchAction { device: "hue-s-study".into(), action: SwitchAction::OffPressRelease, ts: clk.now() });
+        c.handle_event(btn_at("hue-s-study", "off", Gesture::Press, clk.now()));
         assert!(!c.state_for("study").unwrap().physically_on);
-        let actions = c.handle_event(Event::SwitchAction { device: "hue-s-study".into(), action: SwitchAction::OnPressRelease, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-s-study", "on", Gesture::Press, clk.now()));
         assert_eq!(actions, vec![Action::new("hue-lz-study", Payload::scene_recall(1))]);
     }
 
@@ -1119,7 +1344,7 @@ mod tests {
         let mut c = study_with_motion_controller(clk.clone());
         let mut emitted: Vec<u8> = Vec::new();
         for _ in 0..4 {
-            let actions = c.handle_event(Event::SwitchAction { device: "hue-s-study".into(), action: SwitchAction::OnPressRelease, ts: clk.now() });
+            let actions = c.handle_event(btn_at("hue-s-study", "on", Gesture::Press, clk.now()));
             assert_eq!(actions.len(), 1);
             if let Payload::SceneRecall { scene_recall } = actions[0].payload { emitted.push(scene_recall); }
             else { panic!("expected SceneRecall, got {:?}", actions[0].payload); }
@@ -1135,7 +1360,7 @@ mod tests {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = study_with_motion_controller(clk.clone());
         c.set_physical_state("study", true);
-        let actions = c.handle_event(Event::SwitchAction { device: "hue-s-study".into(), action: SwitchAction::OffPressRelease, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-s-study", "off", Gesture::Press, clk.now()));
         assert_eq!(actions, vec![Action::new("hue-lz-study", Payload::state_off(0.8))]);
     }
 
@@ -1143,7 +1368,7 @@ mod tests {
     fn wall_switch_brightness_up_press_release() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = study_with_motion_controller(clk.clone());
-        let actions = c.handle_event(Event::SwitchAction { device: "hue-s-study".into(), action: SwitchAction::UpPressRelease, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-s-study", "up", Gesture::Press, clk.now()));
         assert_eq!(actions, vec![Action::new("hue-lz-study", Payload::brightness_step(25, 0.2))]);
     }
 
@@ -1151,7 +1376,7 @@ mod tests {
     fn wall_switch_brightness_down_press_release() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = study_with_motion_controller(clk.clone());
-        let actions = c.handle_event(Event::SwitchAction { device: "hue-s-study".into(), action: SwitchAction::DownPressRelease, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-s-study", "down", Gesture::Press, clk.now()));
         assert_eq!(actions, vec![Action::new("hue-lz-study", Payload::brightness_step(-25, 0.2))]);
     }
 
@@ -1159,9 +1384,9 @@ mod tests {
     fn wall_switch_hold_and_release_brightness_move() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = study_with_motion_controller(clk.clone());
-        let hold = c.handle_event(Event::SwitchAction { device: "hue-s-study".into(), action: SwitchAction::UpHold, ts: clk.now() });
+        let hold = c.handle_event(btn_at("hue-s-study", "up", Gesture::Hold, clk.now()));
         assert_eq!(hold, vec![Action::new("hue-lz-study", Payload::brightness_move(40))]);
-        let release = c.handle_event(Event::SwitchAction { device: "hue-s-study".into(), action: SwitchAction::UpHoldRelease, ts: clk.now() });
+        let release = c.handle_event(btn_at("hue-s-study", "up", Gesture::HoldRelease, clk.now()));
         assert_eq!(release, vec![Action::new("hue-lz-study", Payload::brightness_move(0))]);
     }
 
@@ -1202,7 +1427,7 @@ mod tests {
     fn motion_off_skipped_when_user_owns_lights() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = study_with_motion_controller(clk.clone());
-        c.handle_event(Event::SwitchAction { device: "hue-s-study".into(), action: SwitchAction::OnPressRelease, ts: clk.now() });
+        c.handle_event(btn_at("hue-s-study", "on", Gesture::Press, clk.now()));
         c.handle_event(Event::Occupancy { sensor: "hue-ms-study".into(), occupied: true, illuminance: None, ts: clk.now() });
         clk.advance(Duration::from_secs(60));
         let actions = c.handle_event(Event::Occupancy { sensor: "hue-ms-study".into(), occupied: false, illuminance: None, ts: clk.now() });
@@ -1236,13 +1461,14 @@ mod tests {
                     occupancy_timeout_seconds: 60, max_illuminance: Some(25),
                 }),
             ]),
+            switch_models: BTreeMap::new(),
             rooms: vec![Room {
                 name: "study".into(), group_name: "hue-lz-study".into(), id: 1,
                 members: vec!["hue-l-a/11".into()], parent: None,
-                devices: vec![binding("hue-ms-study", None)],
+                motion_sensors: vec!["hue-ms-study".into()],
                 scenes: day_scenes(vec![1]), off_transition_seconds: 0.8, motion_off_cooldown_seconds: 0,
             }],
-            actions: vec![], defaults: Defaults::default(), heating: None, location: None,
+            bindings: vec![], defaults: Defaults::default(), heating: None, location: None,
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
         let mut c = Controller::new(topo, clk.clone(), cfg.defaults, None);
@@ -1264,13 +1490,14 @@ mod tests {
                     occupancy_timeout_seconds: 60, max_illuminance: Some(25),
                 }),
             ]),
+            switch_models: BTreeMap::new(),
             rooms: vec![Room {
                 name: "study".into(), group_name: "hue-lz-study".into(), id: 1,
                 members: vec!["hue-l-a/11".into()], parent: None,
-                devices: vec![binding("hue-ms-study", None)],
+                motion_sensors: vec!["hue-ms-study".into()],
                 scenes: day_scenes(vec![1]), off_transition_seconds: 0.8, motion_off_cooldown_seconds: 0,
             }],
-            actions: vec![], defaults: Defaults::default(), heating: None, location: None,
+            bindings: vec![], defaults: Defaults::default(), heating: None, location: None,
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
         let mut c = Controller::new(topo, clk.clone(), cfg.defaults, None);
@@ -1299,13 +1526,14 @@ mod tests {
                 ("hue-ms-a".into(), motion("0x1")),
                 ("hue-ms-b".into(), motion("0x2")),
             ]),
+            switch_models: BTreeMap::new(),
             rooms: vec![Room {
                 name: "hall".into(), group_name: "hue-lz-hall".into(), id: 1,
                 members: vec!["hue-l-a/11".into()], parent: None,
-                devices: vec![binding("hue-ms-a", None), binding("hue-ms-b", None)],
+                motion_sensors: vec!["hue-ms-a".into(), "hue-ms-b".into()],
                 scenes: day_scenes(vec![1]), off_transition_seconds: 0.8, motion_off_cooldown_seconds: 0,
             }],
-            actions: vec![], defaults: Defaults::default(), heating: None, location: None,
+            bindings: vec![], defaults: Defaults::default(), heating: None, location: None,
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
         let mut c = Controller::new(topo, clk.clone(), cfg.defaults, None);
@@ -1317,210 +1545,98 @@ mod tests {
         assert_eq!(off, vec![Action::new("hue-lz-hall", Payload::state_off(0.8))]);
     }
 
-    // ---- cycle_on_double_tap ------------------------------------------------
+    // ---- hardware double-tap suppression ----------------------------------
 
-    fn double_tap_controller(clock: Arc<FakeClock>) -> Controller {
+    fn hw_double_tap_controller(clock: Arc<FakeClock>) -> Controller {
         let cfg = Config {
             name_by_address: BTreeMap::new(),
             devices: BTreeMap::from([
                 ("hue-l-a".into(), light("0xa")),
-                ("sonoff-ts-foo".into(), tap_dev("0x1")),
+                ("sonoff-ts-foo".into(), DeviceCatalogEntry::Switch {
+                    common: CommonFields { ieee_address: "0x1".into(), description: None, options: BTreeMap::new() },
+                    model: "test-sonoff".into(),
+                }),
             ]),
+            switch_models: test_switch_models(),
             rooms: vec![Room {
                 name: "bedroom".into(), group_name: "hue-lz-bedroom".into(), id: 1,
                 members: vec!["hue-l-a/11".into()], parent: None,
-                devices: vec![binding_double_tap("sonoff-ts-foo", 1)],
+                motion_sensors: vec![],
                 scenes: day_night_scenes(), off_transition_seconds: 0.8,
                 motion_off_cooldown_seconds: 0,
             }],
-            actions: vec![], defaults: Defaults::default(), heating: None, location: None,
+            bindings: vec![
+                Binding { name: "bedroom-press".into(), trigger: Trigger::Button { device: "sonoff-ts-foo".into(), button: "1".into(), gesture: Gesture::Press }, effect: Effect::SceneToggleCycle { room: "bedroom".into() } },
+                Binding { name: "bedroom-double".into(), trigger: Trigger::Button { device: "sonoff-ts-foo".into(), button: "1".into(), gesture: Gesture::DoubleTap }, effect: Effect::SceneCycle { room: "bedroom".into() } },
+            ],
+            defaults: Defaults::default(),
+            heating: None,
+            location: None,
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
         Controller::new(topo, clock, cfg.defaults, None)
     }
 
     #[test]
-    fn double_tap_single_tap_turns_on_first_scene() {
+    fn hw_double_tap_press_turns_on_first_scene() {
         let clk = Arc::new(FakeClock::new(12));
-        let mut c = double_tap_controller(clk.clone());
-        let actions = c.handle_event(Event::TapAction {
-            device: "sonoff-ts-foo".into(), button: 1, action: None, ts: clk.now(),
-        });
+        let mut c = hw_double_tap_controller(clk.clone());
+        let actions = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
         assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::scene_recall(1))]);
         assert!(c.state_for("bedroom").unwrap().physically_on);
     }
 
     #[test]
-    fn double_tap_single_tap_turns_off() {
+    fn hw_double_tap_cycles_scenes() {
         let clk = Arc::new(FakeClock::new(12));
-        let mut c = double_tap_controller(clk.clone());
-        // Turn on first.
-        c.handle_event(Event::TapAction {
-            device: "sonoff-ts-foo".into(), button: 1, action: None, ts: clk.now(),
-        });
-        clk.advance(Duration::from_secs(5));
-        // Single tap again → off (no cycle window involved).
-        let actions = c.handle_event(Event::TapAction {
-            device: "sonoff-ts-foo".into(), button: 1, action: None, ts: clk.now(),
-        });
-        assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::state_off(0.8))]);
-        assert!(!c.state_for("bedroom").unwrap().physically_on);
-    }
-
-    #[test]
-    fn double_tap_cycles_scenes() {
-        let clk = Arc::new(FakeClock::new(12));
-        let mut c = double_tap_controller(clk.clone());
-        // Turn on via single tap.
-        c.handle_event(Event::TapAction {
-            device: "sonoff-ts-foo".into(), button: 1, action: None, ts: clk.now(),
-        });
+        let mut c = hw_double_tap_controller(clk.clone());
+        // Turn on via press.
+        c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
         // Double tap → advance to scene 2.
-        let actions = c.handle_event(Event::TapAction {
-            device: "sonoff-ts-foo".into(), button: 1,
-            action: Some("double".into()), ts: clk.now(),
-        });
+        let actions = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::DoubleTap, clk.now()));
         assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::scene_recall(2))]);
         assert_eq!(c.state_for("bedroom").unwrap().cycle_idx, 1);
     }
 
     #[test]
-    fn double_tap_cycle_wraps() {
+    fn hw_double_tap_suppresses_press_within_cooldown() {
         let clk = Arc::new(FakeClock::new(12));
-        let mut c = double_tap_controller(clk.clone());
-        // Turn on via single tap (cycle_idx = 0, scene 1).
-        c.handle_event(Event::TapAction {
-            device: "sonoff-ts-foo".into(), button: 1, action: None, ts: clk.now(),
-        });
-        // Double tap → scene 2 (cycle_idx = 1).
-        c.handle_event(Event::TapAction {
-            device: "sonoff-ts-foo".into(), button: 1,
-            action: Some("double".into()), ts: clk.now(),
-        });
-        // Double tap → scene 3 (cycle_idx = 2).
-        c.handle_event(Event::TapAction {
-            device: "sonoff-ts-foo".into(), button: 1,
-            action: Some("double".into()), ts: clk.now(),
-        });
-        // Double tap → wraps to scene 1 (cycle_idx = 0).
-        let actions = c.handle_event(Event::TapAction {
-            device: "sonoff-ts-foo".into(), button: 1,
-            action: Some("double".into()), ts: clk.now(),
-        });
-        assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::scene_recall(1))]);
-        assert_eq!(c.state_for("bedroom").unwrap().cycle_idx, 0);
-    }
-
-    #[test]
-    fn double_tap_on_off_room_turns_on() {
-        let clk = Arc::new(FakeClock::new(12));
-        let mut c = double_tap_controller(clk.clone());
-        // Double tap when off → turns on with first scene.
-        let actions = c.handle_event(Event::TapAction {
-            device: "sonoff-ts-foo".into(), button: 1,
-            action: Some("double".into()), ts: clk.now(),
-        });
-        assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::scene_recall(1))]);
-        assert!(c.state_for("bedroom").unwrap().physically_on);
-    }
-
-    // ---- double-tap suppression guard --------------------------------------
-
-    #[test]
-    fn single_tap_suppressed_within_double_tap_cooldown() {
-        let clk = Arc::new(FakeClock::new(12));
-        let mut c = double_tap_controller(clk.clone());
-        // Turn on via single tap.
-        c.handle_event(Event::TapAction {
-            device: "sonoff-ts-foo".into(), button: 1, action: None, ts: clk.now(),
-        });
+        let mut c = hw_double_tap_controller(clk.clone());
+        // Turn on via press.
+        c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
         // Double tap → advance scene.
-        c.handle_event(Event::TapAction {
-            device: "sonoff-ts-foo".into(), button: 1,
-            action: Some("double".into()), ts: clk.now(),
-        });
-        // Spurious single within 2 s cooldown → suppressed, no state change.
+        c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::DoubleTap, clk.now()));
+        // Spurious press within 2 s cooldown → suppressed.
         clk.advance(Duration::from_millis(500));
-        let actions = c.handle_event(Event::TapAction {
-            device: "sonoff-ts-foo".into(), button: 1, action: None, ts: clk.now(),
-        });
-        assert_eq!(actions, vec![], "single tap within cooldown must be suppressed");
+        let actions = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        assert_eq!(actions, vec![], "press within cooldown must be suppressed");
         assert!(c.state_for("bedroom").unwrap().physically_on, "room must stay on");
-        assert_eq!(c.state_for("bedroom").unwrap().cycle_idx, 1, "cycle index must not change");
     }
 
     #[test]
-    fn single_tap_works_after_double_tap_cooldown_expires() {
+    fn hw_double_tap_press_works_after_cooldown_expires() {
         let clk = Arc::new(FakeClock::new(12));
-        let mut c = double_tap_controller(clk.clone());
-        // Turn on via single tap.
-        c.handle_event(Event::TapAction {
-            device: "sonoff-ts-foo".into(), button: 1, action: None, ts: clk.now(),
-        });
+        let mut c = hw_double_tap_controller(clk.clone());
+        // Turn on via press.
+        c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
         // Double tap → advance scene.
-        c.handle_event(Event::TapAction {
-            device: "sonoff-ts-foo".into(), button: 1,
-            action: Some("double".into()), ts: clk.now(),
-        });
+        c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::DoubleTap, clk.now()));
         // Wait past the 2 s suppression window.
         clk.advance(Duration::from_secs(3));
-        // Single tap → should toggle off normally.
-        let actions = c.handle_event(Event::TapAction {
-            device: "sonoff-ts-foo".into(), button: 1, action: None, ts: clk.now(),
-        });
+        // Press → should toggle off normally.
+        let actions = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
         assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::state_off(0.8))]);
         assert!(!c.state_for("bedroom").unwrap().physically_on);
     }
 
     #[test]
-    fn suppression_does_not_affect_non_double_tap_buttons() {
+    fn suppression_does_not_affect_non_hw_double_tap_buttons() {
         let clk = Arc::new(FakeClock::new(12));
-        // kitchen_controller uses regular (non-cycle_on_double_tap) bindings.
+        // kitchen_controller uses test-tap model which has no hardware double-tap.
         let mut c = kitchen_controller(clk.clone());
-        // Simulate a double tap on a non-cycle_on_double_tap button.
-        c.handle_event(Event::TapAction {
-            device: "hue-ts-foo".into(), button: 1, action: Some("double".into()),
-            ts: clk.now(),
-        });
-        // Single tap immediately → must NOT be suppressed.
-        let actions = c.handle_event(Event::TapAction {
-            device: "hue-ts-foo".into(), button: 1, action: None, ts: clk.now(),
-        });
-        assert!(!actions.is_empty(), "single tap on non-cycle_on_double_tap button must not be suppressed");
-    }
-
-    #[test]
-    fn double_tap_action_rule_on_same_button_is_allowed() {
-        use crate::config::{ActionRule, Effect, Trigger};
-        // Double-tap action rules on a cycle_on_double_tap button are fine —
-        // only single-tap rules are rejected.
-        let cfg = Config {
-            name_by_address: BTreeMap::new(),
-            devices: BTreeMap::from([
-                ("hue-l-a".into(), light("0xa")),
-                ("sonoff-ts-foo".into(), tap_dev("0x1")),
-                ("z2m-p-plug".into(), plug_dev("0xf", "sonoff-basic", &["on-off"])),
-            ]),
-            rooms: vec![Room {
-                name: "bedroom".into(), group_name: "hue-lz-bedroom".into(), id: 1,
-                members: vec!["hue-l-a/11".into()], parent: None,
-                devices: vec![binding_double_tap("sonoff-ts-foo", 1)],
-                scenes: day_night_scenes(), off_transition_seconds: 0.8,
-                motion_off_cooldown_seconds: 0,
-            }],
-            actions: vec![ActionRule {
-                name: "plug-off-on-double".into(),
-                trigger: Trigger::Tap {
-                    device: "sonoff-ts-foo".into(), button: 1,
-                    action: Some("double".into()),
-                },
-                effect: Effect::TurnOff { target: "z2m-p-plug".into() },
-            }],
-            defaults: Defaults::default(),
-            heating: None,
-            location: None,
-        };
-        assert!(Topology::build(&cfg).is_ok(), "double-tap action rule must be allowed");
+        // Press on button 1 → should work.
+        let actions = c.handle_event(btn_at("hue-ts-foo", "1", Gesture::Press, clk.now()));
+        assert!(!actions.is_empty(), "press on non-hw-double-tap button must not be suppressed");
     }
 
     // ---- startup turn-off for motion zones --------------------------------
@@ -1554,7 +1670,6 @@ mod tests {
         let _ = c.startup_turn_off_motion_zones(clk.now());
         assert!(c.state_for("study").unwrap().last_off_at.is_none(),
             "startup turn-off must not set cooldown");
-        // Motion can immediately re-trigger.
         let on = c.handle_event(Event::Occupancy {
             sensor: "hue-ms-study".into(), occupied: true,
             illuminance: Some(10), ts: clk.now(),
@@ -1584,14 +1699,15 @@ mod tests {
                 ("hue-l-a".into(), light("0xa")),
                 ("hue-s-foo".into(), switch_dev("0x1")),
             ]),
+            switch_models: test_switch_models(),
             rooms: vec![Room {
                 name: "office".into(), group_name: "hue-lz-office".into(), id: 1,
                 members: vec!["hue-l-a/11".into()], parent: None,
-                devices: vec![binding("hue-s-foo", None)],
+                motion_sensors: vec![],
                 scenes: day_scenes(vec![1]), off_transition_seconds: 0.8,
                 motion_off_cooldown_seconds: 0,
             }],
-            actions: vec![], defaults: Defaults::default(), heating: None, location: None,
+            bindings: vec![], defaults: Defaults::default(), heating: None, location: None,
         };
         let topo = Arc::new(Topology::build(&cfg).unwrap());
         let mut c = Controller::new(topo, clk.clone(), cfg.defaults, None);
@@ -1672,17 +1788,11 @@ mod tests {
 
     #[test]
     fn child_tap_cycles_despite_parent_group_echo() {
-        // Regression: when a child group turns on, z2m publishes the
-        // parent group as ON too (member-state aggregation).  The old
-        // code's propagate_to_descendants inside handle_group_state
-        // cleared last_press_at on the child, killing its cycle window.
         let clk = Arc::new(FakeClock::new(12));
         let mut c = kitchen_controller(clk.clone());
 
         // 1. Press child button → cooker turns on, scene 1.
-        let a1 = c.handle_event(Event::TapAction {
-            action: None, device: "hue-ts-foo".into(), button: 2, ts: clk.now(),
-        });
+        let a1 = c.handle_event(btn_at("hue-ts-foo", "2", Gesture::Press, clk.now()));
         assert_eq!(a1, vec![Action::new("hue-lz-kitchen-cooker", Payload::scene_recall(1))]);
         assert!(c.state_for("kitchen-cooker").unwrap().last_press_at.is_some());
 
@@ -1692,16 +1802,13 @@ mod tests {
             group: "hue-lz-kitchen-all".into(), on: true, ts: clk.now(),
         });
 
-        // Child's cycle state must survive the parent echo.
         let s = c.state_for("kitchen-cooker").unwrap();
         assert!(s.physically_on);
         assert!(s.last_press_at.is_some(), "parent group echo must not clear child's last_press_at");
 
         // 3. Press child button again within cycle window → should cycle.
         clk.advance(Duration::from_millis(200));
-        let a2 = c.handle_event(Event::TapAction {
-            action: None, device: "hue-ts-foo".into(), button: 2, ts: clk.now(),
-        });
+        let a2 = c.handle_event(btn_at("hue-ts-foo", "2", Gesture::Press, clk.now()));
         assert_eq!(
             a2, vec![Action::new("hue-lz-kitchen-cooker", Payload::scene_recall(2))],
             "second press within cycle window must advance to scene 2, not turn off"
@@ -1711,29 +1818,22 @@ mod tests {
 
     #[test]
     fn parent_group_off_echo_propagates_physical_state_to_children() {
-        // Soft propagation must still update physically_on on off.
         let clk = Arc::new(FakeClock::new(12));
         let mut c = kitchen_controller(clk.clone());
 
-        // Turn on child.
-        c.handle_event(Event::TapAction {
-            action: None, device: "hue-ts-foo".into(), button: 2, ts: clk.now(),
-        });
+        c.handle_event(btn_at("hue-ts-foo", "2", Gesture::Press, clk.now()));
         assert!(c.state_for("kitchen-cooker").unwrap().physically_on);
 
-        // z2m publishes parent group ON (member-state aggregation).
         clk.advance(Duration::from_millis(80));
         c.handle_event(Event::GroupState {
             group: "hue-lz-kitchen-all".into(), on: true, ts: clk.now(),
         });
 
-        // Parent group echo: off (e.g. someone turned off all via z2m UI).
         clk.advance(Duration::from_millis(100));
         c.handle_event(Event::GroupState {
             group: "hue-lz-kitchen-all".into(), on: false, ts: clk.now(),
         });
 
-        // Children must be marked off.
         assert!(!c.state_for("kitchen-cooker").unwrap().physically_on);
         assert!(!c.state_for("kitchen-dining").unwrap().physically_on);
     }
@@ -1744,15 +1844,15 @@ mod tests {
     fn cycle_uses_active_slot_at_press_time() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = study_with_motion_controller(clk.clone());
-        let day_press = c.handle_event(Event::SwitchAction { device: "hue-s-study".into(), action: SwitchAction::OnPressRelease, ts: clk.now() });
+        let day_press = c.handle_event(btn_at("hue-s-study", "on", Gesture::Press, clk.now()));
         assert_eq!(day_press, vec![Action::new("hue-lz-study", Payload::scene_recall(1))]);
         c.set_physical_state("study", false);
         clk.set_hour(2);
-        let night_press = c.handle_event(Event::SwitchAction { device: "hue-s-study".into(), action: SwitchAction::OnPressRelease, ts: clk.now() });
+        let night_press = c.handle_event(btn_at("hue-s-study", "on", Gesture::Press, clk.now()));
         assert_eq!(night_press, vec![Action::new("hue-lz-study", Payload::scene_recall(3))]);
     }
 
-    // ---- plug / action rule tests ---------------------------------------
+    // ---- plug / binding tests -------------------------------------------
 
     fn plug_dev(ieee: &str, variant: &str, caps: &[&str]) -> DeviceCatalogEntry {
         DeviceCatalogEntry::Plug {
@@ -1764,9 +1864,7 @@ mod tests {
         }
     }
 
-    use crate::config::{ActionRule, Effect, Trigger};
-
-    fn plug_controller(clock: Arc<FakeClock>, actions: Vec<ActionRule>) -> Controller {
+    fn plug_controller(clock: Arc<FakeClock>, bindings: Vec<Binding>) -> Controller {
         let cfg = Config {
             name_by_address: BTreeMap::new(),
             devices: BTreeMap::from([
@@ -1776,12 +1874,13 @@ mod tests {
                 ("z2m-p-printer".into(), plug_dev("0xf", "sonoff-power", &["on-off", "power"])),
                 ("z2m-p-lamp".into(), plug_dev("0xe", "sonoff-basic", &["on-off"])),
             ]),
+            switch_models: test_switch_models(),
             rooms: vec![Room {
                 name: "office".into(), group_name: "hue-lz-office".into(), id: 1,
-                members: vec!["hue-l-a/11".into()], parent: None, devices: vec![],
+                members: vec!["hue-l-a/11".into()], parent: None, motion_sensors: vec![],
                 scenes: day_scenes(vec![1, 2]), off_transition_seconds: 0.8, motion_off_cooldown_seconds: 0,
             }],
-            actions,
+            bindings,
             defaults: Defaults::default(),
             heating: None,
             location: None,
@@ -1791,33 +1890,33 @@ mod tests {
     }
 
     #[test]
-    fn tap_toggle_action_toggles_plug() {
+    fn tap_toggle_binding_toggles_plug() {
         let clk = Arc::new(FakeClock::new(12));
-        let mut c = plug_controller(clk.clone(), vec![ActionRule {
+        let mut c = plug_controller(clk.clone(), vec![Binding {
             name: "printer-toggle".into(),
-            trigger: Trigger::Tap { action: None, device: "hue-ts-office".into(), button: 3 },
+            trigger: Trigger::Button { device: "hue-ts-office".into(), button: "3".into(), gesture: Gesture::Press },
             effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-printer".into() },
         }]);
-        let actions = c.handle_event(Event::TapAction { action: None, device: "hue-ts-office".into(), button: 3, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-ts-office", "3", Gesture::Press, clk.now()));
         assert!(actions.iter().any(|a| *a == Action::for_device("z2m-p-printer", Payload::device_on())));
         assert!(c.plug_state_for("z2m-p-printer").unwrap().on);
         clk.advance(Duration::from_secs(2));
-        let actions = c.handle_event(Event::TapAction { action: None, device: "hue-ts-office".into(), button: 3, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-ts-office", "3", Gesture::Press, clk.now()));
         assert!(actions.iter().any(|a| *a == Action::for_device("z2m-p-printer", Payload::device_off())));
         assert!(!c.plug_state_for("z2m-p-printer").unwrap().on);
     }
 
     #[test]
-    fn switch_on_off_actions() {
+    fn switch_on_off_bindings() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = plug_controller(clk.clone(), vec![
-            ActionRule { name: "lamp-on".into(), trigger: Trigger::SwitchOn { device: "hue-s-office".into(), action: None }, effect: Effect::TurnOn { target: "z2m-p-lamp".into() } },
-            ActionRule { name: "lamp-off".into(), trigger: Trigger::SwitchOff { device: "hue-s-office".into(), action: None }, effect: Effect::TurnOff { target: "z2m-p-lamp".into() } },
+            Binding { name: "lamp-on".into(), trigger: Trigger::Button { device: "hue-s-office".into(), button: "on".into(), gesture: Gesture::Press }, effect: Effect::TurnOn { target: "z2m-p-lamp".into() } },
+            Binding { name: "lamp-off".into(), trigger: Trigger::Button { device: "hue-s-office".into(), button: "off".into(), gesture: Gesture::Press }, effect: Effect::TurnOff { target: "z2m-p-lamp".into() } },
         ]);
-        let actions = c.handle_event(Event::SwitchAction { device: "hue-s-office".into(), action: SwitchAction::OnPressRelease, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-s-office", "on", Gesture::Press, clk.now()));
         assert!(actions.iter().any(|a| *a == Action::for_device("z2m-p-lamp", Payload::device_on())));
         assert!(c.plug_state_for("z2m-p-lamp").unwrap().on);
-        let actions = c.handle_event(Event::SwitchAction { device: "hue-s-office".into(), action: SwitchAction::OffPressRelease, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-s-office", "off", Gesture::Press, clk.now()));
         assert!(actions.iter().any(|a| *a == Action::for_device("z2m-p-lamp", Payload::device_off())));
         assert!(!c.plug_state_for("z2m-p-lamp").unwrap().on);
     }
@@ -1825,7 +1924,7 @@ mod tests {
     #[test]
     fn kill_switch_fires_after_holdoff() {
         let clk = Arc::new(FakeClock::new(12));
-        let mut c = plug_controller(clk.clone(), vec![ActionRule {
+        let mut c = plug_controller(clk.clone(), vec![Binding {
             name: "printer-kill".into(),
             trigger: Trigger::PowerBelow { device: "z2m-p-printer".into(), watts: 5.0, for_seconds: 60 },
             effect: Effect::TurnOff { target: "z2m-p-printer".into() },
@@ -1850,7 +1949,7 @@ mod tests {
     #[test]
     fn kill_switch_resets_on_power_recovery() {
         let clk = Arc::new(FakeClock::new(12));
-        let mut c = plug_controller(clk.clone(), vec![ActionRule {
+        let mut c = plug_controller(clk.clone(), vec![Binding {
             name: "printer-kill".into(),
             trigger: Trigger::PowerBelow { device: "z2m-p-printer".into(), watts: 5.0, for_seconds: 60 },
             effect: Effect::TurnOff { target: "z2m-p-printer".into() },
@@ -1873,10 +1972,10 @@ mod tests {
     fn kill_switch_rearms_after_manual_on() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = plug_controller(clk.clone(), vec![
-            ActionRule { name: "printer-toggle".into(), trigger: Trigger::Tap { action: None, device: "hue-ts-office".into(), button: 3 }, effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-printer".into() } },
-            ActionRule { name: "printer-kill".into(), trigger: Trigger::PowerBelow { device: "z2m-p-printer".into(), watts: 5.0, for_seconds: 10 }, effect: Effect::TurnOff { target: "z2m-p-printer".into() } },
+            Binding { name: "printer-toggle".into(), trigger: Trigger::Button { device: "hue-ts-office".into(), button: "3".into(), gesture: Gesture::Press }, effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-printer".into() } },
+            Binding { name: "printer-kill".into(), trigger: Trigger::PowerBelow { device: "z2m-p-printer".into(), watts: 5.0, for_seconds: 10 }, effect: Effect::TurnOff { target: "z2m-p-printer".into() } },
         ]);
-        let _ = c.handle_event(Event::TapAction { action: None, device: "hue-ts-office".into(), button: 3, ts: clk.now() });
+        let _ = c.handle_event(btn_at("hue-ts-office", "3", Gesture::Press, clk.now()));
         assert!(c.plug_state_for("z2m-p-printer").unwrap().on);
         clk.advance(Duration::from_secs(1));
         let _ = c.handle_event(Event::PlugState { device: "z2m-p-printer".into(), on: true, power: Some(100.0), ts: clk.now() });
@@ -1887,7 +1986,7 @@ mod tests {
         assert_eq!(actions, vec![Action::for_device("z2m-p-printer", Payload::device_off())]);
         assert!(!c.plug_state_for("z2m-p-printer").unwrap().on);
         clk.advance(Duration::from_secs(1));
-        let actions = c.handle_event(Event::TapAction { action: None, device: "hue-ts-office".into(), button: 3, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-ts-office", "3", Gesture::Press, clk.now()));
         assert!(actions.iter().any(|a| *a == Action::for_device("z2m-p-printer", Payload::device_on())));
         assert!(c.plug_state_for("z2m-p-printer").unwrap().on);
         assert!(!c.is_kill_switch_idle("printer-kill"));
@@ -1896,7 +1995,7 @@ mod tests {
     #[test]
     fn tick_fires_kill_switch_without_plug_state_event() {
         let clk = Arc::new(FakeClock::new(12));
-        let mut c = plug_controller(clk.clone(), vec![ActionRule {
+        let mut c = plug_controller(clk.clone(), vec![Binding {
             name: "printer-kill".into(),
             trigger: Trigger::PowerBelow { device: "z2m-p-printer".into(), watts: 5.0, for_seconds: 10 },
             effect: Effect::TurnOff { target: "z2m-p-printer".into() },
@@ -1913,7 +2012,7 @@ mod tests {
     #[test]
     fn plug_state_off_clears_idle() {
         let clk = Arc::new(FakeClock::new(12));
-        let mut c = plug_controller(clk.clone(), vec![ActionRule {
+        let mut c = plug_controller(clk.clone(), vec![Binding {
             name: "printer-kill".into(),
             trigger: Trigger::PowerBelow { device: "z2m-p-printer".into(), watts: 5.0, for_seconds: 10 },
             effect: Effect::TurnOff { target: "z2m-p-printer".into() },
@@ -1931,19 +2030,19 @@ mod tests {
     fn kill_switch_disarms_on_controller_driven_off_on_cycle() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = plug_controller(clk.clone(), vec![
-            ActionRule { name: "printer-toggle".into(), trigger: Trigger::Tap { action: None, device: "hue-ts-office".into(), button: 3 }, effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-printer".into() } },
-            ActionRule { name: "printer-kill".into(), trigger: Trigger::PowerBelow { device: "z2m-p-printer".into(), watts: 5.0, for_seconds: 10 }, effect: Effect::TurnOff { target: "z2m-p-printer".into() } },
+            Binding { name: "printer-toggle".into(), trigger: Trigger::Button { device: "hue-ts-office".into(), button: "3".into(), gesture: Gesture::Press }, effect: Effect::Toggle { confirm_off_seconds: None, target: "z2m-p-printer".into() } },
+            Binding { name: "printer-kill".into(), trigger: Trigger::PowerBelow { device: "z2m-p-printer".into(), watts: 5.0, for_seconds: 10 }, effect: Effect::TurnOff { target: "z2m-p-printer".into() } },
         ]);
-        let _ = c.handle_event(Event::TapAction { action: None, device: "hue-ts-office".into(), button: 3, ts: clk.now() });
+        let _ = c.handle_event(btn_at("hue-ts-office", "3", Gesture::Press, clk.now()));
         assert!(c.plug_state_for("z2m-p-printer").unwrap().on);
         clk.advance(Duration::from_secs(1));
         let _ = c.handle_event(Event::PlugState { device: "z2m-p-printer".into(), on: true, power: Some(100.0), ts: clk.now() });
         clk.advance(Duration::from_secs(1));
-        let actions = c.handle_event(Event::TapAction { action: None, device: "hue-ts-office".into(), button: 3, ts: clk.now() });
+        let actions = c.handle_event(btn_at("hue-ts-office", "3", Gesture::Press, clk.now()));
         assert!(actions.iter().any(|a| a.payload == Payload::device_off()));
         assert!(!c.plug_state_for("z2m-p-printer").unwrap().on);
         clk.advance(Duration::from_secs(1));
-        let _ = c.handle_event(Event::TapAction { action: None, device: "hue-ts-office".into(), button: 3, ts: clk.now() });
+        let _ = c.handle_event(btn_at("hue-ts-office", "3", Gesture::Press, clk.now()));
         assert!(c.plug_state_for("z2m-p-printer").unwrap().on);
         clk.advance(Duration::from_secs(1));
         let _ = c.handle_event(Event::PlugState { device: "z2m-p-printer".into(), on: true, power: Some(2.0), ts: clk.now() });
@@ -1953,7 +2052,7 @@ mod tests {
     #[test]
     fn kill_switch_trips_after_startup_with_plug_already_below_threshold() {
         let clk = Arc::new(FakeClock::new(12));
-        let mut c = plug_controller(clk.clone(), vec![ActionRule {
+        let mut c = plug_controller(clk.clone(), vec![Binding {
             name: "printer-kill".into(),
             trigger: Trigger::PowerBelow { device: "z2m-p-printer".into(), watts: 5.0, for_seconds: 10 },
             effect: Effect::TurnOff { target: "z2m-p-printer".into() },
@@ -1971,7 +2070,7 @@ mod tests {
     #[test]
     fn kill_switch_startup_zwave_split_event_power_before_switch() {
         let clk = Arc::new(FakeClock::new(12));
-        let mut c = plug_controller(clk.clone(), vec![ActionRule {
+        let mut c = plug_controller(clk.clone(), vec![Binding {
             name: "printer-kill".into(),
             trigger: Trigger::PowerBelow { device: "z2m-p-printer".into(), watts: 5.0, for_seconds: 10 },
             effect: Effect::TurnOff { target: "z2m-p-printer".into() },
@@ -1990,7 +2089,7 @@ mod tests {
     #[test]
     fn kill_switch_startup_late_switch_response_after_arming() {
         let clk = Arc::new(FakeClock::new(12));
-        let mut c = plug_controller(clk.clone(), vec![ActionRule {
+        let mut c = plug_controller(clk.clone(), vec![Binding {
             name: "printer-kill".into(),
             trigger: Trigger::PowerBelow { device: "z2m-p-printer".into(), watts: 5.0, for_seconds: 10 },
             effect: Effect::TurnOff { target: "z2m-p-printer".into() },
@@ -2010,7 +2109,7 @@ mod tests {
     #[test]
     fn kill_switch_does_not_retrip_before_warmup() {
         let clk = Arc::new(FakeClock::new(12));
-        let mut c = plug_controller(clk.clone(), vec![ActionRule {
+        let mut c = plug_controller(clk.clone(), vec![Binding {
             name: "printer-kill".into(),
             trigger: Trigger::PowerBelow { device: "z2m-p-printer".into(), watts: 5.0, for_seconds: 10 },
             effect: Effect::TurnOff { target: "z2m-p-printer".into() },
@@ -2040,14 +2139,15 @@ mod tests {
     }
 
     #[test]
-    fn unrelated_switch_action_does_not_trigger_plug() {
+    fn unrelated_button_press_does_not_trigger_plug() {
         let clk = Arc::new(FakeClock::new(12));
-        let mut c = plug_controller(clk.clone(), vec![ActionRule {
+        let mut c = plug_controller(clk.clone(), vec![Binding {
             name: "lamp-on".into(),
-            trigger: Trigger::SwitchOn { device: "hue-s-office".into(), action: None },
+            trigger: Trigger::Button { device: "hue-s-office".into(), button: "on".into(), gesture: Gesture::Press },
             effect: Effect::TurnOn { target: "z2m-p-lamp".into() },
         }]);
-        let actions = c.handle_event(Event::SwitchAction { device: "hue-s-office".into(), action: SwitchAction::UpPressRelease, ts: clk.now() });
+        // "up" button has no binding → should not trigger plug
+        let actions = c.handle_event(btn_at("hue-s-office", "up", Gesture::Press, clk.now()));
         assert!(!actions.iter().any(|a| matches!(a.target, crate::domain::action::ActionTarget::Device(_))));
     }
 
@@ -2057,7 +2157,7 @@ mod tests {
     fn at_trigger_fires_again_next_day() {
         let clk = Arc::new(FakeClock::new(22));
         clk.set_minute(59);
-        let mut c = plug_controller(clk.clone(), vec![ActionRule {
+        let mut c = plug_controller(clk.clone(), vec![Binding {
             name: "nightly-off".into(),
             trigger: Trigger::At { time: fixed_time(23, 0) },
             effect: Effect::TurnOff { target: "z2m-p-printer".into() },
@@ -2088,11 +2188,12 @@ mod tests {
         let cfg = Config {
             name_by_address: BTreeMap::new(),
             devices: BTreeMap::from([("hue-l-a".into(), light("0xa")), ("hue-l-b".into(), light("0xb"))]),
+            switch_models: BTreeMap::new(),
             rooms: vec![
-                Room { name: "room-a".into(), group_name: "hue-lz-a".into(), id: 1, members: vec!["hue-l-a/11".into()], parent: None, devices: vec![], scenes: day_scenes(vec![1]), off_transition_seconds: 0.5, motion_off_cooldown_seconds: 0 },
-                Room { name: "room-b".into(), group_name: "hue-lz-b".into(), id: 2, members: vec!["hue-l-b/11".into()], parent: None, devices: vec![], scenes: day_scenes(vec![1]), off_transition_seconds: 1.0, motion_off_cooldown_seconds: 0 },
+                Room { name: "room-a".into(), group_name: "hue-lz-a".into(), id: 1, members: vec!["hue-l-a/11".into()], parent: None, motion_sensors: vec![], scenes: day_scenes(vec![1]), off_transition_seconds: 0.5, motion_off_cooldown_seconds: 0 },
+                Room { name: "room-b".into(), group_name: "hue-lz-b".into(), id: 2, members: vec!["hue-l-b/11".into()], parent: None, motion_sensors: vec![], scenes: day_scenes(vec![1]), off_transition_seconds: 1.0, motion_off_cooldown_seconds: 0 },
             ],
-            actions: vec![ActionRule { name: "all-off".into(), trigger: Trigger::At { time: fixed_time(23, 0) }, effect: Effect::TurnOffAllZones }],
+            bindings: vec![Binding { name: "all-off".into(), trigger: Trigger::At { time: fixed_time(23, 0) }, effect: Effect::TurnOffAllZones }],
             defaults: Defaults::default(),
             heating: None,
             location: None,
@@ -2109,10 +2210,10 @@ mod tests {
         assert!(!c.state_for("room-b").unwrap().physically_on);
     }
 
-    // ---- action-rule-only switches in all_switch_names -------------------
+    // ---- binding-only switches in all_switch_device_names ----------------
 
     #[test]
-    fn action_rule_only_switch_in_all_switch_names() {
+    fn binding_only_switch_in_all_switch_device_names() {
         let cfg = Config {
             name_by_address: BTreeMap::new(),
             devices: BTreeMap::from([
@@ -2120,14 +2221,15 @@ mod tests {
                 ("hue-s-standalone".into(), switch_dev("0x5")),
                 ("z2m-p-lamp".into(), plug_dev("0xe", "sonoff-basic", &["on-off"])),
             ]),
+            switch_models: test_switch_models(),
             rooms: vec![Room {
                 name: "empty-room".into(), group_name: "hue-lz-empty".into(), id: 1,
-                members: vec!["hue-l-a/11".into()], parent: None, devices: vec![],
+                members: vec!["hue-l-a/11".into()], parent: None, motion_sensors: vec![],
                 scenes: day_scenes(vec![1]), off_transition_seconds: 0.8, motion_off_cooldown_seconds: 0,
             }],
-            actions: vec![ActionRule {
+            bindings: vec![Binding {
                 name: "lamp-on".into(),
-                trigger: Trigger::SwitchOn { device: "hue-s-standalone".into(), action: None },
+                trigger: Trigger::Button { device: "hue-s-standalone".into(), button: "on".into(), gesture: Gesture::Press },
                 effect: Effect::TurnOn { target: "z2m-p-lamp".into() },
             }],
             defaults: Defaults::default(),
@@ -2135,7 +2237,6 @@ mod tests {
             location: None,
         };
         let topo = Topology::build(&cfg).unwrap();
-        assert!(topo.rooms_for_switch("hue-s-standalone").is_empty());
-        assert!(topo.all_switch_names().contains("hue-s-standalone"), "action-rule-only switches must be included in all_switch_names");
+        assert!(topo.all_switch_device_names().contains("hue-s-standalone"), "binding-only switches must be included in all_switch_device_names");
     }
 }

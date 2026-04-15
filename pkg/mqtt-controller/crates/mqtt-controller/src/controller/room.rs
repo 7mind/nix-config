@@ -1,165 +1,25 @@
-//! Room scene-cycling handlers: wall switch and tap button dispatch.
+//! Room-targeting effect executors: scene cycling, turn-off, brightness.
+//!
+//! These methods implement the room-facing `Effect` variants. Each one
+//! resolves the room's group name and scenes via the topology, then
+//! produces the appropriate `Action`s.
 
 use std::time::{Duration, Instant};
 
 use crate::domain::action::{Action, Payload};
-use crate::domain::event::SwitchAction;
-use crate::topology::RoomName;
 
 use super::{Controller, active_slot_scene_ids};
 
 impl Controller {
-    pub(super) fn handle_switch_action(
-        &mut self,
-        device: &str,
-        action: SwitchAction,
-        ts: Instant,
-    ) -> Vec<Action> {
-        let rooms: Vec<RoomName> = self.topology.rooms_for_switch(device).to_vec();
-        if rooms.is_empty() {
-            return Vec::new();
-        }
-        let mut out = Vec::new();
-        for room_name in &rooms {
-            self.dispatch_switch(room_name, device, action, ts, &mut out);
-        }
-        out
-    }
-
-    fn dispatch_switch(
-        &mut self,
-        room_name: &str,
-        device: &str,
-        action: SwitchAction,
-        ts: Instant,
-        out: &mut Vec<Action>,
-    ) {
-        let Some(room) = self.topology.room_by_name(room_name) else {
-            return;
-        };
-        let group_name = room.group_name.clone();
-        let off_transition = room.off_transition_seconds;
-
-        match action {
-            SwitchAction::OnPressRelease => {
-                self.wall_switch_on_press(room_name, device, ts, out);
-            }
-            SwitchAction::OffPressRelease => {
-                tracing::info!(
-                    device,
-                    room = room_name,
-                    group = %group_name,
-                    transition = off_transition,
-                    "wall switch off → publish state OFF (dedicated off button)"
-                );
-                self.publish_off(room_name, &group_name, off_transition, ts, out);
-            }
-            SwitchAction::UpPressRelease => {
-                let step = self.defaults.wall_switch.brightness_step;
-                let trans = self.defaults.wall_switch.brightness_step_transition_seconds;
-                tracing::info!(
-                    device,
-                    room = room_name,
-                    group = %group_name,
-                    step,
-                    transition = trans,
-                    "wall switch up press → brightness step +"
-                );
-                out.push(Action::new(group_name, Payload::brightness_step(step, trans)));
-            }
-            SwitchAction::DownPressRelease => {
-                let step = self.defaults.wall_switch.brightness_step;
-                let trans = self.defaults.wall_switch.brightness_step_transition_seconds;
-                tracing::info!(
-                    device,
-                    room = room_name,
-                    group = %group_name,
-                    step = -step,
-                    transition = trans,
-                    "wall switch down press → brightness step -"
-                );
-                out.push(Action::new(
-                    group_name,
-                    Payload::brightness_step(-step, trans),
-                ));
-            }
-            SwitchAction::UpHold => {
-                let rate = self.defaults.wall_switch.brightness_move_rate;
-                tracing::info!(
-                    device,
-                    room = room_name,
-                    group = %group_name,
-                    rate,
-                    "wall switch up hold → brightness move + (continuous)"
-                );
-                out.push(Action::new(group_name, Payload::brightness_move(rate)));
-            }
-            SwitchAction::DownHold => {
-                let rate = self.defaults.wall_switch.brightness_move_rate;
-                tracing::info!(
-                    device,
-                    room = room_name,
-                    group = %group_name,
-                    rate = -rate,
-                    "wall switch down hold → brightness move - (continuous)"
-                );
-                out.push(Action::new(group_name, Payload::brightness_move(-rate)));
-            }
-            SwitchAction::UpHoldRelease | SwitchAction::DownHoldRelease => {
-                tracing::info!(
-                    device,
-                    room = room_name,
-                    group = %group_name,
-                    "wall switch hold release → brightness move stop"
-                );
-                out.push(Action::new(group_name, Payload::brightness_move(0)));
-            }
-        }
-    }
-
-    pub(super) fn handle_tap_action(
-        &mut self,
-        device: &str,
-        button: u8,
-        action: Option<&str>,
-        ts: Instant,
-    ) -> Vec<Action> {
-        let rooms: Vec<RoomName> = self
-            .topology
-            .rooms_for_tap_button(device, button)
-            .to_vec();
-        if rooms.is_empty() {
-            return Vec::new();
-        }
-        let mut out = Vec::new();
-        for room_name in &rooms {
-            let cycle_on_double = self.topology.tap_cycle_on_double_tap(device, button, room_name);
-            if cycle_on_double {
-                match action {
-                    None => self.tap_toggle(room_name, device, button, ts, &mut out),
-                    Some("double") => self.tap_cycle(room_name, device, button, ts, &mut out),
-                    _ => {}
-                }
-            } else if action.is_none() {
-                self.tap_press(room_name, device, button, ts, &mut out);
-            }
-        }
-        out
-    }
-
-    /// Wall switch `on_press_release` handler. Pure scene cycle — no
-    /// time component, no cycle window.
-    fn wall_switch_on_press(
-        &mut self,
-        room_name: &str,
-        device: &str,
-        ts: Instant,
-        out: &mut Vec<Action>,
-    ) {
+    /// `SceneCycle` effect — wall switch on-button behavior. Pure scene
+    /// cycle: every press advances the cycle unconditionally, no time
+    /// component, no toggle-off. The cycle index only resets when the
+    /// lights physically go off.
+    pub(super) fn execute_scene_cycle(&mut self, room_name: &str, ts: Instant) -> Vec<Action> {
         let sun = self.sun_times();
         let (group_name, scenes_for_now) = {
             let Some(room) = self.topology.room_by_name(room_name) else {
-                return;
+                return Vec::new();
             };
             let hour = self.clock.local_hour();
             let minute = self.clock.local_minute();
@@ -169,7 +29,7 @@ impl Controller {
             )
         };
         if scenes_for_now.is_empty() {
-            return;
+            return Vec::new();
         }
         let n = scenes_for_now.len();
 
@@ -181,7 +41,6 @@ impl Controller {
         };
         let next_scene = scenes_for_now[next_idx];
         tracing::info!(
-            device,
             room = room_name,
             group = %group_name,
             scene = next_scene,
@@ -189,29 +48,26 @@ impl Controller {
             cycle_idx_to = next_idx,
             cycle_len = n,
             branch,
-            "wall switch on → scene_recall"
+            "scene_cycle → scene_recall"
         );
-        out.push(Action::new(
+        let action = Action::new(
             group_name.clone(),
             Payload::scene_recall(next_scene),
-        ));
+        );
         self.write_after_on(room_name, ts, next_idx);
         self.propagate_to_descendants(room_name, true, ts);
+        vec![action]
     }
 
-    /// Tap button handler. Three-branch state machine.
-    fn tap_press(
-        &mut self,
-        room_name: &str,
-        device: &str,
-        button: u8,
-        ts: Instant,
-        out: &mut Vec<Action>,
-    ) {
+    /// `SceneToggleCycle` effect — tap button three-branch behavior:
+    /// 1. If room is off → turn on with first scene
+    /// 2. If within cycle window → advance to next scene
+    /// 3. If outside cycle window → turn off
+    pub(super) fn execute_scene_toggle_cycle(&mut self, room_name: &str, ts: Instant) -> Vec<Action> {
         let sun = self.sun_times();
         let (group_name, scenes_for_now, off_transition) = {
             let Some(room) = self.topology.room_by_name(room_name) else {
-                return;
+                return Vec::new();
             };
             let hour = self.clock.local_hour();
             let minute = self.clock.local_minute();
@@ -222,7 +78,7 @@ impl Controller {
             )
         };
         if scenes_for_now.is_empty() {
-            return;
+            return Vec::new();
         }
         let cycle_window = Duration::from_secs_f64(self.defaults.cycle_window_seconds);
 
@@ -236,21 +92,20 @@ impl Controller {
             // Branch 1: fresh on → first scene.
             let first = scenes_for_now[0];
             tracing::info!(
-                device,
-                button,
                 room = room_name,
                 group = %group_name,
                 scene = first,
                 cycle_idx_to = 0,
                 branch = "fresh on (was physically off)",
-                "tap press → scene_recall"
+                "scene_toggle_cycle → scene_recall"
             );
-            out.push(Action::new(
+            let action = Action::new(
                 group_name.clone(),
                 Payload::scene_recall(first),
-            ));
+            );
             self.write_after_on(room_name, ts, 0);
             self.propagate_to_descendants(room_name, true, ts);
+            vec![action]
         } else if within_window {
             // Branch 2: cycle to next scene mod N.
             let n = scenes_for_now.len();
@@ -260,8 +115,6 @@ impl Controller {
                 .map(|d| d.as_millis())
                 .unwrap_or(0);
             tracing::info!(
-                device,
-                button,
                 room = room_name,
                 group = %group_name,
                 scene = next_scene,
@@ -270,152 +123,97 @@ impl Controller {
                 cycle_len = n,
                 elapsed_ms,
                 branch = "cycle advance (within window)",
-                "tap press → scene_recall"
+                "scene_toggle_cycle → scene_recall"
             );
-            out.push(Action::new(
+            let action = Action::new(
                 group_name.clone(),
                 Payload::scene_recall(next_scene),
-            ));
+            );
             self.write_after_on(room_name, ts, next_idx);
             self.propagate_to_descendants(room_name, true, ts);
+            vec![action]
         } else {
             // Branch 3: window expired → toggle off.
             let elapsed_ms = elapsed_since_last
                 .map(|d| d.as_millis() as i64)
                 .unwrap_or(-1);
             tracing::info!(
-                device,
-                button,
                 room = room_name,
                 group = %group_name,
                 transition = off_transition,
                 elapsed_ms,
                 branch = "expire (cycle window passed)",
-                "tap press → state OFF"
+                "scene_toggle_cycle → state OFF"
             );
-            self.publish_off(room_name, &group_name, off_transition, ts, out);
+            let mut out = Vec::new();
+            self.publish_off(room_name, &group_name, off_transition, ts, &mut out);
+            out
         }
     }
 
-    /// cycle_on_double_tap: single tap = toggle on (first scene) / off.
-    fn tap_toggle(
-        &mut self,
-        room_name: &str,
-        device: &str,
-        button: u8,
-        ts: Instant,
-        out: &mut Vec<Action>,
-    ) {
-        let sun = self.sun_times();
+    /// `TurnOffRoom` effect — turn off a room group with its configured
+    /// off transition.
+    pub(super) fn execute_turn_off_room(&mut self, room_name: &str, ts: Instant) -> Vec<Action> {
         let Some(room) = self.topology.room_by_name(room_name) else {
-            return;
+            return Vec::new();
         };
         let group_name = room.group_name.clone();
         let off_transition = room.off_transition_seconds;
-        let hour = self.clock.local_hour();
-        let minute = self.clock.local_minute();
-        let scenes_for_now = active_slot_scene_ids(&room.scenes, hour, minute, sun.as_ref());
-
-        let state_snapshot = self.states.get(room_name).cloned().unwrap_or_default();
-
-        if state_snapshot.physically_on {
-            tracing::info!(
-                device,
-                button,
-                room = room_name,
-                group = %group_name,
-                transition = off_transition,
-                branch = "toggle off (cycle_on_double_tap)",
-                "tap single → state OFF"
-            );
-            self.publish_off(room_name, &group_name, off_transition, ts, out);
-        } else {
-            let Some(&first) = scenes_for_now.first() else {
-                return;
-            };
-            tracing::info!(
-                device,
-                button,
-                room = room_name,
-                group = %group_name,
-                scene = first,
-                branch = "toggle on (cycle_on_double_tap)",
-                "tap single → scene_recall"
-            );
-            out.push(Action::new(
-                group_name.clone(),
-                Payload::scene_recall(first),
-            ));
-            self.write_after_on(room_name, ts, 0);
-            self.propagate_to_descendants(room_name, true, ts);
-        }
+        tracing::info!(
+            room = room_name,
+            group = %group_name,
+            transition = off_transition,
+            "turn_off_room → state OFF"
+        );
+        let mut out = Vec::new();
+        self.publish_off(room_name, &group_name, off_transition, ts, &mut out);
+        out
     }
 
-    /// cycle_on_double_tap: double tap = cycle to next scene.
-    fn tap_cycle(
-        &mut self,
-        room_name: &str,
-        device: &str,
-        button: u8,
-        ts: Instant,
-        out: &mut Vec<Action>,
-    ) {
-        let sun = self.sun_times();
+    /// `BrightnessStep` effect — step brightness up or down.
+    pub(super) fn execute_brightness_step(&mut self, room_name: &str, step: i16, transition: f64) -> Vec<Action> {
         let Some(room) = self.topology.room_by_name(room_name) else {
-            return;
+            return Vec::new();
         };
         let group_name = room.group_name.clone();
-        let hour = self.clock.local_hour();
-        let minute = self.clock.local_minute();
-        let scenes_for_now = active_slot_scene_ids(&room.scenes, hour, minute, sun.as_ref());
-        if scenes_for_now.is_empty() {
-            return;
-        }
+        tracing::info!(
+            room = room_name,
+            group = %group_name,
+            step,
+            transition,
+            "brightness_step"
+        );
+        vec![Action::new(group_name, Payload::brightness_step(step, transition))]
+    }
 
-        let state_snapshot = self.states.get(room_name).cloned().unwrap_or_default();
+    /// `BrightnessMove` effect — start continuous brightness change (hold).
+    pub(super) fn execute_brightness_move(&mut self, room_name: &str, rate: i16) -> Vec<Action> {
+        let Some(room) = self.topology.room_by_name(room_name) else {
+            return Vec::new();
+        };
+        let group_name = room.group_name.clone();
+        tracing::info!(
+            room = room_name,
+            group = %group_name,
+            rate,
+            "brightness_move"
+        );
+        vec![Action::new(group_name, Payload::brightness_move(rate))]
+    }
 
-        if !state_snapshot.physically_on {
-            // Off → turn on with first scene.
-            let first = scenes_for_now[0];
-            tracing::info!(
-                device,
-                button,
-                room = room_name,
-                group = %group_name,
-                scene = first,
-                branch = "cycle fresh on (cycle_on_double_tap, was off)",
-                "tap double → scene_recall"
-            );
-            out.push(Action::new(
-                group_name.clone(),
-                Payload::scene_recall(first),
-            ));
-            self.write_after_on(room_name, ts, 0);
-            self.propagate_to_descendants(room_name, true, ts);
-        } else {
-            // On → advance to next scene.
-            let n = scenes_for_now.len();
-            let next_idx = (state_snapshot.cycle_idx + 1) % n;
-            let next_scene = scenes_for_now[next_idx];
-            tracing::info!(
-                device,
-                button,
-                room = room_name,
-                group = %group_name,
-                scene = next_scene,
-                cycle_idx_from = state_snapshot.cycle_idx,
-                cycle_idx_to = next_idx,
-                cycle_len = n,
-                branch = "cycle advance (cycle_on_double_tap)",
-                "tap double → scene_recall"
-            );
-            out.push(Action::new(
-                group_name.clone(),
-                Payload::scene_recall(next_scene),
-            ));
-            self.write_after_on(room_name, ts, next_idx);
-            self.propagate_to_descendants(room_name, true, ts);
-        }
+    /// `BrightnessStop` effect — stop continuous brightness change
+    /// (hold release). Implemented as brightness_move with rate 0.
+    pub(super) fn execute_brightness_stop(&mut self, room_name: &str) -> Vec<Action> {
+        let Some(room) = self.topology.room_by_name(room_name) else {
+            return Vec::new();
+        };
+        let group_name = room.group_name.clone();
+        tracing::info!(
+            room = room_name,
+            group = %group_name,
+            "brightness_stop"
+        );
+        vec![Action::new(group_name, Payload::brightness_move(0))]
     }
 
     pub(super) fn publish_off(

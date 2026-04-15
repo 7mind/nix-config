@@ -61,10 +61,10 @@ impl KillSwitchEvaluator {
     /// `device`. Returns `None` if no rule is currently tracking idle.
     pub fn earliest_idle(&self, device: &str) -> Option<Instant> {
         self.topology
-            .actions_for_power_below(device)
+            .bindings_for_power_below(device)
             .iter()
             .filter_map(|&idx| {
-                let name = &self.topology.actions()[idx].name;
+                let name = &self.topology.bindings()[idx].name;
                 self.idle_since.get(name).copied()
             })
             .min()
@@ -75,10 +75,10 @@ impl KillSwitchEvaluator {
     /// rule is idle.
     pub fn holdoff_secs(&self, device: &str) -> Option<u64> {
         self.topology
-            .actions_for_power_below(device)
+            .bindings_for_power_below(device)
             .iter()
             .filter_map(|&idx| {
-                let resolved = &self.topology.actions()[idx];
+                let resolved = &self.topology.bindings()[idx];
                 if !self.idle_since.contains_key(&resolved.name) {
                     return None;
                 }
@@ -94,8 +94,8 @@ impl KillSwitchEvaluator {
     /// off-transition (explicit off, toggle off, kill-switch fire from
     /// the controller side, etc.).
     pub fn on_plug_off(&mut self, device: &str) {
-        for &idx in self.topology.actions_for_power_below(device) {
-            let name = &self.topology.actions()[idx].name;
+        for &idx in self.topology.bindings_for_power_below(device) {
+            let name = &self.topology.bindings()[idx].name;
             self.idle_since.remove(name);
             self.armed.remove(name);
         }
@@ -109,8 +109,8 @@ impl KillSwitchEvaluator {
         seed_power: Option<f64>,
         ts: Instant,
     ) {
-        for &idx in self.topology.actions_for_power_below(device) {
-            let resolved = &self.topology.actions()[idx];
+        for &idx in self.topology.bindings_for_power_below(device) {
+            let resolved = &self.topology.bindings()[idx];
             let rule_name = resolved.name.clone();
             if self.suppressed.contains(&rule_name) {
                 continue;
@@ -154,7 +154,7 @@ impl KillSwitchEvaluator {
         power: f64,
         ts: Instant,
     ) -> Vec<KillSwitchFired> {
-        let rule_indexes = self.topology.actions_for_power_below(device).to_vec();
+        let rule_indexes = self.topology.bindings_for_power_below(device).to_vec();
         if rule_indexes.is_empty() {
             return Vec::new();
         }
@@ -169,7 +169,7 @@ impl KillSwitchEvaluator {
             target: Option<String>,
         }
         let rules: Vec<RuleInfo> = rule_indexes.iter().filter_map(|&idx| {
-            let resolved = &self.topology.actions()[idx];
+            let resolved = &self.topology.bindings()[idx];
             match &resolved.trigger {
                 Trigger::PowerBelow { watts, for_seconds, .. } => Some(RuleInfo {
                     rule_name: resolved.name.clone(),
@@ -250,7 +250,7 @@ impl KillSwitchEvaluator {
         ts: Instant,
         is_plug_on: &dyn Fn(&str) -> bool,
     ) -> Vec<KillSwitchFired> {
-        let actions_snapshot = self.topology.actions().to_vec();
+        let actions_snapshot = self.topology.bindings().to_vec();
         let mut fired = Vec::new();
         for resolved in &actions_snapshot {
             let (device, holdoff_secs) = match &resolved.trigger {
@@ -296,8 +296,8 @@ impl KillSwitchEvaluator {
         ts: Instant,
     ) {
         for (plug_name, last_power) in active_plugs {
-            for &idx in self.topology.actions_for_power_below(plug_name) {
-                let resolved = &self.topology.actions()[idx];
+            for &idx in self.topology.bindings_for_power_below(plug_name) {
+                let resolved = &self.topology.bindings()[idx];
                 let rule_name = resolved.name.clone();
                 if self.suppressed.contains(&rule_name)
                     || self.armed.contains(&rule_name)
@@ -337,8 +337,8 @@ impl KillSwitchEvaluator {
     /// Suppress and clear ALL rules for a device. Called when any
     /// kill-switch fires.
     fn suppress_all(&mut self, device: &str) {
-        for &idx in self.topology.actions_for_power_below(device) {
-            let name = &self.topology.actions()[idx].name;
+        for &idx in self.topology.bindings_for_power_below(device) {
+            let name = &self.topology.bindings()[idx].name;
             self.idle_since.remove(name);
             self.armed.remove(name);
             self.suppressed.insert(name.clone());

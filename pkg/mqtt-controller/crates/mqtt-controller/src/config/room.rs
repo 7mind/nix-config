@@ -1,7 +1,7 @@
-//! Room schema. Each room is one zigbee group plus a binding of input
-//! devices (switches, taps, motion sensors) to the room. Optionally has a
-//! parent room (the ancestor whose state changes propagate to descendants
-//! via the on/off invalidation we already worked out for bento).
+//! Room schema. Each room is one zigbee group with motion sensors.
+//! Switch/tap bindings are now in the top-level `bindings` array,
+//! not in the room itself. Optionally has a parent room (the ancestor
+//! whose state changes propagate to descendants via on/off invalidation).
 
 use serde::{Deserialize, Serialize};
 
@@ -36,12 +36,10 @@ pub struct Room {
     #[serde(default)]
     pub parent: Option<String>,
 
-    /// Input devices bound to this room. Each entry is either a bare
-    /// device name (for switches and motion sensors) or a `{device, button}`
-    /// pair (for tap buttons). Heterogeneous types share one slot in the
-    /// JSON; the topology builder partitions them by `DeviceKind`.
+    /// Motion sensors bound to this room. Each entry is a device
+    /// friendly_name referencing a `motion-sensor` in the catalog.
     #[serde(default)]
-    pub devices: Vec<DeviceBinding>,
+    pub motion_sensors: Vec<String>,
 
     /// Per-room scene schedule. Provisioning emits these as `scene_add`
     /// calls; the runtime reads `slots` for the cycle dispatch.
@@ -58,26 +56,6 @@ pub struct Room {
     pub motion_off_cooldown_seconds: u32,
 }
 
-/// One input device binding inside a room. The Nix layer normalizes the
-/// shorthand `"hue-s-foo"` form into a `{device: ..., button: null}`
-/// record before rendering, so the Rust loader only ever sees the long
-/// form. `button` is `Some(N)` for tap buttons and `None` for everything
-/// else.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct DeviceBinding {
-    pub device: String,
-
-    #[serde(default)]
-    pub button: Option<u8>,
-
-    /// When true, single tap toggles on/off and double tap cycles scenes.
-    /// When false (default), the existing 3-branch tap state machine applies
-    /// (consecutive taps cycle, delayed tap turns off).
-    #[serde(default)]
-    pub cycle_on_double_tap: bool,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -90,9 +68,7 @@ mod tests {
             "id": 15,
             "members": ["hue-l-cooker-bottom/11", "hue-l-cooker-top/11"],
             "parent": "kitchen-all",
-            "devices": [
-                {"device": "hue-ts-kitchen-entrance", "button": 2}
-            ],
+            "motion_sensors": ["hue-ms-kitchen"],
             "scenes": {
                 "scenes": [
                     {"id": 1, "name": "x", "state": "ON", "brightness": null, "color_temp": null, "transition": 0.5}
@@ -107,18 +83,7 @@ mod tests {
         let room: Room = serde_json::from_str(json).unwrap();
         assert_eq!(room.name, "kitchen-cooker");
         assert_eq!(room.parent.as_deref(), Some("kitchen-all"));
-        assert_eq!(room.devices.len(), 1);
-        assert_eq!(room.devices[0].button, Some(2));
+        assert_eq!(room.motion_sensors, vec!["hue-ms-kitchen"]);
         assert_eq!(room.members.len(), 2);
-    }
-
-    #[test]
-    fn switch_binding_has_no_button() {
-        let json = r#"{
-            "device": "hue-s-mid-bedroom"
-        }"#;
-        let b: DeviceBinding = serde_json::from_str(json).unwrap();
-        assert_eq!(b.device, "hue-s-mid-bedroom");
-        assert_eq!(b.button, None);
     }
 }
