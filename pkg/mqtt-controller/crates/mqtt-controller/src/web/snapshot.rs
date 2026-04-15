@@ -1,4 +1,4 @@
-//! Conversion from internal domain types ([`ZoneState`], [`PlugRuntimeState`])
+//! Conversion from TASS entities ([`LightZoneEntity`], [`PlugEntity`])
 //! to wire DTOs ([`RoomSnapshot`], [`PlugSnapshot`]).
 
 use std::time::Instant;
@@ -8,23 +8,26 @@ use mqtt_controller_wire::{
     RoomSnapshot, SlotInfo, TopologyInfo, TrvSnapshot,
 };
 
-use crate::controller::Controller;
 use crate::domain::action::{Action, ActionTarget};
+use crate::entities::light_zone::LightZoneEntity;
+use crate::logic::EventProcessor;
 use crate::topology::Topology;
 
-/// Build a full state snapshot from the controller's current state.
-pub fn build_full_snapshot(controller: &Controller, now: Instant) -> FullStateSnapshot {
-    let topology = controller.topology();
-    let hour = controller.clock().local_hour();
-    let minute = controller.clock().local_minute();
-    let sun = snapshot_sun_times(controller);
-    let epoch_ms = controller.clock().epoch_millis();
+/// Build a full state snapshot from the processor's current state.
+pub fn build_full_snapshot(processor: &EventProcessor, now: Instant) -> FullStateSnapshot {
+    let topology = processor.topology();
+    let hour = processor.clock().local_hour();
+    let minute = processor.clock().local_minute();
+    let sun = snapshot_sun_times(processor);
+    let epoch_ms = processor.clock().epoch_millis();
+    let world = processor.world();
 
     let rooms: Vec<RoomSnapshot> = topology
         .rooms()
         .map(|room| {
-            let state = controller.state_for(&room.name);
-            room_snapshot_from(room, state, hour, minute, sun.as_ref(), now)
+            let zone = world.light_zones.get(&room.name);
+            let active_sensors = active_motion_sensors_for_room(processor, &room.name);
+            room_snapshot_from(room, zone, &active_sensors, hour, minute, sun.as_ref(), now)
         })
         .collect();
 
@@ -32,22 +35,22 @@ pub fn build_full_snapshot(controller: &Controller, now: Instant) -> FullStateSn
         .all_plug_names()
         .iter()
         .map(|name| {
-            let state = controller.plug_state_for(name);
-            let idle_since_ago_ms = controller
+            let plug = world.plugs.get(name);
+            let idle_since_ago_ms = processor
                 .earliest_kill_switch_idle(name)
                 .map(|t| ago_ms(now, t));
-            let kill_switch_holdoff_secs = controller.kill_switch_holdoff_secs(name);
+            let kill_switch_holdoff_secs = processor.kill_switch_holdoff_secs(name);
             PlugSnapshot {
                 device: name.clone(),
-                on: state.map_or(false, |s| s.on),
+                on: plug.map_or(false, |p| p.is_on()),
                 idle_since_ago_ms,
                 kill_switch_holdoff_secs,
-                power_watts: state.and_then(|s| s.last_power),
+                power_watts: plug.and_then(|p| p.power()),
             }
         })
         .collect();
 
-    let heating_zones = build_heating_zone_snapshots(controller, now);
+    let heating_zones = build_heating_zone_snapshots(processor, now);
 
     FullStateSnapshot {
         rooms,
@@ -59,29 +62,49 @@ pub fn build_full_snapshot(controller: &Controller, now: Instant) -> FullStateSn
 
 /// Build a single room snapshot for incremental updates.
 pub fn build_room_snapshot(
-    controller: &Controller,
+    processor: &EventProcessor,
     room_name: &str,
     now: Instant,
 ) -> Option<RoomSnapshot> {
-    let topology = controller.topology();
+    let topology = processor.topology();
     let room = topology.room_by_name(room_name)?;
-    let state = controller.state_for(room_name);
-    let hour = controller.clock().local_hour();
-    let minute = controller.clock().local_minute();
-    let sun = snapshot_sun_times(controller);
-    Some(room_snapshot_from(room, state, hour, minute, sun.as_ref(), now))
+    let zone = processor.world().light_zones.get(room_name);
+    let hour = processor.clock().local_hour();
+    let minute = processor.clock().local_minute();
+    let sun = snapshot_sun_times(processor);
+    let active_sensors = active_motion_sensors_for_room(processor, room_name);
+    Some(room_snapshot_from(room, zone, &active_sensors, hour, minute, sun.as_ref(), now))
+}
+
+/// Collect names of motion sensors that are currently active (occupied) for a given room.
+fn active_motion_sensors_for_room(processor: &EventProcessor, room_name: &str) -> Vec<String> {
+    let Some(room) = processor.topology().room_by_name(room_name) else {
+        return Vec::new();
+    };
+    let world = processor.world();
+    room.bound_motion
+        .iter()
+        .filter(|mb| {
+            world
+                .motion_sensors
+                .get(mb.sensor.as_str())
+                .is_some_and(|s| s.is_occupied())
+        })
+        .map(|mb| mb.sensor.clone())
+        .collect()
 }
 
 /// Compute sun times for snapshots (read-only path, no caching).
-fn snapshot_sun_times(controller: &Controller) -> Option<crate::sun::SunTimes> {
-    let loc = controller.location()?;
-    let info = controller.clock().local_date_info();
+fn snapshot_sun_times(processor: &EventProcessor) -> Option<crate::sun::SunTimes> {
+    let loc = processor.location.as_ref()?;
+    let info = processor.clock().local_date_info();
     Some(crate::sun::compute_sun_times(loc, info.date, info.utc_offset_hours))
 }
 
 fn room_snapshot_from(
     room: &crate::topology::ResolvedRoom,
-    state: Option<&crate::domain::state::ZoneState>,
+    zone: Option<&LightZoneEntity>,
+    active_sensors: &[String],
     hour: u8,
     minute: u8,
     sun: Option<&crate::sun::SunTimes>,
@@ -96,24 +119,16 @@ fn room_snapshot_from(
     RoomSnapshot {
         name: room.name.clone(),
         group_name: room.group_name.clone(),
-        physically_on: state.map_or(false, |s| s.physically_on),
-        motion_owned: state.map_or(false, |s| s.motion_owned),
-        cycle_idx: state.map_or(0, |s| s.cycle_idx),
-        last_press_ago_ms: state
-            .and_then(|s| s.last_press_at)
+        physically_on: zone.map_or(false, |z| z.is_on()),
+        motion_owned: zone.map_or(false, |z| z.is_motion_owned()),
+        cycle_idx: zone.map_or(0, |z| z.cycle_idx()),
+        last_press_ago_ms: zone
+            .and_then(|z| z.last_press_at)
             .map(|t| ago_ms(now, t)),
-        last_off_ago_ms: state
-            .and_then(|s| s.last_off_at)
+        last_off_ago_ms: zone
+            .and_then(|z| z.last_off_at)
             .map(|t| ago_ms(now, t)),
-        motion_active_sensors: state
-            .map(|s| {
-                s.motion_active_by_sensor
-                    .iter()
-                    .filter(|&(_, active)| *active)
-                    .map(|(name, _)| name.clone())
-                    .collect()
-            })
-            .unwrap_or_default(),
+        motion_active_sensors: active_sensors.to_vec(),
         active_slot,
         scene_ids,
     }
@@ -121,21 +136,21 @@ fn room_snapshot_from(
 
 /// Build a single plug snapshot for incremental updates.
 pub fn build_plug_snapshot(
-    controller: &Controller,
+    processor: &EventProcessor,
     device: &str,
     now: Instant,
 ) -> Option<PlugSnapshot> {
-    let state = controller.plug_state_for(device)?;
-    let idle_since_ago_ms = controller
+    let plug = processor.world().plugs.get(device)?;
+    let idle_since_ago_ms = processor
         .earliest_kill_switch_idle(device)
         .map(|t| ago_ms(now, t));
-    let kill_switch_holdoff_secs = controller.kill_switch_holdoff_secs(device);
+    let kill_switch_holdoff_secs = processor.kill_switch_holdoff_secs(device);
     Some(PlugSnapshot {
         device: device.to_string(),
-        on: state.on,
+        on: plug.is_on(),
         idle_since_ago_ms,
         kill_switch_holdoff_secs,
-        power_watts: state.last_power,
+        power_watts: plug.power(),
     })
 }
 
@@ -266,13 +281,13 @@ pub fn summarize_event(event: &crate::domain::event::Event) -> String {
 
 /// Build snapshots for all heating zones.
 fn build_heating_zone_snapshots(
-    controller: &Controller,
+    processor: &EventProcessor,
     now: Instant,
 ) -> Vec<HeatingZoneSnapshot> {
-    let Some(heating_cfg) = controller.topology().heating_config() else {
+    let Some(heating_cfg) = processor.topology().heating_config() else {
         return Vec::new();
     };
-    let Some(heating_state) = controller.heating_state() else {
+    let Some(heating_state) = processor.heating_state() else {
         return Vec::new();
     };
     heating_cfg
@@ -362,12 +377,12 @@ fn build_one_heating_zone(
 
 /// Build a single heating zone snapshot for incremental updates.
 pub fn build_heating_zone_snapshot(
-    controller: &Controller,
+    processor: &EventProcessor,
     zone_name: &str,
     now: Instant,
 ) -> Option<HeatingZoneSnapshot> {
-    let heating_cfg = controller.topology().heating_config()?;
-    let heating_state = controller.heating_state()?;
+    let heating_cfg = processor.topology().heating_config()?;
+    let heating_state = processor.heating_state()?;
     let zone = heating_cfg.zones.iter().find(|z| z.name == zone_name)?;
     Some(build_one_heating_zone(zone, heating_cfg, heating_state, now))
 }

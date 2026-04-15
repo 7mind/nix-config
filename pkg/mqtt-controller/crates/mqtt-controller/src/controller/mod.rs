@@ -1001,7 +1001,7 @@ impl Controller {
 }
 
 /// Pull out the `scene_ids` of the slot covering `(hour, minute)`.
-fn active_slot_scene_ids(
+pub fn active_slot_scene_ids(
     schedule: &crate::config::SceneSchedule,
     hour: u8,
     minute: u8,

@@ -1,0 +1,438 @@
+//! Light zone logic: scene cycling, toggle, brightness, group state echo,
+//! and descendant propagation.
+//!
+//! Ports [`crate::controller::room`] to TASS entities. State access goes
+//! through [`WorldState`] / [`LightZoneEntity`] instead of the ad-hoc
+//! `ZoneState` map.
+
+use std::time::{Duration, Instant};
+
+use crate::domain::action::{Action, Payload};
+use crate::entities::light_zone::{LightZoneActual, LightZoneTarget};
+use crate::tass::Owner;
+use crate::topology::RoomName;
+
+use super::EventProcessor;
+
+impl EventProcessor {
+    /// `SceneCycle` effect -- wall switch on-button behavior. Pure scene
+    /// cycle: every press advances the cycle unconditionally, no time
+    /// component, no toggle-off. The cycle index only resets when the
+    /// lights physically go off.
+    pub(super) fn execute_scene_cycle(&mut self, room_name: &str, ts: Instant) -> Vec<Action> {
+        let scenes_for_now = self.scenes_for_room(room_name);
+        let Some(room) = self.topology.room_by_name(room_name) else {
+            return Vec::new();
+        };
+        let group_name = room.group_name.clone();
+
+        if scenes_for_now.is_empty() {
+            return Vec::new();
+        }
+        let n = scenes_for_now.len();
+
+        let zone = self.world.light_zone(room_name);
+        let (next_idx, branch) = if zone.is_on() {
+            ((zone.cycle_idx() + 1) % n, "cycle advance")
+        } else {
+            (0, "fresh on (was physically off)")
+        };
+        let prev_idx = zone.cycle_idx();
+        let next_scene = scenes_for_now[next_idx];
+        tracing::info!(
+            room = room_name,
+            group = %group_name,
+            scene = next_scene,
+            cycle_idx_from = prev_idx,
+            cycle_idx_to = next_idx,
+            cycle_len = n,
+            branch,
+            "scene_cycle → scene_recall"
+        );
+        let action = Action::new(
+            group_name.clone(),
+            Payload::scene_recall(next_scene),
+        );
+        self.write_after_on(room_name, ts, next_idx, next_scene);
+        self.propagate_to_descendants(room_name, true, ts);
+        vec![action]
+    }
+
+    /// `SceneToggle` effect -- pure on/off toggle. If room is off, turn
+    /// on with the first scene in the active slot. If room is on, turn
+    /// off. No cycle window, no scene advancement. Designed for buttons
+    /// that use hardware double-tap for scene cycling.
+    pub(super) fn execute_scene_toggle(&mut self, room_name: &str, ts: Instant) -> Vec<Action> {
+        let scenes_for_now = self.scenes_for_room(room_name);
+        let Some(room) = self.topology.room_by_name(room_name) else {
+            return Vec::new();
+        };
+        let group_name = room.group_name.clone();
+        let off_transition = room.off_transition_seconds;
+
+        if scenes_for_now.is_empty() {
+            return Vec::new();
+        }
+
+        let zone = self.world.light_zone(room_name);
+        let is_on = zone.is_on();
+
+        if !is_on {
+            let first = scenes_for_now[0];
+            tracing::info!(
+                room = room_name,
+                group = %group_name,
+                scene = first,
+                branch = "on (was off)",
+                "scene_toggle → scene_recall"
+            );
+            let action = Action::new(
+                group_name.clone(),
+                Payload::scene_recall(first),
+            );
+            self.write_after_on(room_name, ts, 0, first);
+            self.propagate_to_descendants(room_name, true, ts);
+            vec![action]
+        } else {
+            tracing::info!(
+                room = room_name,
+                group = %group_name,
+                transition = off_transition,
+                branch = "off (was on)",
+                "scene_toggle → state OFF"
+            );
+            let mut out = Vec::new();
+            self.publish_off(room_name, &group_name, off_transition, ts, &mut out);
+            out
+        }
+    }
+
+    /// `SceneToggleCycle` effect -- tap button three-branch behavior:
+    /// 1. If room is off -> turn on with first scene
+    /// 2. If within cycle window -> advance to next scene
+    /// 3. If outside cycle window -> turn off
+    pub(super) fn execute_scene_toggle_cycle(&mut self, room_name: &str, ts: Instant) -> Vec<Action> {
+        let scenes_for_now = self.scenes_for_room(room_name);
+        let Some(room) = self.topology.room_by_name(room_name) else {
+            return Vec::new();
+        };
+        let group_name = room.group_name.clone();
+        let off_transition = room.off_transition_seconds;
+
+        if scenes_for_now.is_empty() {
+            return Vec::new();
+        }
+        let cycle_window = Duration::from_secs_f64(self.defaults.cycle_window_seconds);
+
+        let zone = self.world.light_zone(room_name);
+        let is_on = zone.is_on();
+        let prev_idx = zone.cycle_idx();
+        let elapsed_since_last = zone.last_press_at.map(|last| ts.duration_since(last));
+        let within_window = elapsed_since_last.is_some_and(|d| d < cycle_window);
+
+        if !is_on {
+            // Branch 1: fresh on -> first scene.
+            let first = scenes_for_now[0];
+            tracing::info!(
+                room = room_name,
+                group = %group_name,
+                scene = first,
+                cycle_idx_to = 0,
+                branch = "fresh on (was physically off)",
+                "scene_toggle_cycle → scene_recall"
+            );
+            let action = Action::new(
+                group_name.clone(),
+                Payload::scene_recall(first),
+            );
+            self.write_after_on(room_name, ts, 0, first);
+            self.propagate_to_descendants(room_name, true, ts);
+            vec![action]
+        } else if within_window {
+            // Branch 2: cycle to next scene mod N.
+            let n = scenes_for_now.len();
+            let next_idx = (prev_idx + 1) % n;
+            let next_scene = scenes_for_now[next_idx];
+            let elapsed_ms = elapsed_since_last
+                .map(|d| d.as_millis())
+                .unwrap_or(0);
+            tracing::info!(
+                room = room_name,
+                group = %group_name,
+                scene = next_scene,
+                cycle_idx_from = prev_idx,
+                cycle_idx_to = next_idx,
+                cycle_len = n,
+                elapsed_ms,
+                branch = "cycle advance (within window)",
+                "scene_toggle_cycle → scene_recall"
+            );
+            let action = Action::new(
+                group_name.clone(),
+                Payload::scene_recall(next_scene),
+            );
+            self.write_after_on(room_name, ts, next_idx, next_scene);
+            self.propagate_to_descendants(room_name, true, ts);
+            vec![action]
+        } else {
+            // Branch 3: window expired -> toggle off.
+            let elapsed_ms = elapsed_since_last
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or(-1);
+            tracing::info!(
+                room = room_name,
+                group = %group_name,
+                transition = off_transition,
+                elapsed_ms,
+                branch = "expire (cycle window passed)",
+                "scene_toggle_cycle → state OFF"
+            );
+            let mut out = Vec::new();
+            self.publish_off(room_name, &group_name, off_transition, ts, &mut out);
+            out
+        }
+    }
+
+    /// `TurnOffRoom` effect -- turn off a room group with its configured
+    /// off transition.
+    pub(super) fn execute_turn_off_room(&mut self, room_name: &str, ts: Instant) -> Vec<Action> {
+        let Some(room) = self.topology.room_by_name(room_name) else {
+            return Vec::new();
+        };
+        let group_name = room.group_name.clone();
+        let off_transition = room.off_transition_seconds;
+        tracing::info!(
+            room = room_name,
+            group = %group_name,
+            transition = off_transition,
+            "turn_off_room → state OFF"
+        );
+        let mut out = Vec::new();
+        self.publish_off(room_name, &group_name, off_transition, ts, &mut out);
+        out
+    }
+
+    /// `BrightnessStep` effect -- step brightness up or down.
+    pub(super) fn execute_brightness_step(&mut self, room_name: &str, step: i16, transition: f64) -> Vec<Action> {
+        let Some(room) = self.topology.room_by_name(room_name) else {
+            return Vec::new();
+        };
+        let group_name = room.group_name.clone();
+        tracing::info!(
+            room = room_name,
+            group = %group_name,
+            step,
+            transition,
+            "brightness_step"
+        );
+        vec![Action::new(group_name, Payload::brightness_step(step, transition))]
+    }
+
+    /// `BrightnessMove` effect -- start continuous brightness change (hold).
+    pub(super) fn execute_brightness_move(&mut self, room_name: &str, rate: i16) -> Vec<Action> {
+        let Some(room) = self.topology.room_by_name(room_name) else {
+            return Vec::new();
+        };
+        let group_name = room.group_name.clone();
+        tracing::info!(
+            room = room_name,
+            group = %group_name,
+            rate,
+            "brightness_move"
+        );
+        vec![Action::new(group_name, Payload::brightness_move(rate))]
+    }
+
+    /// `BrightnessStop` effect -- stop continuous brightness change
+    /// (hold release). Implemented as brightness_move with rate 0.
+    pub(super) fn execute_brightness_stop(&mut self, room_name: &str) -> Vec<Action> {
+        let Some(room) = self.topology.room_by_name(room_name) else {
+            return Vec::new();
+        };
+        let group_name = room.group_name.clone();
+        tracing::info!(
+            room = room_name,
+            group = %group_name,
+            "brightness_stop"
+        );
+        vec![Action::new(group_name, Payload::brightness_move(0))]
+    }
+
+    // ----- shared helpers ---------------------------------------------------
+
+    pub(super) fn publish_off(
+        &mut self,
+        room_name: &str,
+        group_name: &str,
+        off_transition: f64,
+        ts: Instant,
+        out: &mut Vec<Action>,
+    ) {
+        out.push(Action::new(
+            group_name.to_string(),
+            Payload::state_off(off_transition),
+        ));
+        self.write_after_off(room_name, ts);
+        self.propagate_to_descendants(room_name, false, ts);
+    }
+
+    /// TASS write-after-on: set target to On, update last_press_at, clear
+    /// motion ownership (manual press supersedes motion).
+    fn write_after_on(&mut self, room_name: &str, ts: Instant, cycle_idx: usize, scene_id: u8) {
+        let zone = self.world.light_zone(room_name);
+        zone.target.set_and_command(
+            LightZoneTarget::On { scene_id, cycle_idx },
+            Owner::User,
+            ts,
+        );
+        zone.last_press_at = Some(ts);
+    }
+
+    /// TASS write-after-off: set target to Off, update timestamps.
+    fn write_after_off(&mut self, room_name: &str, ts: Instant) {
+        let zone = self.world.light_zone(room_name);
+        zone.target.set_and_command(LightZoneTarget::Off, Owner::User, ts);
+        zone.last_press_at = Some(ts);
+        zone.last_off_at = Some(ts);
+    }
+
+    /// Process z2m group state echo. Updates the light zone's actual
+    /// state. On off-transitions, clears motion ownership and resets
+    /// cycle state. Uses soft propagation to descendants (preserves
+    /// cycle state in children).
+    pub(super) fn handle_group_state(
+        &mut self,
+        group_name: &str,
+        on: bool,
+        ts: Instant,
+    ) -> Vec<Action> {
+        let Some(room) = self.topology.room_by_group_name(group_name) else {
+            return Vec::new();
+        };
+        let room_name = room.name.clone();
+
+        let zone = self.world.light_zone(&room_name);
+        let new_actual = if on { LightZoneActual::On } else { LightZoneActual::Off };
+        // Use is_on() (target OR actual) not actual_is_on() — the target
+        // may say On optimistically even before the first actual echo arrives.
+        let was_on = zone.is_on();
+        zone.actual.update(new_actual, ts);
+
+        // If actual now matches target, confirm the target.
+        let target_matches = match (zone.target.value(), on) {
+            (Some(LightZoneTarget::On { .. }), true) => true,
+            (Some(LightZoneTarget::Off), false) => true,
+            _ => false,
+        };
+        if target_matches {
+            zone.target.confirm(ts);
+        }
+
+        if was_on == on {
+            tracing::debug!(
+                group = group_name,
+                room = %room_name,
+                state = on,
+                "group state echo → no transition"
+            );
+            return Vec::new();
+        }
+
+        if on {
+            tracing::info!(
+                group = group_name,
+                room = %room_name,
+                from = was_on,
+                to = on,
+                "group state echo → off→on transition (leaving user-owned)"
+            );
+        } else {
+            // Off transition: reset zone to clean state.
+            let zone = self.world.light_zone(&room_name);
+            zone.target.set_and_command(LightZoneTarget::Off, Owner::System, ts);
+            zone.last_off_at = Some(ts);
+            tracing::info!(
+                group = group_name,
+                room = %room_name,
+                from = was_on,
+                to = on,
+                "group state echo → on→off transition (motion ownership cleared)"
+            );
+        }
+
+        // Propagate only the physical on/off flag to descendants so
+        // child rooms track the parent's physical state.  Use the
+        // *soft* variant that preserves cycle state (last_press_at,
+        // cycle_idx) -- a group echo is NOT an explicit button press,
+        // so it must not destroy a child's in-progress scene cycle.
+        self.soft_propagate_to_descendants(&room_name, on, ts);
+
+        Vec::new()
+    }
+
+    /// Optimistically propagate a parent's new physical state to every
+    /// transitive descendant. Resets cycle state and motion ownership.
+    pub(super) fn propagate_to_descendants(&mut self, ancestor: &str, on: bool, ts: Instant) {
+        let descendants: Vec<RoomName> = self.topology.descendants_of(ancestor).to_vec();
+        if descendants.is_empty() {
+            return;
+        }
+        tracing::info!(
+            ancestor,
+            descendants = ?descendants,
+            physically_on = on,
+            "propagating physical state to descendants (next press takes \
+             toggle-off branch instead of fresh-on)"
+        );
+        for desc in descendants {
+            let zone = self.world.light_zone(&desc);
+            if on {
+                // Propagate on: set target on with same scene as parent
+                // but reset cycle state. We use System owner since this
+                // is derived propagation, not a direct user action.
+                zone.target.set_and_command(
+                    LightZoneTarget::On { scene_id: 0, cycle_idx: 0 },
+                    Owner::System,
+                    ts,
+                );
+                zone.actual.update(LightZoneActual::On, ts);
+            } else {
+                zone.target.set_and_command(LightZoneTarget::Off, Owner::System, ts);
+                zone.actual.update(LightZoneActual::Off, ts);
+                zone.last_off_at = Some(ts);
+            }
+            zone.last_press_at = None;
+        }
+    }
+
+    /// Soft propagation: update only actual state (and last_off_at on off
+    /// transitions) for descendants. Does NOT reset last_press_at or
+    /// cycle_idx.
+    ///
+    /// Used by `handle_group_state` where the echo is a side-effect of
+    /// z2m aggregating member states, not an explicit user action. If
+    /// we cleared cycle state here, a child room's tap-press cycle
+    /// window would be destroyed every time z2m re-publishes the
+    /// parent group's state after the child turned on.
+    fn soft_propagate_to_descendants(&mut self, ancestor: &str, on: bool, ts: Instant) {
+        let descendants: Vec<RoomName> = self.topology.descendants_of(ancestor).to_vec();
+        if descendants.is_empty() {
+            return;
+        }
+        tracing::debug!(
+            ancestor,
+            descendants = ?descendants,
+            physically_on = on,
+            "group echo: soft-propagating physical state to descendants \
+             (preserving cycle state)"
+        );
+        for desc in descendants {
+            let zone = self.world.light_zone(&desc);
+            let new_actual = if on { LightZoneActual::On } else { LightZoneActual::Off };
+            zone.actual.update(new_actual, ts);
+            if !on {
+                zone.last_off_at = Some(ts);
+            }
+        }
+    }
+}

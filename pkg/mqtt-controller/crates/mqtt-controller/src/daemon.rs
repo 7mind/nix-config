@@ -1,4 +1,4 @@
-//! The runtime daemon: wires the [`MqttBridge`] to the [`Controller`],
+//! The runtime daemon: wires the [`MqttBridge`] to the [`EventProcessor`],
 //! performs the startup state refresh, then runs the event loop until
 //! shutdown.
 //!
@@ -41,7 +41,7 @@ use thiserror::Error;
 use tokio::sync::{broadcast, mpsc};
 
 use crate::config::Config;
-use crate::controller::Controller;
+use crate::logic::EventProcessor;
 use crate::domain::event::Event;
 use crate::mqtt::{MqttBridge, MqttConfig, MqttError};
 use crate::time::Clock;
@@ -90,7 +90,7 @@ pub async fn run(
         "topology built"
     );
 
-    let mut controller = Controller::new(topology.clone(), clock.clone(), defaults, config.location);
+    let mut processor = EventProcessor::new(topology.clone(), clock.clone(), defaults, config.location);
 
     tracing::info!(
         host = %mqtt.host,
@@ -101,27 +101,27 @@ pub async fn run(
         .await
         .context("connecting to mqtt broker")?;
 
-    refresh_state(&mut controller, &bridge, &mut event_rx, &topology, &*clock).await?;
+    refresh_state(&mut processor, &bridge, &mut event_rx, &topology, &*clock).await?;
 
     // Turn off any motion-controlled room that was left on before
     // restart. No cooldown is applied so motion sensors can
     // immediately re-trigger if someone is actually in the room.
-    let startup_off = controller.startup_turn_off_motion_zones(clock.now());
+    let startup_off = processor.startup_turn_off_motion_zones(clock.now());
     for action in &startup_off {
         if let Err(e) = bridge.publish_action(action).await {
             tracing::error!(error = ?e, "failed to publish startup turn-off action");
         }
     }
-    controller.arm_kill_switches_for_active_plugs(clock.now());
+    processor.arm_kill_switches_for_active_plugs(clock.now());
 
     tracing::info!("startup state refresh complete; entering event loop");
 
-    run_event_loop(&mut controller, &bridge, &mut event_rx, web, clock).await
+    run_event_loop(&mut processor, &bridge, &mut event_rx, web, clock).await
 }
 
 /// Three-phase startup state refresh. See module docs.
 async fn refresh_state(
-    controller: &mut Controller,
+    processor: &mut EventProcessor,
     bridge: &MqttBridge,
     event_rx: &mut mpsc::Receiver<Event>,
     topology: &Topology,
@@ -138,7 +138,7 @@ async fn refresh_state(
     let phase1_window = Duration::from_millis(300);
     let phase1_deadline = clock.now() + phase1_window;
     drain_until(
-        controller,
+        processor,
         bridge,
         event_rx,
         &mut seen_groups,
@@ -171,7 +171,7 @@ async fn refresh_state(
         let phase3_window = Duration::from_secs(2);
         let phase3_deadline = clock.now() + phase3_window;
         drain_until(
-            controller,
+            processor,
             bridge,
             event_rx,
             &mut seen_groups,
@@ -214,7 +214,7 @@ async fn refresh_state(
         // for plug events, not groups, so the group-count early exit
         // must not apply.
         drain_until(
-            controller,
+            processor,
             bridge,
             event_rx,
             &mut seen_groups,
@@ -249,7 +249,7 @@ async fn refresh_state(
         let zwave_drain_window = Duration::from_secs(3);
         let zwave_deadline = clock.now() + zwave_drain_window;
         drain_until(
-            controller,
+            processor,
             bridge,
             event_rx,
             &mut seen_groups,
@@ -300,7 +300,7 @@ async fn refresh_state(
         let heating_drain = Duration::from_secs(2);
         let heating_deadline = clock.now() + heating_drain;
         drain_until(
-            controller,
+            processor,
             bridge,
             event_rx,
             &mut seen_groups,
@@ -322,7 +322,7 @@ async fn refresh_state(
 /// for some groups may still be defaulted to false. The very next group
 /// state event from z2m will reconcile any divergence.
 async fn drain_until(
-    controller: &mut Controller,
+    processor: &mut EventProcessor,
     bridge: &MqttBridge,
     event_rx: &mut mpsc::Receiver<Event>,
     seen_groups: &mut BTreeSet<String>,
@@ -342,7 +342,7 @@ async fn drain_until(
                 if let Event::GroupState { group, .. } = &event {
                     seen_groups.insert(group.clone());
                 }
-                let actions = controller.handle_event(event);
+                let actions = processor.handle_event(event);
                 for action in actions {
                     if let Err(e) = bridge.publish_action(&action).await {
                         tracing::error!(
@@ -369,7 +369,7 @@ const TICK_INTERVAL: Duration = Duration::from_secs(5);
 /// When `web` is `Some`, also handles WebSocket commands and broadcasts
 /// event/decision log entries and state updates.
 async fn run_event_loop(
-    controller: &mut Controller,
+    processor: &mut EventProcessor,
     bridge: &MqttBridge,
     event_rx: &mut mpsc::Receiver<Event>,
     web: Option<WebHandle>,
@@ -397,7 +397,7 @@ async fn run_event_loop(
         // the first press is buffered for a short window. This branch
         // flushes it as a single press once the window expires.
         let switch_deadline_sleep = async {
-            match controller.next_press_deadline() {
+            match processor.next_press_deadline() {
                 Some(deadline) => {
                     let now = std::time::Instant::now();
                     if deadline <= now {
@@ -426,7 +426,7 @@ async fn run_event_loop(
                     Some(cmd) => {
                         handle_ws_command(
                             cmd,
-                            controller,
+                            processor,
                             bridge,
                             &broadcast_tx,
                             &*clock,
@@ -453,7 +453,7 @@ async fn run_event_loop(
 
         // Extract event-side entity names before the event is consumed.
         let event_entities = if has_web {
-            snapshot::extract_event_entities(&event, controller.topology())
+            snapshot::extract_event_entities(&event, processor.topology())
         } else {
             Vec::new()
         };
@@ -463,7 +463,7 @@ async fn run_event_loop(
             Event::ButtonPress { .. }
         );
 
-        let actions = controller.handle_event(event);
+        let actions = processor.handle_event(event);
 
         // Broadcast to WebSocket clients.
         if let Some(tx) = &broadcast_tx {
@@ -494,7 +494,7 @@ async fn run_event_loop(
                     let involved_entities = snapshot::finish_involved_entities(
                         event_entities,
                         &actions,
-                        controller.topology(),
+                        processor.topology(),
                     );
                     let entry = mqtt_controller_wire::DecisionLogEntry {
                         seq: event_seq,
@@ -511,7 +511,7 @@ async fn run_event_loop(
             // Broadcast incremental state updates for any room/plug that
             // may have changed. We broadcast all rooms — cheap since we
             // typically have <20 rooms and JSON is small.
-            broadcast_state_updates(controller, tx, now);
+            broadcast_state_updates(processor, tx, now);
         }
 
         // Publish actions to MQTT (the actual side effect).
@@ -541,22 +541,22 @@ async fn recv_ws_cmd(
 /// loop thread (no concurrent access to the controller).
 async fn handle_ws_command(
     cmd: WsCommand,
-    controller: &mut Controller,
+    processor: &mut EventProcessor,
     bridge: &MqttBridge,
     broadcast_tx: &Option<broadcast::Sender<mqtt_controller_wire::ServerMessage>>,
     clock: &dyn Clock,
 ) {
     match cmd {
         WsCommand::RequestSnapshot { reply } => {
-            let snap = snapshot::build_full_snapshot(controller, clock.now());
+            let snap = snapshot::build_full_snapshot(processor, clock.now());
             let _ = reply.send(snap);
         }
         WsCommand::RequestTopology { reply } => {
-            let topo = snapshot::build_topology_info(controller.topology());
+            let topo = snapshot::build_topology_info(processor.topology());
             let _ = reply.send(topo);
         }
         WsCommand::RecallScene { room, scene_id } => {
-            let actions = controller.web_recall_scene(&room, scene_id, clock.now());
+            let actions = processor.web_recall_scene(&room, scene_id, clock.now());
             for action in actions {
                 if let Err(e) = bridge.publish_action(&action).await {
                     tracing::error!(error = ?e, "web: failed to publish scene recall");
@@ -564,7 +564,7 @@ async fn handle_ws_command(
             }
         }
         WsCommand::SetRoomOff { room } => {
-            let actions = controller.web_set_room_off(&room, clock.now());
+            let actions = processor.web_set_room_off(&room, clock.now());
             for action in actions {
                 if let Err(e) = bridge.publish_action(&action).await {
                     tracing::error!(error = ?e, "web: failed to publish room off");
@@ -572,7 +572,7 @@ async fn handle_ws_command(
             }
         }
         WsCommand::TogglePlug { device } => {
-            let actions = controller.web_toggle_plug(&device, clock.now());
+            let actions = processor.web_toggle_plug(&device, clock.now());
             for action in actions {
                 if let Err(e) = bridge.publish_action(&action).await {
                     tracing::error!(error = ?e, "web: failed to publish plug toggle");
@@ -584,30 +584,30 @@ async fn handle_ws_command(
     // Broadcast a fresh snapshot after any command so clients see
     // the effect immediately (before the z2m state callback arrives).
     if let Some(tx) = &broadcast_tx {
-        broadcast_state_updates(controller, tx, clock.now());
+        broadcast_state_updates(processor, tx, clock.now());
     }
 }
 
 /// Broadcast current state of all rooms, plugs, and heating zones to WebSocket clients.
 fn broadcast_state_updates(
-    controller: &Controller,
+    processor: &EventProcessor,
     tx: &broadcast::Sender<mqtt_controller_wire::ServerMessage>,
     now: Instant,
 ) {
-    let topology = controller.topology();
+    let topology = processor.topology();
     for room in topology.rooms() {
-        if let Some(snap) = snapshot::build_room_snapshot(controller, &room.name, now) {
+        if let Some(snap) = snapshot::build_room_snapshot(processor, &room.name, now) {
             let _ = tx.send(mqtt_controller_wire::ServerMessage::RoomUpdate(snap));
         }
     }
     for plug_name in topology.all_plug_names() {
-        if let Some(snap) = snapshot::build_plug_snapshot(controller, plug_name, now) {
+        if let Some(snap) = snapshot::build_plug_snapshot(processor, plug_name, now) {
             let _ = tx.send(mqtt_controller_wire::ServerMessage::PlugUpdate(snap));
         }
     }
     if let Some(cfg) = topology.heating_config() {
         for zone in &cfg.zones {
-            if let Some(snap) = snapshot::build_heating_zone_snapshot(controller, &zone.name, now) {
+            if let Some(snap) = snapshot::build_heating_zone_snapshot(processor, &zone.name, now) {
                 let _ = tx.send(mqtt_controller_wire::ServerMessage::HeatingZoneUpdate(snap));
             }
         }

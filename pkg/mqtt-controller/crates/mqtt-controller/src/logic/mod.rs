@@ -1,0 +1,376 @@
+//! TASS-based event processor. Replaces [`crate::controller::Controller`].
+//!
+//! The processor is the main entry point for the daemon's event loop.
+//! It holds the [`WorldState`] (all TASS entities) and dispatches events
+//! to per-domain logic modules.
+//!
+//! ## Module structure
+//!
+//! Each module handles one domain:
+//!   - [`lights`]   — light zone scene cycling, toggle, brightness
+//!   - [`motion`]   — motion sensor → light zone automation
+//!   - [`plugs`]    — plug state + kill switch evaluation
+//!   - [`buttons`]  — button dispatch (double-tap, soft double-tap)
+//!   - [`schedule`] — `At` trigger evaluation
+//!   - [`heating`]  — heating zones, TRVs, relay control
+
+pub mod buttons;
+pub mod heating;
+pub mod lights;
+pub mod motion;
+pub mod plugs;
+pub mod schedule;
+
+use std::collections::BTreeMap;
+use std::sync::Arc;
+use std::time::Instant;
+
+use crate::config::Defaults;
+use crate::config::heating::HeatingConfig;
+use crate::controller::heating::HeatingController;
+use crate::domain::action::Action;
+use crate::domain::event::Event;
+use crate::entities::WorldState;
+use crate::time::Clock;
+use crate::topology::Topology;
+
+#[derive(Debug)]
+pub struct EventProcessor {
+    pub(crate) world: WorldState,
+    pub(crate) topology: Arc<Topology>,
+    pub(crate) clock: Arc<dyn Clock>,
+    pub(crate) defaults: Defaults,
+    pub(crate) location: Option<crate::sun::Location>,
+    pub(crate) heating_config: Option<HeatingConfig>,
+
+    // Existing heating controller (adapter pattern — wraps battle-tested logic)
+    pub(crate) heating_controller: Option<HeatingController>,
+
+    // Sun cache
+    pub(crate) cached_sun: Option<(chrono::NaiveDate, i32, crate::sun::SunTimes)>,
+}
+
+impl EventProcessor {
+    pub fn new(
+        topology: Arc<Topology>,
+        clock: Arc<dyn Clock>,
+        defaults: Defaults,
+        location: Option<crate::sun::Location>,
+    ) -> Self {
+        let heating_config = topology.heating_config().cloned();
+        let heating_controller = heating_config.as_ref().map(|cfg| {
+            HeatingController::new(cfg.clone(), topology.clone(), clock.clone())
+        });
+        Self {
+            world: WorldState::new(),
+            topology,
+            clock,
+            defaults,
+            location,
+            heating_config,
+            heating_controller,
+            cached_sun: None,
+        }
+    }
+
+    /// Single entry point for the daemon's event loop.
+    pub fn handle_event(&mut self, event: Event) -> Vec<Action> {
+        match event {
+            Event::ButtonPress {
+                ref device,
+                ref button,
+                gesture,
+                ts,
+            } => self.handle_button_press(device, button, gesture, ts),
+            Event::Occupancy {
+                sensor,
+                occupied,
+                illuminance,
+                ts,
+            } => self.handle_occupancy(&sensor, occupied, illuminance, ts),
+            Event::GroupState { group, on, ts } => self.handle_group_state(&group, on, ts),
+            Event::PlugState {
+                device,
+                on,
+                power,
+                ts,
+            } => self.handle_plug_state(&device, Some(on), power, ts),
+            Event::PlugPowerUpdate {
+                device, watts, ts, ..
+            } => self.handle_plug_state(&device, None, Some(watts), ts),
+            Event::TrvState { .. } | Event::WallThermostatState { .. } => {
+                if self.heating_config.is_some() {
+                    self.handle_heating_event(&event)
+                } else {
+                    Vec::new()
+                }
+            }
+            Event::Tick { ts } => self.handle_tick(ts),
+        }
+    }
+
+    // ----- state accessors ---------------------------------------------------
+
+    /// Read-only access to the world state.
+    pub fn world(&self) -> &WorldState {
+        &self.world
+    }
+
+    /// Mutable access to the world state.
+    pub fn world_mut(&mut self) -> &mut WorldState {
+        &mut self.world
+    }
+
+    /// Reference to the immutable topology.
+    pub fn topology(&self) -> &Arc<Topology> {
+        &self.topology
+    }
+
+    /// Reference to the clock.
+    pub fn clock(&self) -> &Arc<dyn Clock> {
+        &self.clock
+    }
+
+    /// Earliest deadline among pending presses, if any.
+    pub fn next_press_deadline(&self) -> Option<Instant> {
+        self.world.next_press_deadline()
+    }
+
+    /// Reference to the geographic location (if configured).
+    pub fn location(&self) -> Option<&crate::sun::Location> {
+        self.location.as_ref()
+    }
+
+    // ----- startup helpers ---------------------------------------------------
+
+    /// Set the physical state of a light zone from a retained MQTT message.
+    pub fn set_zone_actual(&mut self, room: &str, on: bool, ts: Instant) {
+        use crate::entities::light_zone::LightZoneActual;
+        let zone = self.world.light_zone(room);
+        let actual = if on {
+            LightZoneActual::On
+        } else {
+            LightZoneActual::Off
+        };
+        zone.actual.update(actual, ts);
+    }
+
+    /// Set the physical state of a plug from a retained MQTT message.
+    pub fn set_plug_actual(&mut self, device: &str, on: bool, power: Option<f64>, ts: Instant) {
+        use crate::entities::plug::PlugActual;
+        let plug = self.world.plug(device);
+        plug.actual.update(PlugActual { on, power }, ts);
+    }
+
+    /// Turn off all motion-controlled rooms that are physically on at startup.
+    pub fn startup_turn_off_motion_zones(&mut self, ts: Instant) -> Vec<Action> {
+        use crate::domain::action::Payload;
+        use crate::entities::light_zone::{LightZoneActual, LightZoneTarget};
+        use crate::tass::Owner;
+
+        let mut out = Vec::new();
+        for room in self.topology.rooms() {
+            let zone = self.world.light_zone(&room.name);
+            if !zone.actual_is_on() {
+                continue;
+            }
+            if room.has_motion_sensor() {
+                tracing::info!(
+                    room = %room.name,
+                    group = %room.group_name,
+                    transition = room.off_transition_seconds,
+                    "startup: turning off motion-controlled zone (no cooldown)"
+                );
+                zone.target
+                    .set_and_command(LightZoneTarget::Off, Owner::System, ts);
+                zone.actual.update(LightZoneActual::Off, ts);
+                out.push(Action::new(
+                    &room.group_name,
+                    Payload::state_off(room.off_transition_seconds),
+                ));
+            } else {
+                tracing::info!(
+                    room = %room.name,
+                    "startup: room is physically on; leaving user-owned (no motion sensor)"
+                );
+            }
+        }
+        out
+    }
+
+    /// Pre-arm kill switch rules for all plugs that are currently ON.
+    pub fn arm_kill_switches_for_active_plugs(&mut self, ts: Instant) {
+        use crate::entities::plug::KillSwitchRuleState;
+        let topology = self.topology.clone();
+        for (device_name, plug) in &mut self.world.plugs {
+            if !plug.actual.value().is_some_and(|a| a.on) {
+                continue;
+            }
+            let power = plug.power();
+            for &idx in topology.bindings_for_power_below(device_name) {
+                let resolved = &topology.bindings()[idx];
+                let rule_name = resolved.name.clone();
+                let entry = plug
+                    .kill_switch_rules
+                    .entry(rule_name.clone())
+                    .or_insert(KillSwitchRuleState::Inactive);
+                if matches!(entry, KillSwitchRuleState::Suppressed | KillSwitchRuleState::Armed) {
+                    continue;
+                }
+                *entry = KillSwitchRuleState::Armed;
+                if let Some(current_power) = power {
+                    if let crate::config::Trigger::PowerBelow { watts, .. } = &resolved.trigger {
+                        if current_power < *watts {
+                            tracing::info!(
+                                plug = device_name.as_str(),
+                                rule = rule_name.as_str(),
+                                power = current_power,
+                                threshold = watts,
+                                "startup: pre-arming AND seeding idle (power already below threshold)"
+                            );
+                            *entry = KillSwitchRuleState::Idle { since: ts };
+                            continue;
+                        }
+                    }
+                }
+                tracing::info!(
+                    plug = device_name.as_str(),
+                    rule = rule_name.as_str(),
+                    "startup: pre-arming kill switch for active plug"
+                );
+            }
+        }
+    }
+
+    // ----- web command handlers ----------------------------------------------
+
+    /// Web UI: recall a specific scene in a room.
+    pub fn web_recall_scene(&mut self, room_name: &str, scene_id: u8, ts: Instant) -> Vec<Action> {
+        use crate::domain::action::Payload;
+        use crate::entities::light_zone::LightZoneTarget;
+        use crate::tass::Owner;
+
+        let scenes_for_now = self.scenes_for_room(room_name);
+        let Some(room) = self.topology.room_by_name(room_name) else {
+            return Vec::new();
+        };
+        let group_name = room.group_name.clone();
+
+        let cycle_idx = scenes_for_now
+            .iter()
+            .position(|&id| id == scene_id)
+            .unwrap_or(0);
+
+        tracing::info!(
+            room = room_name,
+            group = %group_name,
+            scene = scene_id,
+            cycle_idx,
+            "web: recall scene"
+        );
+
+        let action = Action::new(group_name, Payload::scene_recall(scene_id));
+        let zone = self.world.light_zone(room_name);
+        zone.target.set_and_command(
+            LightZoneTarget::On {
+                scene_id,
+                cycle_idx,
+            },
+            Owner::WebUI,
+            ts,
+        );
+        zone.last_press_at = Some(ts);
+        self.propagate_to_descendants(room_name, true, ts);
+        vec![action]
+    }
+
+    /// Web UI: turn a room off.
+    pub fn web_set_room_off(&mut self, room_name: &str, ts: Instant) -> Vec<Action> {
+        let Some(room) = self.topology.room_by_name(room_name) else {
+            return Vec::new();
+        };
+        let group_name = room.group_name.clone();
+        let off_transition = room.off_transition_seconds;
+
+        tracing::info!(
+            room = room_name,
+            group = %group_name,
+            transition = off_transition,
+            "web: set room off"
+        );
+
+        let mut out = Vec::new();
+        self.publish_off(room_name, &group_name, off_transition, ts, &mut out);
+        out
+    }
+
+    /// Web UI: toggle a smart plug.
+    pub fn web_toggle_plug(&mut self, device: &str, ts: Instant) -> Vec<Action> {
+        use crate::domain::action::Payload;
+        use crate::entities::plug::PlugTarget;
+        use crate::tass::Owner;
+
+        if !self.topology.is_plug(device) {
+            tracing::warn!(device, "web: toggle plug rejected — unknown device");
+            return Vec::new();
+        }
+        let is_on = self.world.plugs.get(device).is_some_and(|p| p.is_on());
+        let (new_target, payload) = if is_on {
+            (PlugTarget::Off, Payload::device_off())
+        } else {
+            (PlugTarget::On, Payload::device_on())
+        };
+        let plug = self.world.plug(device);
+        plug.target.set_and_command(new_target, Owner::WebUI, ts);
+
+        tracing::info!(device, target_state = !is_on, "web: toggle plug");
+        vec![Action::for_device(device, payload)]
+    }
+
+    // ----- tick handler ------------------------------------------------------
+
+    fn handle_tick(&mut self, ts: Instant) -> Vec<Action> {
+        let mut out = self.flush_pending_presses(ts);
+        out.extend(self.evaluate_at_triggers(ts));
+        out.extend(self.evaluate_kill_switch_ticks(ts));
+
+        if self.heating_config.is_some() {
+            out.extend(self.handle_heating_tick());
+        }
+
+        out
+    }
+
+    // ----- sun time helpers --------------------------------------------------
+
+    pub(crate) fn sun_times(&mut self) -> Option<crate::sun::SunTimes> {
+        let loc = self.location.as_ref()?;
+        let info = self.clock.local_date_info();
+        let offset_secs = (info.utc_offset_hours * 3600.0) as i32;
+        let needs_refresh = self.cached_sun.as_ref().map_or(true, |(d, o, _)| {
+            *d != info.date || *o != offset_secs
+        });
+        if needs_refresh {
+            let times = crate::sun::compute_sun_times(loc, info.date, info.utc_offset_hours);
+            tracing::info!(
+                sunrise = %format!("{:02}:{:02}", times.sunrise_minute_of_day / 60, times.sunrise_minute_of_day % 60),
+                sunset = %format!("{:02}:{:02}", times.sunset_minute_of_day / 60, times.sunset_minute_of_day % 60),
+                date = %info.date,
+                offset_secs,
+                "computed sun times"
+            );
+            self.cached_sun = Some((info.date, offset_secs, times));
+        }
+        self.cached_sun.as_ref().map(|(_, _, t)| *t)
+    }
+
+    pub(crate) fn scenes_for_room(&mut self, room_name: &str) -> Vec<u8> {
+        let sun = self.sun_times();
+        let hour = self.clock.local_hour();
+        let minute = self.clock.local_minute();
+        let Some(room) = self.topology.room_by_name(room_name) else {
+            return Vec::new();
+        };
+        crate::controller::active_slot_scene_ids(&room.scenes, hour, minute, sun.as_ref())
+    }
+}
