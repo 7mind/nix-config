@@ -27,7 +27,7 @@
 
     # Validate SSH_AUTH_SOCK on each prompt; recover if the socket went stale
     # (e.g. SSH reconnect while inside tmux leaves existing shells with a dead path).
-    programs.zsh.initExtra = lib.mkIf cfg-meta.isLinux ''
+    programs.zsh.initContent = lib.mkIf cfg-meta.isLinux ''
       _smind_fix_ssh_sock() {
         [[ -S "''${SSH_AUTH_SOCK:-}" ]] && return
 

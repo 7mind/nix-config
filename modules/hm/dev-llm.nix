@@ -37,78 +37,11 @@ let
 
   defaultCustomModelName = "huihui_ai/qwen3.5-abliterated:35b-custom";
 
-  baseClaudeMemorySection = ''
-    ## Project Guidelines
-
-    ### Core Principles
-
-    - **Think first**: Read existing files before writing code.
-    - **Concise output, thorough reasoning**: Be concise in what you write to the user; be thorough in what you think through.
-    - **Edit over rewrite**: Prefer editing over rewriting whole files.
-    - **No re-reads**: Don't re-read files you have already read.
-    - **Test before done**: Test your code before declaring it done.
-    - **No fluff**: No sycophantic openers or closing fluff.
-    - **Persistence**: Don't bail out partway through a task. If stuck, investigate, try a different angle, or ask — half-finished work is worse than none.
-    - **Fail fast**: Use assertions, throw errors early — no graceful fallbacks.
-    - **Explicit over implicit**: No default parameters or optional chaining for required values.
-    - **Minimal new comments**: Only write **new** comments to explain something non-obvious. Don't delete existing comments unless they're totally useless, wrong or out-of-date.
-    - **No workarounds**: Deliver sound, generic, universal solutions. When you discover a bug or problem, don't hide it — attempt to fix underlying issues, ask for assistance when you can't.
-    - **Ask questions**: When instructions or requirements are unclear, incomplete, or contradictory — always ask for clarifications before proceeding.
-    - **Recent versions**: Always use the most recent versions of the relevant libraries and tools.
-
-    ### References
-
-    - **RTFM**: Read documentation, code, and samples thoroughly, download docs when necessary, use search.
-    - **Prefer recent docs**: When searching, prioritize results from the current year over older sources.
-    - **Use available sources**: Explore package-manager caches when you need sources or docs that aren't in the project tree — `nix store`, cargo registry, npm cache, pip wheels, maven/coursier/ivy jars, etc.
-
-    ### Environment
-
-    - **Sandbox detection**: Check `$SMIND_SANDBOXED` in your environment. When set to `1`, you are running inside a bubblewrap sandbox via the `yolo` wrapper and the sandbox-specific guidance below applies. When unset, you are running unsandboxed with the user's normal filesystem permissions — ignore the sandbox-specific workflow and write wherever the task requires.
-    - **Sandbox layout** (when `SMIND_SANDBOXED=1`): The sandbox grants access to the project directory, `/nix`, and `/tmp/exchange`. Only writes to the project directory and `/tmp/exchange` persist — everything else is ephemeral and changes will be lost.
-    - **Direct execution**: Always run project commands directly (compilation, tests, linting, git, formatting, etc.) — these work fine in or out of the sandbox. Only use the script workflow below for true sandbox escapes.
-    - **For system interaction** (when `SMIND_SANDBOXED=1`): When you need to access `$HOME`, modify system configuration, or reach files outside the sandbox, use this workflow:
-      1. Write a shell script to `/tmp/exchange/{name}.sh`.
-      2. Script structure MUST be:
-         ```bash
-         #!/usr/bin/env bash
-         set -euxo pipefail
-         bat --paging=never "$0"  # Show script contents first
-         read -p "Press Enter to run, Ctrl+C to abort..."
-         # Your commands here, with output captured:
-         command 2>&1 | tee /tmp/exchange/{name}.out
-         ```
-      3. Ask user to run: `bash /tmp/exchange/{name}.sh`.
-      4. After user confirms execution, use Read tool to read `/tmp/exchange/{name}.out`.
-      5. NEVER proceed without reading the output file — it contains the information you need.
-    - **Verbose debug scripts**: Use `set -x` so the user can see commands together with output.
-    - **Nix environment**: Use `flake.nix` and `direnv` for dependencies.
-    - **Commands**: Use `direnv exec DIR COMMAND [...ARGS]` and `nix run`.
-      - **Commands exception**: IFF your shell has a defined `DIRENV_DIR` env var, then you are already in a direnv environment, and you **DO NOT NEED TO** execute commands via `direnv exec DIR COMMAND [...ARGS]` syntax.
-
-    ### Code Style
-
-    - **Type safety**: Encode domain concepts as named types (interfaces/classes/records), avoid catch-all types (Object, any) and untyped containers (string-keyed maps).
-    - **SOLID**: Adhere to SOLID principles.
-    - **No globals**: Pass dependencies explicitly via constructors, parameters, or DI containers — never rely on singletons, module-level mutable state, or ambient globals.
-    - **No magic constants**: Use named constants.
-    - **No backwards compatibility**: Refactor freely.
-    - **Composition over conditionals**: Prefer composition over conditional logic.
-    - **DRY**: Never duplicate, always generalize.
-
-    ### Project Structure
-
-    - **New docs**: When creating documentation in projects without an established docs layout, prefer `./docs/drafts/{YYYYMMDD-HHMM}-{name}.md`.
-    - **Debug scripts**: When creating throwaway debug scripts, prefer `./debug/{YYYYMMDD-HHMMSS}-{name}.{ext}` (use the appropriate extension for the project language).
-    - **Services**: Use interface + implementation pattern when possible.
-    - **Gitignore**: Always create and maintain reasonable `.gitignore` files.
-
-    ### Tools
-
-    - **Debuggers**: Use the debugger appropriate for the language at hand.
-    - **Parallelism**: Use `nproc` to determine available parallel processes.
-    - **Unattended mode**: Always run tools in batch mode, especially tools like SBT which expect user input by default.
-  '';
+  # Prompt content and validated skill files live in pkg/llm-prompts/.
+  # Environment guidance is delivered as a skill for agents that support skills
+  # (Claude Code, Codex, Gemini CLI, OpenCode). For agents without skill support
+  # (Copilot, Vibe), a pre-composed context file from the package is used instead.
+  llmPrompts = pkgs.callPackage "${cfg-meta.paths.pkg}/llm-prompts/default.nix" { };
 
   claudeMemoryText = lib.concatStringsSep "\n\n" config.smind.hm.dev.llm.memorySections;
   copilotConfig = jsonFormat.generate "copilot-config.json" {
@@ -164,7 +97,7 @@ in
       );
       smind.hm.dev.llm.opencodeDefaultModel =
         lib.mkDefault config.smind.hm.dev.llm.opencodeOllamaModelName;
-      smind.hm.dev.llm.memorySections = lib.mkBefore [ baseClaudeMemorySection ];
+      smind.hm.dev.llm.memorySections = lib.mkBefore [ llmPrompts.baseContext ];
     }
     (lib.mkIf config.smind.hm.dev.llm.enable {
       home.sessionVariables = {
@@ -211,11 +144,13 @@ in
             '';
           };
         };
+        skills = llmPrompts.skills;
         context = claudeMemoryText;
       };
 
       programs.codex = {
         enable = true;
+        skills = llmPrompts.skills;
         context = claudeMemoryText;
         settings = {
           model = "gpt-5.4";
@@ -266,6 +201,7 @@ in
             "CLAUDE.md"
           ];
         };
+        skills = llmPrompts.skills;
         context = {
           AGENTS = claudeMemoryText;
         };
@@ -277,7 +213,8 @@ in
       home.file.".claude-work/settings.json".source = config.home.file.".claude/settings.json".source;
       home.file.".claude-work/CLAUDE.md".source = config.home.file.".claude/CLAUDE.md".source;
 
-      home.file.".copilot/copilot-instructions.md".text = claudeMemoryText;
+      # Copilot does not support skills — uses pre-composed context from llm-prompts package
+      home.file.".copilot/copilot-instructions.md".source = llmPrompts.contextWithEnvFile;
 
       home.file.".copilot-work/copilot-instructions.md".source =
         config.home.file.".copilot/copilot-instructions.md".source;
@@ -286,7 +223,8 @@ in
         system_prompt_id = "default_with_custom_instructions";
       };
 
-      home.file.".vibe/prompts/default_with_custom_instructions.md".text = claudeMemoryText;
+      # Vibe does not support skills — uses pre-composed context from llm-prompts package
+      home.file.".vibe/prompts/default_with_custom_instructions.md".source = llmPrompts.contextWithEnvFile;
 
       programs.opencode = {
         enable = true;
@@ -344,6 +282,7 @@ in
             doom_loop = "allow";
           };
         };
+        skills = llmPrompts.skills;
         context = claudeMemoryText;
       };
 
