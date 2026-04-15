@@ -516,16 +516,32 @@ impl Controller {
         gesture: Gesture,
         ts: Instant,
     ) -> Vec<Action> {
+        tracing::info!(device, button, gesture = ?gesture, "button_event");
         match gesture {
             Gesture::DoubleTap => {
                 // Hardware double-tap. Record timestamp for suppression.
                 self.last_double_tap
                     .insert((device.to_string(), button.to_string()), ts);
+                // Cancel any deferred press for this (device, button) —
+                // the single was the first tap of this double-tap, not a
+                // standalone press.
+                let key = (device.to_string(), button.to_string());
+                if self.pending_press.remove(&key).is_some() {
+                    tracing::info!(
+                        device,
+                        button,
+                        "cancelled deferred press (hardware double-tap arrived)"
+                    );
+                }
                 // Fire double_tap bindings directly.
                 self.dispatch_bindings(device, button, Gesture::DoubleTap, ts)
             }
             Gesture::Press => {
-                // Check hardware double-tap suppression (Sonoff quirk).
+                // Check hardware double-tap suppression (Sonoff quirk):
+                // after a DoubleTap, suppress Presses for a cooldown
+                // window to guard against the firmware re-sending
+                // `single` when the user double-taps again before the
+                // inter-sequence cooldown has elapsed.
                 if self.topology.is_hw_double_tap_button(device, button) {
                     if let Some(&last_dt) = self
                         .last_double_tap
@@ -535,7 +551,7 @@ impl Controller {
                             self.defaults.double_tap_suppression_seconds,
                         );
                         if ts.duration_since(last_dt) < window {
-                            tracing::debug!(
+                            tracing::info!(
                                 device,
                                 button,
                                 "suppressing press within double-tap suppression window"
@@ -543,6 +559,11 @@ impl Controller {
                             return Vec::new();
                         }
                     }
+                    // Defer press: the firmware sends `single` before it
+                    // knows whether a `double` is coming. Buffer the
+                    // press and wait for either a DoubleTap (which
+                    // cancels it) or the deferral window to expire.
+                    return self.handle_hw_double_tap_deferred_press(device, button, ts);
                 }
                 // Check if soft-double-tap deferral is needed.
                 if self.topology.is_soft_double_tap_button(device, button) {
@@ -561,6 +582,51 @@ impl Controller {
                 self.dispatch_bindings(device, button, other, ts)
             }
         }
+    }
+
+    /// Defer a press on a hardware-double-tap button. If a previous
+    /// deferred press is still pending (user tapped again before the
+    /// deferral window expired), flush it first, then buffer the new one.
+    fn handle_hw_double_tap_deferred_press(
+        &mut self,
+        device: &str,
+        button: &str,
+        ts: Instant,
+    ) -> Vec<Action> {
+        let key = (device.to_string(), button.to_string());
+        let window =
+            Duration::from_secs_f64(self.defaults.soft_double_tap_window_seconds);
+        let mut out = Vec::new();
+        // Flush any stale pending press before buffering the new one.
+        if let Some(stale) = self.pending_press.remove(&key) {
+            tracing::info!(
+                device = %stale.device,
+                button = %stale.button,
+                "flushing stale deferred press (new press arrived)"
+            );
+            out.extend(self.dispatch_bindings(
+                &stale.device,
+                &stale.button,
+                Gesture::Press,
+                stale.ts,
+            ));
+        }
+        tracing::info!(
+            device,
+            button,
+            window_ms = window.as_millis() as u64,
+            "deferring press for hardware double-tap detection"
+        );
+        self.pending_press.insert(
+            key,
+            PendingPress {
+                device: device.to_string(),
+                button: button.to_string(),
+                ts,
+                deadline: ts + window,
+            },
+        );
+        out
     }
 
     /// Handle a press event for a button that has soft-double-tap
@@ -821,10 +887,10 @@ impl Controller {
         let mut out = Vec::new();
         for (key, pending) in expired {
             self.pending_press.remove(&key);
-            tracing::debug!(
+            tracing::info!(
                 device = %pending.device,
                 button = %pending.button,
-                "flushing deferred single press"
+                "flushing deferred press (deferral window expired)"
             );
             out.extend(self.dispatch_bindings(
                 &pending.device,
@@ -1578,24 +1644,48 @@ mod tests {
         Controller::new(topo, clock, cfg.defaults, None)
     }
 
-    // ---- SceneToggle: pure on/off toggle (no cycle window) ------------------
+    // ---- SceneToggle + hw-double-tap deferral --------------------------------
+    //
+    // Press on a hw-double-tap button is DEFERRED: it buffers in
+    // pending_press and only fires when the deferral window expires
+    // (via Tick). If a DoubleTap arrives within the window, it cancels
+    // the pending Press. This prevents SceneToggle from toggling the
+    // room off before the firmware's double-tap event arrives.
+    //
+    // To flush a deferred press in tests: advance clock past the
+    // soft_double_tap_window (default 0.8 s) and send a Tick event.
+
+    /// Helper: flush deferred presses by advancing past the deferral
+    /// window and sending a Tick.
+    fn flush_deferred(c: &mut Controller, clk: &FakeClock) -> Vec<Action> {
+        clk.advance(Duration::from_secs(1));
+        c.handle_event(Event::Tick { ts: clk.now() })
+    }
 
     #[test]
-    fn scene_toggle_press_when_off_turns_on() {
+    fn scene_toggle_deferred_press_turns_on_after_flush() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = hw_double_tap_controller(clk.clone());
-        let actions = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        // Press is deferred — no immediate action.
+        let immediate = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        assert_eq!(immediate, vec![], "press must be deferred");
+        // Flush → SceneToggle fires, room turns on.
+        let actions = flush_deferred(&mut c, &clk);
         assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::scene_recall(1))]);
         assert!(c.state_for("bedroom").unwrap().physically_on);
     }
 
     #[test]
-    fn scene_toggle_press_when_on_turns_off() {
+    fn scene_toggle_deferred_press_turns_off_after_flush() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = hw_double_tap_controller(clk.clone());
+        // Turn on: press + flush.
         c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
-        clk.advance(Duration::from_millis(100));
-        let actions = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        flush_deferred(&mut c, &clk);
+        assert!(c.state_for("bedroom").unwrap().physically_on);
+        // Second press (deferred) + flush → off.
+        c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        let actions = flush_deferred(&mut c, &clk);
         assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::state_off(0.8))]);
         assert!(!c.state_for("bedroom").unwrap().physically_on);
     }
@@ -1604,54 +1694,92 @@ mod tests {
     fn scene_toggle_never_cycles_on_repeated_presses() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = hw_double_tap_controller(clk.clone());
-        // Press 1: on (scene 1).
-        let a1 = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        // Press 1 + flush: on (scene 1).
+        c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        let a1 = flush_deferred(&mut c, &clk);
         assert_eq!(a1, vec![Action::new("hue-lz-bedroom", Payload::scene_recall(1))]);
-        // Press 2 within what would be the cycle window: must turn OFF, not cycle.
-        clk.advance(Duration::from_millis(200));
-        let a2 = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        // Press 2 + flush: off.
+        c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        let a2 = flush_deferred(&mut c, &clk);
         assert_eq!(a2, vec![Action::new("hue-lz-bedroom", Payload::state_off(0.8))]);
-        // Press 3: back on with scene 1 again, not scene 2.
-        clk.advance(Duration::from_millis(200));
-        let a3 = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        // Press 3 + flush: back on with scene 1. No scene cycling.
+        c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        let a3 = flush_deferred(&mut c, &clk);
         assert_eq!(a3, vec![Action::new("hue-lz-bedroom", Payload::scene_recall(1))]);
         assert_eq!(c.state_for("bedroom").unwrap().cycle_idx, 0, "cycle_idx must stay at 0");
     }
 
+    // ---- DoubleTap cancels deferred press -----------------------------------
+
     #[test]
-    fn scene_toggle_on_off_regardless_of_timing() {
+    fn hw_double_tap_cancels_deferred_press_and_cycles() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = hw_double_tap_controller(clk.clone());
-        // Press on.
-        c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
-        // Wait much longer than any cycle window.
-        clk.advance(Duration::from_secs(30));
-        // Press → must still toggle off.
-        let actions = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
-        assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::state_off(0.8))]);
+        // Room starts off. Sonoff double-tap sequence:
+        // 1. single_button → Press (deferred, not fired)
+        let press_actions = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        assert_eq!(press_actions, vec![], "press must be deferred");
+        // 2. double_button → DoubleTap (cancels deferred press, fires SceneCycle)
+        clk.advance(Duration::from_millis(100));
+        let dt_actions = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::DoubleTap, clk.now()));
+        // SceneCycle on off room → fresh on with scene 1.
+        assert_eq!(dt_actions, vec![Action::new("hue-lz-bedroom", Payload::scene_recall(1))]);
+        assert!(c.state_for("bedroom").unwrap().physically_on);
+        // Flush tick → nothing (pending was cancelled).
+        let tick_actions = flush_deferred(&mut c, &clk);
+        assert_eq!(tick_actions, vec![], "cancelled press must not fire on tick");
     }
 
-    // ---- SceneToggle + hardware double-tap integration ----------------------
-
     #[test]
-    fn hw_double_tap_cycles_scenes_with_scene_toggle() {
+    fn hw_double_tap_on_lit_room_cycles_without_turning_off() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = hw_double_tap_controller(clk.clone());
-        // Press → on with scene 1 (SceneToggle).
+        // Turn room on: press + flush.
         c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
-        // DoubleTap → advance to scene 2 (SceneCycle).
-        let actions = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::DoubleTap, clk.now()));
-        assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::scene_recall(2))]);
+        flush_deferred(&mut c, &clk);
+        assert!(c.state_for("bedroom").unwrap().physically_on);
+        assert_eq!(c.state_for("bedroom").unwrap().cycle_idx, 0);
+        // Now double-tap while room is ON:
+        // Press (deferred — would turn off, but gets cancelled).
+        let press_actions = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        assert_eq!(press_actions, vec![]);
+        // DoubleTap cancels press and cycles.
+        clk.advance(Duration::from_millis(100));
+        let dt_actions = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::DoubleTap, clk.now()));
+        assert_eq!(dt_actions, vec![Action::new("hue-lz-bedroom", Payload::scene_recall(2))]);
+        // Room stayed on, scene advanced — no flash off→on.
+        assert!(c.state_for("bedroom").unwrap().physically_on);
         assert_eq!(c.state_for("bedroom").unwrap().cycle_idx, 1);
     }
+
+    #[test]
+    fn hw_double_tap_repeated_cycles_scenes() {
+        let clk = Arc::new(FakeClock::new(12));
+        let mut c = hw_double_tap_controller(clk.clone());
+        // First double-tap: on + scene 1.
+        c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        clk.advance(Duration::from_millis(100));
+        c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::DoubleTap, clk.now()));
+        assert_eq!(c.state_for("bedroom").unwrap().cycle_idx, 0);
+        // Wait past suppression window.
+        clk.advance(Duration::from_secs(3));
+        // Second double-tap: cycle to scene 2.
+        c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
+        clk.advance(Duration::from_millis(100));
+        let actions = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::DoubleTap, clk.now()));
+        assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::scene_recall(2))]);
+        assert!(c.state_for("bedroom").unwrap().physically_on);
+        assert_eq!(c.state_for("bedroom").unwrap().cycle_idx, 1);
+    }
+
+    // ---- Suppression still works --------------------------------------------
 
     #[test]
     fn hw_double_tap_suppresses_press_within_cooldown() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = hw_double_tap_controller(clk.clone());
-        // Turn on via press.
+        // Turn on: press + double-tap.
         c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
-        // Double tap → advance scene.
         c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::DoubleTap, clk.now()));
         // Spurious press within 2 s cooldown → suppressed.
         clk.advance(Duration::from_millis(500));
@@ -1661,41 +1789,24 @@ mod tests {
     }
 
     #[test]
-    fn hw_double_tap_press_works_after_cooldown_expires() {
+    fn hw_double_tap_press_defers_after_cooldown_expires() {
         let clk = Arc::new(FakeClock::new(12));
         let mut c = hw_double_tap_controller(clk.clone());
-        // Turn on via press.
+        // Turn on: press + double-tap.
         c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
-        // Double tap → advance scene.
         c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::DoubleTap, clk.now()));
         // Wait past the 2 s suppression window.
         clk.advance(Duration::from_secs(3));
-        // Press → should toggle off normally (SceneToggle: room is on → off).
+        // Press → deferred (not suppressed).
         let actions = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
-        assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::state_off(0.8))]);
+        assert_eq!(actions, vec![], "press is deferred, not immediately dispatched");
+        // Flush → toggle off.
+        let flushed = flush_deferred(&mut c, &clk);
+        assert_eq!(flushed, vec![Action::new("hue-lz-bedroom", Payload::state_off(0.8))]);
         assert!(!c.state_for("bedroom").unwrap().physically_on);
     }
 
-    #[test]
-    fn double_tap_then_double_tap_cycles_twice() {
-        let clk = Arc::new(FakeClock::new(12));
-        let mut c = hw_double_tap_controller(clk.clone());
-        // Press → on.
-        c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
-        // DoubleTap → scene 2.
-        c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::DoubleTap, clk.now()));
-        assert_eq!(c.state_for("bedroom").unwrap().cycle_idx, 1);
-        // Wait past suppression window then another double-tap sequence.
-        clk.advance(Duration::from_secs(3));
-        // Press from second double-tap (SceneToggle: room is on → off).
-        c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::Press, clk.now()));
-        // DoubleTap → scene cycle (room is off, so fresh on → scene 1).
-        // Actually, the press just turned it off. DoubleTap fires SceneCycle
-        // which resets to scene 1 because physically_on is false.
-        let actions = c.handle_event(btn_at("sonoff-ts-foo", "1", Gesture::DoubleTap, clk.now()));
-        assert_eq!(actions, vec![Action::new("hue-lz-bedroom", Payload::scene_recall(1))]);
-        assert!(c.state_for("bedroom").unwrap().physically_on);
-    }
+    // ---- Non-hw-double-tap buttons unaffected --------------------------------
 
     #[test]
     fn suppression_does_not_affect_non_hw_double_tap_buttons() {
