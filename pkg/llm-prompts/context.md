@@ -11,12 +11,12 @@
 - **Test before done**: Test your code before declaring it done.
 - **No fluff**: No sycophantic openers or closing fluff.
 - **Persistence**: Don't bail out partway through a task. If stuck, investigate, try a different angle, or ask — half-finished work is worse than none.
-- **Fail fast**: Use assertions, throw errors early — no graceful fallbacks.
+- **Fail fast**: Use assertions, throw errors early — no graceful fallbacks for internal logic. Validate at system boundaries (user input, external APIs, network) but never swallow errors silently.
 - **Explicit over implicit**: No default parameters or optional chaining for required values.
 - **Minimal new comments**: Only write **new** comments to explain something non-obvious. Don't delete existing comments unless they're totally useless, wrong or out-of-date.
 - **No workarounds**: Deliver sound, generic, universal solutions. When you discover a bug or problem, don't hide it — attempt to fix underlying issues, ask for assistance when you can't.
 - **Ask questions**: When instructions or requirements are unclear, incomplete, or contradictory — always ask for clarifications before proceeding.
-- **Recent versions**: Always use the most recent versions of the relevant libraries and tools.
+- **Recent stable versions**: Always use the most recent stable versions of the relevant libraries and tools. Avoid alpha, beta, and release candidates unless explicitly requested.
 
 ## 2. References
 
@@ -86,9 +86,9 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - **SOLID**: Adhere to SOLID principles.
 - **No globals**: Pass dependencies explicitly via constructors, parameters, or DI containers — never rely on singletons, module-level mutable state, or ambient globals.
 - **No magic constants**: Use named constants.
-- **No backwards compatibility**: Refactor freely.
+- **No backwards compatibility in internal code**: Refactor freely. External/public APIs follow their own versioning rules (e.g. Baboon model evolution).
 - **Composition over conditionals**: Prefer composition over conditional logic.
-- **DRY**: Never duplicate, always generalize.
+- **DRY**: Don't repeat yourself — but don't abstract prematurely. Two similar blocks are fine; three means generalize.
 
 ## 8. Project Structure
 
