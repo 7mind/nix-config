@@ -42,6 +42,18 @@ fn light(ieee: &str) -> DeviceCatalogEntry {
     })
 }
 
+fn motion_sensor_dev(ieee: &str) -> DeviceCatalogEntry {
+    DeviceCatalogEntry::MotionSensor {
+        common: CommonFields {
+            ieee_address: ieee.into(),
+            description: None,
+            options: BTreeMap::new(),
+        },
+        occupancy_timeout_seconds: 60,
+        max_illuminance: None,
+    }
+}
+
 fn switch_dev(ieee: &str, model: &str) -> DeviceCatalogEntry {
     DeviceCatalogEntry::Switch {
         common: CommonFields {
@@ -263,6 +275,72 @@ pub fn study_switch_config() -> Config {
                 },
                 effect: Effect::BrightnessStop { room: "study".into() },
             },
+        ],
+        defaults: Defaults::default(),
+        heating: None,
+        location: None,
+    }
+}
+
+/// Kitchen layout with a motion sensor on the cooker zone.
+/// Same parent/child structure as `kitchen_config()` but adds motion
+/// sensor `hue-ms-kitchen` bound to `kitchen-cooker`.
+pub fn kitchen_with_motion_config() -> Config {
+    Config {
+        name_by_address: BTreeMap::new(),
+        devices: BTreeMap::from([
+            ("hue-l-cooker".into(), light("0xa")),
+            ("hue-l-dining".into(), light("0xb")),
+            ("hue-l-empty".into(), light("0xc")),
+            ("hue-ts-foo".into(), switch_dev("0x1", "test-tap")),
+            ("hue-ms-kitchen".into(), motion_sensor_dev("0xd")),
+        ]),
+        switch_models: BTreeMap::from([
+            ("test-tap".into(), tap_model()),
+        ]),
+        rooms: vec![
+            Room {
+                name: "kitchen-cooker".into(),
+                group_name: "hue-lz-kitchen-cooker".into(),
+                id: 1,
+                members: vec!["hue-l-cooker/11".into()],
+                parent: Some("kitchen-all".into()),
+                motion_sensors: vec!["hue-ms-kitchen".into()],
+                scenes: day_scenes(vec![1, 2, 3]),
+                off_transition_seconds: 0.8,
+                motion_off_cooldown_seconds: 0,
+            },
+            Room {
+                name: "kitchen-dining".into(),
+                group_name: "hue-lz-kitchen-dining".into(),
+                id: 2,
+                members: vec!["hue-l-dining/11".into()],
+                parent: Some("kitchen-all".into()),
+                motion_sensors: vec![],
+                scenes: day_scenes(vec![1, 2, 3]),
+                off_transition_seconds: 0.8,
+                motion_off_cooldown_seconds: 0,
+            },
+            Room {
+                name: "kitchen-all".into(),
+                group_name: "hue-lz-kitchen-all".into(),
+                id: 3,
+                members: vec![
+                    "hue-l-cooker/11".into(),
+                    "hue-l-dining/11".into(),
+                    "hue-l-empty/11".into(),
+                ],
+                parent: None,
+                motion_sensors: vec![],
+                scenes: day_scenes(vec![1, 2, 3]),
+                off_transition_seconds: 0.8,
+                motion_off_cooldown_seconds: 0,
+            },
+        ],
+        bindings: vec![
+            scene_toggle_cycle_binding("cooker-tap", "hue-ts-foo", "2", "kitchen-cooker"),
+            scene_toggle_cycle_binding("dining-tap", "hue-ts-foo", "3", "kitchen-dining"),
+            scene_toggle_cycle_binding("all-tap", "hue-ts-foo", "1", "kitchen-all"),
         ],
         defaults: Defaults::default(),
         heating: None,

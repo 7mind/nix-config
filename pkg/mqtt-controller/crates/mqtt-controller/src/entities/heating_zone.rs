@@ -26,8 +26,6 @@ pub struct HeatingZoneEntity {
     pub actual: TassActual<HeatingZoneActual>,
     /// When the relay was confirmed on. For min_cycle enforcement.
     pub relay_on_since: Option<Instant>,
-    /// When the relay was confirmed off. For min_pause enforcement.
-    pub relay_off_since: Option<Instant>,
     /// Last reported operating_mode from wall thermostat.
     pub wt_operating_mode: Option<String>,
     /// When the wall thermostat last reported any state.
@@ -44,7 +42,6 @@ impl Default for HeatingZoneEntity {
             target: TassTarget::new(),
             actual: TassActual::new(),
             relay_on_since: None,
-            relay_off_since: None,
             wt_operating_mode: None,
             wt_last_seen: None,
             relay_state_known: false,

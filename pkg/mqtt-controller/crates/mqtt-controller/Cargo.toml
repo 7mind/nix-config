@@ -82,3 +82,6 @@ rstest = "0.23"
 
 # Better assertion diffs.
 pretty_assertions = "1"
+
+# Property-based testing for TASS state machine invariants.
+proptest = "1"

@@ -9,7 +9,6 @@
 
 use std::time::{Duration, Instant};
 
-use crate::controller::active_slot_scene_ids;
 use crate::domain::action::{Action, Payload};
 use crate::entities::light_zone::LightZoneTarget;
 use crate::entities::motion_sensor::MotionActual;
@@ -64,7 +63,7 @@ impl EventProcessor {
             let cooldown_ms = room.motion_off_cooldown_seconds * 1000;
             let hour = self.clock.local_hour();
             let minute = self.clock.local_minute();
-            let scenes = active_slot_scene_ids(&room.scenes, hour, minute, sun.as_ref());
+            let scenes = room.scenes.active_slot_scene_ids(hour, minute, sun.as_ref());
             (
                 room.group_name.clone(),
                 max_lux,

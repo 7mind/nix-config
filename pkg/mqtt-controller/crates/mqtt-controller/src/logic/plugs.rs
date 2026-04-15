@@ -56,10 +56,12 @@ impl EventProcessor {
 
         let is_on = plug.is_on();
 
-        // Off transition: reset kill switches, set target to Off.
+        // Off transition: clear kill switches, confirm target if it
+        // was already Off. Do NOT override the target owner — the echo
+        // is an observation, not a command.
         if on == Some(false) {
-            plug.reset_kill_switches();
-            plug.target.set_and_command(PlugTarget::Off, Owner::Rule, ts);
+            plug.on_off_clear_kill_switches();
+            self.maybe_confirm_plug_target(device, ts);
             return Vec::new();
         }
 
@@ -388,7 +390,7 @@ impl EventProcessor {
             target_plug
                 .target
                 .set_and_command(PlugTarget::Off, Owner::Rule, ts);
-            target_plug.reset_kill_switches();
+            target_plug.on_off_clear_kill_switches();
             out.push(Action::for_device(target, Payload::device_off()));
         }
         out

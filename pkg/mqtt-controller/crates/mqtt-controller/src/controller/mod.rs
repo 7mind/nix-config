@@ -1001,16 +1001,14 @@ impl Controller {
 }
 
 /// Pull out the `scene_ids` of the slot covering `(hour, minute)`.
+/// Delegates to [`crate::config::SceneSchedule::active_slot_scene_ids`].
 pub fn active_slot_scene_ids(
     schedule: &crate::config::SceneSchedule,
     hour: u8,
     minute: u8,
     sun: Option<&crate::sun::SunTimes>,
 ) -> Vec<u8> {
-    let Some((_name, slot)) = schedule.slot_for_time(hour, minute, sun) else {
-        return Vec::new();
-    };
-    slot.scene_ids.clone()
+    schedule.active_slot_scene_ids(hour, minute, sun)
 }
 
 #[cfg(test)]

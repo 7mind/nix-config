@@ -280,7 +280,7 @@ impl EventProcessor {
                                 let plug = self.world.plug(target);
                                 plug.target
                                     .set_and_command(PlugTarget::Off, Owner::User, ts);
-                                plug.reset_kill_switches();
+                                plug.on_off_clear_kill_switches();
                                 return vec![Action::for_device(
                                     target,
                                     Payload::device_off(),
@@ -317,7 +317,7 @@ impl EventProcessor {
                 plug.target
                     .set_and_command(new_target, Owner::User, ts);
                 if is_on {
-                    plug.reset_kill_switches();
+                    plug.on_off_clear_kill_switches();
                 }
                 vec![Action::for_device(target, payload)]
             }
@@ -341,7 +341,7 @@ impl EventProcessor {
                 let plug = self.world.plug(target);
                 plug.target
                     .set_and_command(PlugTarget::Off, Owner::User, ts);
-                plug.reset_kill_switches();
+                plug.on_off_clear_kill_switches();
                 vec![Action::for_device(target, Payload::device_off())]
             }
             Effect::TurnOffAllZones => {

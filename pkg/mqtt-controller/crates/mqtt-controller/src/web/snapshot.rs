@@ -4,14 +4,18 @@
 use std::time::Instant;
 
 use mqtt_controller_wire::{
-    ActionDto, FullStateSnapshot, HeatingZoneInfo, HeatingZoneSnapshot, PlugSnapshot, RoomInfo,
-    RoomSnapshot, SlotInfo, TopologyInfo, TrvSnapshot,
+    ActionDto, FullStateSnapshot, HeatingZoneInfo, HeatingZoneSnapshot, KillSwitchRuleInfo,
+    MotionSensorInfo, PlugSnapshot, RoomInfo, RoomSnapshot, SlotInfo, SwitchInfo, TopologyInfo,
+    TrvSnapshot,
 };
 
+use crate::config::Trigger;
 use crate::domain::action::{Action, ActionTarget};
 use crate::entities::light_zone::LightZoneEntity;
+use crate::entities::plug::{KillSwitchRuleState, PlugEntity};
+use crate::entities::WorldState;
 use crate::logic::EventProcessor;
-use crate::topology::Topology;
+use crate::topology::{MotionBinding, Topology};
 
 /// Build a full state snapshot from the processor's current state.
 pub fn build_full_snapshot(processor: &EventProcessor, now: Instant) -> FullStateSnapshot {
@@ -27,7 +31,7 @@ pub fn build_full_snapshot(processor: &EventProcessor, now: Instant) -> FullStat
         .map(|room| {
             let zone = world.light_zones.get(&room.name);
             let active_sensors = active_motion_sensors_for_room(processor, &room.name);
-            room_snapshot_from(room, zone, &active_sensors, hour, minute, sun.as_ref(), now)
+            room_snapshot_from(room, zone, &active_sensors, hour, minute, sun.as_ref(), now, processor)
         })
         .collect();
 
@@ -40,12 +44,18 @@ pub fn build_full_snapshot(processor: &EventProcessor, now: Instant) -> FullStat
                 .earliest_kill_switch_idle(name)
                 .map(|t| ago_ms(now, t));
             let kill_switch_holdoff_secs = processor.kill_switch_holdoff_secs(name);
+            let kill_switch_rules = build_kill_switch_rules(plug, name, topology, now);
+            let linked_switches = build_linked_switches(topology, name);
             PlugSnapshot {
                 device: name.clone(),
                 on: plug.map_or(false, |p| p.is_on()),
                 idle_since_ago_ms,
                 kill_switch_holdoff_secs,
                 power_watts: plug.and_then(|p| p.power()),
+                target: plug.map(|p| tass_target_info(&p.target, now)),
+                actual: plug.map(|p| tass_actual_info(&p.actual, now)),
+                kill_switch_rules,
+                linked_switches,
             }
         })
         .collect();
@@ -73,7 +83,7 @@ pub fn build_room_snapshot(
     let minute = processor.clock().local_minute();
     let sun = snapshot_sun_times(processor);
     let active_sensors = active_motion_sensors_for_room(processor, room_name);
-    Some(room_snapshot_from(room, zone, &active_sensors, hour, minute, sun.as_ref(), now))
+    Some(room_snapshot_from(room, zone, &active_sensors, hour, minute, sun.as_ref(), now, processor))
 }
 
 /// Collect names of motion sensors that are currently active (occupied) for a given room.
@@ -94,9 +104,12 @@ fn active_motion_sensors_for_room(processor: &EventProcessor, room_name: &str) -
         .collect()
 }
 
-/// Compute sun times for snapshots (read-only path, no caching).
+/// Compute sun times for snapshots. Recomputes rather than using
+/// EventProcessor's cache because snapshots take `&self` (immutable)
+/// while the cache requires `&mut self`. The computation is cheap
+/// (~2us) and snapshots are infrequent.
 fn snapshot_sun_times(processor: &EventProcessor) -> Option<crate::sun::SunTimes> {
-    let loc = processor.location.as_ref()?;
+    let loc = processor.location()?;
     let info = processor.clock().local_date_info();
     Some(crate::sun::compute_sun_times(loc, info.date, info.utc_offset_hours))
 }
@@ -109,12 +122,21 @@ fn room_snapshot_from(
     minute: u8,
     sun: Option<&crate::sun::SunTimes>,
     now: Instant,
+    processor: &EventProcessor,
 ) -> RoomSnapshot {
     let (active_slot, scene_ids) = room
         .scenes
         .slot_for_time(hour, minute, sun)
         .map(|(name, slot)| (Some(name.clone()), slot.scene_ids.clone()))
         .unwrap_or((None, Vec::new()));
+
+    let switches = build_room_switches(processor.topology(), &room.name);
+
+    let motion_sensors = build_room_motion_sensors(
+        &room.bound_motion,
+        processor.world(),
+        now,
+    );
 
     RoomSnapshot {
         name: room.name.clone(),
@@ -131,6 +153,10 @@ fn room_snapshot_from(
         motion_active_sensors: active_sensors.to_vec(),
         active_slot,
         scene_ids,
+        target: zone.map(|z| tass_target_info(&z.target, now)),
+        actual: zone.map(|z| tass_actual_info(&z.actual, now)),
+        switches,
+        motion_sensors,
     }
 }
 
@@ -145,12 +171,19 @@ pub fn build_plug_snapshot(
         .earliest_kill_switch_idle(device)
         .map(|t| ago_ms(now, t));
     let kill_switch_holdoff_secs = processor.kill_switch_holdoff_secs(device);
+    let topology = processor.topology();
+    let kill_switch_rules = build_kill_switch_rules(Some(plug), device, topology, now);
+    let linked_switches = build_linked_switches(topology, device);
     Some(PlugSnapshot {
         device: device.to_string(),
         on: plug.is_on(),
         idle_since_ago_ms,
         kill_switch_holdoff_secs,
         power_watts: plug.power(),
+        target: Some(tass_target_info(&plug.target, now)),
+        actual: Some(tass_actual_info(&plug.actual, now)),
+        kill_switch_rules,
+        linked_switches,
     })
 }
 
@@ -493,7 +526,156 @@ pub fn finish_involved_entities(
     entities
 }
 
+/// Collect switches bound to a room from the topology's bindings.
+fn build_room_switches(topology: &Topology, room_name: &str) -> Vec<SwitchInfo> {
+    let mut switches = Vec::new();
+    for binding in topology.bindings() {
+        if binding.effect.room() != Some(room_name) {
+            continue;
+        }
+        if let Trigger::Button { device, button, .. } = &binding.trigger {
+            // Dedup: avoid duplicates when multiple gestures bind the
+            // same (device, button) to the same room.
+            if !switches.iter().any(|s: &SwitchInfo| s.device == *device && s.button == *button) {
+                switches.push(SwitchInfo {
+                    device: device.clone(),
+                    button: button.clone(),
+                    last_event: None,
+                });
+            }
+        }
+    }
+    switches
+}
+
+/// Build motion sensor info for a room from bound motion bindings.
+fn build_room_motion_sensors(
+    bound_motion: &[MotionBinding],
+    world: &WorldState,
+    now: Instant,
+) -> Vec<MotionSensorInfo> {
+    bound_motion
+        .iter()
+        .map(|mb| {
+            let entity = world.motion_sensors.get(&mb.sensor);
+            let occupied = entity.and_then(|e| e.actual.value()).map(|a| a.occupied);
+            let illuminance = entity.and_then(|e| e.illuminance());
+            let freshness = entity
+                .map(|e| e.actual.freshness().to_string())
+                .unwrap_or_default();
+            let since_ago_ms = entity.and_then(|e| e.actual.since()).map(|t| ago_ms(now, t));
+            MotionSensorInfo {
+                device: mb.sensor.clone(),
+                occupied,
+                illuminance,
+                freshness,
+                since_ago_ms,
+            }
+        })
+        .collect()
+}
+
+/// Build kill switch rule info for a plug from its entity state and topology.
+fn build_kill_switch_rules(
+    plug: Option<&PlugEntity>,
+    device: &str,
+    topology: &Topology,
+    now: Instant,
+) -> Vec<KillSwitchRuleInfo> {
+    let Some(plug) = plug else {
+        return Vec::new();
+    };
+    topology
+        .bindings_for_power_below(device)
+        .iter()
+        .map(|&idx| {
+            let resolved = &topology.bindings()[idx];
+            let rule_name = resolved.name.clone();
+            let state = plug
+                .kill_switch_rules
+                .get(&rule_name)
+                .cloned()
+                .unwrap_or(KillSwitchRuleState::Inactive);
+            let (threshold_watts, holdoff_secs) = match &resolved.trigger {
+                Trigger::PowerBelow { watts, for_seconds, .. } => (*watts, *for_seconds),
+                _ => (0.0, 0),
+            };
+            let idle_since_ago_ms = match &state {
+                KillSwitchRuleState::Idle { since } => Some(ago_ms(now, *since)),
+                _ => None,
+            };
+            let state_str = match &state {
+                KillSwitchRuleState::Inactive => "inactive",
+                KillSwitchRuleState::Armed => "armed",
+                KillSwitchRuleState::Idle { .. } => "idle",
+                KillSwitchRuleState::Suppressed => "suppressed",
+            };
+            KillSwitchRuleInfo {
+                rule_name,
+                state: state_str.to_string(),
+                threshold_watts,
+                holdoff_secs,
+                idle_since_ago_ms,
+            }
+        })
+        .collect()
+}
+
+/// Find switches linked to a plug (Button triggers with device-targeting effects).
+fn build_linked_switches(topology: &Topology, plug_device: &str) -> Vec<SwitchInfo> {
+    let mut switches = Vec::new();
+    for binding in topology.bindings() {
+        if binding.effect.target() != Some(plug_device) {
+            continue;
+        }
+        if let Trigger::Button { device, button, .. } = &binding.trigger {
+            if !switches.iter().any(|s: &SwitchInfo| s.device == *device && s.button == *button) {
+                switches.push(SwitchInfo {
+                    device: device.clone(),
+                    button: button.clone(),
+                    last_event: None,
+                });
+            }
+        }
+    }
+    switches
+}
+
 fn ago_ms(now: Instant, then: Instant) -> u64 {
     now.duration_since(then).as_millis() as u64
+}
+
+/// Convert a TASS target to a wire DTO.
+fn tass_target_info<T: std::fmt::Debug>(
+    target: &crate::tass::TassTarget<T>,
+    now: Instant,
+) -> mqtt_controller_wire::TassTargetInfo {
+    mqtt_controller_wire::TassTargetInfo {
+        value: target
+            .value()
+            .map(|v| format!("{v:?}"))
+            .unwrap_or_default(),
+        phase: target.phase().to_string(),
+        owner: target
+            .owner()
+            .map(|o| o.to_string())
+            .unwrap_or_default(),
+        since_ago_ms: target.since().map(|t| ago_ms(now, t)),
+    }
+}
+
+/// Convert a TASS actual to a wire DTO.
+fn tass_actual_info<T: std::fmt::Debug>(
+    actual: &crate::tass::TassActual<T>,
+    now: Instant,
+) -> mqtt_controller_wire::TassActualInfo {
+    mqtt_controller_wire::TassActualInfo {
+        value: actual
+            .value()
+            .map(|v| format!("{v:?}"))
+            .unwrap_or_default(),
+        freshness: actual.freshness().to_string(),
+        since_ago_ms: actual.since().map(|t| ago_ms(now, t)),
+    }
 }
 

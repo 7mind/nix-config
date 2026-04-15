@@ -26,18 +26,6 @@ use crate::tass::Owner;
 use super::EventProcessor;
 
 impl EventProcessor {
-    /// Initialize the heating sub-controller if config is present.
-    pub fn init_heating(&mut self) {
-        if let Some(config) = self.heating_config.clone() {
-            let controller = HeatingController::new(
-                config,
-                self.topology.clone(),
-                self.clock.clone(),
-            );
-            self.heating_controller = Some(controller);
-        }
-    }
-
     /// Forward a TRV or wall thermostat event to the heating controller
     /// and sync TASS entities.
     pub(super) fn handle_heating_event(&mut self, event: &Event) -> Vec<Action> {

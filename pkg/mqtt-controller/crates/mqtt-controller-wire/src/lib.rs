@@ -11,6 +11,80 @@ use serde::{Deserialize, Serialize};
 // Snapshots (server → client)
 // ---------------------------------------------------------------------------
 
+/// TASS target state summary for the frontend.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct TassTargetInfo {
+    /// Human-readable target value (e.g. "On(S1)", "Off", "21.0 C").
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub value: String,
+    /// Target phase: "unset", "pending", "commanded", "confirmed".
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub phase: String,
+    /// Who set the target: "user", "motion", "schedule", "webui", "system", "rule".
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub owner: String,
+    /// Milliseconds since the current phase was entered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub since_ago_ms: Option<u64>,
+}
+
+/// TASS actual state summary for the frontend.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct TassActualInfo {
+    /// Human-readable actual value (e.g. "On", "Off", "20.5 C").
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub value: String,
+    /// Actual freshness: "unknown", "fresh", "stale".
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub freshness: String,
+    /// Milliseconds since the last reading.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub since_ago_ms: Option<u64>,
+}
+
+/// Info about a switch that controls a room or plug.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SwitchInfo {
+    pub device: String,
+    pub button: String,
+    /// Last event from this switch, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_event: Option<SwitchEventInfo>,
+}
+
+/// A recent switch event.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SwitchEventInfo {
+    pub gesture: String,
+    pub ago_ms: u64,
+}
+
+/// Motion sensor state for the systems view.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MotionSensorInfo {
+    pub device: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub occupied: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub illuminance: Option<u32>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub freshness: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub since_ago_ms: Option<u64>,
+}
+
+/// Kill switch rule state for the systems view.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct KillSwitchRuleInfo {
+    pub rule_name: String,
+    /// "inactive", "armed", "idle", "suppressed"
+    pub state: String,
+    pub threshold_watts: f64,
+    pub holdoff_secs: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idle_since_ago_ms: Option<u64>,
+}
+
 /// Current state of one room. `*_ago_ms` fields are milliseconds elapsed
 /// since the corresponding event, relative to
 /// [`FullStateSnapshot::timestamp_epoch_ms`].
@@ -31,6 +105,21 @@ pub struct RoomSnapshot {
     pub active_slot: Option<String>,
     /// Scene ids in the active slot's cycle, in order.
     pub scene_ids: Vec<u8>,
+
+    // --- TASS system view fields ---
+
+    /// TASS target state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<TassTargetInfo>,
+    /// TASS actual state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actual: Option<TassActualInfo>,
+    /// Switches bound to this room.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub switches: Vec<SwitchInfo>,
+    /// Motion sensors for this room with their current state.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub motion_sensors: Vec<MotionSensorInfo>,
 }
 
 /// Current state of one smart plug.
@@ -48,6 +137,21 @@ pub struct PlugSnapshot {
     /// Most recent power reading in watts, if available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub power_watts: Option<f64>,
+
+    // --- TASS system view fields ---
+
+    /// TASS target state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<TassTargetInfo>,
+    /// TASS actual state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actual: Option<TassActualInfo>,
+    /// Kill switch rules with their current state.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub kill_switch_rules: Vec<KillSwitchRuleInfo>,
+    /// Switches that control this plug.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub linked_switches: Vec<SwitchInfo>,
 }
 
 /// Current state of one heating zone (relay + TRVs).
@@ -274,6 +378,10 @@ mod tests {
                 motion_active_sensors: vec!["hue-ms-kitchen".into()],
                 active_slot: Some("day".into()),
                 scene_ids: vec![1, 2, 3],
+                target: None,
+                actual: None,
+                switches: vec![],
+                motion_sensors: vec![],
             }],
             plugs: vec![PlugSnapshot {
                 device: "z2m-p-printer".into(),
@@ -281,6 +389,10 @@ mod tests {
                 idle_since_ago_ms: Some(30000),
                 kill_switch_holdoff_secs: Some(600),
                 power_watts: Some(120.5),
+                target: None,
+                actual: None,
+                kill_switch_rules: vec![],
+                linked_switches: vec![],
             }],
             heating_zones: vec![HeatingZoneSnapshot {
                 name: "living-room".into(),
@@ -390,6 +502,10 @@ mod tests {
             last_press_ago_ms: None,
             last_off_ago_ms: None,
             motion_active_sensors: vec![],
+            target: None,
+            actual: None,
+            switches: vec![],
+            motion_sensors: vec![],
             active_slot: None,
             scene_ids: vec![],
         }))

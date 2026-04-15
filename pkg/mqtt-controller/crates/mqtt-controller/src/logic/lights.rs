@@ -53,7 +53,7 @@ impl EventProcessor {
             group_name.clone(),
             Payload::scene_recall(next_scene),
         );
-        self.write_after_on(room_name, ts, next_idx, next_scene);
+        self.write_after_on(room_name, ts, next_idx, next_scene, Owner::User);
         self.propagate_to_descendants(room_name, true, ts);
         vec![action]
     }
@@ -90,7 +90,7 @@ impl EventProcessor {
                 group_name.clone(),
                 Payload::scene_recall(first),
             );
-            self.write_after_on(room_name, ts, 0, first);
+            self.write_after_on(room_name, ts, 0, first, Owner::User);
             self.propagate_to_descendants(room_name, true, ts);
             vec![action]
         } else {
@@ -145,7 +145,7 @@ impl EventProcessor {
                 group_name.clone(),
                 Payload::scene_recall(first),
             );
-            self.write_after_on(room_name, ts, 0, first);
+            self.write_after_on(room_name, ts, 0, first, Owner::User);
             self.propagate_to_descendants(room_name, true, ts);
             vec![action]
         } else if within_window {
@@ -171,7 +171,7 @@ impl EventProcessor {
                 group_name.clone(),
                 Payload::scene_recall(next_scene),
             );
-            self.write_after_on(room_name, ts, next_idx, next_scene);
+            self.write_after_on(room_name, ts, next_idx, next_scene, Owner::User);
             self.propagate_to_descendants(room_name, true, ts);
             vec![action]
         } else {
@@ -276,13 +276,13 @@ impl EventProcessor {
         self.propagate_to_descendants(room_name, false, ts);
     }
 
-    /// TASS write-after-on: set target to On, update last_press_at, clear
-    /// motion ownership (manual press supersedes motion).
-    fn write_after_on(&mut self, room_name: &str, ts: Instant, cycle_idx: usize, scene_id: u8) {
+    /// TASS write-after-on: set target to On with the given owner,
+    /// update last_press_at.
+    fn write_after_on(&mut self, room_name: &str, ts: Instant, cycle_idx: usize, scene_id: u8, owner: Owner) {
         let zone = self.world.light_zone(room_name);
         zone.target.set_and_command(
             LightZoneTarget::On { scene_id, cycle_idx },
-            Owner::User,
+            owner,
             ts,
         );
         zone.last_press_at = Some(ts);
@@ -318,13 +318,16 @@ impl EventProcessor {
         let was_on = zone.is_on();
         zone.actual.update(new_actual, ts);
 
-        // If actual now matches target, confirm the target.
-        let target_matches = match (zone.target.value(), on) {
-            (Some(LightZoneTarget::On { .. }), true) => true,
-            (Some(LightZoneTarget::Off), false) => true,
-            _ => false,
-        };
-        if target_matches {
+        // If actual now matches target and target is Commanded (awaiting
+        // confirmation), advance to Confirmed. Skip if already Confirmed
+        // (avoids churning timestamps) or if target is Unset/Pending.
+        let should_confirm = zone.target.phase() == crate::tass::TargetPhase::Commanded
+            && match (zone.target.value(), on) {
+                (Some(LightZoneTarget::On { .. }), true) => true,
+                (Some(LightZoneTarget::Off), false) => true,
+                _ => false,
+            };
+        if should_confirm {
             zone.target.confirm(ts);
         }
 
@@ -387,14 +390,10 @@ impl EventProcessor {
         for desc in descendants {
             let zone = self.world.light_zone(&desc);
             if on {
-                // Propagate on: set target on with same scene as parent
-                // but reset cycle state. We use System owner since this
-                // is derived propagation, not a direct user action.
-                zone.target.set_and_command(
-                    LightZoneTarget::On { scene_id: 0, cycle_idx: 0 },
-                    Owner::System,
-                    ts,
-                );
+                // Propagate on: mark descendant as on with reset cycle.
+                // scene_id is not meaningful here — the parent's scene_recall
+                // command drove the bulbs; this just tracks that the zone is
+                // physically on so the next press takes the toggle-off path.
                 zone.actual.update(LightZoneActual::On, ts);
             } else {
                 zone.target.set_and_command(LightZoneTarget::Off, Owner::System, ts);

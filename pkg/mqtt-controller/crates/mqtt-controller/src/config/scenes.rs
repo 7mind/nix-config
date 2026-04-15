@@ -243,6 +243,19 @@ impl SceneSchedule {
             .iter()
             .find(|(_, slot)| slot.contains_time(hour, minute, sun))
     }
+
+    /// Scene ids of the slot covering `(hour, minute)`.
+    pub fn active_slot_scene_ids(
+        &self,
+        hour: u8,
+        minute: u8,
+        sun: Option<&SunTimes>,
+    ) -> Vec<u8> {
+        let Some((_name, slot)) = self.slot_for_time(hour, minute, sun) else {
+            return Vec::new();
+        };
+        slot.scene_ids.clone()
+    }
 }
 
 #[cfg(test)]

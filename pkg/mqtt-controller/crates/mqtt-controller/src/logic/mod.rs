@@ -23,7 +23,7 @@ pub mod schedule;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::config::Defaults;
 use crate::config::heating::HeatingConfig;
@@ -333,12 +333,44 @@ impl EventProcessor {
         let mut out = self.flush_pending_presses(ts);
         out.extend(self.evaluate_at_triggers(ts));
         out.extend(self.evaluate_kill_switch_ticks(ts));
+        self.evaluate_target_staleness(ts);
 
         if self.heating_config.is_some() {
             out.extend(self.handle_heating_tick());
         }
 
         out
+    }
+
+    // ----- target staleness --------------------------------------------------
+
+    /// Threshold for marking a Commanded target as Stale.
+    /// z2m echoes normally arrive within 1-2 seconds; 10s is generous.
+    const TARGET_STALE_THRESHOLD: Duration = Duration::from_secs(10);
+
+    /// Check all TASS entities for stuck Commanded targets and mark them
+    /// Stale if confirmation hasn't arrived within the threshold.
+    fn evaluate_target_staleness(&mut self, now: Instant) {
+        for (name, zone) in &mut self.world.light_zones {
+            if zone.target.phase() == crate::tass::TargetPhase::Commanded {
+                if let Some(since) = zone.target.since() {
+                    if now.duration_since(since) >= Self::TARGET_STALE_THRESHOLD {
+                        tracing::info!(room = name.as_str(), "target stale: no confirmation within threshold");
+                        zone.target.mark_stale();
+                    }
+                }
+            }
+        }
+        for (name, plug) in &mut self.world.plugs {
+            if plug.target.phase() == crate::tass::TargetPhase::Commanded {
+                if let Some(since) = plug.target.since() {
+                    if now.duration_since(since) >= Self::TARGET_STALE_THRESHOLD {
+                        tracing::info!(plug = name.as_str(), "target stale: no confirmation within threshold");
+                        plug.target.mark_stale();
+                    }
+                }
+            }
+        }
     }
 
     // ----- sun time helpers --------------------------------------------------
@@ -371,6 +403,6 @@ impl EventProcessor {
         let Some(room) = self.topology.room_by_name(room_name) else {
             return Vec::new();
         };
-        crate::controller::active_slot_scene_ids(&room.scenes, hour, minute, sun.as_ref())
+        room.scenes.active_slot_scene_ids(hour, minute, sun.as_ref())
     }
 }
