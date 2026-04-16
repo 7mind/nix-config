@@ -74,7 +74,31 @@ impl MqttConfig {
             keep_alive: Duration::from_secs(30),
         }
     }
+
+    /// Build a configured `(AsyncClient, EventLoop)` pair using this
+    /// connection profile. `inflight` is the in-flight QoS>0 publish
+    /// window (daemon bursts /get during startup, provisioner is more
+    /// sequential). `channel_cap` is the rumqttc command-channel size.
+    ///
+    /// Both mqtt-controller modes (daemon, provisioner) share these
+    /// settings: same broker, same credentials, same packet-size limit
+    /// (large enough for z2m's bridge inventory payloads).
+    pub fn build_client(&self, inflight: u16, channel_cap: usize) -> (AsyncClient, EventLoop) {
+        let mut opts = MqttOptions::new(&self.client_id, &self.host, self.port);
+        opts.set_credentials(&self.user, &self.password);
+        opts.set_keep_alive(self.keep_alive);
+        opts.set_inflight(inflight);
+        // rumqttc defaults to 10 KB max incoming packet which is far too
+        // small for z2m bridge inventory payloads (~200 KB on a 50-device
+        // mesh) and could also bite on large group state messages. 2 MB
+        // is well above any plausible z2m payload.
+        opts.set_max_packet_size(MAX_PACKET_SIZE, MAX_PACKET_SIZE);
+        AsyncClient::new(opts, channel_cap)
+    }
 }
+
+/// Per-direction packet size limit shared by daemon and provisioner.
+pub const MAX_PACKET_SIZE: usize = 2 * 1024 * 1024;
 
 #[derive(Debug, Error)]
 pub enum MqttError {
@@ -104,20 +128,9 @@ impl MqttBridge {
         topology: Arc<Topology>,
         clock: Arc<dyn Clock>,
     ) -> Result<(Self, mpsc::Receiver<Event>), MqttError> {
-        let mut opts = MqttOptions::new(&config.client_id, &config.host, config.port);
-        opts.set_credentials(&config.user, &config.password);
-        opts.set_keep_alive(config.keep_alive);
-        // Bigger inflight window — we'll briefly burst a lot of /get
-        // publishes during startup state refresh.
-        opts.set_inflight(50);
-        // rumqttc defaults to a 10 KB max incoming packet, which is too
-        // small for z2m bridge inventory payloads (~200 KB) and could
-        // also bite on large group state messages. Bump to 2 MB so the
-        // eventloop never trips on a legitimate z2m publish. See the
-        // matching note in `provision::client`.
-        opts.set_max_packet_size(2 * 1024 * 1024, 2 * 1024 * 1024);
-
-        let (client, eventloop) = AsyncClient::new(opts, 256);
+        // Inflight 50 covers the /get burst during startup state refresh;
+        // channel cap 256 buffers the daemon's outbound action stream.
+        let (client, eventloop) = config.build_client(50, 256);
 
         // Subscribe to every topic we care about. Doing this BEFORE
         // spawning the event loop ensures the SUBACKs come in once

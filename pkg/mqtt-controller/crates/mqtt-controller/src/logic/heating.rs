@@ -27,6 +27,31 @@ const MAX_SETPOINT: f64 = 30.0;
 /// Wall thermostat state refresh interval.
 const WT_REFRESH_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
+/// Shared body of `check_trv_mode` / `check_wt_mode`: if the device's
+/// reported `operating_mode` is anything other than "manual" or unknown,
+/// re-issue a `mode=manual` command and warn. `device_kind` is used only
+/// for the log message ("TRV" or "wall thermostat").
+fn reassert_manual_mode_if_needed(
+    device: &str,
+    current_mode: Option<&str>,
+    device_kind: &str,
+) -> Vec<Action> {
+    match current_mode {
+        Some("manual") | None => Vec::new(),
+        Some(m) => {
+            tracing::warn!(
+                device,
+                current_mode = m,
+                "{device_kind} operating_mode is not 'manual', reasserting"
+            );
+            vec![Action::for_device(
+                device.to_string(),
+                Payload::OperatingMode { operating_mode: "manual" },
+            )]
+        }
+    }
+}
+
 impl EventProcessor {
     // ---- Event dispatch -------------------------------------------------------
 
@@ -86,10 +111,7 @@ impl EventProcessor {
     ) {
         let now = self.clock.now();
         // Find the TRV — only process TRVs that belong to a heating zone.
-        let heating_config = match &self.heating_config {
-            Some(c) => c,
-            None => return,
-        };
+        let Some(heating_config) = self.heating_config.as_ref() else { return };
         let is_known_trv = heating_config.zones.iter()
             .any(|z| z.trvs.iter().any(|zt| zt.device == device));
         if !is_known_trv {
@@ -209,10 +231,7 @@ impl EventProcessor {
         _ts: Instant,
     ) {
         let now = self.clock.now();
-        let heating_config = match &self.heating_config {
-            Some(c) => c.clone(),
-            None => return,
-        };
+        let Some(heating_config) = self.heating_config.clone() else { return };
 
         // Find zone for this relay.
         let zone_cfg = heating_config.zones.iter()
@@ -401,10 +420,7 @@ impl EventProcessor {
         self.heating_tick_gen += 1;
         let mut actions = Vec::new();
 
-        let heating_config = match &self.heating_config {
-            Some(c) => c.clone(),
-            None => return actions,
-        };
+        let Some(heating_config) = self.heating_config.clone() else { return actions };
 
         if !self.startup_complete {
             self.startup_complete = true;
@@ -515,10 +531,7 @@ impl EventProcessor {
         now: Instant,
     ) -> Vec<Action> {
         let mut actions = Vec::new();
-        let heating_config = match &self.heating_config {
-            Some(c) => c.clone(),
-            None => return actions,
-        };
+        let Some(heating_config) = self.heating_config.clone() else { return actions };
         let tick_gen = self.heating_tick_gen;
 
         for zone in &heating_config.zones {
@@ -571,10 +584,7 @@ impl EventProcessor {
 
     fn reconcile_setpoints(&self) -> Vec<Action> {
         let mut actions = Vec::new();
-        let heating_config = match &self.heating_config {
-            Some(c) => c,
-            None => return actions,
-        };
+        let Some(heating_config) = self.heating_config.as_ref() else { return actions };
 
         for zone in &heating_config.zones {
             for zt in &zone.trvs {
@@ -613,10 +623,7 @@ impl EventProcessor {
 
     fn enforce_pressure_groups(&mut self, now: Instant) -> Vec<Action> {
         let mut actions = Vec::new();
-        let heating_config = match &self.heating_config {
-            Some(c) => c.clone(),
-            None => return actions,
-        };
+        let Some(heating_config) = self.heating_config.clone() else { return actions };
         let (md, mdf) = self.min_demand();
         let tick_gen = self.heating_tick_gen;
 
@@ -716,10 +723,7 @@ impl EventProcessor {
 
     fn detect_open_windows(&mut self, now: Instant) -> Vec<Action> {
         let mut actions = Vec::new();
-        let heating_config = match &self.heating_config {
-            Some(c) => c.clone(),
-            None => return actions,
-        };
+        let Some(heating_config) = self.heating_config.clone() else { return actions };
         let detect_dur = Duration::from_secs(
             heating_config.open_window.detection_minutes as u64 * 60,
         );
@@ -838,10 +842,7 @@ impl EventProcessor {
 
     /// Un-inhibit TRVs whose inhibition timer has expired.
     fn expire_inhibitions(&mut self, now: Instant) {
-        let heating_config = match &self.heating_config {
-            Some(c) => c.clone(),
-            None => return,
-        };
+        let Some(heating_config) = self.heating_config.clone() else { return };
 
         for zone in &heating_config.zones {
             for zt in &zone.trvs {
@@ -883,10 +884,7 @@ impl EventProcessor {
 
     fn evaluate_relays(&mut self, now: Instant) -> Vec<Action> {
         let mut actions = Vec::new();
-        let heating_config = match &self.heating_config {
-            Some(c) => c.clone(),
-            None => return actions,
-        };
+        let Some(heating_config) = self.heating_config.clone() else { return actions };
         let min_cycle = Duration::from_secs(heating_config.heat_pump.min_cycle_seconds);
         let min_pause = Duration::from_secs(heating_config.heat_pump.min_pause_seconds);
         let (md, mdf) = self.min_demand();
@@ -1105,10 +1103,7 @@ impl EventProcessor {
 
     fn reconcile_relays(&self) -> Vec<Action> {
         let mut actions = Vec::new();
-        let heating_config = match &self.heating_config {
-            Some(c) => c,
-            None => return actions,
-        };
+        let Some(heating_config) = self.heating_config.as_ref() else { return actions };
 
         for zone in &heating_config.zones {
             let Some(hz) = self.world.heating_zones.get(&zone.name) else {
@@ -1157,66 +1152,26 @@ impl EventProcessor {
     // ---- Device mode enforcement ----------------------------------------------
 
     fn check_trv_mode(&self, device: &str) -> Vec<Action> {
-        let Some(trv) = self.world.trvs.get(device) else {
-            return Vec::new();
-        };
-        let mode = trv.actual.value()
+        let mode = self.world.trvs.get(device)
+            .and_then(|t| t.actual.value())
             .and_then(|a| a.operating_mode.as_deref());
-        match mode {
-            Some("manual") | None => Vec::new(),
-            Some(m) => {
-                tracing::warn!(
-                    trv = %device,
-                    current_mode = m,
-                    "TRV operating_mode is not 'manual', reasserting"
-                );
-                vec![Action::for_device(
-                    device.to_string(),
-                    Payload::OperatingMode { operating_mode: "manual" },
-                )]
-            }
-        }
+        reassert_manual_mode_if_needed(device, mode, "TRV")
     }
 
     fn check_wt_mode(&self, device: &str) -> Vec<Action> {
-        let heating_config = match &self.heating_config {
-            Some(c) => c,
-            None => return Vec::new(),
-        };
-        for zone in &heating_config.zones {
-            if zone.relay != device {
-                continue;
-            }
-            let Some(hz) = self.world.heating_zones.get(&zone.name) else {
-                break;
-            };
-            return match hz.wt_operating_mode.as_deref() {
-                Some("manual") | None => Vec::new(),
-                Some(mode) => {
-                    tracing::warn!(
-                        zone = %zone.name,
-                        relay = %device,
-                        current_mode = mode,
-                        "wall thermostat operating_mode is not 'manual', reasserting"
-                    );
-                    vec![Action::for_device(
-                        device.to_string(),
-                        Payload::OperatingMode { operating_mode: "manual" },
-                    )]
-                }
-            };
-        }
-        Vec::new()
+        let Some(heating_config) = &self.heating_config else { return Vec::new() };
+        let mode = heating_config.zones.iter()
+            .find(|z| z.relay == device)
+            .and_then(|z| self.world.heating_zones.get(&z.name))
+            .and_then(|hz| hz.wt_operating_mode.as_deref());
+        reassert_manual_mode_if_needed(device, mode, "wall thermostat")
     }
 
     // ---- HA discovery and state updates ---------------------------------------
 
     fn emit_ha_updates(&mut self, now: Instant) -> Vec<Action> {
         let mut actions = Vec::new();
-        let heating_config = match &self.heating_config {
-            Some(c) => c.clone(),
-            None => return actions,
-        };
+        let Some(heating_config) = self.heating_config.clone() else { return actions };
 
         if !self.ha_discovery_published {
             self.ha_discovery_published = true;

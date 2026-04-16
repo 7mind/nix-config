@@ -58,8 +58,10 @@ impl std::fmt::Display for Weekday {
 /// `end` is exclusive. No midnight crossing: start must be strictly before
 /// end within the same day (00:00 to 24:00).
 ///
-/// Serialized as `{"start": "HH:MM", "end": "HH:MM", "temperature": …}`.
-#[derive(Debug, Clone, PartialEq)]
+/// Serialized as `{"start": "HH:MM", "end": "HH:MM", "temperature": …}`
+/// via [`DayTimeRangeRaw`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "DayTimeRangeRaw", into = "DayTimeRangeRaw")]
 pub struct DayTimeRange {
     pub start_hour: u8,
     pub start_minute: u8,
@@ -71,23 +73,22 @@ pub struct DayTimeRange {
     pub temperature: f64,
 }
 
-impl<'de> Deserialize<'de> for DayTimeRange {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        #[serde(deny_unknown_fields)]
-        struct Raw {
-            start: String,
-            end: String,
-            temperature: f64,
-        }
-        let raw = Raw::deserialize(deserializer)?;
-        let (start_hour, start_minute) =
-            super::time_expr::parse_hhmm(&raw.start).map_err(serde::de::Error::custom)?;
-        let (end_hour, end_minute) =
-            super::time_expr::parse_hhmm(&raw.end).map_err(serde::de::Error::custom)?;
+/// Wire shape for [`DayTimeRange`]: HH:MM strings, parsed via
+/// `time_expr::parse_hhmm`.
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DayTimeRangeRaw {
+    start: String,
+    end: String,
+    temperature: f64,
+}
+
+impl TryFrom<DayTimeRangeRaw> for DayTimeRange {
+    type Error = super::time_expr::ParseTimeExprError;
+
+    fn try_from(raw: DayTimeRangeRaw) -> Result<Self, Self::Error> {
+        let (start_hour, start_minute) = super::time_expr::parse_hhmm(&raw.start)?;
+        let (end_hour, end_minute) = super::time_expr::parse_hhmm(&raw.end)?;
         Ok(DayTimeRange {
             start_hour,
             start_minute,
@@ -98,23 +99,13 @@ impl<'de> Deserialize<'de> for DayTimeRange {
     }
 }
 
-impl Serialize for DayTimeRange {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeStruct;
-        let mut s = serializer.serialize_struct("DayTimeRange", 3)?;
-        s.serialize_field(
-            "start",
-            &format!("{:02}:{:02}", self.start_hour, self.start_minute),
-        )?;
-        s.serialize_field(
-            "end",
-            &format!("{:02}:{:02}", self.end_hour, self.end_minute),
-        )?;
-        s.serialize_field("temperature", &self.temperature)?;
-        s.end()
+impl From<DayTimeRange> for DayTimeRangeRaw {
+    fn from(r: DayTimeRange) -> Self {
+        DayTimeRangeRaw {
+            start: format!("{:02}:{:02}", r.start_hour, r.start_minute),
+            end: format!("{:02}:{:02}", r.end_hour, r.end_minute),
+            temperature: r.temperature,
+        }
     }
 }
 
@@ -446,89 +437,103 @@ pub enum HeatingConfigError {
     },
 }
 
+// ---- Device option validation helpers --------------------------------------
+//
+// The bulk of validate_trv_options / validate_wall_thermostat_options is
+// the same shape: "for this option key, the value must be {choice from
+// list | int in range | float in range | int multiple of 10 ≤ 100}".
+// The helpers below let the per-device validators be a small dispatch
+// table mapping option name to constraint.
+
+/// Build an `InvalidDeviceOption` error with the given reason.
+fn invalid_option(
+    device: &str,
+    key: &str,
+    value: &serde_json::Value,
+    reason: impl Into<String>,
+) -> HeatingConfigError {
+    HeatingConfigError::InvalidDeviceOption {
+        device: device.into(),
+        key: key.into(),
+        value: value.to_string(),
+        reason: reason.into(),
+    }
+}
+
+/// Require `value` to be a string in `valid`.
+fn check_choice(
+    device: &str,
+    key: &str,
+    value: &serde_json::Value,
+    valid: &[&str],
+) -> Result<(), HeatingConfigError> {
+    if value.as_str().is_some_and(|v| valid.contains(&v)) {
+        Ok(())
+    } else {
+        Err(invalid_option(device, key, value, format!("must be one of {valid:?}")))
+    }
+}
+
+/// Require `value` to be an unsigned integer in `min..=max`.
+fn check_u64_range(
+    device: &str,
+    key: &str,
+    value: &serde_json::Value,
+    min: u64,
+    max: u64,
+    unit: &str,
+) -> Result<(), HeatingConfigError> {
+    if value.as_u64().is_some_and(|v| (min..=max).contains(&v)) {
+        Ok(())
+    } else {
+        Err(invalid_option(device, key, value, format!("must be {min}..={max}{unit}")))
+    }
+}
+
+/// Require `value` to be a float in `min..=max`.
+fn check_f64_range(
+    device: &str,
+    key: &str,
+    value: &serde_json::Value,
+    min: f64,
+    max: f64,
+) -> Result<(), HeatingConfigError> {
+    if value.as_f64().is_some_and(|v| (min..=max).contains(&v)) {
+        Ok(())
+    } else {
+        Err(invalid_option(device, key, value, format!("must be {min}..={max}")))
+    }
+}
+
+/// Display brightness: 0, 10, 20, ..., 100.
+fn check_brightness(
+    device: &str,
+    key: &str,
+    value: &serde_json::Value,
+) -> Result<(), HeatingConfigError> {
+    if value.as_u64().is_some_and(|v| v <= 100 && v % 10 == 0) {
+        Ok(())
+    } else {
+        Err(invalid_option(device, key, value, "must be 0, 10, 20, ..., 100"))
+    }
+}
+
 /// Known configurable options for Bosch BTH-RA TRVs with validation.
+/// Unknown options are allowed through — the device might support
+/// attributes we don't validate yet.
 pub fn validate_trv_options(
     device: &str,
     options: &std::collections::BTreeMap<String, serde_json::Value>,
 ) -> Result<(), HeatingConfigError> {
     for (key, value) in options {
         match key.as_str() {
-            "operating_mode" => {
-                let valid = ["schedule", "manual", "pause"];
-                if !value.as_str().is_some_and(|v| valid.contains(&v)) {
-                    return Err(HeatingConfigError::InvalidDeviceOption {
-                        device: device.into(),
-                        key: key.clone(),
-                        value: value.to_string(),
-                        reason: format!("must be one of {valid:?}"),
-                    });
-                }
-            }
-            "display_brightness" => {
-                if !value.as_u64().is_some_and(|v| v <= 100 && v % 10 == 0) {
-                    return Err(HeatingConfigError::InvalidDeviceOption {
-                        device: device.into(),
-                        key: key.clone(),
-                        value: value.to_string(),
-                        reason: "must be 0, 10, 20, ..., 100".into(),
-                    });
-                }
-            }
-            "display_switch_on_duration" => {
-                if !value.as_u64().is_some_and(|v| (5..=30).contains(&v)) {
-                    return Err(HeatingConfigError::InvalidDeviceOption {
-                        device: device.into(),
-                        key: key.clone(),
-                        value: value.to_string(),
-                        reason: "must be 5..=30 (seconds)".into(),
-                    });
-                }
-            }
-            "display_orientation" => {
-                let valid = ["standard_arrangement", "rotated_by_180_degrees"];
-                if !value.as_str().is_some_and(|v| valid.contains(&v)) {
-                    return Err(HeatingConfigError::InvalidDeviceOption {
-                        device: device.into(),
-                        key: key.clone(),
-                        value: value.to_string(),
-                        reason: format!("must be one of {valid:?}"),
-                    });
-                }
-            }
-            "displayed_temperature" => {
-                let valid = ["set_temperature", "measured_temperature"];
-                if !value.as_str().is_some_and(|v| valid.contains(&v)) {
-                    return Err(HeatingConfigError::InvalidDeviceOption {
-                        device: device.into(),
-                        key: key.clone(),
-                        value: value.to_string(),
-                        reason: format!("must be one of {valid:?}"),
-                    });
-                }
-            }
-            "local_temperature_calibration" => {
-                if !value.as_f64().is_some_and(|v| (-5.0..=5.0).contains(&v)) {
-                    return Err(HeatingConfigError::InvalidDeviceOption {
-                        device: device.into(),
-                        key: key.clone(),
-                        value: value.to_string(),
-                        reason: "must be -5.0..=5.0".into(),
-                    });
-                }
-            }
-            "child_lock" => {
-                let valid = ["LOCK", "UNLOCK"];
-                if !value.as_str().is_some_and(|v| valid.contains(&v)) {
-                    return Err(HeatingConfigError::InvalidDeviceOption {
-                        device: device.into(),
-                        key: key.clone(),
-                        value: value.to_string(),
-                        reason: format!("must be one of {valid:?}"),
-                    });
-                }
-            }
-            // Allow unknown options through — the device might support
-            // attributes we don't validate yet.
+            "operating_mode" => check_choice(device, key, value, &["schedule", "manual", "pause"])?,
+            "display_brightness" => check_brightness(device, key, value)?,
+            "display_switch_on_duration" => check_u64_range(device, key, value, 5, 30, " (seconds)")?,
+            "display_orientation" => check_choice(device, key, value, &["standard_arrangement", "rotated_by_180_degrees"])?,
+            "displayed_temperature" => check_choice(device, key, value, &["set_temperature", "measured_temperature"])?,
+            "local_temperature_calibration" => check_f64_range(device, key, value, -5.0, 5.0)?,
+            "child_lock" => check_choice(device, key, value, &["LOCK", "UNLOCK"])?,
             _ => {}
         }
     }
@@ -542,106 +547,15 @@ pub fn validate_wall_thermostat_options(
 ) -> Result<(), HeatingConfigError> {
     for (key, value) in options {
         match key.as_str() {
-            "heater_type" => {
-                let valid = [
-                    "underfloor_heating",
-                    "central_heating",
-                    "radiator",
-                    "manual_control",
-                ];
-                if !value.as_str().is_some_and(|v| valid.contains(&v)) {
-                    return Err(HeatingConfigError::InvalidDeviceOption {
-                        device: device.into(),
-                        key: key.clone(),
-                        value: value.to_string(),
-                        reason: format!("must be one of {valid:?}"),
-                    });
-                }
-            }
-            "operating_mode" => {
-                let valid = ["schedule", "manual", "pause"];
-                if !value.as_str().is_some_and(|v| valid.contains(&v)) {
-                    return Err(HeatingConfigError::InvalidDeviceOption {
-                        device: device.into(),
-                        key: key.clone(),
-                        value: value.to_string(),
-                        reason: format!("must be one of {valid:?}"),
-                    });
-                }
-            }
-            "display_brightness" => {
-                if !value.as_u64().is_some_and(|v| v <= 100 && v % 10 == 0) {
-                    return Err(HeatingConfigError::InvalidDeviceOption {
-                        device: device.into(),
-                        key: key.clone(),
-                        value: value.to_string(),
-                        reason: "must be 0, 10, 20, ..., 100".into(),
-                    });
-                }
-            }
-            "display_switch_on_duration" => {
-                if !value.as_u64().is_some_and(|v| (5..=30).contains(&v)) {
-                    return Err(HeatingConfigError::InvalidDeviceOption {
-                        device: device.into(),
-                        key: key.clone(),
-                        value: value.to_string(),
-                        reason: "must be 5..=30 (seconds)".into(),
-                    });
-                }
-            }
-            "valve_type" => {
-                let valid = ["normally_closed", "normally_open"];
-                if !value.as_str().is_some_and(|v| valid.contains(&v)) {
-                    return Err(HeatingConfigError::InvalidDeviceOption {
-                        device: device.into(),
-                        key: key.clone(),
-                        value: value.to_string(),
-                        reason: format!("must be one of {valid:?}"),
-                    });
-                }
-            }
-            "activity_led" => {
-                let valid = ["off", "auto", "on"];
-                if !value.as_str().is_some_and(|v| valid.contains(&v)) {
-                    return Err(HeatingConfigError::InvalidDeviceOption {
-                        device: device.into(),
-                        key: key.clone(),
-                        value: value.to_string(),
-                        reason: format!("must be one of {valid:?}"),
-                    });
-                }
-            }
-            "local_temperature_calibration" => {
-                if !value.as_f64().is_some_and(|v| (-5.0..=5.0).contains(&v)) {
-                    return Err(HeatingConfigError::InvalidDeviceOption {
-                        device: device.into(),
-                        key: key.clone(),
-                        value: value.to_string(),
-                        reason: "must be -5.0..=5.0".into(),
-                    });
-                }
-            }
-            "child_lock" => {
-                let valid = ["LOCK", "UNLOCK"];
-                if !value.as_str().is_some_and(|v| valid.contains(&v)) {
-                    return Err(HeatingConfigError::InvalidDeviceOption {
-                        device: device.into(),
-                        key: key.clone(),
-                        value: value.to_string(),
-                        reason: format!("must be one of {valid:?}"),
-                    });
-                }
-            }
-            "occupied_heating_setpoint" => {
-                if !value.as_f64().is_some_and(|v| (5.0..=30.0).contains(&v)) {
-                    return Err(HeatingConfigError::InvalidDeviceOption {
-                        device: device.into(),
-                        key: key.clone(),
-                        value: value.to_string(),
-                        reason: "must be 5.0..=30.0".into(),
-                    });
-                }
-            }
+            "heater_type" => check_choice(device, key, value, &["underfloor_heating", "central_heating", "radiator", "manual_control"])?,
+            "operating_mode" => check_choice(device, key, value, &["schedule", "manual", "pause"])?,
+            "display_brightness" => check_brightness(device, key, value)?,
+            "display_switch_on_duration" => check_u64_range(device, key, value, 5, 30, " (seconds)")?,
+            "valve_type" => check_choice(device, key, value, &["normally_closed", "normally_open"])?,
+            "activity_led" => check_choice(device, key, value, &["off", "auto", "on"])?,
+            "local_temperature_calibration" => check_f64_range(device, key, value, -5.0, 5.0)?,
+            "child_lock" => check_choice(device, key, value, &["LOCK", "UNLOCK"])?,
+            "occupied_heating_setpoint" => check_f64_range(device, key, value, 5.0, 30.0)?,
             _ => {}
         }
     }

@@ -38,26 +38,7 @@ pub fn build_full_snapshot(processor: &EventProcessor, now: Instant) -> FullStat
     let plugs: Vec<PlugSnapshot> = topology
         .all_plug_names()
         .iter()
-        .map(|name| {
-            let plug = world.plugs.get(name);
-            let idle_since_ago_ms = processor
-                .earliest_kill_switch_idle(name)
-                .map(|t| ago_ms(now, t));
-            let kill_switch_holdoff_secs = processor.kill_switch_holdoff_secs(name);
-            let kill_switch_rules = build_kill_switch_rules(plug, name, topology, now);
-            let linked_switches = build_linked_switches(topology, name);
-            PlugSnapshot {
-                device: name.clone(),
-                on: plug.map_or(false, |p| p.is_on()),
-                idle_since_ago_ms,
-                kill_switch_holdoff_secs,
-                power_watts: plug.and_then(|p| p.power()),
-                target: plug.map(|p| tass_target_info(&p.target, now)),
-                actual: plug.map(|p| tass_actual_info(&p.actual, now)),
-                kill_switch_rules,
-                linked_switches,
-            }
-        })
+        .map(|name| plug_snapshot_from(world.plugs.get(name), name, processor, now))
         .collect();
 
     let heating_zones = build_heating_zone_snapshots(processor, now);
@@ -161,30 +142,39 @@ fn room_snapshot_from(
 }
 
 /// Build a single plug snapshot for incremental updates.
+/// Returns `None` if the plug has never been observed.
 pub fn build_plug_snapshot(
     processor: &EventProcessor,
     device: &str,
     now: Instant,
 ) -> Option<PlugSnapshot> {
     let plug = processor.world().plugs.get(device)?;
-    let idle_since_ago_ms = processor
-        .earliest_kill_switch_idle(device)
-        .map(|t| ago_ms(now, t));
-    let kill_switch_holdoff_secs = processor.kill_switch_holdoff_secs(device);
+    Some(plug_snapshot_from(Some(plug), device, processor, now))
+}
+
+/// Shared builder used by both `build_full_snapshot` and `build_plug_snapshot`.
+/// Accepts `Option<&PlugEntity>` so it can build a placeholder for plugs
+/// the daemon has never received state for.
+fn plug_snapshot_from(
+    plug: Option<&PlugEntity>,
+    device: &str,
+    processor: &EventProcessor,
+    now: Instant,
+) -> PlugSnapshot {
     let topology = processor.topology();
-    let kill_switch_rules = build_kill_switch_rules(Some(plug), device, topology, now);
-    let linked_switches = build_linked_switches(topology, device);
-    Some(PlugSnapshot {
+    PlugSnapshot {
         device: device.to_string(),
-        on: plug.is_on(),
-        idle_since_ago_ms,
-        kill_switch_holdoff_secs,
-        power_watts: plug.power(),
-        target: Some(tass_target_info(&plug.target, now)),
-        actual: Some(tass_actual_info(&plug.actual, now)),
-        kill_switch_rules,
-        linked_switches,
-    })
+        on: plug.is_some_and(|p| p.is_on()),
+        idle_since_ago_ms: processor
+            .earliest_kill_switch_idle(device)
+            .map(|t| ago_ms(now, t)),
+        kill_switch_holdoff_secs: processor.kill_switch_holdoff_secs(device),
+        power_watts: plug.and_then(|p| p.power()),
+        target: plug.map(|p| tass_target_info(&p.target, now)),
+        actual: plug.map(|p| tass_actual_info(&p.actual, now)),
+        kill_switch_rules: build_kill_switch_rules(plug, device, topology, now),
+        linked_switches: build_linked_switches(topology, device),
+    }
 }
 
 /// Build topology info for the frontend.
@@ -522,16 +512,19 @@ pub fn finish_involved_entities(
     entities
 }
 
-/// Collect switches bound to a room from the topology's bindings.
-fn build_room_switches(topology: &Topology, room_name: &str) -> Vec<SwitchInfo> {
+/// Collect button-trigger switches from bindings that satisfy `pred`,
+/// deduped on `(device, button)`. Used by both room views (filter by
+/// effect.room) and plug views (filter by effect.target).
+fn collect_switches(
+    topology: &Topology,
+    pred: impl Fn(&crate::topology::ResolvedBinding) -> bool,
+) -> Vec<SwitchInfo> {
     let mut switches = Vec::new();
     for binding in topology.bindings() {
-        if binding.effect.room() != Some(room_name) {
+        if !pred(binding) {
             continue;
         }
         if let Trigger::Button { device, button, .. } = &binding.trigger {
-            // Dedup: avoid duplicates when multiple gestures bind the
-            // same (device, button) to the same room.
             if !switches.iter().any(|s: &SwitchInfo| s.device == *device && s.button == *button) {
                 switches.push(SwitchInfo {
                     device: device.clone(),
@@ -542,6 +535,11 @@ fn build_room_switches(topology: &Topology, room_name: &str) -> Vec<SwitchInfo> 
         }
     }
     switches
+}
+
+/// Collect switches bound to a room from the topology's bindings.
+fn build_room_switches(topology: &Topology, room_name: &str) -> Vec<SwitchInfo> {
+    collect_switches(topology, |b| b.effect.room() == Some(room_name))
 }
 
 /// Build motion sensor info for a room from bound motion bindings.
@@ -619,22 +617,7 @@ fn build_kill_switch_rules(
 
 /// Find switches linked to a plug (Button triggers with device-targeting effects).
 fn build_linked_switches(topology: &Topology, plug_device: &str) -> Vec<SwitchInfo> {
-    let mut switches = Vec::new();
-    for binding in topology.bindings() {
-        if binding.effect.target() != Some(plug_device) {
-            continue;
-        }
-        if let Trigger::Button { device, button, .. } = &binding.trigger {
-            if !switches.iter().any(|s: &SwitchInfo| s.device == *device && s.button == *button) {
-                switches.push(SwitchInfo {
-                    device: device.clone(),
-                    button: button.clone(),
-                    last_event: None,
-                });
-            }
-        }
-    }
-    switches
+    collect_switches(topology, |b| b.effect.target() == Some(plug_device))
 }
 
 fn ago_ms(now: Instant, then: Instant) -> u64 {

@@ -19,7 +19,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use rumqttc::{AsyncClient, EventLoop, MqttOptions, QoS};
+use rumqttc::{AsyncClient, EventLoop, QoS};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
@@ -28,10 +28,6 @@ use tokio::sync::{Mutex, Notify, oneshot};
 use crate::config::scenes::Scene;
 use crate::mqtt::MqttConfig;
 use crate::mqtt::codec::bridge;
-
-/// Per-direction packet size limit. 2 MB; see `Z2mClient::connect` for
-/// the rationale.
-const MAX_PACKET_SIZE: usize = 2 * 1024 * 1024;
 
 #[derive(Debug, Error)]
 pub enum Z2mClientError {
@@ -152,20 +148,8 @@ impl Z2mClient {
     /// a subtle race against rumqttc's outgoing-request queue and made
     /// fetches time out against real mosquitto.
     pub async fn connect(config: MqttConfig, timeout: Duration) -> Result<Self, Z2mClientError> {
-        let mut opts = MqttOptions::new(&config.client_id, &config.host, config.port);
-        opts.set_credentials(&config.user, &config.password);
-        opts.set_keep_alive(config.keep_alive);
-        opts.set_inflight(20);
-        // rumqttc's default max packet size is 10 KB, which is far too
-        // small for z2m's `bridge/devices` retained payload — that's
-        // ~200 KB on a 50-device mesh and grows with the inventory.
-        // When the eventloop hits a too-big incoming packet it errors
-        // out without dispatching the publish, so the topic cache
-        // never gets the payload and fetches time out. 2 MB is well
-        // above any plausible z2m payload.
-        opts.set_max_packet_size(MAX_PACKET_SIZE, MAX_PACKET_SIZE);
-
-        let (client, eventloop) = AsyncClient::new(opts, 100);
+        // Sequential request/response usage; small inflight is fine.
+        let (client, eventloop) = config.build_client(20, 100);
 
         let shared = Arc::new(Shared {
             requests: Mutex::new(HashMap::new()),

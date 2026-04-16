@@ -365,36 +365,23 @@ impl EventProcessor {
     /// Check all TASS entities for stuck Commanded targets and mark them
     /// Stale if confirmation hasn't arrived within the threshold.
     fn evaluate_target_staleness(&mut self, now: Instant) {
+        // Wall thermostats respond slower than lights, so heating zones
+        // get a longer window.
+        const HEATING_TARGET_STALE_THRESHOLD: Duration = Duration::from_secs(60);
+        let msg = "target stale: no confirmation within threshold";
         for (name, zone) in &mut self.world.light_zones {
-            if zone.target.phase() == crate::tass::TargetPhase::Commanded {
-                if let Some(since) = zone.target.since() {
-                    if now.duration_since(since) >= Self::TARGET_STALE_THRESHOLD {
-                        tracing::info!(room = name.as_str(), "target stale: no confirmation within threshold");
-                        zone.target.mark_stale();
-                    }
-                }
+            if zone.target.mark_stale_if_old(now, Self::TARGET_STALE_THRESHOLD) {
+                tracing::info!(room = name.as_str(), "{msg}");
             }
         }
         for (name, plug) in &mut self.world.plugs {
-            if plug.target.phase() == crate::tass::TargetPhase::Commanded {
-                if let Some(since) = plug.target.since() {
-                    if now.duration_since(since) >= Self::TARGET_STALE_THRESHOLD {
-                        tracing::info!(plug = name.as_str(), "target stale: no confirmation within threshold");
-                        plug.target.mark_stale();
-                    }
-                }
+            if plug.target.mark_stale_if_old(now, Self::TARGET_STALE_THRESHOLD) {
+                tracing::info!(plug = name.as_str(), "{msg}");
             }
         }
-        // Heating zone targets: wall thermostats respond slower than lights.
-        const HEATING_TARGET_STALE_THRESHOLD: Duration = Duration::from_secs(60);
         for (name, zone) in &mut self.world.heating_zones {
-            if zone.target.phase() == crate::tass::TargetPhase::Commanded {
-                if let Some(since) = zone.target.since() {
-                    if now.duration_since(since) >= HEATING_TARGET_STALE_THRESHOLD {
-                        tracing::info!(zone = name.as_str(), "heating zone target stale: no relay confirmation within threshold");
-                        zone.target.mark_stale();
-                    }
-                }
+            if zone.target.mark_stale_if_old(now, HEATING_TARGET_STALE_THRESHOLD) {
+                tracing::info!(zone = name.as_str(), "heating zone target stale: no relay confirmation within threshold");
             }
         }
     }
@@ -418,24 +405,14 @@ impl EventProcessor {
     fn evaluate_actual_staleness(&mut self, now: Instant) -> Vec<Action> {
         let mut newly_stale_sensors = Vec::new();
         for (name, sensor) in &mut self.world.motion_sensors {
-            if sensor.actual.freshness() == crate::tass::ActualFreshness::Fresh {
-                if let Some(since) = sensor.actual.since() {
-                    if now.duration_since(since) >= Self::MOTION_SENSOR_STALE_THRESHOLD {
-                        tracing::info!(sensor = name.as_str(), "motion sensor actual stale — treating as not occupied");
-                        sensor.actual.mark_stale();
-                        newly_stale_sensors.push(name.clone());
-                    }
-                }
+            if sensor.actual.mark_stale_if_old(now, Self::MOTION_SENSOR_STALE_THRESHOLD) {
+                tracing::info!(sensor = name.as_str(), "motion sensor actual stale — treating as not occupied");
+                newly_stale_sensors.push(name.clone());
             }
         }
         for (name, plug) in &mut self.world.plugs {
-            if plug.actual.freshness() == crate::tass::ActualFreshness::Fresh {
-                if let Some(since) = plug.actual.since() {
-                    if now.duration_since(since) >= Self::PLUG_ACTUAL_STALE_THRESHOLD {
-                        tracing::debug!(plug = name.as_str(), "plug actual stale");
-                        plug.actual.mark_stale();
-                    }
-                }
+            if plug.actual.mark_stale_if_old(now, Self::PLUG_ACTUAL_STALE_THRESHOLD) {
+                tracing::debug!(plug = name.as_str(), "plug actual stale");
             }
         }
 

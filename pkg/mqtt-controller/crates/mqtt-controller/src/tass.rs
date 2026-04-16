@@ -6,7 +6,7 @@
 //! Read-only entities (sensors) have only the actual half.
 
 use std::fmt;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Phase of a target state lifecycle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -163,6 +163,20 @@ impl<T> TassTarget<T> {
         }
     }
 
+    /// If `phase` is Commanded and `since` is older than `threshold`,
+    /// mark stale and return `true`. Otherwise leave the phase alone
+    /// and return `false`. Used by the periodic staleness sweep.
+    pub fn mark_stale_if_old(&mut self, now: Instant, threshold: Duration) -> bool {
+        if self.phase == TargetPhase::Commanded
+            && self.since.is_some_and(|s| now.duration_since(s) >= threshold)
+        {
+            self.phase = TargetPhase::Stale;
+            true
+        } else {
+            false
+        }
+    }
+
     /// True if the target is in a state where the system is actively
     /// waiting for something (Commanded or Pending). Stale targets
     /// are no longer actionable — the system gave up waiting.
@@ -230,6 +244,20 @@ impl<T> TassActual<T> {
     pub fn mark_stale(&mut self) {
         if self.freshness == ActualFreshness::Fresh {
             self.freshness = ActualFreshness::Stale;
+        }
+    }
+
+    /// If `freshness` is Fresh and `since` is older than `threshold`,
+    /// mark stale and return `true`. Otherwise leave it alone and
+    /// return `false`. Used by the periodic actual-staleness sweep.
+    pub fn mark_stale_if_old(&mut self, now: Instant, threshold: Duration) -> bool {
+        if self.freshness == ActualFreshness::Fresh
+            && self.since.is_some_and(|s| now.duration_since(s) >= threshold)
+        {
+            self.freshness = ActualFreshness::Stale;
+            true
+        } else {
+            false
         }
     }
 

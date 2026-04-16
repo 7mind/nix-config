@@ -246,38 +246,40 @@ fn display_name(device_name: &str) -> String {
         .join(" ")
 }
 
-/// Build the retained HA discovery config Action for a TRV entity.
-pub fn trv_discovery_action(device_name: &str) -> Action {
+/// Build a retained HA discovery config Action.
+///
+/// `entity_type` is the topic segment ("trv" / "zone") and matches the
+/// one used by `state_topic` / `state_update_action`. `kind_label`
+/// is the prefix shown in HA ("TRV" / "Zone").
+fn discovery_action(
+    entity_type: &str,
+    kind_label: &str,
+    name: &str,
+    options: &[&str],
+) -> Action {
     let config = json!({
-        "name": format!("TRV {} State", display_name(device_name)),
-        "state_topic": state_topic("trv", device_name),
-        "unique_id": unique_id("trv", device_name),
+        "name": format!("{kind_label} {} State", display_name(name)),
+        "state_topic": state_topic(entity_type, name),
+        "unique_id": unique_id(entity_type, name),
         "device_class": "enum",
-        "options": TrvDerivedState::ALL_OPTIONS,
+        "options": options,
         "device": ha_device_block(),
     });
     Action::raw(
-        discovery_config_topic("trv", device_name),
+        discovery_config_topic(entity_type, name),
         Payload::RawString(serde_json::to_string(&config).expect("JSON serialization")),
         true,
     )
 }
 
+/// Build the retained HA discovery config Action for a TRV entity.
+pub fn trv_discovery_action(device_name: &str) -> Action {
+    discovery_action("trv", "TRV", device_name, TrvDerivedState::ALL_OPTIONS)
+}
+
 /// Build the retained HA discovery config Action for a zone entity.
 pub fn zone_discovery_action(zone_name: &str) -> Action {
-    let config = json!({
-        "name": format!("Zone {} State", display_name(zone_name)),
-        "state_topic": state_topic("zone", zone_name),
-        "unique_id": unique_id("zone", zone_name),
-        "device_class": "enum",
-        "options": ZoneDerivedState::ALL_OPTIONS,
-        "device": ha_device_block(),
-    });
-    Action::raw(
-        discovery_config_topic("zone", zone_name),
-        Payload::RawString(serde_json::to_string(&config).expect("JSON serialization")),
-        true,
-    )
+    discovery_action("zone", "Zone", zone_name, ZoneDerivedState::ALL_OPTIONS)
 }
 
 /// Build a retained state update Action.
