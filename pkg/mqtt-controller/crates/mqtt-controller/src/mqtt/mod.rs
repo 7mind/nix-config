@@ -125,9 +125,10 @@ impl MqttBridge {
         Self::subscribe_all(&client, &topology).await?;
 
         let (tx, rx) = mpsc::channel(512);
+        let client_for_loop = client.clone();
         let topology_for_loop = topology.clone();
         let clock_for_loop = clock.clone();
-        tokio::spawn(run_eventloop(eventloop, tx, topology_for_loop, clock_for_loop));
+        tokio::spawn(run_eventloop(eventloop, client_for_loop, tx, topology_for_loop, clock_for_loop));
 
         Ok((
             Self {
@@ -143,55 +144,7 @@ impl MqttBridge {
         client: &AsyncClient,
         topology: &Topology,
     ) -> Result<(), MqttError> {
-        // Switches (all models): action topics
-        for sw in topology.all_switch_device_names() {
-            client
-                .subscribe(topics::device_action_topic(sw), QoS::AtLeastOnce)
-                .await?;
-        }
-        // Motion sensors: state topic
-        for sensor in topology.all_motion_sensor_names() {
-            client
-                .subscribe(topics::state_topic(sensor), QoS::AtLeastOnce)
-                .await?;
-        }
-        // Groups: state topic (for physical_on tracking, including
-        // retained messages on initial subscribe)
-        for group in topology.all_group_names() {
-            client
-                .subscribe(topics::state_topic(group), QoS::AtLeastOnce)
-                .await?;
-        }
-        // Zigbee plugs: state topic (for on/off + power monitoring)
-        for plug in topology.all_plug_names() {
-            if !topology.is_zwave_plug(plug) {
-                client
-                    .subscribe(topics::state_topic(plug), QoS::AtLeastOnce)
-                    .await?;
-            }
-        }
-        // TRVs: state topic (for temperature, demand, setpoint)
-        for trv in topology.all_trv_names() {
-            client
-                .subscribe(topics::state_topic(trv), QoS::AtLeastOnce)
-                .await?;
-        }
-        // Wall thermostats: state topic (for relay state, temperature)
-        for wt in topology.all_wall_thermostat_names() {
-            client
-                .subscribe(topics::state_topic(wt), QoS::AtLeastOnce)
-                .await?;
-        }
-        // Z-Wave plugs: separate topics for switch state and power meter
-        for plug in topology.zwave_plug_names() {
-            client
-                .subscribe(topics::zwave_switch_state_topic(plug), QoS::AtLeastOnce)
-                .await?;
-            client
-                .subscribe(topics::zwave_meter_power_topic(plug), QoS::AtLeastOnce)
-                .await?;
-        }
-        Ok(())
+        subscribe_all_topics(client, topology).await
     }
 
     /// Publish an [`Action`] to the corresponding `/set` topic.
@@ -301,13 +254,33 @@ impl MqttBridge {
     }
 }
 
-async fn run_eventloop(mut eventloop: EventLoop, tx: mpsc::Sender<Event>, topology: Arc<Topology>, clock: Arc<dyn Clock>) {
+async fn run_eventloop(
+    mut eventloop: EventLoop,
+    client: AsyncClient,
+    tx: mpsc::Sender<Event>,
+    topology: Arc<Topology>,
+    clock: Arc<dyn Clock>,
+) {
+    let mut initial_connect = true;
+
     loop {
         match eventloop.poll().await {
+            Ok(rumqttc::Event::Incoming(rumqttc::Packet::ConnAck(_))) => {
+                if initial_connect {
+                    initial_connect = false;
+                    tracing::info!("mqtt: initial connection established");
+                } else {
+                    // Reconnect after broker restart. With clean_session=true
+                    // the broker discards our subscriptions, so re-subscribe.
+                    tracing::warn!("mqtt: reconnected after connection loss; re-subscribing");
+                    if let Err(e) = subscribe_all_topics(&client, &topology).await {
+                        tracing::error!(error = ?e, "mqtt: failed to re-subscribe after reconnect");
+                    }
+                }
+            }
             Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(p))) => {
                 if let Some(event) = parse_event(&topology, &p, &*clock) {
                     if tx.send(event).await.is_err() {
-                        // Receiver dropped → daemon shutting down.
                         break;
                     }
                 }
@@ -319,6 +292,39 @@ async fn run_eventloop(mut eventloop: EventLoop, tx: mpsc::Sender<Event>, topolo
             }
         }
     }
+}
+
+/// Subscribe to all MQTT topics the topology requires. Used on initial
+/// connect and on every reconnect.
+async fn subscribe_all_topics(
+    client: &AsyncClient,
+    topology: &Topology,
+) -> Result<(), MqttError> {
+    for sw in topology.all_switch_device_names() {
+        client.subscribe(topics::device_action_topic(sw), QoS::AtLeastOnce).await?;
+    }
+    for sensor in topology.all_motion_sensor_names() {
+        client.subscribe(topics::state_topic(sensor), QoS::AtLeastOnce).await?;
+    }
+    for group in topology.all_group_names() {
+        client.subscribe(topics::state_topic(group), QoS::AtLeastOnce).await?;
+    }
+    for plug in topology.all_plug_names() {
+        if !topology.is_zwave_plug(plug) {
+            client.subscribe(topics::state_topic(plug), QoS::AtLeastOnce).await?;
+        }
+    }
+    for trv in topology.all_trv_names() {
+        client.subscribe(topics::state_topic(trv), QoS::AtLeastOnce).await?;
+    }
+    for wt in topology.all_wall_thermostat_names() {
+        client.subscribe(topics::state_topic(wt), QoS::AtLeastOnce).await?;
+    }
+    for plug in topology.zwave_plug_names() {
+        client.subscribe(topics::zwave_switch_state_topic(plug), QoS::AtLeastOnce).await?;
+        client.subscribe(topics::zwave_meter_power_topic(plug), QoS::AtLeastOnce).await?;
+    }
+    Ok(())
 }
 
 /// Translate a raw MQTT publish into an [`Event`]. Returns `None` for
