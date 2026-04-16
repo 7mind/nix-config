@@ -48,6 +48,8 @@
 
     desktop.cosmic.minimal-keybindings = true;
 
+    apps.prusa-3d-printing.enable = true;
+
     # Resource-limited Electron apps
     electron-wrappers = {
       enable = true;

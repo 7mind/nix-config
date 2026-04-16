@@ -174,6 +174,11 @@ in
     hw.ledger.enable = true;
     hw.qmk-keyboard.enable = true;
     hw.qmk-keyboard.frameworkKeyboard = true;
+
+    hw.prusa-3d-printing = {
+      enable = true;
+      users = [ "pavel" ];
+    };
     containers.docker.enable = true;
 
     ssh.mode = "safe";
