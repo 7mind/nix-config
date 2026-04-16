@@ -216,7 +216,8 @@ pub fn state_topic(entity_type: &str, name: &str) -> String {
     format!("mqtt-controller/heating/{entity_type}/{name}/state")
 }
 
-fn discovery_config_topic(entity_type: &str, name: &str) -> String {
+/// HA discovery config topic for a heating entity.
+pub fn discovery_topic(entity_type: &str, name: &str) -> String {
     format!(
         "homeassistant/sensor/{}/config",
         unique_id(entity_type, name)
@@ -272,7 +273,7 @@ fn discovery_publish(
         "device": ha_device_block(),
     });
     DiscoveryPublish {
-        topic: discovery_config_topic(entity_type, name),
+        topic: discovery_topic(entity_type, name),
         payload: serde_json::to_string(&config).expect("JSON serialization"),
     }
 }

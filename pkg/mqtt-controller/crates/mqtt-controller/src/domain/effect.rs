@@ -9,7 +9,9 @@
 //! the only place that turns indexes back into MQTT topic strings.
 
 use crate::domain::action::Payload;
-use crate::topology::{DeviceIdx, PlugIdx, RoomIdx, ZoneIdx};
+use crate::domain::ha_discovery;
+use crate::mqtt::topics;
+use crate::topology::{DeviceIdx, PlugIdx, RoomIdx, Topology, ZoneIdx};
 
 /// One thing the controller wants to publish to MQTT, expressed in
 /// terms of typed topology indexes.
@@ -82,4 +84,72 @@ impl Effect {
             _ => None,
         }
     }
+
+    /// MQTT topic this effect would publish to. Used by tests / logs;
+    /// the dispatcher composes the same topic implicitly when calling
+    /// the typed `MqttBridge` methods.
+    pub fn topic(&self, topology: &Topology) -> String {
+        match self {
+            Effect::PublishGroupSet { room, .. } => {
+                topics::set_topic(&topology.room(*room).group_name)
+            }
+            Effect::PublishDeviceSet { device, .. } => {
+                if topology.is_zwave_plug_idx(*device) {
+                    topics::zwave_switch_set_topic(topology.device_name(*device))
+                } else {
+                    topics::set_topic(topology.device_name(*device))
+                }
+            }
+            Effect::PublishDeviceGet { device }
+            | Effect::PublishGetTrv { trv: device } => {
+                topics::get_topic(topology.device_name(*device))
+            }
+            Effect::PublishZwaveRefresh { .. } => format!(
+                "{}refreshValues/set",
+                crate::mqtt::codec::zwave_api::GATEWAY_PREFIX,
+            ),
+            Effect::PublishHaDiscoveryZone { zone } => {
+                let name = zone_name(topology, *zone);
+                ha_discovery::discovery_topic("zone", &name)
+            }
+            Effect::PublishHaDiscoveryTrv { trv } => {
+                ha_discovery::discovery_topic("trv", topology.device_name(*trv))
+            }
+            Effect::PublishHaStateZone { zone, .. } => {
+                let name = zone_name(topology, *zone);
+                ha_discovery::state_topic("zone", &name)
+            }
+            Effect::PublishHaStateTrv { trv, .. } => {
+                ha_discovery::state_topic("trv", topology.device_name(*trv))
+            }
+            Effect::PublishRaw { topic, .. } => topic.clone(),
+        }
+    }
+
+    /// Serialized form of the payload. Lossy for non-JSON variants
+    /// (HA state strings, Z-Wave refresh, etc.) — only intended for
+    /// tests, logs, and the decision-trace UI.
+    pub fn payload_string(&self) -> String {
+        match self {
+            Effect::PublishGroupSet { payload, .. }
+            | Effect::PublishDeviceSet { payload, .. } => {
+                serde_json::to_string(payload).unwrap_or_default()
+            }
+            Effect::PublishDeviceGet { .. } => r#"{"state":""}"#.into(),
+            Effect::PublishGetTrv { .. } => "{}".into(),
+            Effect::PublishZwaveRefresh { .. } => "{}".into(),
+            Effect::PublishHaDiscoveryZone { .. }
+            | Effect::PublishHaDiscoveryTrv { .. } => "<discovery>".into(),
+            Effect::PublishHaStateZone { state, .. }
+            | Effect::PublishHaStateTrv { state, .. } => state.to_string(),
+            Effect::PublishRaw { payload, .. } => payload.clone(),
+        }
+    }
+}
+
+fn zone_name(topology: &Topology, zone: ZoneIdx) -> String {
+    topology
+        .heating_config()
+        .map(|cfg| cfg.zones[zone.as_usize()].name.clone())
+        .unwrap_or_default()
 }

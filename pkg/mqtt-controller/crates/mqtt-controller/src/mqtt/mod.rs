@@ -113,11 +113,12 @@ pub enum MqttError {
 }
 
 /// Public handle. Holds the MQTT client and the topology used for parsing.
+/// The clock is consumed by the spawned event loop only; it isn't stored
+/// on the bridge.
 #[derive(Clone)]
 pub struct MqttBridge {
     client: AsyncClient,
     topology: Arc<Topology>,
-    clock: Arc<dyn Clock>,
 }
 
 impl MqttBridge {
@@ -143,17 +144,9 @@ impl MqttBridge {
         let (tx, rx) = mpsc::channel(512);
         let client_for_loop = client.clone();
         let topology_for_loop = topology.clone();
-        let clock_for_loop = clock.clone();
-        tokio::spawn(run_eventloop(eventloop, client_for_loop, tx, topology_for_loop, clock_for_loop));
+        tokio::spawn(run_eventloop(eventloop, client_for_loop, tx, topology_for_loop, clock));
 
-        Ok((
-            Self {
-                client,
-                topology,
-                clock,
-            },
-            rx,
-        ))
+        Ok((Self { client, topology }, rx))
     }
 
     async fn subscribe_all(

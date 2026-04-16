@@ -1,7 +1,6 @@
 use super::*;
 use crate::config::heating::*;
 use crate::config::{CommonFields, Config, Defaults, DeviceCatalogEntry};
-use crate::domain::Effect;
 use crate::entities::heating_zone::HeatingZoneActual;
 use crate::logic::EventProcessor;
 use crate::time::{Clock, FakeClock};
@@ -9,73 +8,33 @@ use crate::topology::Topology;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-/// Test helpers to query effects by target name. Bridges the
-/// Effect-typed API back to the previous string-keyed shape so the
-/// existing assertions (".target_name() == \"foo\"" etc) keep working.
+/// Bridges Effect's `topic`/`payload_string` methods to the friendly-name
+/// shape the heating tests have always used. `target_name(&ep)` returns
+/// the friendly name for `/set` publishes so
+/// `.filter(|a| a.target_name(&ep) == "trv-bath-1")` keeps reading
+/// naturally. HA-targeted effects fall back to the full topic, so
+/// friendly-name filters never accidentally match them.
 trait EffectTestExt {
     fn target_name(&self, ep: &EventProcessor) -> String;
     fn payload_json(&self, ep: &EventProcessor) -> String;
 }
 
 impl EffectTestExt for Effect {
-    /// Mirrors the previous `Action::target_name()` semantics: returns
-    /// the friendly name for /set publishes and the raw topic for HA
-    /// discovery / state updates. Tests that filter by friendly name
-    /// must not match HA-targeted effects against the same name.
     fn target_name(&self, ep: &EventProcessor) -> String {
+        let topo = ep.topology();
         match self {
-            Effect::PublishGroupSet { room, .. } => ep.topology().room(*room).group_name.clone(),
+            Effect::PublishGroupSet { room, .. } => topo.room(*room).group_name.clone(),
             Effect::PublishDeviceSet { device, .. }
-            | Effect::PublishDeviceGet { device } => ep.topology().device_name(*device).to_string(),
-            Effect::PublishGetTrv { trv } => ep.topology().device_name(*trv).to_string(),
-            Effect::PublishZwaveRefresh { plug } => ep.topology().device_name(plug.device()).to_string(),
-            Effect::PublishHaDiscoveryZone { zone } => {
-                let name = ep
-                    .topology()
-                    .heating_config()
-                    .map(|cfg| cfg.zones[zone.as_usize()].name.clone())
-                    .unwrap_or_default();
-                format!("homeassistant/sensor/mqtt_ctrl_zone_{}_state/config",
-                    name.replace('-', "_"))
-            }
-            Effect::PublishHaDiscoveryTrv { trv } => {
-                let name = ep.topology().device_name(*trv);
-                format!("homeassistant/sensor/mqtt_ctrl_trv_{}_state/config",
-                    name.replace('-', "_"))
-            }
-            Effect::PublishHaStateZone { zone, .. } => {
-                let name = ep
-                    .topology()
-                    .heating_config()
-                    .map(|cfg| cfg.zones[zone.as_usize()].name.clone())
-                    .unwrap_or_default();
-                format!("mqtt-controller/heating/zone/{name}/state")
-            }
-            Effect::PublishHaStateTrv { trv, .. } => {
-                let name = ep.topology().device_name(*trv);
-                format!("mqtt-controller/heating/trv/{name}/state")
-            }
-            Effect::PublishRaw { topic, .. } => topic.clone(),
+            | Effect::PublishDeviceGet { device }
+            | Effect::PublishGetTrv { trv: device } => topo.device_name(*device).to_string(),
+            Effect::PublishZwaveRefresh { plug } => topo.device_name(plug.device()).to_string(),
+            // HA / raw → fall back to the full MQTT topic.
+            other => other.topic(topo),
         }
     }
 
     fn payload_json(&self, _ep: &EventProcessor) -> String {
-        match self {
-            Effect::PublishGroupSet { payload, .. }
-            | Effect::PublishDeviceSet { payload, .. } => {
-                serde_json::to_string(payload).unwrap_or_default()
-            }
-            Effect::PublishDeviceGet { .. } => r#"{"state":""}"#.into(),
-            Effect::PublishGetTrv { .. } => "{}".into(),
-            Effect::PublishZwaveRefresh { .. } => "{}".into(),
-            Effect::PublishHaDiscoveryZone { .. } | Effect::PublishHaDiscoveryTrv { .. } => {
-                "<discovery>".into()
-            }
-            Effect::PublishHaStateZone { state, .. } | Effect::PublishHaStateTrv { state, .. } => {
-                state.to_string()
-            }
-            Effect::PublishRaw { payload, .. } => payload.clone(),
-        }
+        self.payload_string()
     }
 }
 
