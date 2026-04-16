@@ -7,13 +7,14 @@
 
 use std::time::{Duration, Instant};
 
-use crate::config::Effect;
 use crate::config::switch_model::Gesture;
-use crate::domain::action::{Action, Payload};
+use crate::domain::Effect;
+use crate::domain::action::Payload;
 use crate::entities::PendingPress;
 use crate::entities::light_zone::LightZoneTarget;
 use crate::entities::plug::PlugTarget;
 use crate::tass::Owner;
+use crate::topology::{BindingIdx, ResolvedEffect};
 
 use super::EventProcessor;
 
@@ -27,8 +28,12 @@ impl EventProcessor {
         button: &str,
         gesture: Gesture,
         ts: Instant,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         tracing::info!(device, button, gesture = ?gesture, "button_event");
+        let Some(device_idx) = self.topology.device_idx(device) else {
+            // Unknown device — no bindings can match.
+            return Vec::new();
+        };
         match gesture {
             Gesture::DoubleTap => {
                 let key = (device.to_string(), button.to_string());
@@ -57,7 +62,7 @@ impl EventProcessor {
                 self.world
                     .last_double_tap
                     .insert((device.to_string(), button.to_string()), ts);
-                self.dispatch_bindings(device, button, Gesture::DoubleTap, ts)
+                self.dispatch_bindings(device_idx, button, Gesture::DoubleTap, ts)
             }
             Gesture::Press => {
                 // Check hardware double-tap suppression (Sonoff quirk):
@@ -65,7 +70,7 @@ impl EventProcessor {
                 // window to guard against the firmware re-sending
                 // `single` when the user double-taps again before the
                 // inter-sequence cooldown has elapsed.
-                if self.topology.is_hw_double_tap_button(device, button) {
+                if self.topology.is_hw_double_tap_button(device_idx, button) {
                     if let Some(&last_dt) = self
                         .world
                         .last_double_tap
@@ -87,12 +92,12 @@ impl EventProcessor {
                     // knows whether a `double` is coming. Buffer the
                     // press and wait for either a DoubleTap (which
                     // cancels it) or the deferral window to expire.
-                    return self.handle_hw_double_tap_deferred_press(device, button, ts);
+                    return self.handle_hw_double_tap_deferred_press(device, button, device_idx, ts);
                 }
-                if self.topology.is_soft_double_tap_button(device, button) {
-                    self.handle_soft_double_tap_press(device, button, ts)
+                if self.topology.is_soft_double_tap_button(device_idx, button) {
+                    self.handle_soft_double_tap_press(device, button, device_idx, ts)
                 } else {
-                    self.dispatch_bindings(device, button, Gesture::Press, ts)
+                    self.dispatch_bindings(device_idx, button, Gesture::Press, ts)
                 }
             }
             Gesture::SoftDoubleTap => {
@@ -102,7 +107,7 @@ impl EventProcessor {
             }
             other => {
                 // Hold, HoldRelease — dispatch directly, no deferral.
-                self.dispatch_bindings(device, button, other, ts)
+                self.dispatch_bindings(device_idx, button, other, ts)
             }
         }
     }
@@ -120,8 +125,9 @@ impl EventProcessor {
         &mut self,
         device: &str,
         button: &str,
+        device_idx: crate::topology::DeviceIdx,
         ts: Instant,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         let key = (device.to_string(), button.to_string());
         let window =
             Duration::from_secs_f64(self.defaults.soft_double_tap_window_seconds);
@@ -135,21 +141,21 @@ impl EventProcessor {
                     "flushing stale deferred press (new press arrived)"
                 );
                 out.extend(self.dispatch_bindings(
-                    &stale.device,
+                    device_idx,
                     &stale.button,
                     Gesture::Press,
                     stale.ts,
                 ));
             }
         }
-        let early_fire = self.can_early_fire_press(device, button);
+        let early_fire = self.can_early_fire_press(device_idx, button);
         if early_fire {
             tracing::info!(
                 device,
                 button,
                 "early-firing press (all target rooms are OFF)"
             );
-            out.extend(self.dispatch_bindings(device, button, Gesture::Press, ts));
+            out.extend(self.dispatch_bindings(device_idx, button, Gesture::Press, ts));
         } else {
             tracing::info!(
                 device,
@@ -178,8 +184,9 @@ impl EventProcessor {
         &mut self,
         device: &str,
         button: &str,
+        device_idx: crate::topology::DeviceIdx,
         ts: Instant,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         let key = (device.to_string(), button.to_string());
         if let Some(pending) = self.world.pending_presses.remove(&key) {
             let window =
@@ -192,7 +199,7 @@ impl EventProcessor {
                     "soft double-tap detected"
                 );
                 return self.dispatch_bindings(
-                    device,
+                    device_idx,
                     button,
                     Gesture::SoftDoubleTap,
                     ts,
@@ -201,7 +208,7 @@ impl EventProcessor {
             // Outside window — flush stale pending as press, then handle
             // new press (which also needs deferral).
             let out = self.dispatch_bindings(
-                &pending.device,
+                device_idx,
                 &pending.button,
                 Gesture::Press,
                 pending.ts,
@@ -245,18 +252,19 @@ impl EventProcessor {
     /// Returns true if all Press bindings for (device, button) target rooms
     /// that are currently OFF. When true, firing Press immediately is safe
     /// because both Press and DoubleTap would produce the same result (turn on).
-    fn can_early_fire_press(&self, device: &str, button: &str) -> bool {
+    fn can_early_fire_press(&self, device: crate::topology::DeviceIdx, button: &str) -> bool {
         let indexes = self.topology.bindings_for_button(device, button, Gesture::Press);
         if indexes.is_empty() {
             return false;
         }
         for &idx in indexes {
-            let binding = &self.topology.bindings()[idx];
+            let binding = self.topology.binding(idx);
             match &binding.effect {
-                Effect::SceneToggle { room }
-                | Effect::SceneCycle { room }
-                | Effect::SceneToggleCycle { room } => {
-                    match self.world.light_zones.get(room.as_str()) {
+                ResolvedEffect::SceneToggle { room }
+                | ResolvedEffect::SceneCycle { room }
+                | ResolvedEffect::SceneToggleCycle { room } => {
+                    let room_name = &self.topology.room(*room).name;
+                    match self.world.light_zones.get(room_name.as_str()) {
                         Some(z) if !z.is_on() && z.actual.is_known() => {
                             // Room exists, is known to be off — safe to early-fire
                         }
@@ -273,19 +281,19 @@ impl EventProcessor {
     /// (device, button, gesture) triple and executes their effects.
     fn dispatch_bindings(
         &mut self,
-        device: &str,
+        device: crate::topology::DeviceIdx,
         button: &str,
         gesture: Gesture,
         ts: Instant,
-    ) -> Vec<Action> {
-        let indexes: Vec<usize> = self
+    ) -> Vec<Effect> {
+        let indexes: Vec<BindingIdx> = self
             .topology
             .bindings_for_button(device, button, gesture)
             .to_vec();
-        let bindings: Vec<(String, Effect)> = indexes
+        let bindings: Vec<(String, ResolvedEffect)> = indexes
             .iter()
             .map(|&idx| {
-                let b = &self.topology.bindings()[idx];
+                let b = self.topology.binding(idx);
                 (b.name.clone(), b.effect.clone())
             })
             .collect();
@@ -301,29 +309,47 @@ impl EventProcessor {
     pub(super) fn execute_effect(
         &mut self,
         rule_name: &str,
-        effect: &Effect,
+        effect: &ResolvedEffect,
         ts: Instant,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         match effect {
-            Effect::SceneCycle { room } => self.execute_scene_cycle(room, ts),
-            Effect::SceneToggle { room } => self.execute_scene_toggle(room, ts),
-            Effect::SceneToggleCycle { room } => {
-                self.execute_scene_toggle_cycle(room, ts)
+            ResolvedEffect::SceneCycle { room } => {
+                let room_name = self.topology.room(*room).name.clone();
+                self.execute_scene_cycle(&room_name, ts)
             }
-            Effect::TurnOffRoom { room } => self.execute_turn_off_room(room, ts),
-            Effect::BrightnessStep {
+            ResolvedEffect::SceneToggle { room } => {
+                let room_name = self.topology.room(*room).name.clone();
+                self.execute_scene_toggle(&room_name, ts)
+            }
+            ResolvedEffect::SceneToggleCycle { room } => {
+                let room_name = self.topology.room(*room).name.clone();
+                self.execute_scene_toggle_cycle(&room_name, ts)
+            }
+            ResolvedEffect::TurnOffRoom { room } => {
+                let room_name = self.topology.room(*room).name.clone();
+                self.execute_turn_off_room(&room_name, ts)
+            }
+            ResolvedEffect::BrightnessStep {
                 room,
                 step,
                 transition,
-            } => self.execute_brightness_step(room, *step, *transition),
-            Effect::BrightnessMove { room, rate } => {
-                self.execute_brightness_move(room, *rate)
+            } => {
+                let room_name = self.topology.room(*room).name.clone();
+                self.execute_brightness_step(&room_name, *step, *transition)
             }
-            Effect::BrightnessStop { room } => self.execute_brightness_stop(room),
-            Effect::Toggle {
-                target,
+            ResolvedEffect::BrightnessMove { room, rate } => {
+                let room_name = self.topology.room(*room).name.clone();
+                self.execute_brightness_move(&room_name, *rate)
+            }
+            ResolvedEffect::BrightnessStop { room } => {
+                let room_name = self.topology.room(*room).name.clone();
+                self.execute_brightness_stop(&room_name)
+            }
+            ResolvedEffect::Toggle {
+                plug,
                 confirm_off_seconds,
             } => {
+                let target = self.topology.device_name(plug.device()).to_string();
                 let is_on = self.world.plugs.get(target.as_str()).is_some_and(|p| p.is_on());
                 if is_on {
                     if let Some(window) = confirm_off_seconds {
@@ -337,14 +363,14 @@ impl EventProcessor {
                                     target = target.as_str(),
                                     "action rule → confirm-off: second tap, turning off"
                                 );
-                                let plug = self.world.plug(target);
-                                plug.target
+                                let plug_entity = self.world.plug(&target);
+                                plug_entity.target
                                     .set_and_command(PlugTarget::Off, Owner::User, ts);
-                                plug.on_off_clear_kill_switches();
-                                return vec![Action::for_device(
-                                    target,
-                                    Payload::device_off(),
-                                )];
+                                plug_entity.on_off_clear_kill_switches();
+                                return vec![Effect::PublishDeviceSet {
+                                    device: plug.device(),
+                                    payload: Payload::device_off(),
+                                }];
                             }
                         }
                         tracing::info!(
@@ -373,41 +399,43 @@ impl EventProcessor {
                     to = !is_on,
                     "action rule → toggle plug"
                 );
-                let plug = self.world.plug(target);
-                plug.target
+                let plug_entity = self.world.plug(&target);
+                plug_entity.target
                     .set_and_command(new_target, Owner::User, ts);
                 if is_on {
-                    plug.on_off_clear_kill_switches();
+                    plug_entity.on_off_clear_kill_switches();
                 }
-                vec![Action::for_device(target, payload)]
+                vec![Effect::PublishDeviceSet { device: plug.device(), payload }]
             }
-            Effect::TurnOn { target } => {
+            ResolvedEffect::TurnOn { plug } => {
+                let target = self.topology.device_name(plug.device()).to_string();
                 tracing::info!(
                     rule = rule_name,
                     target = target.as_str(),
                     "action rule → turn on plug"
                 );
-                let plug = self.world.plug(target);
-                plug.target
+                let plug_entity = self.world.plug(&target);
+                plug_entity.target
                     .set_and_command(PlugTarget::On, Owner::User, ts);
-                vec![Action::for_device(target, Payload::device_on())]
+                vec![Effect::PublishDeviceSet { device: plug.device(), payload: Payload::device_on() }]
             }
-            Effect::TurnOff { target } => {
+            ResolvedEffect::TurnOff { plug } => {
+                let target = self.topology.device_name(plug.device()).to_string();
                 tracing::info!(
                     rule = rule_name,
                     target = target.as_str(),
                     "action rule → turn off plug"
                 );
-                let plug = self.world.plug(target);
-                plug.target
+                let plug_entity = self.world.plug(&target);
+                plug_entity.target
                     .set_and_command(PlugTarget::Off, Owner::User, ts);
-                plug.on_off_clear_kill_switches();
-                vec![Action::for_device(target, Payload::device_off())]
+                plug_entity.on_off_clear_kill_switches();
+                vec![Effect::PublishDeviceSet { device: plug.device(), payload: Payload::device_off() }]
             }
-            Effect::TurnOffAllZones => {
+            ResolvedEffect::TurnOffAllZones => {
                 tracing::info!(rule = rule_name, "action rule → turn off all zones");
                 let mut out = Vec::new();
-                for room in self.topology.rooms() {
+                for (room_idx, room) in self.topology.rooms_with_idx() {
                     let zone = self.world.light_zone(&room.name);
                     if zone.is_on() {
                         tracing::info!(
@@ -422,10 +450,10 @@ impl EventProcessor {
                             .set_and_command(LightZoneTarget::Off, Owner::Schedule, ts);
                         zone.last_press_at = None;
                         zone.last_off_at = Some(ts);
-                        out.push(Action::new(
-                            &room.group_name,
-                            Payload::state_off(room.off_transition_seconds),
-                        ));
+                        out.push(Effect::PublishGroupSet {
+                            room: room_idx,
+                            payload: Payload::state_off(room.off_transition_seconds),
+                        });
                     }
                 }
                 out
@@ -434,7 +462,7 @@ impl EventProcessor {
     }
 
     /// Flush all pending presses whose deadline has passed.
-    pub(super) fn flush_pending_presses(&mut self, ts: Instant) -> Vec<Action> {
+    pub(super) fn flush_pending_presses(&mut self, ts: Instant) -> Vec<Effect> {
         let expired: Vec<_> = self
             .world
             .pending_presses
@@ -458,12 +486,16 @@ impl EventProcessor {
                 button = %pending.button,
                 "flushing deferred press (deferral window expired)"
             );
-            out.extend(self.dispatch_bindings(
-                &pending.device,
-                &pending.button,
-                Gesture::Press,
-                pending.ts,
-            ));
+            // Look up the device idx; should always succeed for buffered presses
+            // (the pending entry was created from a known device).
+            if let Some(device_idx) = self.topology.device_idx(&pending.device) {
+                out.extend(self.dispatch_bindings(
+                    device_idx,
+                    &pending.button,
+                    Gesture::Press,
+                    pending.ts,
+                ));
+            }
         }
         out
     }

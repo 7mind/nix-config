@@ -6,7 +6,8 @@
 use std::time::Instant;
 
 use crate::config::heating::HeatingConfig;
-use crate::domain::action::{Action, Payload};
+use crate::domain::Effect;
+use crate::domain::action::Payload;
 use crate::entities::heating_zone::HeatingZoneTarget;
 use crate::entities::trv::{ForceOpenReason, TrvTarget};
 use crate::logic::EventProcessor;
@@ -19,7 +20,7 @@ impl EventProcessor {
         &mut self,
         heating_config: &HeatingConfig,
         now: Instant,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         let mut actions = Vec::new();
         let (md, mdf) = self.min_demand();
         let tick_gen = self.heating_tick_gen;
@@ -86,10 +87,12 @@ impl EventProcessor {
                         );
                         trv.last_force_reason = Some(ForceOpenReason::PressureGroup);
                         trv.setpoint_dirty_gen = tick_gen;
-                        actions.push(Action::for_device(
-                            trv_name.clone(),
-                            Payload::trv_setpoint(MAX_SETPOINT),
-                        ));
+                        if let Some(trv_idx) = self.topology.device_idx(trv_name) {
+                            actions.push(Effect::PublishDeviceSet {
+                                device: trv_idx,
+                                payload: Payload::trv_setpoint(MAX_SETPOINT),
+                            });
+                        }
                         tracing::info!(
                             trv = %trv_name,
                             group = %group.name,

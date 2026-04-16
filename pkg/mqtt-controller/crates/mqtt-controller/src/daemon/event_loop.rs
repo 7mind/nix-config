@@ -9,6 +9,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 use crate::domain::event::Event;
+use crate::effect_dispatch;
 use crate::logic::EventProcessor;
 use crate::mqtt::MqttBridge;
 use crate::time::Clock;
@@ -16,7 +17,9 @@ use crate::web::decision_capture;
 use crate::web::event_log;
 use crate::web::server::WebHandle;
 
-use super::web_bridge::{broadcast_state_updates, handle_ws_command, recv_ws_cmd};
+use super::web_bridge::{
+    broadcast_state_updates, broadcast_touched, handle_ws_command, recv_ws_cmd,
+};
 
 /// Tick interval for evaluating kill-switch deadlines.
 const TICK_INTERVAL: Duration = Duration::from_secs(5);
@@ -117,62 +120,85 @@ pub(super) async fn run_event_loop(
             &event,
             Event::ButtonPress { .. }
         );
+        // Tick handlers (`evaluate_target_staleness`,
+        // `evaluate_actual_staleness`, schedule, kill-switch holdoffs,
+        // heating reconciliation) can flip target/freshness fields on
+        // arbitrary entities without emitting effects. Rather than
+        // teach each tick path to publish its touched-entity set, fall
+        // back to a full broadcast on every tick — ticks are slow
+        // (5 s interval) so the cost is negligible.
+        let is_tick = matches!(&event, Event::Tick { .. });
 
-        let actions = processor.handle_event(event);
+        // The event itself can mutate world state without producing
+        // any effect (group/plug/TRV/WT echoes, motion updates, …);
+        // capture the implied touched-entities BEFORE handing the
+        // event to the processor so the dashboard sees those updates
+        // alongside effect-driven ones.
+        let topology = processor.topology().clone();
+        let mut touched = effect_dispatch::touched_from_event(&event, &topology);
+
+        let effects = processor.handle_event(event);
+
+        // Dispatch effects to MQTT and merge the effect-side touched
+        // set into the broadcast set.
+        let dispatch_touched = effect_dispatch::dispatch(bridge, &topology, &effects).await;
+        touched.extend(dispatch_touched);
 
         // Broadcast to WebSocket clients.
         if let Some(tx) = &broadcast_tx {
             let decisions = decision_capture::drain_capture();
             // Only log events that are interesting: user button presses,
             // or events where the controller actually did something
-            // (emitted actions or captured decision traces). This filters
+            // (emitted effects or captured decision traces). This filters
             // out the bulk of noise: zigbee state echoes, power updates,
             // TRV telemetry, and ticks with no side effects.
-            let has_actions = !actions.is_empty();
+            let has_effects = !effects.is_empty();
             let has_decisions = !decisions.is_empty();
-            if is_user_action || has_actions || has_decisions {
-                // Filter out HA discovery/state Raw actions from the log
+            if is_user_action || has_effects || has_decisions {
+                // Filter out HA discovery/state Raw effects from the log
                 // — they fire every tick and would still be noisy.
-                let visible_actions: Vec<_> = actions
+                let visible_effects: Vec<_> = effects
                     .iter()
-                    .filter(|a| !matches!(
-                        a.target,
-                        crate::domain::action::ActionTarget::Raw { .. }
+                    .filter(|e| !matches!(
+                        e,
+                        crate::domain::Effect::PublishRaw { .. }
+                            | crate::domain::Effect::PublishHaDiscoveryZone { .. }
+                            | crate::domain::Effect::PublishHaDiscoveryTrv { .. }
+                            | crate::domain::Effect::PublishHaStateZone { .. }
+                            | crate::domain::Effect::PublishHaStateTrv { .. }
                     ))
-                    .map(event_log::action_to_dto)
+                    .map(|e| event_log::effect_to_dto(e, &topology))
                     .collect();
                 let should_log = is_user_action
-                    || !visible_actions.is_empty()
+                    || !visible_effects.is_empty()
                     || has_decisions;
                 if should_log {
                     event_seq += 1;
                     let involved_entities = event_log::finish_involved_entities(
                         event_entities,
-                        &actions,
-                        processor.topology(),
+                        &effects,
+                        &topology,
                     );
                     let entry = mqtt_controller_wire::DecisionLogEntry {
                         seq: event_seq,
                         timestamp_epoch_ms: clock.epoch_millis(),
                         event_summary,
                         decisions,
-                        actions_emitted: visible_actions,
+                        actions_emitted: visible_effects,
                         involved_entities,
                     };
                     let _ = tx.send(mqtt_controller_wire::ServerMessage::EventLog(entry));
                 }
             }
 
-            // Broadcast incremental state updates for any room/plug that
-            // may have changed. We broadcast all rooms — cheap since we
-            // typically have <20 rooms and JSON is small.
-            broadcast_state_updates(processor, tx, now);
-        }
-
-        // Publish actions to MQTT (the actual side effect).
-        for action in actions {
-            if let Err(e) = bridge.publish_action(&action).await {
-                tracing::error!(error = ?e, "failed to publish action");
+            // Broadcast incremental state updates for entities that
+            // were actually touched by this batch of effects. Tick
+            // events get a full sweep because tick handlers mutate
+            // target/freshness silently (see comment above).
+            if is_tick {
+                broadcast_state_updates(processor, tx, now);
+            } else {
+                broadcast_touched(processor, tx, &touched, now);
             }
         }
     }

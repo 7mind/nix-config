@@ -5,10 +5,11 @@
 
 use std::time::{Duration, Instant};
 
-use crate::config::Trigger;
-use crate::domain::action::{Action, Payload};
+use crate::domain::Effect;
+use crate::domain::action::Payload;
 use crate::entities::plug::{KillSwitchRuleState, PlugActual, PlugTarget};
 use crate::tass::{ActualFreshness, Owner, TargetPhase};
+use crate::topology::ResolvedTrigger;
 
 use super::EventProcessor;
 
@@ -24,7 +25,7 @@ impl EventProcessor {
         on: Option<bool>,
         power: Option<f64>,
         ts: Instant,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         let clamped_power = power.map(|w| w.max(0.0));
 
         let plug = self.world.plug(device);
@@ -96,9 +97,12 @@ impl EventProcessor {
         device: &str,
         power: f64,
         ts: Instant,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         let topology = self.topology.clone();
-        let rule_indexes = topology.bindings_for_power_below(device);
+        let Some(device_idx) = topology.device_idx(device) else {
+            return Vec::new();
+        };
+        let rule_indexes = topology.bindings_for_power_below(device_idx);
         if rule_indexes.is_empty() {
             return Vec::new();
         }
@@ -107,21 +111,24 @@ impl EventProcessor {
         struct RuleInfo {
             rule_name: String,
             threshold_watts: f64,
-            holdoff_secs: u64,
+            holdoff: Duration,
             target: Option<String>,
         }
         let rules: Vec<RuleInfo> = rule_indexes
             .iter()
             .filter_map(|&idx| {
-                let resolved = &topology.bindings()[idx];
+                let resolved = topology.binding(idx);
                 match &resolved.trigger {
-                    Trigger::PowerBelow {
-                        watts, for_seconds, ..
+                    ResolvedTrigger::PowerBelow {
+                        watts, holdoff, ..
                     } => Some(RuleInfo {
                         rule_name: resolved.name.clone(),
                         threshold_watts: *watts,
-                        holdoff_secs: *for_seconds,
-                        target: resolved.effect.target().map(str::to_string),
+                        holdoff: *holdoff,
+                        target: resolved
+                            .effect
+                            .target_plug()
+                            .map(|p| topology.device_name(p.device()).to_string()),
                     }),
                     _ => None,
                 }
@@ -163,11 +170,11 @@ impl EventProcessor {
                         *state = KillSwitchRuleState::Idle { since: ts };
                     }
                     KillSwitchRuleState::Idle { since } => {
-                        if ts.duration_since(*since) >= Duration::from_secs(rule.holdoff_secs) {
+                        if ts.duration_since(*since) >= rule.holdoff {
                             tracing::info!(
                                 device,
                                 rule = %rule.rule_name,
-                                holdoff_secs = rule.holdoff_secs,
+                                holdoff_secs = rule.holdoff.as_secs(),
                                 "kill switch: holdoff elapsed, turning off plug"
                             );
                             if let Some(target) = &rule.target {
@@ -215,7 +222,7 @@ impl EventProcessor {
     /// Tick-based kill switch evaluation. Checks all plugs that are on
     /// for idle rules whose holdoff has elapsed.
     /// Ports `KillSwitchEvaluator::tick()`.
-    pub(super) fn evaluate_kill_switch_ticks(&mut self, ts: Instant) -> Vec<Action> {
+    pub(super) fn evaluate_kill_switch_ticks(&mut self, ts: Instant) -> Vec<Effect> {
         let topology = self.topology.clone();
         let bindings_snapshot = topology.bindings().to_vec();
 
@@ -224,39 +231,39 @@ impl EventProcessor {
         let mut to_fire: Vec<(String, String, String)> = Vec::new();
 
         for resolved in &bindings_snapshot {
-            let (device, holdoff_secs) = match &resolved.trigger {
-                Trigger::PowerBelow {
-                    device, for_seconds, ..
-                } => (device.as_str(), *for_seconds),
+            let (plug, holdoff) = match &resolved.trigger {
+                ResolvedTrigger::PowerBelow { plug, holdoff, .. } => (*plug, *holdoff),
                 _ => continue,
             };
 
-            let Some(plug) = self.world.plugs.get(device) else {
+            let device = topology.device_name(plug.device());
+            let Some(plug_entity) = self.world.plugs.get(device) else {
                 continue;
             };
-            if !plug.is_on() {
+            if !plug_entity.is_on() {
                 continue;
             }
 
-            let Some(state) = plug.kill_switch_rules.get(&resolved.name) else {
+            let Some(state) = plug_entity.kill_switch_rules.get(&resolved.name) else {
                 continue;
             };
             let KillSwitchRuleState::Idle { since } = state else {
                 continue;
             };
 
-            if ts.duration_since(*since) >= Duration::from_secs(holdoff_secs) {
+            if ts.duration_since(*since) >= holdoff {
                 tracing::info!(
                     device,
                     rule = %resolved.name,
-                    holdoff_secs,
+                    holdoff_secs = holdoff.as_secs(),
                     "tick: kill switch holdoff elapsed, turning off plug"
                 );
-                if let Some(target) = resolved.effect.target() {
+                if let Some(target_plug) = resolved.effect.target_plug() {
+                    let target = topology.device_name(target_plug.device()).to_string();
                     to_fire.push((
                         device.to_string(),
                         resolved.name.clone(),
-                        target.to_string(),
+                        target,
                     ));
                 }
             }
@@ -278,11 +285,12 @@ impl EventProcessor {
     pub fn earliest_kill_switch_idle(&self, device: &str) -> Option<Instant> {
         let plug = self.world.plugs.get(device)?;
         let topology = &self.topology;
+        let device_idx = topology.device_idx(device)?;
         topology
-            .bindings_for_power_below(device)
+            .bindings_for_power_below(device_idx)
             .iter()
             .filter_map(|&idx| {
-                let name = &topology.bindings()[idx].name;
+                let name = &topology.binding(idx).name;
                 match plug.kill_switch_rules.get(name) {
                     Some(KillSwitchRuleState::Idle { since }) => Some(*since),
                     _ => None,
@@ -296,11 +304,12 @@ impl EventProcessor {
     pub fn kill_switch_holdoff_secs(&self, device: &str) -> Option<u64> {
         let plug = self.world.plugs.get(device)?;
         let topology = &self.topology;
+        let device_idx = topology.device_idx(device)?;
         topology
-            .bindings_for_power_below(device)
+            .bindings_for_power_below(device_idx)
             .iter()
             .filter_map(|&idx| {
-                let resolved = &topology.bindings()[idx];
+                let resolved = topology.binding(idx);
                 if !matches!(
                     plug.kill_switch_rules.get(&resolved.name),
                     Some(KillSwitchRuleState::Idle { .. })
@@ -308,7 +317,7 @@ impl EventProcessor {
                     return None;
                 }
                 match &resolved.trigger {
-                    Trigger::PowerBelow { for_seconds, .. } => Some(*for_seconds),
+                    ResolvedTrigger::PowerBelow { holdoff, .. } => Some(holdoff.as_secs()),
                     _ => None,
                 }
             })
@@ -329,10 +338,13 @@ impl EventProcessor {
         cause: ArmCause,
     ) {
         let topology = self.topology.clone();
+        let Some(device_idx) = topology.device_idx(device) else {
+            return;
+        };
         let plug = self.world.plug(device);
 
-        for &idx in topology.bindings_for_power_below(device) {
-            let resolved = &topology.bindings()[idx];
+        for &idx in topology.bindings_for_power_below(device_idx) {
+            let resolved = topology.binding(idx);
             let rule_name = resolved.name.clone();
 
             let entry = plug
@@ -348,7 +360,7 @@ impl EventProcessor {
             *entry = KillSwitchRuleState::Armed;
 
             if let Some(current_power) = seed_power {
-                if let Trigger::PowerBelow { watts, .. } = &resolved.trigger {
+                if let ResolvedTrigger::PowerBelow { watts, .. } = &resolved.trigger {
                     if current_power < *watts {
                         tracing::info!(
                             device,
@@ -402,7 +414,7 @@ impl crate::logic::EventProcessor {
         device: &str,
         fired: &[(String, String)],
         ts: Instant,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         if fired.is_empty() {
             return Vec::new();
         }
@@ -418,7 +430,12 @@ impl crate::logic::EventProcessor {
                 .target
                 .set_and_command(PlugTarget::Off, Owner::Rule, ts);
             target_plug.on_off_clear_kill_switches();
-            out.push(Action::for_device(target, Payload::device_off()));
+            if let Some(device_idx) = self.topology.device_idx(target) {
+                out.push(Effect::PublishDeviceSet {
+                    device: device_idx,
+                    payload: Payload::device_off(),
+                });
+            }
         }
         out
     }

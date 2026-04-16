@@ -8,6 +8,36 @@ use crate::topology::Topology;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+/// Bridges Effect's `topic`/`payload_string` methods to the friendly-name
+/// shape the heating tests have always used. `target_name(&ep)` returns
+/// the friendly name for `/set` publishes so
+/// `.filter(|a| a.target_name(&ep) == "trv-bath-1")` keeps reading
+/// naturally. HA-targeted effects fall back to the full topic, so
+/// friendly-name filters never accidentally match them.
+trait EffectTestExt {
+    fn target_name(&self, ep: &EventProcessor) -> String;
+    fn payload_json(&self, ep: &EventProcessor) -> String;
+}
+
+impl EffectTestExt for Effect {
+    fn target_name(&self, ep: &EventProcessor) -> String {
+        let topo = ep.topology();
+        match self {
+            Effect::PublishGroupSet { room, .. } => topo.room(*room).group_name.clone(),
+            Effect::PublishDeviceSet { device, .. }
+            | Effect::PublishDeviceGet { device }
+            | Effect::PublishGetTrv { trv: device } => topo.device_name(*device).to_string(),
+            Effect::PublishZwaveRefresh { plug } => topo.device_name(plug.device()).to_string(),
+            // HA / raw → fall back to the full MQTT topic.
+            other => other.topic(topo),
+        }
+    }
+
+    fn payload_json(&self, _ep: &EventProcessor) -> String {
+        self.payload_string()
+    }
+}
+
 fn full_day(temp: f64) -> Vec<DayTimeRange> {
     vec![DayTimeRange {
         start_hour: 0,
@@ -175,7 +205,7 @@ fn send_trv_demand(ep: &mut EventProcessor, trv: &str, temp: f64, demand: u8, st
     });
 }
 
-fn tick(ep: &mut EventProcessor) -> Vec<Action> {
+fn tick(ep: &mut EventProcessor) -> Vec<Effect> {
     let ts = ep.clock.now();
     ep.handle_event(Event::Tick { ts })
 }
@@ -188,10 +218,10 @@ fn schedule_sets_initial_setpoint() {
     let (mut ep, _clk) = setup(&cfg);
     let actions = tick(&mut ep);
     let sp: Vec<_> = actions.iter()
-        .filter(|a| a.target_name() == "trv-bath-1")
+        .filter(|a| a.target_name(&ep) == "trv-bath-1")
         .collect();
     assert!(!sp.is_empty());
-    let json = serde_json::to_string(&sp[0].payload).unwrap();
+    let json = sp[0].payload_json(&ep);
     assert!(json.contains("20"));
 }
 
@@ -203,7 +233,7 @@ fn schedule_dedup_skips_redundant_setpoint() {
     echo_setpoint(&mut ep, "trv-bath-1", 20.0, &clk);
     let actions = tick(&mut ep);
     let sp: Vec<_> = actions.iter()
-        .filter(|a| a.target_name() == "trv-bath-1")
+        .filter(|a| a.target_name(&ep) == "trv-bath-1")
         .collect();
     assert!(sp.is_empty(), "should not re-send confirmed setpoint");
 }
@@ -215,7 +245,7 @@ fn schedule_retries_unconfirmed_setpoint() {
     tick(&mut ep);
     let actions = tick(&mut ep);
     let sp: Vec<_> = actions.iter()
-        .filter(|a| a.target_name() == "trv-bath-1")
+        .filter(|a| a.target_name(&ep) == "trv-bath-1")
         .collect();
     assert!(!sp.is_empty(), "should retry unconfirmed setpoint");
 }
@@ -238,14 +268,14 @@ fn schedule_updates_on_time_change() {
     let (mut ep, clk) = setup(&cfg);
     let actions = tick(&mut ep);
     assert!(!actions.is_empty());
-    let json = serde_json::to_string(&actions[0].payload).unwrap();
+    let json = actions[0].payload_json(&ep);
     assert!(json.contains("22"));
     echo_setpoint(&mut ep, "trv-bath-1", 22.0, &clk);
     clk.set_hour(23);
     let actions = tick(&mut ep);
     let sp: Vec<_> = actions.iter()
-        .filter(|a| a.target_name() == "trv-bath-1"
-            && serde_json::to_string(&a.payload).unwrap().contains("18"))
+        .filter(|a| a.target_name(&ep) == "trv-bath-1"
+            && a.payload_json(&ep).contains("18"))
         .collect();
     assert!(!sp.is_empty(), "should set new target on time change");
 }
@@ -260,8 +290,8 @@ fn relay_turns_on_when_trv_demands_heat() {
     send_trv_demand(&mut ep, "trv-bath-1", 18.0, 50, "heat", 20.0, &clk);
     let actions = tick(&mut ep);
     let relay_on: Vec<_> = actions.iter()
-        .filter(|a| a.target_name() == "wt-bath"
-            && serde_json::to_string(&a.payload).unwrap().contains("ON"))
+        .filter(|a| a.target_name(&ep) == "wt-bath"
+            && a.payload_json(&ep).contains("ON"))
         .collect();
     assert!(!relay_on.is_empty(), "should request relay ON");
 }
@@ -278,8 +308,8 @@ fn relay_turns_off_when_demand_stops() {
     send_trv_demand(&mut ep, "trv-bath-1", 20.5, 0, "idle", 20.0, &clk);
     let actions = tick(&mut ep);
     let relay_off: Vec<_> = actions.iter()
-        .filter(|a| a.target_name() == "wt-bath"
-            && serde_json::to_string(&a.payload).unwrap().contains("OFF"))
+        .filter(|a| a.target_name(&ep) == "wt-bath"
+            && a.payload_json(&ep).contains("OFF"))
         .collect();
     assert!(!relay_off.is_empty(), "should request relay OFF");
 }
@@ -296,15 +326,15 @@ fn min_pause_blocks_relay_on() {
     send_trv_demand(&mut ep, "trv-bath-1", 18.0, 50, "heat", 20.0, &clk);
     let actions = tick(&mut ep);
     let relay_on: Vec<_> = actions.iter()
-        .filter(|a| a.target_name() == "wt-bath"
-            && serde_json::to_string(&a.payload).unwrap().contains("ON"))
+        .filter(|a| a.target_name(&ep) == "wt-bath"
+            && a.payload_json(&ep).contains("ON"))
         .collect();
     assert!(relay_on.is_empty(), "should block relay ON during min_pause");
     clk.advance(Duration::from_secs(40));
     let actions = tick(&mut ep);
     let relay_on: Vec<_> = actions.iter()
-        .filter(|a| a.target_name() == "wt-bath"
-            && serde_json::to_string(&a.payload).unwrap().contains("ON"))
+        .filter(|a| a.target_name(&ep) == "wt-bath"
+            && a.payload_json(&ep).contains("ON"))
         .collect();
     assert!(!relay_on.is_empty(), "should allow relay ON after min_pause");
 }
@@ -321,15 +351,15 @@ fn min_cycle_blocks_relay_off() {
     clk.advance(Duration::from_secs(60));
     let actions = tick(&mut ep);
     let relay_off: Vec<_> = actions.iter()
-        .filter(|a| a.target_name() == "wt-bath"
-            && serde_json::to_string(&a.payload).unwrap().contains("OFF"))
+        .filter(|a| a.target_name(&ep) == "wt-bath"
+            && a.payload_json(&ep).contains("OFF"))
         .collect();
     assert!(relay_off.is_empty(), "should block relay OFF during min_cycle");
     clk.advance(Duration::from_secs(120));
     let actions = tick(&mut ep);
     let relay_off: Vec<_> = actions.iter()
-        .filter(|a| a.target_name() == "wt-bath"
-            && serde_json::to_string(&a.payload).unwrap().contains("OFF"))
+        .filter(|a| a.target_name(&ep) == "wt-bath"
+            && a.payload_json(&ep).contains("OFF"))
         .collect();
     assert!(!relay_off.is_empty(), "should allow relay OFF after min_cycle");
 }
@@ -360,8 +390,8 @@ fn pressure_group_forces_open_other_trvs() {
     echo_relay(&mut ep, "wt-bath", true, &clk);
     let actions = tick(&mut ep);
     let forced: Vec<_> = actions.iter()
-        .filter(|a| a.target_name() == "trv-2"
-            && serde_json::to_string(&a.payload).unwrap().contains("30"))
+        .filter(|a| a.target_name(&ep) == "trv-2"
+            && a.payload_json(&ep).contains("30"))
         .collect();
     assert_eq!(forced.len(), 1, "trv-2 should be forced to 30C");
 }
@@ -386,8 +416,8 @@ fn open_window_inhibits_trv() {
     send_trv_demand(&mut ep, "trv-bath-1", 18.0, 50, "heat", 20.0, &clk);
     let actions = tick(&mut ep);
     let inhibit: Vec<_> = actions.iter()
-        .filter(|a| a.target_name() == "trv-bath-1"
-            && serde_json::to_string(&a.payload).unwrap().contains("\"occupied_heating_setpoint\":5"))
+        .filter(|a| a.target_name(&ep) == "trv-bath-1"
+            && a.payload_json(&ep).contains("\"occupied_heating_setpoint\":5"))
         .collect();
     assert!(!inhibit.is_empty(), "TRV should be inhibited via setpoint 5C");
     let trv = ep.world.trvs.get("trv-bath-1").unwrap();
@@ -412,8 +442,8 @@ fn trv_mode_drift_triggers_reassertion() {
         ts: clk.now(),
     });
     let mode: Vec<_> = actions.iter()
-        .filter(|a| a.target_name() == "trv-bath-1"
-            && serde_json::to_string(&a.payload).unwrap().contains("manual"))
+        .filter(|a| a.target_name(&ep) == "trv-bath-1"
+            && a.payload_json(&ep).contains("manual"))
         .collect();
     assert!(!mode.is_empty(), "TRV mode drift must trigger reassertion");
 }
@@ -431,8 +461,8 @@ fn wall_thermostat_mode_drift_triggers_reassertion() {
         ts: clk.now(),
     });
     let mode: Vec<_> = actions.iter()
-        .filter(|a| a.target_name() == "wt-bath"
-            && serde_json::to_string(&a.payload).unwrap().contains("manual"))
+        .filter(|a| a.target_name(&ep) == "wt-bath"
+            && a.payload_json(&ep).contains("manual"))
         .collect();
     assert!(!mode.is_empty(), "wall thermostat mode drift must trigger reassertion");
 }
@@ -449,8 +479,8 @@ fn relay_reconciliation_retries_unconfirmed() {
     // No echo.
     let actions = tick(&mut ep);
     let relay_on: Vec<_> = actions.iter()
-        .filter(|a| a.target_name() == "wt-bath"
-            && serde_json::to_string(&a.payload).unwrap().contains("ON"))
+        .filter(|a| a.target_name(&ep) == "wt-bath"
+            && a.payload_json(&ep).contains("ON"))
         .collect();
     assert!(!relay_on.is_empty(), "should retry unconfirmed relay ON");
 }
@@ -472,8 +502,8 @@ fn setpoint_reconciliation_retries_on_divergence() {
     });
     let actions = tick(&mut ep);
     let retries: Vec<_> = actions.iter()
-        .filter(|a| a.target_name() == "trv-bath-1"
-            && serde_json::to_string(&a.payload).unwrap().contains("20"))
+        .filter(|a| a.target_name(&ep) == "trv-bath-1"
+            && a.payload_json(&ep).contains("20"))
         .collect();
     assert!(!retries.is_empty(), "should retry diverged setpoint");
 }
@@ -484,7 +514,7 @@ fn no_duplicate_commands_on_same_tick() {
     let (mut ep, _clk) = setup(&cfg);
     let actions = tick(&mut ep);
     let sp: Vec<_> = actions.iter()
-        .filter(|a| a.target_name() == "trv-bath-1")
+        .filter(|a| a.target_name(&ep) == "trv-bath-1")
         .collect();
     assert_eq!(sp.len(), 1, "should emit exactly one setpoint command per tick");
 }
@@ -503,13 +533,13 @@ fn min_cycle_forces_trvs_open_when_blocking_relay_off() {
     clk.advance(Duration::from_secs(60));
     let actions = tick(&mut ep);
     let relay_off: Vec<_> = actions.iter()
-        .filter(|a| a.target_name() == "wt-bath"
-            && serde_json::to_string(&a.payload).unwrap().contains("OFF"))
+        .filter(|a| a.target_name(&ep) == "wt-bath"
+            && a.payload_json(&ep).contains("OFF"))
         .collect();
     assert!(relay_off.is_empty(), "relay OFF should be blocked by min_cycle");
     let trv_forced: Vec<_> = actions.iter()
-        .filter(|a| a.target_name() == "trv-bath-1"
-            && serde_json::to_string(&a.payload).unwrap().contains("30"))
+        .filter(|a| a.target_name(&ep) == "trv-bath-1"
+            && a.payload_json(&ep).contains("30"))
         .collect();
     assert!(!trv_forced.is_empty(), "TRV should be forced to 30C during min_cycle hold");
     let trv = ep.world.trvs.get("trv-bath-1").unwrap();

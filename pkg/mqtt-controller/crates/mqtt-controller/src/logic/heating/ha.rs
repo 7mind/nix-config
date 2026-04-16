@@ -6,31 +6,36 @@
 use std::time::Instant;
 
 use crate::config::heating::HeatingConfig;
-use crate::domain::action::Action;
+use crate::domain::Effect;
 use crate::domain::ha_discovery;
 use crate::logic::EventProcessor;
+use crate::topology::ZoneIdx;
 
 impl EventProcessor {
     pub(super) fn emit_ha_updates(
         &mut self,
         heating_config: &HeatingConfig,
         now: Instant,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         let mut actions = Vec::new();
 
         if !self.ha_discovery_published {
             self.ha_discovery_published = true;
-            for zone in &heating_config.zones {
-                actions.push(ha_discovery::zone_discovery_action(&zone.name));
+            for (i, zone) in heating_config.zones.iter().enumerate() {
+                let zone_idx = ZoneIdx::new(i as u32);
+                actions.push(Effect::PublishHaDiscoveryZone { zone: zone_idx });
                 for zt in &zone.trvs {
-                    actions.push(ha_discovery::trv_discovery_action(&zt.device));
+                    if let Some(trv_idx) = self.topology.device_idx(&zt.device) {
+                        actions.push(Effect::PublishHaDiscoveryTrv { trv: trv_idx });
+                    }
                 }
             }
         }
 
         let (md, mdf) = self.min_demand();
         let min_pause = heating_config.heat_pump.min_pause_seconds;
-        for zone_cfg in &heating_config.zones {
+        for (i, zone_cfg) in heating_config.zones.iter().enumerate() {
+            let zone_idx = ZoneIdx::new(i as u32);
             // Zone state
             let zone_derived = {
                 let hz = self.world.heating_zones.get(&zone_cfg.name);
@@ -50,7 +55,7 @@ impl EventProcessor {
                     relay_state_known = hz.map_or(false, |h| h.relay_state_known),
                     "HA zone state transition"
                 );
-                actions.push(ha_discovery::state_update_action("zone", &zone_cfg.name, state_str));
+                actions.push(Effect::PublishHaStateZone { zone: zone_idx, state: state_str });
                 self.ha_last_published.insert(topic, state_str.to_string());
             }
 
@@ -62,7 +67,9 @@ impl EventProcessor {
                 let topic = ha_discovery::state_topic("trv", &zt.device);
                 let state_str = trv_derived.as_str();
                 if self.ha_last_published.get(&topic).map_or(true, |prev| prev != state_str) {
-                    actions.push(ha_discovery::state_update_action("trv", &zt.device, state_str));
+                    if let Some(trv_idx) = self.topology.device_idx(&zt.device) {
+                        actions.push(Effect::PublishHaStateTrv { trv: trv_idx, state: state_str });
+                    }
                     self.ha_last_published.insert(topic, state_str.to_string());
                 }
             }

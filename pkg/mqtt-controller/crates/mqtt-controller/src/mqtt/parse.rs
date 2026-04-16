@@ -34,7 +34,7 @@ pub(super) fn parse_event(topology: &Topology, p: &Publish, clock: &dyn Clock) -
     // z2m action string via the device's model descriptor.
     if let Some(name) = rest.strip_suffix("/action") {
         let payload_text = std::str::from_utf8(&p.payload).ok()?.trim_matches('"');
-        let (button, gesture) = topology.resolve_button_event(name, payload_text)?;
+        let (_dev, button, gesture) = topology.resolve_button_event(name, payload_text)?;
         return Some(Event::ButtonPress {
             device: name.to_string(),
             button,

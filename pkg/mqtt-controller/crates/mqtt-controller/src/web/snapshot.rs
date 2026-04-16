@@ -9,12 +9,11 @@ use mqtt_controller_wire::{
     TrvSnapshot,
 };
 
-use crate::config::Trigger;
 use crate::entities::light_zone::LightZoneEntity;
 use crate::entities::plug::{KillSwitchRuleState, PlugEntity};
 use crate::entities::WorldState;
 use crate::logic::EventProcessor;
-use crate::topology::{MotionBinding, Topology};
+use crate::topology::{MotionBinding, ResolvedTrigger, Topology};
 
 /// Build a full state snapshot from the processor's current state.
 pub fn build_full_snapshot(processor: &EventProcessor, now: Instant) -> FullStateSnapshot {
@@ -37,7 +36,7 @@ pub fn build_full_snapshot(processor: &EventProcessor, now: Instant) -> FullStat
     let plugs: Vec<PlugSnapshot> = topology
         .all_plug_names()
         .iter()
-        .map(|name| plug_snapshot_from(world.plugs.get(name), name, processor, now))
+        .map(|&name| plug_snapshot_from(world.plugs.get(name), name, processor, now))
         .collect();
 
     let heating_zones = build_heating_zone_snapshots(processor, now);
@@ -199,7 +198,11 @@ pub fn build_topology_info(topology: &Topology) -> TopologyInfo {
         })
         .collect();
 
-    let plugs: Vec<String> = topology.all_plug_names().iter().cloned().collect();
+    let plugs: Vec<String> = topology
+        .all_plug_names()
+        .iter()
+        .map(|&s| s.to_string())
+        .collect();
 
     let heating_zones: Vec<HeatingZoneInfo> = topology
         .heating_config()
@@ -359,10 +362,11 @@ fn collect_switches(
         if !pred(binding) {
             continue;
         }
-        if let Trigger::Button { device, button, .. } = &binding.trigger {
-            if !switches.iter().any(|s: &SwitchInfo| s.device == *device && s.button == *button) {
+        if let ResolvedTrigger::Button { device, button, .. } = &binding.trigger {
+            let device_name = topology.device_name(*device);
+            if !switches.iter().any(|s: &SwitchInfo| s.device == device_name && s.button == *button) {
                 switches.push(SwitchInfo {
-                    device: device.clone(),
+                    device: device_name.to_string(),
                     button: button.clone(),
                     last_event: None,
                 });
@@ -374,7 +378,8 @@ fn collect_switches(
 
 /// Collect switches bound to a room from the topology's bindings.
 fn build_room_switches(topology: &Topology, room_name: &str) -> Vec<SwitchInfo> {
-    collect_switches(topology, |b| b.effect.room() == Some(room_name))
+    let room_idx = topology.room_idx(room_name);
+    collect_switches(topology, |b| b.effect.room() == room_idx)
 }
 
 /// Build motion sensor info for a room from bound motion bindings.
@@ -414,11 +419,14 @@ fn build_kill_switch_rules(
     let Some(plug) = plug else {
         return Vec::new();
     };
+    let Some(device_idx) = topology.device_idx(device) else {
+        return Vec::new();
+    };
     topology
-        .bindings_for_power_below(device)
+        .bindings_for_power_below(device_idx)
         .iter()
         .map(|&idx| {
-            let resolved = &topology.bindings()[idx];
+            let resolved = topology.binding(idx);
             let rule_name = resolved.name.clone();
             let state = plug
                 .kill_switch_rules
@@ -426,7 +434,7 @@ fn build_kill_switch_rules(
                 .cloned()
                 .unwrap_or(KillSwitchRuleState::Inactive);
             let (threshold_watts, holdoff_secs) = match &resolved.trigger {
-                Trigger::PowerBelow { watts, for_seconds, .. } => (*watts, *for_seconds),
+                ResolvedTrigger::PowerBelow { watts, holdoff, .. } => (*watts, holdoff.as_secs()),
                 _ => (0.0, 0),
             };
             let idle_since_ago_ms = match &state {
@@ -452,7 +460,8 @@ fn build_kill_switch_rules(
 
 /// Find switches linked to a plug (Button triggers with device-targeting effects).
 fn build_linked_switches(topology: &Topology, plug_device: &str) -> Vec<SwitchInfo> {
-    collect_switches(topology, |b| b.effect.target() == Some(plug_device))
+    let plug_idx = topology.device_idx(plug_device).and_then(|d| topology.plug_idx(d));
+    collect_switches(topology, |b| b.effect.target_plug() == plug_idx)
 }
 
 fn ago_ms(now: Instant, then: Instant) -> u64 {

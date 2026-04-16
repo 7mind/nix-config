@@ -208,6 +208,17 @@ fn config_with_bindings(
     }
 }
 
+/// Test helper: look up a binding's index by name (callers want
+/// stable indexes for assertions).
+fn binding_idx_by_name(topo: &Topology, name: &str) -> BindingIdx {
+    topo.bindings()
+        .iter()
+        .enumerate()
+        .find(|(_, b)| b.name == name)
+        .map(|(i, _)| BindingIdx::new(i as u32))
+        .unwrap_or_else(|| panic!("binding {name:?} not found"))
+}
+
 #[test]
 fn empty_config_builds() {
     let cfg = config(vec![], vec![]);
@@ -234,13 +245,15 @@ fn room_with_switch_binding_builds_and_indexes() {
         }],
     );
     let topo = Topology::build(&cfg).unwrap();
+    let study_idx = topo.room_idx("study").unwrap();
     let r = topo.room_by_name("study").unwrap();
     assert!(r.bound_motion.is_empty());
-    assert!(topo.room_has_rules("study"));
+    assert!(topo.room_has_rules(study_idx));
 
+    let switch_idx = topo.device_idx("hue-s-a").unwrap();
     assert_eq!(
-        topo.bindings_for_button("hue-s-a", "on", Gesture::Press),
-        &[0]
+        topo.bindings_for_button(switch_idx, "on", Gesture::Press),
+        &[BindingIdx::new(0)]
     );
     assert_eq!(topo.room_by_group_name("hue-lz-study").unwrap().name, "study");
 }
@@ -259,7 +272,8 @@ fn motion_sensor_binding_routes_to_room() {
     assert!(r.has_motion_sensor());
     assert_eq!(r.bound_motion.len(), 1);
     assert_eq!(r.bound_motion[0].sensor, "hue-ms-a");
-    assert_eq!(topo.rooms_for_motion("hue-ms-a"), &["study".to_string()]);
+    let study_idx = topo.room_idx("study").unwrap();
+    assert_eq!(topo.rooms_for_motion("hue-ms-a"), &[study_idx]);
 }
 
 #[test]
@@ -326,15 +340,18 @@ fn button_binding_routes_to_correct_index() {
     );
     let topo = Topology::build(&cfg).unwrap();
 
+    let switch_idx = topo.device_idx("hue-ts-foo").unwrap();
+    let cooker_idx = binding_idx_by_name(&topo, "cooker-tap");
+    let all_idx = binding_idx_by_name(&topo, "all-tap");
     assert_eq!(
-        topo.bindings_for_button("hue-ts-foo", "1", Gesture::Press),
-        &[1]
+        topo.bindings_for_button(switch_idx, "1", Gesture::Press),
+        &[all_idx]
     );
     assert_eq!(
-        topo.bindings_for_button("hue-ts-foo", "2", Gesture::Press),
-        &[0]
+        topo.bindings_for_button(switch_idx, "2", Gesture::Press),
+        &[cooker_idx]
     );
-    assert!(topo.bindings_for_button("hue-ts-foo", "3", Gesture::Press).is_empty());
+    assert!(topo.bindings_for_button(switch_idx, "3", Gesture::Press).is_empty());
 }
 
 #[test]
@@ -483,8 +500,10 @@ fn binding_toggle_plug_builds_and_indexes() {
     );
     let topo = Topology::build(&cfg).unwrap();
     assert_eq!(topo.bindings().len(), 1);
-    assert_eq!(topo.bindings_for_button("hue-ts-foo", "3", Gesture::Press), &[0]);
-    assert!(topo.bindings_for_button("hue-ts-foo", "1", Gesture::Press).is_empty());
+    let switch_idx = topo.device_idx("hue-ts-foo").unwrap();
+    let printer_toggle = binding_idx_by_name(&topo, "printer-toggle");
+    assert_eq!(topo.bindings_for_button(switch_idx, "3", Gesture::Press), &[printer_toggle]);
+    assert!(topo.bindings_for_button(switch_idx, "1", Gesture::Press).is_empty());
     assert!(topo.is_plug("z2m-p-printer"));
     assert!(!topo.is_plug("hue-l-a"));
 }
@@ -521,8 +540,11 @@ fn binding_switch_on_off_builds_and_indexes() {
     );
     let topo = Topology::build(&cfg).unwrap();
     assert_eq!(topo.bindings().len(), 2);
-    assert_eq!(topo.bindings_for_button("hue-s-office", "on", Gesture::Press), &[0]);
-    assert_eq!(topo.bindings_for_button("hue-s-office", "off", Gesture::Press), &[1]);
+    let switch_idx = topo.device_idx("hue-s-office").unwrap();
+    let lamp_on = binding_idx_by_name(&topo, "lamp-on");
+    let lamp_off = binding_idx_by_name(&topo, "lamp-off");
+    assert_eq!(topo.bindings_for_button(switch_idx, "on", Gesture::Press), &[lamp_on]);
+    assert_eq!(topo.bindings_for_button(switch_idx, "off", Gesture::Press), &[lamp_off]);
 }
 
 #[test]
@@ -544,7 +566,9 @@ fn binding_power_below_builds_and_indexes() {
         }],
     );
     let topo = Topology::build(&cfg).unwrap();
-    assert_eq!(topo.bindings_for_power_below("z2m-p-printer"), &[0]);
+    let printer_idx = topo.device_idx("z2m-p-printer").unwrap();
+    let kill = binding_idx_by_name(&topo, "printer-kill");
+    assert_eq!(topo.bindings_for_power_below(printer_idx), &[kill]);
 }
 
 #[test]
@@ -785,10 +809,9 @@ fn descendants_filter_rule_less_rooms() {
     );
     let topo = Topology::build(&cfg).unwrap();
     // Only kitchen-cooker has rules; kitchen-empty is filtered out.
-    assert_eq!(
-        topo.descendants_of("kitchen-all"),
-        &["kitchen-cooker".to_string()]
-    );
+    let all_idx = topo.room_idx("kitchen-all").unwrap();
+    let cooker_idx = topo.room_idx("kitchen-cooker").unwrap();
+    assert_eq!(topo.descendants_of(all_idx), &[cooker_idx]);
 }
 
 #[test]
@@ -852,10 +875,13 @@ fn transitive_descendants_through_rule_less_intermediate() {
         ],
     );
     let topo = Topology::build(&cfg).unwrap();
+    let grand_idx = topo.room_idx("grand").unwrap();
+    let parent_idx = topo.room_idx("parent").unwrap();
+    let child_idx = topo.room_idx("child").unwrap();
     // grand's descendants: child (parent is rule-less, filtered out)
-    assert_eq!(topo.descendants_of("grand"), &["child".to_string()]);
+    assert_eq!(topo.descendants_of(grand_idx), &[child_idx]);
     // parent's descendants: child
-    assert_eq!(topo.descendants_of("parent"), &["child".to_string()]);
+    assert_eq!(topo.descendants_of(parent_idx), &[child_idx]);
 }
 
 #[test]
@@ -911,8 +937,9 @@ fn soft_double_tap_buttons_tracked() {
         ],
     );
     let topo = Topology::build(&cfg).unwrap();
-    assert!(topo.is_soft_double_tap_button("hue-s-a", "on"));
-    assert!(!topo.is_soft_double_tap_button("hue-s-a", "off"));
+    let switch_idx = topo.device_idx("hue-s-a").unwrap();
+    assert!(topo.is_soft_double_tap_button(switch_idx, "on"));
+    assert!(!topo.is_soft_double_tap_button(switch_idx, "off"));
 }
 
 #[test]
@@ -934,8 +961,9 @@ fn hw_double_tap_buttons_tracked() {
         }],
     );
     let topo = Topology::build(&cfg).unwrap();
-    assert!(topo.is_hw_double_tap_button("sonoff-orb", "1"));
-    assert!(topo.is_hw_double_tap_button("sonoff-orb", "2"));
+    let switch_idx = topo.device_idx("sonoff-orb").unwrap();
+    assert!(topo.is_hw_double_tap_button(switch_idx, "1"));
+    assert!(topo.is_hw_double_tap_button(switch_idx, "2"));
 }
 
 #[test]
@@ -975,8 +1003,9 @@ fn hw_double_tap_is_per_button() {
         location: None,
     };
     let topo = Topology::build(&cfg).unwrap();
-    assert!(topo.is_hw_double_tap_button("sw-partial", "1"));
-    assert!(!topo.is_hw_double_tap_button("sw-partial", "2"));
+    let switch_idx = topo.device_idx("sw-partial").unwrap();
+    assert!(topo.is_hw_double_tap_button(switch_idx, "1"));
+    assert!(!topo.is_hw_double_tap_button(switch_idx, "2"));
 }
 
 #[test]
@@ -990,8 +1019,10 @@ fn switch_model_lookup() {
         vec![],
     );
     let topo = Topology::build(&cfg).unwrap();
-    assert_eq!(topo.switch_model_for("hue-s-a"), Some("test-dimmer"));
-    assert_eq!(topo.switch_model_for("hue-l-a"), None);
+    let switch_idx = topo.device_idx("hue-s-a").unwrap();
+    let light_idx = topo.device_idx("hue-l-a").unwrap();
+    assert_eq!(topo.switch_model_for(switch_idx), Some("test-dimmer"));
+    assert_eq!(topo.switch_model_for(light_idx), None);
 }
 
 #[test]
@@ -1034,7 +1065,21 @@ fn all_switch_device_names_populated() {
     );
     let topo = Topology::build(&cfg).unwrap();
     let names = topo.all_switch_device_names();
-    assert!(names.contains("hue-s-a"));
-    assert!(names.contains("hue-s-b"));
-    assert!(!names.contains("hue-l-a"));
+    assert!(names.contains(&"hue-s-a"));
+    assert!(names.contains(&"hue-s-b"));
+    assert!(!names.contains(&"hue-l-a"));
+}
+
+#[test]
+fn zwave_plug_indexed_by_node_id() {
+    let cfg = config(
+        vec![
+            ("hue-l-a", light("0xa")),
+            ("z2m-p-zw", zwave_plug_dev(7, "neo-nas-wr01ze", &["on-off", "power"])),
+        ],
+        vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+    );
+    let topo = Topology::build(&cfg).unwrap();
+    let map = topo.zwave_node_id_to_name();
+    assert_eq!(map.get(&7), Some(&"z2m-p-zw"));
 }

@@ -17,6 +17,7 @@
 pub mod config;
 pub mod daemon;
 pub mod domain;
+pub mod effect_dispatch;
 pub mod entities;
 pub mod logic;
 pub mod mqtt;

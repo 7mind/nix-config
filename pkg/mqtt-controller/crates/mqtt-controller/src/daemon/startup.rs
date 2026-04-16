@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
 use crate::domain::event::Event;
+use crate::effect_dispatch;
 use crate::logic::EventProcessor;
 use crate::mqtt::MqttBridge;
 use crate::time::Clock;
@@ -105,7 +106,7 @@ pub(super) async fn refresh_state(
         );
         for plug_name in zigbee_plugs {
             if let Err(e) = bridge.publish_get(plug_name).await {
-                tracing::warn!(plug = plug_name.as_str(), error = ?e, "failed to request zigbee plug refresh");
+                tracing::warn!(plug = plug_name, error = ?e, "failed to request zigbee plug refresh");
             }
             tokio::time::sleep(GET_BURST_INTERPACKET_DELAY).await;
         }
@@ -138,10 +139,10 @@ pub(super) async fn refresh_state(
             zwave_plugs = zwave_map.len(),
             "phase 4: refreshing zwave plug states"
         );
-        for (&node_id, name) in zwave_map {
-            tracing::info!(node_id, name = name.as_str(), "requesting zwave value refresh");
-            if let Err(e) = bridge.publish_zwave_refresh(node_id).await {
-                tracing::warn!(node_id, error = ?e, "failed to request zwave refresh");
+        for (node_id, name) in &zwave_map {
+            tracing::info!(node_id = node_id, name = name, "requesting zwave value refresh");
+            if let Err(e) = bridge.publish_zwave_refresh(*node_id).await {
+                tracing::warn!(node_id = node_id, error = ?e, "failed to request zwave refresh");
             }
             tokio::time::sleep(GET_BURST_INTERPACKET_DELAY).await;
         }
@@ -181,7 +182,7 @@ pub(super) async fn refresh_state(
         for name in trv_names {
             if let Err(e) = bridge.publish_get_trv(name).await {
                 tracing::warn!(
-                    device = name.as_str(),
+                    device = name,
                     error = ?e,
                     "failed to request TRV state refresh"
                 );
@@ -191,7 +192,7 @@ pub(super) async fn refresh_state(
         for name in wt_names {
             if let Err(e) = bridge.publish_get(name).await {
                 tracing::warn!(
-                    device = name.as_str(),
+                    device = name,
                     error = ?e,
                     "failed to request wall thermostat state refresh"
                 );
@@ -243,15 +244,9 @@ async fn drain_until(
                 if let Event::GroupState { group, .. } = &event {
                     seen_groups.insert(group.clone());
                 }
-                let actions = processor.handle_event(event);
-                for action in actions {
-                    if let Err(e) = bridge.publish_action(&action).await {
-                        tracing::error!(
-                            error = ?e,
-                            "failed to publish action during startup refresh"
-                        );
-                    }
-                }
+                let effects = processor.handle_event(event);
+                let topology = processor.topology().clone();
+                effect_dispatch::dispatch(bridge, &topology, &effects).await;
             }
             Ok(None) => break, // channel closed
             Err(_) => break,    // timeout

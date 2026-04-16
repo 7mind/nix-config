@@ -1,6 +1,8 @@
 //! MQTT bridge: parses incoming z2m messages into [`crate::domain::Event`],
-//! serializes [`crate::domain::Action`] back to z2m's wire format, drives
-//! the rumqttc event loop.
+//! exposes thin pub/sub helpers (publish_group_set, publish_device_set,
+//! publish_raw) that the [`crate::effect_dispatch`] module calls to
+//! translate typed [`crate::domain::Effect`]s into wire-level publishes,
+//! and drives the rumqttc event loop.
 //!
 //! Architecture:
 //!
@@ -42,7 +44,7 @@ use rumqttc::{AsyncClient, EventLoop, MqttOptions, QoS};
 use thiserror::Error;
 use tokio::sync::mpsc;
 
-use crate::domain::action::Action;
+use crate::domain::action::Payload;
 use crate::domain::event::Event;
 use crate::time::Clock;
 use crate::topology::Topology;
@@ -111,11 +113,12 @@ pub enum MqttError {
 }
 
 /// Public handle. Holds the MQTT client and the topology used for parsing.
+/// The clock is consumed by the spawned event loop only; it isn't stored
+/// on the bridge.
 #[derive(Clone)]
 pub struct MqttBridge {
     client: AsyncClient,
     topology: Arc<Topology>,
-    clock: Arc<dyn Clock>,
 }
 
 impl MqttBridge {
@@ -141,17 +144,9 @@ impl MqttBridge {
         let (tx, rx) = mpsc::channel(512);
         let client_for_loop = client.clone();
         let topology_for_loop = topology.clone();
-        let clock_for_loop = clock.clone();
-        tokio::spawn(run_eventloop(eventloop, client_for_loop, tx, topology_for_loop, clock_for_loop));
+        tokio::spawn(run_eventloop(eventloop, client_for_loop, tx, topology_for_loop, clock));
 
-        Ok((
-            Self {
-                client,
-                topology,
-                clock,
-            },
-            rx,
-        ))
+        Ok((Self { client, topology }, rx))
     }
 
     async fn subscribe_all(
@@ -161,56 +156,66 @@ impl MqttBridge {
         subscribe_all_topics(client, topology).await
     }
 
-    /// Publish an [`Action`] to the corresponding `/set` topic.
-    /// For Z-Wave plugs, translates to the Z-Wave JS UI wire format.
-    pub async fn publish_action(&self, action: &Action) -> Result<(), MqttError> {
-        use crate::domain::action::ActionTarget;
-        let name = action.target_name();
-        match &action.target {
-            ActionTarget::Raw { topic, retain } => {
-                let payload = match &action.payload {
-                    crate::domain::action::Payload::RawString(s) => s.as_bytes().to_vec(),
-                    other => serde_json::to_vec(other)?,
-                };
-                self.client
-                    .publish(topic, QoS::AtLeastOnce, *retain, payload)
-                    .await?;
-            }
-            ActionTarget::DeviceGet(_) => {
-                // GET actions go to the /get topic, not /set.
-                let topic = topics::get_topic(name);
-                let payload = serde_json::to_vec(&action.payload)?;
-                self.client
-                    .publish(topic, QoS::AtLeastOnce, false, payload)
-                    .await?;
-            }
-            _ if self.topology.is_zwave_plug(name) => {
-                // Z-Wave plugs: publish true/false to switch_binary targetValue
-                let on = match &action.payload {
-                    crate::domain::action::Payload::DeviceStateSet { state } => *state == "ON",
-                    other => {
-                        tracing::warn!(
-                            device = name,
-                            payload = ?other,
-                            "unexpected payload type for zwave plug; ignoring"
-                        );
-                        return Ok(());
-                    }
-                };
-                let topic = topics::zwave_switch_set_topic(name);
-                let payload = if on { b"true".as_slice() } else { b"false".as_slice() };
-                self.client
-                    .publish(topic, QoS::AtLeastOnce, false, payload)
-                    .await?;
-            }
-            _ => {
-                let topic = topics::set_topic(name);
-                let payload = serde_json::to_vec(&action.payload)?;
-                self.client
-                    .publish(topic, QoS::AtLeastOnce, false, payload)
-                    .await?;
-            }
+    /// Publish a payload to `zigbee2mqtt/<group>/set` for a z2m group.
+    pub async fn publish_group_set(
+        &self,
+        group_name: &str,
+        payload: &Payload,
+    ) -> Result<(), MqttError> {
+        let topic = topics::set_topic(group_name);
+        let bytes = serde_json::to_vec(payload)?;
+        self.client
+            .publish(topic, QoS::AtLeastOnce, false, bytes)
+            .await?;
+        Ok(())
+    }
+
+    /// Publish a payload to a device's `/set` topic. Translates the
+    /// payload to the Z-Wave JS UI wire format when `is_zwave` is set.
+    pub async fn publish_device_set(
+        &self,
+        device_name: &str,
+        payload: &Payload,
+        is_zwave: bool,
+    ) -> Result<(), MqttError> {
+        if is_zwave {
+            let on = match payload {
+                Payload::DeviceStateSet { state } => *state == "ON",
+                other => {
+                    tracing::warn!(
+                        device = device_name,
+                        payload = ?other,
+                        "unexpected payload type for zwave plug; ignoring"
+                    );
+                    return Ok(());
+                }
+            };
+            let topic = topics::zwave_switch_set_topic(device_name);
+            let bytes: &[u8] = if on { b"true" } else { b"false" };
+            self.client
+                .publish(topic, QoS::AtLeastOnce, false, bytes)
+                .await?;
+        } else {
+            let topic = topics::set_topic(device_name);
+            let bytes = serde_json::to_vec(payload)?;
+            self.client
+                .publish(topic, QoS::AtLeastOnce, false, bytes)
+                .await?;
         }
+        Ok(())
+    }
+
+    /// Publish raw bytes to an arbitrary MQTT topic. Used by the
+    /// effect dispatcher for HA discovery configs and state updates.
+    pub async fn publish_raw(
+        &self,
+        topic: &str,
+        bytes: &[u8],
+        retain: bool,
+    ) -> Result<(), MqttError> {
+        self.client
+            .publish(topic, QoS::AtLeastOnce, retain, bytes.to_vec())
+            .await?;
         Ok(())
     }
 

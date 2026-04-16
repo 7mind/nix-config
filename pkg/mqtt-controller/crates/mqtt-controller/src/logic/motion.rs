@@ -8,11 +8,12 @@
 
 use std::time::{Duration, Instant};
 
-use crate::domain::action::{Action, Payload};
+use crate::domain::Effect;
+use crate::domain::action::Payload;
 use crate::entities::light_zone::LightZoneTarget;
 use crate::entities::motion_sensor::MotionActual;
 use crate::tass::Owner;
-use crate::topology::RoomName;
+use crate::topology::{RoomIdx, RoomName};
 
 use super::EventProcessor;
 
@@ -23,26 +24,32 @@ impl EventProcessor {
         occupied: bool,
         illuminance: Option<u32>,
         ts: Instant,
-    ) -> Vec<Action> {
-        let rooms: Vec<RoomName> = self.topology.rooms_for_motion(sensor).to_vec();
-        if rooms.is_empty() {
+    ) -> Vec<Effect> {
+        let room_idxs: Vec<RoomIdx> =
+            self.topology.rooms_for_motion(sensor).to_vec();
+        if room_idxs.is_empty() {
             return Vec::new();
         }
+        let rooms: Vec<(RoomIdx, RoomName)> = room_idxs
+            .iter()
+            .map(|&idx| (idx, self.topology.room(idx).name.clone()))
+            .collect();
         let mut out = Vec::new();
-        for room_name in &rooms {
-            self.dispatch_motion(room_name, sensor, occupied, illuminance, ts, &mut out);
+        for (room_idx, room_name) in &rooms {
+            self.dispatch_motion(*room_idx, room_name, sensor, occupied, illuminance, ts, &mut out);
         }
         out
     }
 
     fn dispatch_motion(
         &mut self,
+        room_idx: RoomIdx,
         room_name: &str,
         sensor: &str,
         occupied: bool,
         illuminance: Option<u32>,
         ts: Instant,
-        out: &mut Vec<Action>,
+        out: &mut Vec<Effect>,
     ) {
         // Capture room metadata before borrowing mut state.
         let sun = self.sun_times();
@@ -155,7 +162,8 @@ impl EventProcessor {
                 illuminance = ?illuminance,
                 "motion-on → scene_recall (room was off, gates passed)"
             );
-            out.push(Action::new(group_name, Payload::scene_recall(first)));
+            out.push(Effect::PublishGroupSet { room: room_idx, payload: Payload::scene_recall(first) });
+            let _ = group_name;
             // Mark as motion-owned so motion-off can later run.
             let zone = self.world.light_zone(room_name);
             zone.target.set_and_command(
@@ -207,7 +215,8 @@ impl EventProcessor {
                 transition = off_transition,
                 "motion-off → state OFF (motion-owned, all sensors clear)"
             );
-            out.push(Action::new(group_name, Payload::state_off(off_transition)));
+            out.push(Effect::PublishGroupSet { room: room_idx, payload: Payload::state_off(off_transition) });
+            let _ = group_name;
             let zone = self.world.light_zone(room_name);
             zone.target.set_and_command(LightZoneTarget::Off, Owner::Motion, ts);
             zone.last_off_at = Some(ts);

@@ -6,7 +6,8 @@
 use std::time::{Duration, Instant};
 
 use crate::config::heating::HeatingConfig;
-use crate::domain::action::{Action, Payload};
+use crate::domain::Effect;
+use crate::domain::action::Payload;
 use crate::entities::trv::{HeatingRunningState, TrvTarget};
 use crate::logic::EventProcessor;
 use crate::tass::Owner;
@@ -18,7 +19,7 @@ impl EventProcessor {
         &mut self,
         heating_config: &HeatingConfig,
         now: Instant,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         let mut actions = Vec::new();
         let detect_dur = Duration::from_secs(
             heating_config.open_window.detection_minutes as u64 * 60,
@@ -113,10 +114,12 @@ impl EventProcessor {
                         now,
                     );
                     trv.setpoint_dirty_gen = tick_gen;
-                    actions.push(Action::for_device(
-                        zt.device.clone(),
-                        Payload::trv_setpoint(MIN_SETPOINT),
-                    ));
+                    if let Some(trv_idx) = self.topology.device_idx(&zt.device) {
+                        actions.push(Effect::PublishDeviceSet {
+                            device: trv_idx,
+                            payload: Payload::trv_setpoint(MIN_SETPOINT),
+                        });
+                    }
                     tracing::warn!(
                         trv = %zt.device,
                         zone = %zone.name,

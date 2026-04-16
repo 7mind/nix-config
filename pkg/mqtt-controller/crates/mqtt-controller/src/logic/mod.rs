@@ -27,7 +27,7 @@ use std::time::{Duration, Instant};
 
 use crate::config::Defaults;
 use crate::config::heating::HeatingConfig;
-use crate::domain::action::Action;
+use crate::domain::Effect;
 use crate::domain::event::Event;
 use crate::entities::WorldState;
 use crate::time::Clock;
@@ -82,7 +82,7 @@ impl EventProcessor {
     }
 
     /// Single entry point for the daemon's event loop.
-    pub fn handle_event(&mut self, event: Event) -> Vec<Action> {
+    pub fn handle_event(&mut self, event: Event) -> Vec<Effect> {
         match event {
             Event::ButtonPress {
                 ref device,
@@ -171,13 +171,13 @@ impl EventProcessor {
     }
 
     /// Turn off all motion-controlled rooms that are physically on at startup.
-    pub fn startup_turn_off_motion_zones(&mut self, ts: Instant) -> Vec<Action> {
+    pub fn startup_turn_off_motion_zones(&mut self, ts: Instant) -> Vec<Effect> {
         use crate::domain::action::Payload;
         use crate::entities::light_zone::{LightZoneActual, LightZoneTarget};
         use crate::tass::Owner;
 
         let mut out = Vec::new();
-        for room in self.topology.rooms() {
+        for (room_idx, room) in self.topology.rooms_with_idx() {
             let zone = self.world.light_zone(&room.name);
             if !zone.actual_is_on() {
                 continue;
@@ -196,10 +196,10 @@ impl EventProcessor {
                 // the room. Without this, actual stays On (from retained echo)
                 // and motion-on gates block.
                 zone.actual.update(LightZoneActual::Off, ts);
-                out.push(Action::new(
-                    &room.group_name,
-                    Payload::state_off(room.off_transition_seconds),
-                ));
+                out.push(Effect::PublishGroupSet {
+                    room: room_idx,
+                    payload: Payload::state_off(room.off_transition_seconds),
+                });
             } else {
                 tracing::info!(
                     room = %room.name,
@@ -226,15 +226,16 @@ impl EventProcessor {
     // ----- web command handlers ----------------------------------------------
 
     /// Web UI: recall a specific scene in a room.
-    pub fn web_recall_scene(&mut self, room_name: &str, scene_id: u8, ts: Instant) -> Vec<Action> {
+    pub fn web_recall_scene(&mut self, room_name: &str, scene_id: u8, ts: Instant) -> Vec<Effect> {
         use crate::domain::action::Payload;
         use crate::entities::light_zone::LightZoneTarget;
         use crate::tass::Owner;
 
         let scenes_for_now = self.scenes_for_room(room_name);
-        let Some(room) = self.topology.room_by_name(room_name) else {
+        let Some(room_idx) = self.topology.room_idx(room_name) else {
             return Vec::new();
         };
+        let room = self.topology.room(room_idx);
         let group_name = room.group_name.clone();
 
         let cycle_idx = scenes_for_now
@@ -250,7 +251,10 @@ impl EventProcessor {
             "web: recall scene"
         );
 
-        let action = Action::new(group_name, Payload::scene_recall(scene_id));
+        let effect = Effect::PublishGroupSet {
+            room: room_idx,
+            payload: Payload::scene_recall(scene_id),
+        };
         let zone = self.world.light_zone(room_name);
         zone.target.set_and_command(
             LightZoneTarget::On {
@@ -262,15 +266,16 @@ impl EventProcessor {
         );
         zone.last_press_at = Some(ts);
         self.propagate_to_descendants(room_name, true, ts);
-        vec![action]
+        vec![effect]
     }
 
     /// Web UI: turn a room off.
-    pub fn web_set_room_off(&mut self, room_name: &str, ts: Instant) -> Vec<Action> {
+    pub fn web_set_room_off(&mut self, room_name: &str, ts: Instant) -> Vec<Effect> {
         use crate::tass::Owner;
-        let Some(room) = self.topology.room_by_name(room_name) else {
+        let Some(room_idx) = self.topology.room_idx(room_name) else {
             return Vec::new();
         };
+        let room = self.topology.room(room_idx);
         let group_name = room.group_name.clone();
         let off_transition = room.off_transition_seconds;
 
@@ -282,18 +287,22 @@ impl EventProcessor {
         );
 
         let mut out = Vec::new();
-        self.publish_off(room_name, &group_name, off_transition, ts, &mut out, Owner::WebUI);
+        self.publish_off(room_name, room_idx, off_transition, ts, &mut out, Owner::WebUI);
         out
     }
 
     /// Web UI: toggle a smart plug.
-    pub fn web_toggle_plug(&mut self, device: &str, ts: Instant) -> Vec<Action> {
+    pub fn web_toggle_plug(&mut self, device: &str, ts: Instant) -> Vec<Effect> {
         use crate::domain::action::Payload;
         use crate::entities::plug::PlugTarget;
         use crate::tass::Owner;
 
-        if !self.topology.is_plug(device) {
+        let Some(device_idx) = self.topology.device_idx(device) else {
             tracing::warn!(device, "web: toggle plug rejected — unknown device");
+            return Vec::new();
+        };
+        if !self.topology.is_plug_idx(device_idx) {
+            tracing::warn!(device, "web: toggle plug rejected — not a plug");
             return Vec::new();
         }
         let is_on = self.world.plugs.get(device).is_some_and(|p| p.is_on());
@@ -306,12 +315,12 @@ impl EventProcessor {
         plug.target.set_and_command(new_target, Owner::WebUI, ts);
 
         tracing::info!(device, target_state = !is_on, "web: toggle plug");
-        vec![Action::for_device(device, payload)]
+        vec![Effect::PublishDeviceSet { device: device_idx, payload }]
     }
 
     // ----- tick handler ------------------------------------------------------
 
-    fn handle_tick(&mut self, ts: Instant) -> Vec<Action> {
+    fn handle_tick(&mut self, ts: Instant) -> Vec<Effect> {
         let mut out = self.flush_pending_presses(ts);
         out.extend(self.evaluate_at_triggers(ts));
         out.extend(self.evaluate_kill_switch_ticks(ts));
@@ -371,7 +380,7 @@ impl EventProcessor {
     /// When a motion sensor goes stale, re-evaluates motion-owned rooms
     /// to trigger motion-off if the stale sensor was the last occupied
     /// sensor in its room.
-    fn evaluate_actual_staleness(&mut self, now: Instant) -> Vec<Action> {
+    fn evaluate_actual_staleness(&mut self, now: Instant) -> Vec<Effect> {
         let mut newly_stale_sensors = Vec::new();
         for (name, sensor) in &mut self.world.motion_sensors {
             if sensor.actual.mark_stale_if_old(now, Self::MOTION_SENSOR_STALE_THRESHOLD) {
@@ -391,10 +400,14 @@ impl EventProcessor {
         // the motion-owned room should turn off.
         let mut actions = Vec::new();
         for sensor_name in newly_stale_sensors {
-            let rooms: Vec<String> = self
+            let room_idxs: Vec<crate::topology::RoomIdx> = self
                 .topology
                 .rooms_for_motion(&sensor_name)
                 .to_vec();
+            let rooms: Vec<String> = room_idxs
+                .iter()
+                .map(|&idx| self.topology.room(idx).name.clone())
+                .collect();
             for room_name in &rooms {
                 let zone = self.world.light_zones.get(room_name);
                 let is_motion_owned = zone.is_some_and(|z| z.is_motion_owned());
@@ -416,18 +429,18 @@ impl EventProcessor {
                         })
                     });
                 if all_inactive {
-                    if let Some(room) = self.topology.room_by_name(room_name) {
-                        let group_name = room.group_name.clone();
+                    if let Some(room_idx) = self.topology.room_idx(room_name) {
+                        let room = self.topology.room(room_idx);
                         let off_transition = room.off_transition_seconds;
                         tracing::info!(
                             room = room_name.as_str(),
                             sensor = sensor_name.as_str(),
                             "stale sensor triggered motion-off (all sensors inactive/stale)"
                         );
-                        actions.push(Action::new(
-                            group_name,
-                            crate::domain::action::Payload::state_off(off_transition),
-                        ));
+                        actions.push(Effect::PublishGroupSet {
+                            room: room_idx,
+                            payload: crate::domain::action::Payload::state_off(off_transition),
+                        });
                         // Only set target — do NOT fabricate actual=Off.
                         // Actual state updates come from z2m group echoes
                         // (handle_group_state). If the OFF command is lost,

@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use tokio::sync::{broadcast, mpsc};
 
+use crate::effect_dispatch;
 use crate::logic::EventProcessor;
 use crate::mqtt::MqttBridge;
 use crate::time::Clock;
@@ -42,28 +43,19 @@ pub(super) async fn handle_ws_command(
             let _ = reply.send(topo);
         }
         WsCommand::RecallScene { room, scene_id } => {
-            let actions = processor.web_recall_scene(&room, scene_id, clock.now());
-            for action in actions {
-                if let Err(e) = bridge.publish_action(&action).await {
-                    tracing::error!(error = ?e, "web: failed to publish scene recall");
-                }
-            }
+            let effects = processor.web_recall_scene(&room, scene_id, clock.now());
+            let topology = processor.topology().clone();
+            effect_dispatch::dispatch(bridge, &topology, &effects).await;
         }
         WsCommand::SetRoomOff { room } => {
-            let actions = processor.web_set_room_off(&room, clock.now());
-            for action in actions {
-                if let Err(e) = bridge.publish_action(&action).await {
-                    tracing::error!(error = ?e, "web: failed to publish room off");
-                }
-            }
+            let effects = processor.web_set_room_off(&room, clock.now());
+            let topology = processor.topology().clone();
+            effect_dispatch::dispatch(bridge, &topology, &effects).await;
         }
         WsCommand::TogglePlug { device } => {
-            let actions = processor.web_toggle_plug(&device, clock.now());
-            for action in actions {
-                if let Err(e) = bridge.publish_action(&action).await {
-                    tracing::error!(error = ?e, "web: failed to publish plug toggle");
-                }
-            }
+            let effects = processor.web_toggle_plug(&device, clock.now());
+            let topology = processor.topology().clone();
+            effect_dispatch::dispatch(bridge, &topology, &effects).await;
         }
     }
 
@@ -75,6 +67,7 @@ pub(super) async fn handle_ws_command(
 }
 
 /// Broadcast current state of all rooms, plugs, and heating zones to WebSocket clients.
+/// Used by command handlers to push a fresh snapshot after a manual action.
 pub(super) fn broadcast_state_updates(
     processor: &EventProcessor,
     tx: &broadcast::Sender<mqtt_controller_wire::ServerMessage>,
@@ -95,6 +88,49 @@ pub(super) fn broadcast_state_updates(
         for zone in &cfg.zones {
             if let Some(snap) = snapshot::build_heating_zone_snapshot(processor, &zone.name, now) {
                 let _ = tx.send(mqtt_controller_wire::ServerMessage::HeatingZoneUpdate(snap));
+            }
+        }
+    }
+}
+
+/// Broadcast updates for the entities touched by the most recent
+/// dispatch. Driven by the [`crate::effect_dispatch::TouchedEntities`]
+/// set produced by the dispatcher, so we only push deltas that actually
+/// changed.
+///
+/// Heating zones share global pump timers (`min_cycle_remaining_secs`,
+/// `min_pause_remaining_secs`) — when ANY zone is touched we have to
+/// rebroadcast all zones so untouched zone cards don't show stale
+/// countdowns. (See Codex review 2026-04.)
+pub(super) fn broadcast_touched(
+    processor: &EventProcessor,
+    tx: &broadcast::Sender<mqtt_controller_wire::ServerMessage>,
+    touched: &crate::effect_dispatch::TouchedEntities,
+    now: Instant,
+) {
+    let topology = processor.topology();
+    for &room_idx in &touched.rooms {
+        let room_name = &topology.room(room_idx).name;
+        if let Some(snap) = snapshot::build_room_snapshot(processor, room_name, now) {
+            let _ = tx.send(mqtt_controller_wire::ServerMessage::RoomUpdate(snap));
+        }
+    }
+    for &plug_idx in &touched.plugs {
+        let plug_name = topology.device_name(plug_idx.device());
+        if let Some(snap) = snapshot::build_plug_snapshot(processor, plug_name, now) {
+            let _ = tx.send(mqtt_controller_wire::ServerMessage::PlugUpdate(snap));
+        }
+    }
+    if let Some(cfg) = topology.heating_config() {
+        if !touched.heating_zones.is_empty() {
+            // Heating zones share global pump timers; any zone touch
+            // means every zone's countdown may have changed.
+            for zone in &cfg.zones {
+                if let Some(snap) =
+                    snapshot::build_heating_zone_snapshot(processor, &zone.name, now)
+                {
+                    let _ = tx.send(mqtt_controller_wire::ServerMessage::HeatingZoneUpdate(snap));
+                }
             }
         }
     }

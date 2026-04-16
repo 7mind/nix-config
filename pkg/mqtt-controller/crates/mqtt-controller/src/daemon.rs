@@ -46,6 +46,7 @@ use anyhow::Context;
 use thiserror::Error;
 
 use crate::config::Config;
+use crate::effect_dispatch;
 use crate::logic::EventProcessor;
 use crate::mqtt::{MqttBridge, MqttConfig, MqttError};
 use crate::time::Clock;
@@ -107,12 +108,8 @@ pub async fn run(
     // Turn off any motion-controlled room that was left on before
     // restart. No cooldown is applied so motion sensors can
     // immediately re-trigger if someone is actually in the room.
-    let startup_off = processor.startup_turn_off_motion_zones(clock.now());
-    for action in &startup_off {
-        if let Err(e) = bridge.publish_action(action).await {
-            tracing::error!(error = ?e, "failed to publish startup turn-off action");
-        }
-    }
+    let startup_effects = processor.startup_turn_off_motion_zones(clock.now());
+    effect_dispatch::dispatch(&bridge, &topology, &startup_effects).await;
     processor.arm_kill_switches_for_active_plugs(clock.now());
 
     tracing::info!("startup state refresh complete; entering event loop");
