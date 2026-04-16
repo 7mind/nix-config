@@ -8,13 +8,16 @@
 //! runs its own as a defense-in-depth check at startup.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::time::Duration;
 
 use crate::config::catalog::PlugProtocol;
 use crate::config::switch_model::Gesture;
-use crate::config::{Config, DeviceCatalogEntry, Room, Trigger};
+use crate::config::{Config, DeviceCatalogEntry, Effect, Room, Trigger};
 
 use super::{
-    FriendlyName, MotionBinding, ResolvedBinding, ResolvedRoom, RoomName, Topology, TopologyError,
+    BindingIdx, DeviceIdx, DeviceInfo, DeviceKind, FriendlyName, MotionBinding, PlugIdx,
+    ResolvedBinding, ResolvedEffect, ResolvedRoom, ResolvedTrigger, RoomIdx, RoomName, Topology,
+    TopologyError,
 };
 
 impl Topology {
@@ -164,11 +167,112 @@ impl Topology {
             }
         }
 
-        // 6. Motion sensor bindings from room.motion_sensors.
-        let mut motion_index: BTreeMap<FriendlyName, Vec<RoomName>> = BTreeMap::new();
+        // 6. Build the Vec<DeviceInfo> indexed catalog. Sorted by
+        //    friendly_name so iteration is deterministic.
+        let mut device_pairs: Vec<(&String, &DeviceCatalogEntry)> = config.devices.iter().collect();
+        device_pairs.sort_by(|a, b| a.0.cmp(b.0));
+        let mut devices: Vec<DeviceInfo> = Vec::with_capacity(device_pairs.len());
+        let mut device_by_name: BTreeMap<String, DeviceIdx> = BTreeMap::new();
+        for (i, (name, entry)) in device_pairs.iter().enumerate() {
+            let kind = DeviceKind::from_entry(entry);
+            let plug_protocol = entry.plug_protocol();
+            let switch_model = entry.switch_model().map(str::to_string);
+            devices.push(DeviceInfo {
+                name: (*name).clone(),
+                kind,
+                plug_protocol,
+                switch_model,
+            });
+            device_by_name.insert((*name).clone(), DeviceIdx::new(i as u32));
+        }
+
+        // 6b. Validate switch model references and collect hw_double_tap
+        //     entries from the catalog. Both depend only on the catalog,
+        //     not on bindings.
+        let mut hw_double_tap_buttons: BTreeSet<(DeviceIdx, String)> = BTreeSet::new();
+        for (name, entry) in &config.devices {
+            if let DeviceCatalogEntry::Switch { model, .. } = entry {
+                let switch_model = config.switch_models.get(model).ok_or_else(|| {
+                    TopologyError::UnknownSwitchModel {
+                        device: name.clone(),
+                        model: model.clone(),
+                    }
+                })?;
+                let dev_idx = device_by_name[name];
+                // Register per-button hardware double-tap suppression.
+                // Only buttons that have both press AND double_tap gestures
+                // mapped in the model get suppression — not all buttons on
+                // a model that happens to have double-tap somewhere.
+                for button in &switch_model.buttons {
+                    let has_press = switch_model.z2m_action_map.values().any(|m| {
+                        m.button == *button && m.gesture == Gesture::Press
+                    });
+                    let has_double = switch_model.z2m_action_map.values().any(|m| {
+                        m.button == *button && m.gesture == Gesture::DoubleTap
+                    });
+                    if has_press && has_double {
+                        hw_double_tap_buttons.insert((dev_idx, button.clone()));
+                    }
+                }
+            }
+        }
+
+        // 6c. Build the device-kind subset Vec<DeviceIdx>'s plus the
+        //     Z-Wave node_id → DeviceIdx map.
+        let mut switch_devices: Vec<DeviceIdx> = Vec::new();
+        let mut motion_sensor_devices: Vec<DeviceIdx> = Vec::new();
+        let mut plug_devices: Vec<DeviceIdx> = Vec::new();
+        let mut zigbee_plug_devices: Vec<DeviceIdx> = Vec::new();
+        let mut zwave_plug_devices: Vec<DeviceIdx> = Vec::new();
+        let mut trv_devices: Vec<DeviceIdx> = Vec::new();
+        let mut wall_thermostat_devices: Vec<DeviceIdx> = Vec::new();
+        let mut zwave_node_id_to_device: BTreeMap<u16, DeviceIdx> = BTreeMap::new();
+        for (i, info) in devices.iter().enumerate() {
+            let idx = DeviceIdx::new(i as u32);
+            match info.kind {
+                DeviceKind::Switch => switch_devices.push(idx),
+                DeviceKind::MotionSensor => motion_sensor_devices.push(idx),
+                DeviceKind::Plug => {
+                    plug_devices.push(idx);
+                    match info.plug_protocol.unwrap_or_default() {
+                        PlugProtocol::Zigbee => zigbee_plug_devices.push(idx),
+                        PlugProtocol::Zwave => {
+                            zwave_plug_devices.push(idx);
+                        }
+                    }
+                }
+                DeviceKind::Trv => trv_devices.push(idx),
+                DeviceKind::WallThermostat => wall_thermostat_devices.push(idx),
+                DeviceKind::Light => {}
+            }
+        }
+        // Validate Z-Wave plugs have node_id and uniqueness.
+        for &idx in &zwave_plug_devices {
+            let info = &devices[idx.as_usize()];
+            let entry = &config.devices[&info.name];
+            let node_id = entry.zwave_node_id().ok_or_else(|| {
+                TopologyError::ZwavePlugMissingNodeId {
+                    device: info.name.clone(),
+                }
+            })?;
+            if let Some(&existing_idx) = zwave_node_id_to_device.get(&node_id) {
+                return Err(TopologyError::DuplicateZwaveNodeId {
+                    node_id,
+                    first: devices[existing_idx.as_usize()].name.clone(),
+                    second: info.name.clone(),
+                });
+            }
+            zwave_node_id_to_device.insert(node_id, idx);
+        }
+
+        // 7. Motion sensor bindings from room.motion_sensors. Build the
+        //    motion_index keyed by DeviceIdx. We also collect each
+        //    room's bound_motion list for the ResolvedRoom assembly.
+        let mut motion_index: BTreeMap<DeviceIdx, Vec<RoomIdx>> = BTreeMap::new();
         let mut bound_motion_per_room: BTreeMap<RoomName, Vec<MotionBinding>> = BTreeMap::new();
 
-        for room in &config.rooms {
+        for (room_pos, room) in config.rooms.iter().enumerate() {
+            let room_idx = RoomIdx::new(room_pos as u32);
             for sensor_name in &room.motion_sensors {
                 let catalog = config.devices.get(sensor_name).ok_or_else(|| {
                     TopologyError::MotionSensorNotInCatalog {
@@ -191,10 +295,11 @@ impl Topology {
                                 occupancy_timeout_seconds: *occupancy_timeout_seconds,
                                 max_illuminance: *max_illuminance,
                             });
+                        let sensor_idx = device_by_name[sensor_name];
                         motion_index
-                            .entry(sensor_name.clone())
+                            .entry(sensor_idx)
                             .or_default()
-                            .push(room.name.clone());
+                            .push(room_idx);
                     }
                     other => {
                         return Err(TopologyError::MotionSensorWrongKind {
@@ -207,13 +312,25 @@ impl Topology {
             }
         }
 
-        // 7. Validate bindings and build dispatch indexes.
+        // 8. Build room_by_name and room_by_group_name maps (assignment
+        //    in config order).
+        let mut room_by_name: BTreeMap<RoomName, RoomIdx> = BTreeMap::new();
+        let mut room_by_group_name: BTreeMap<FriendlyName, RoomIdx> = BTreeMap::new();
+        for (i, room) in config.rooms.iter().enumerate() {
+            let idx = RoomIdx::new(i as u32);
+            room_by_name.insert(room.name.clone(), idx);
+            room_by_group_name.insert(room.group_name.clone(), idx);
+        }
+
+        // 9. Validate bindings, translate into resolved form, build
+        //    dispatch indexes.
         let mut binding_names: BTreeSet<String> = BTreeSet::new();
         let mut resolved_bindings: Vec<ResolvedBinding> = Vec::new();
-        let mut button_binding_index: BTreeMap<(String, String, Gesture), Vec<usize>> = BTreeMap::new();
-        let mut power_below_index: BTreeMap<FriendlyName, Vec<usize>> = BTreeMap::new();
-        let mut soft_double_tap_buttons: BTreeSet<(String, String)> = BTreeSet::new();
-        let mut rooms_with_bindings: BTreeSet<RoomName> = BTreeSet::new();
+        let mut button_binding_index: BTreeMap<(DeviceIdx, String, Gesture), Vec<BindingIdx>> =
+            BTreeMap::new();
+        let mut power_below_index: BTreeMap<DeviceIdx, Vec<BindingIdx>> = BTreeMap::new();
+        let mut soft_double_tap_buttons: BTreeSet<(DeviceIdx, String)> = BTreeSet::new();
+        let mut room_has_bindings_set: BTreeSet<RoomIdx> = BTreeSet::new();
 
         for rule in &config.bindings {
             // Name uniqueness.
@@ -234,7 +351,9 @@ impl Topology {
                 None
             };
 
-            match &rule.trigger {
+            // First validate, then translate. Both produce the same
+            // outcome for valid configs; validation errors take precedence.
+            let resolved_trigger = match &rule.trigger {
                 Trigger::Button { device, button, gesture } => {
                     let trigger_entry = trigger_entry.unwrap();
                     if !trigger_entry.is_switch() {
@@ -257,16 +376,17 @@ impl Topology {
                             }
                         }
                     }
-                    let idx = resolved_bindings.len();
-                    button_binding_index
-                        .entry((device.clone(), button.clone(), *gesture))
-                        .or_default()
-                        .push(idx);
+                    let dev_idx = device_by_name[device];
                     if *gesture == Gesture::SoftDoubleTap {
-                        soft_double_tap_buttons.insert((device.clone(), button.clone()));
+                        soft_double_tap_buttons.insert((dev_idx, button.clone()));
+                    }
+                    ResolvedTrigger::Button {
+                        device: dev_idx,
+                        button: button.clone(),
+                        gesture: *gesture,
                     }
                 }
-                Trigger::PowerBelow { device, .. } => {
+                Trigger::PowerBelow { device, watts, for_seconds } => {
                     let trigger_entry = trigger_entry.unwrap();
                     if !trigger_entry.is_plug() {
                         return Err(TopologyError::BindingTriggerWrongDeviceKind {
@@ -298,11 +418,13 @@ impl Topology {
                             });
                         }
                     }
-                    let idx = resolved_bindings.len();
-                    power_below_index
-                        .entry(device.clone())
-                        .or_default()
-                        .push(idx);
+                    let dev_idx = device_by_name[device];
+                    let plug_idx = PlugIdx::from_device(dev_idx);
+                    ResolvedTrigger::PowerBelow {
+                        plug: plug_idx,
+                        watts: *watts,
+                        holdoff: Duration::from_secs(*for_seconds),
+                    }
                 }
                 Trigger::At { time } => {
                     if let crate::config::time_expr::TimeExpr::Fixed { minute_of_day } = time {
@@ -319,18 +441,18 @@ impl Topology {
                     if time.uses_sun() {
                         needs_location = true;
                     }
+                    ResolvedTrigger::At { time: time.clone() }
                 }
-            }
+            };
 
             // Validate room-targeting effects: the room must exist.
             if let Some(room_name) = rule.effect.room() {
-                if !rooms_by_name.contains_key(room_name) {
+                if !room_by_name.contains_key(room_name) {
                     return Err(TopologyError::BindingRoomNotFound {
                         binding: rule.name.clone(),
                         room: room_name.to_string(),
                     });
                 }
-                rooms_with_bindings.insert(room_name.to_string());
             }
 
             // Validate device-targeting effects: target must be a plug.
@@ -360,140 +482,155 @@ impl Topology {
                 }
             }
 
+            let resolved_effect = match &rule.effect {
+                Effect::SceneCycle { room } => ResolvedEffect::SceneCycle { room: room_by_name[room] },
+                Effect::SceneToggle { room } => ResolvedEffect::SceneToggle { room: room_by_name[room] },
+                Effect::SceneToggleCycle { room } => {
+                    ResolvedEffect::SceneToggleCycle { room: room_by_name[room] }
+                }
+                Effect::TurnOffRoom { room } => ResolvedEffect::TurnOffRoom { room: room_by_name[room] },
+                Effect::BrightnessStep { room, step, transition } => ResolvedEffect::BrightnessStep {
+                    room: room_by_name[room],
+                    step: *step,
+                    transition: *transition,
+                },
+                Effect::BrightnessMove { room, rate } => {
+                    ResolvedEffect::BrightnessMove { room: room_by_name[room], rate: *rate }
+                }
+                Effect::BrightnessStop { room } => ResolvedEffect::BrightnessStop { room: room_by_name[room] },
+                Effect::Toggle { target, confirm_off_seconds } => {
+                    let dev_idx = device_by_name[target];
+                    ResolvedEffect::Toggle {
+                        plug: PlugIdx::from_device(dev_idx),
+                        confirm_off_seconds: *confirm_off_seconds,
+                    }
+                }
+                Effect::TurnOn { target } => {
+                    let dev_idx = device_by_name[target];
+                    ResolvedEffect::TurnOn { plug: PlugIdx::from_device(dev_idx) }
+                }
+                Effect::TurnOff { target } => {
+                    let dev_idx = device_by_name[target];
+                    ResolvedEffect::TurnOff { plug: PlugIdx::from_device(dev_idx) }
+                }
+                Effect::TurnOffAllZones => ResolvedEffect::TurnOffAllZones,
+            };
+
+            // Track which rooms have bindings (for descendant filtering).
+            if let Some(room_idx) = resolved_effect.room() {
+                room_has_bindings_set.insert(room_idx);
+            }
+
+            let binding_idx = BindingIdx::new(resolved_bindings.len() as u32);
+            // Build dispatch indexes from the resolved trigger.
+            match &resolved_trigger {
+                ResolvedTrigger::Button { device, button, gesture } => {
+                    button_binding_index
+                        .entry((*device, button.clone(), *gesture))
+                        .or_default()
+                        .push(binding_idx);
+                }
+                ResolvedTrigger::PowerBelow { plug, .. } => {
+                    power_below_index
+                        .entry(plug.device())
+                        .or_default()
+                        .push(binding_idx);
+                }
+                ResolvedTrigger::At { .. } => {}
+            }
+
             resolved_bindings.push(ResolvedBinding {
                 name: rule.name.clone(),
-                trigger: rule.trigger.clone(),
-                effect: rule.effect.clone(),
+                trigger: resolved_trigger,
+                effect: resolved_effect,
             });
         }
 
-        // 7b. Build resolved rooms now that all per-room data has been
-        //     validated and split.
-        let mut rooms: BTreeMap<RoomName, ResolvedRoom> = BTreeMap::new();
+        // 10. Build resolved rooms in config order.
+        let mut rooms: Vec<ResolvedRoom> = Vec::with_capacity(config.rooms.len());
         for room in &config.rooms {
             let bound_motion = bound_motion_per_room
                 .remove(&room.name)
                 .unwrap_or_default();
-            rooms.insert(
-                room.name.clone(),
-                ResolvedRoom {
-                    name: room.name.clone(),
-                    group_name: room.group_name.clone(),
-                    id: room.id,
-                    members: room.members.clone(),
-                    parent: room.parent.clone(),
-                    scenes: room.scenes.clone(),
-                    off_transition_seconds: room.off_transition_seconds,
-                    motion_off_cooldown_seconds: room.motion_off_cooldown_seconds,
-                    bound_motion,
-                },
-            );
+            rooms.push(ResolvedRoom {
+                name: room.name.clone(),
+                group_name: room.group_name.clone(),
+                id: room.id,
+                members: room.members.clone(),
+                parent: room.parent.clone(),
+                scenes: room.scenes.clone(),
+                off_transition_seconds: room.off_transition_seconds,
+                motion_off_cooldown_seconds: room.motion_off_cooldown_seconds,
+                bound_motion,
+            });
         }
 
-        // 8. group_name → room_name index.
-        let by_group_name = rooms
-            .values()
-            .map(|r| (r.group_name.clone(), r.name.clone()))
+        // 10b. room_has_bindings indexed by RoomIdx.
+        let room_has_bindings: Vec<bool> = (0..rooms.len())
+            .map(|i| room_has_bindings_set.contains(&RoomIdx::new(i as u32)))
             .collect();
 
-        // 9. Transitive descendants. Walk each room and gather every
+        // 11. Transitive descendants. Walk each room and gather every
         //    room reachable via the *inverse* of the parent edge.
         //    Filter to descendants with rules so the controller doesn't
         //    waste cycles propagating to rule-less rooms.
-        let mut direct_children: BTreeMap<RoomName, Vec<RoomName>> = BTreeMap::new();
-        for room in rooms.values() {
-            if let Some(parent) = &room.parent {
-                direct_children
-                    .entry(parent.clone())
-                    .or_default()
-                    .push(room.name.clone());
+        let mut direct_children: BTreeMap<RoomIdx, Vec<RoomIdx>> = BTreeMap::new();
+        for (i, room) in rooms.iter().enumerate() {
+            let idx = RoomIdx::new(i as u32);
+            if let Some(parent_name) = &room.parent {
+                let parent_idx = room_by_name[parent_name];
+                direct_children.entry(parent_idx).or_default().push(idx);
             }
         }
-        let descendants_by_room = rooms
-            .keys()
-            .map(|name| {
-                let mut out = Vec::new();
-                let mut seen: HashSet<RoomName> = HashSet::new();
-                let mut stack: Vec<RoomName> = direct_children
-                    .get(name)
-                    .cloned()
-                    .unwrap_or_default();
-                while let Some(curr) = stack.pop() {
-                    if !seen.insert(curr.clone()) {
-                        continue;
-                    }
-                    if let Some(room) = rooms.get(&curr) {
-                        let has_rules = !room.bound_motion.is_empty()
-                            || rooms_with_bindings.contains(&curr);
-                        if has_rules {
-                            out.push(curr.clone());
-                        }
-                    }
-                    if let Some(grandkids) = direct_children.get(&curr) {
-                        stack.extend(grandkids.iter().cloned());
-                    }
-                }
-                out.sort();
-                (name.clone(), out)
+        // Determine which rooms have rules (motion sensors OR bindings).
+        let room_has_rules_vec: Vec<bool> = rooms
+            .iter()
+            .enumerate()
+            .map(|(i, room)| {
+                !room.bound_motion.is_empty() || room_has_bindings[i]
             })
             .collect();
 
-        // 10. Collect all plug names and protocol metadata from the catalog.
-        let mut plug_names: BTreeSet<FriendlyName> = BTreeSet::new();
-        let mut zigbee_plug_names: BTreeSet<FriendlyName> = BTreeSet::new();
-        let mut zwave_plug_names: BTreeSet<FriendlyName> = BTreeSet::new();
-        let mut plug_protocols: BTreeMap<FriendlyName, PlugProtocol> = BTreeMap::new();
-        let mut zwave_node_id_to_name: BTreeMap<u16, FriendlyName> = BTreeMap::new();
-
-        for (name, entry) in &config.devices {
-            if !entry.is_plug() {
-                continue;
-            }
-            plug_names.insert(name.clone());
-            let protocol = entry.plug_protocol().unwrap_or_default();
-            plug_protocols.insert(name.clone(), protocol);
-
-            match protocol {
-                PlugProtocol::Zwave => {
-                    let node_id = entry.zwave_node_id().ok_or_else(|| {
-                        TopologyError::ZwavePlugMissingNodeId { device: name.clone() }
-                    })?;
-                    if let Some(existing) = zwave_node_id_to_name.get(&node_id) {
-                        return Err(TopologyError::DuplicateZwaveNodeId {
-                            node_id,
-                            first: existing.clone(),
-                            second: name.clone(),
-                        });
+        let descendants_by_room: Vec<Vec<RoomIdx>> = (0..rooms.len())
+            .map(|i| {
+                let parent_idx = RoomIdx::new(i as u32);
+                let mut out: Vec<RoomIdx> = Vec::new();
+                let mut seen: HashSet<RoomIdx> = HashSet::new();
+                let mut stack: Vec<RoomIdx> = direct_children
+                    .get(&parent_idx)
+                    .cloned()
+                    .unwrap_or_default();
+                while let Some(curr) = stack.pop() {
+                    if !seen.insert(curr) {
+                        continue;
                     }
-                    zwave_node_id_to_name.insert(node_id, name.clone());
-                    zwave_plug_names.insert(name.clone());
+                    if room_has_rules_vec[curr.as_usize()] {
+                        out.push(curr);
+                    }
+                    if let Some(grandkids) = direct_children.get(&curr) {
+                        stack.extend(grandkids.iter().copied());
+                    }
                 }
-                PlugProtocol::Zigbee => {
-                    zigbee_plug_names.insert(name.clone());
-                }
-            }
-        }
+                // Sort by name for deterministic test output (matches old
+                // BTreeMap-ordered behavior).
+                out.sort_by(|a, b| {
+                    rooms[a.as_usize()]
+                        .name
+                        .cmp(&rooms[b.as_usize()].name)
+                });
+                out
+            })
+            .collect();
 
-        // Every plug must be classified as exactly one protocol.
-        debug_assert_eq!(
-            plug_names.len(),
-            zigbee_plug_names.len() + zwave_plug_names.len(),
-            "every plug must be either zigbee or zwave"
-        );
-
-        // 10b. Collect TRV and wall thermostat names from the catalog.
-        let mut trv_names: BTreeSet<FriendlyName> = BTreeSet::new();
-        let mut wall_thermostat_names: BTreeSet<FriendlyName> = BTreeSet::new();
-        for (name, entry) in &config.devices {
-            if entry.is_trv() {
-                trv_names.insert(name.clone());
-            }
-            if entry.is_wall_thermostat() {
-                wall_thermostat_names.insert(name.clone());
-            }
-        }
-
-        // 10c. Validate heating config if present.
+        // 12. Validate heating config if present.
+        let trv_names_set: BTreeSet<&str> = trv_devices
+            .iter()
+            .map(|&i| devices[i.as_usize()].name.as_str())
+            .collect();
+        let wall_thermostat_names_set: BTreeSet<&str> = wall_thermostat_devices
+            .iter()
+            .map(|&i| devices[i.as_usize()].name.as_str())
+            .collect();
         let heating_config = if let Some(ref heating) = config.heating {
             use crate::config::heating::HeatingConfigError;
             // Validate schedules.
@@ -521,7 +658,7 @@ impl Topology {
                         },
                     ));
                 }
-                if !wall_thermostat_names.contains(&zone.relay) {
+                if !wall_thermostat_names_set.contains(zone.relay.as_str()) {
                     return Err(TopologyError::HeatingError(
                         HeatingConfigError::RelayNotWallThermostat {
                             zone: zone.name.clone(),
@@ -578,7 +715,7 @@ impl Topology {
                     ));
                 }
                 for zt in &zone.trvs {
-                    if !trv_names.contains(&zt.device) {
+                    if !trv_names_set.contains(zt.device.as_str()) {
                         return Err(TopologyError::HeatingError(
                             HeatingConfigError::TrvNotInCatalog {
                                 zone: zone.name.clone(),
@@ -680,43 +817,6 @@ impl Topology {
             None
         };
 
-        // 11. Build switch_names, device_models, and hw_double_tap_buttons
-        //     from the device catalog.
-        let mut switch_names: BTreeSet<FriendlyName> = BTreeSet::new();
-        let mut device_models: BTreeMap<String, String> = BTreeMap::new();
-        let mut hw_double_tap_buttons: BTreeSet<(String, String)> = BTreeSet::new();
-
-        for (name, entry) in &config.devices {
-            if let DeviceCatalogEntry::Switch { model, .. } = entry {
-                switch_names.insert(name.clone());
-                device_models.insert(name.clone(), model.clone());
-
-                // Validate that the model exists in switch_models.
-                let switch_model = config.switch_models.get(model).ok_or_else(|| {
-                    TopologyError::UnknownSwitchModel {
-                        device: name.clone(),
-                        model: model.clone(),
-                    }
-                })?;
-
-                // Register per-button hardware double-tap suppression.
-                // Only buttons that have both press AND double_tap gestures
-                // mapped in the model get suppression — not all buttons on
-                // a model that happens to have double-tap somewhere.
-                for button in &switch_model.buttons {
-                    let has_press = switch_model.z2m_action_map.values().any(|m| {
-                        m.button == *button && m.gesture == Gesture::Press
-                    });
-                    let has_double = switch_model.z2m_action_map.values().any(|m| {
-                        m.button == *button && m.gesture == Gesture::DoubleTap
-                    });
-                    if has_press && has_double {
-                        hw_double_tap_buttons.insert((name.clone(), button.clone()));
-                    }
-                }
-            }
-        }
-
         // Location is required if any schedule slot or At trigger uses sun expressions.
         if needs_location && config.location.is_none() {
             return Err(TopologyError::MissingLocationForSunExpressions);
@@ -724,25 +824,27 @@ impl Topology {
 
         Ok(Self {
             rooms,
-            by_group_name,
-            motion_index,
+            room_by_name,
+            room_by_group_name,
             descendants_by_room,
+            room_has_bindings,
+            devices,
+            device_by_name,
+            switch_devices,
+            motion_sensor_devices,
+            plug_devices,
+            zigbee_plug_devices,
+            zwave_plug_devices,
+            trv_devices,
+            wall_thermostat_devices,
+            zwave_node_id_to_device,
+            switch_models: config.switch_models.clone(),
+            soft_double_tap_buttons,
+            hw_double_tap_buttons,
             bindings: resolved_bindings,
             button_binding_index,
             power_below_index,
-            switch_names,
-            soft_double_tap_buttons,
-            hw_double_tap_buttons,
-            rooms_with_bindings,
-            device_models,
-            switch_models: config.switch_models.clone(),
-            plug_names,
-            zigbee_plug_names,
-            zwave_plug_names,
-            plug_protocols,
-            zwave_node_id_to_name,
-            trv_names,
-            wall_thermostat_names,
+            motion_index,
             heating_config,
         })
     }

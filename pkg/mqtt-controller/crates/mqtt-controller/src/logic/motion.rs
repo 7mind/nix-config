@@ -24,10 +24,15 @@ impl EventProcessor {
         illuminance: Option<u32>,
         ts: Instant,
     ) -> Vec<Action> {
-        let rooms: Vec<RoomName> = self.topology.rooms_for_motion(sensor).to_vec();
-        if rooms.is_empty() {
+        let room_idxs: Vec<crate::topology::RoomIdx> =
+            self.topology.rooms_for_motion(sensor).to_vec();
+        if room_idxs.is_empty() {
             return Vec::new();
         }
+        let rooms: Vec<RoomName> = room_idxs
+            .iter()
+            .map(|&idx| self.topology.room(idx).name.clone())
+            .collect();
         let mut out = Vec::new();
         for room_name in &rooms {
             self.dispatch_motion(room_name, sensor, occupied, illuminance, ts, &mut out);

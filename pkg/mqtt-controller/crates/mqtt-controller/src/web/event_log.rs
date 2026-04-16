@@ -101,17 +101,19 @@ pub fn extract_event_entities(
         } => {
             entities.push(device.clone());
             // Derive related rooms from bindings for this button event.
-            for &idx in topology.bindings_for_button(device, button, *gesture) {
-                let binding = &topology.bindings()[idx];
-                if let Some(room) = binding.effect.room() {
-                    entities.push(room.to_string());
+            if let Some(device_idx) = topology.device_idx(device) {
+                for &idx in topology.bindings_for_button(device_idx, button, *gesture) {
+                    let binding = topology.binding(idx);
+                    if let Some(room_idx) = binding.effect.room() {
+                        entities.push(topology.room(room_idx).name.clone());
+                    }
                 }
             }
         }
         crate::domain::event::Event::Occupancy { sensor, .. } => {
             entities.push(sensor.clone());
-            for room in topology.rooms_for_motion(sensor) {
-                entities.push(room.clone());
+            for &room_idx in topology.rooms_for_motion(sensor) {
+                entities.push(topology.room(room_idx).name.clone());
             }
         }
         crate::domain::event::Event::GroupState { group, .. } => {

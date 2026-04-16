@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use crate::domain::action::{Action, Payload};
 use crate::entities::light_zone::{LightZoneActual, LightZoneTarget};
 use crate::tass::Owner;
-use crate::topology::RoomName;
+use crate::topology::{RoomIdx, RoomName};
 
 use super::EventProcessor;
 
@@ -374,10 +374,18 @@ impl EventProcessor {
     /// Optimistically propagate a parent's new physical state to every
     /// transitive descendant. Resets cycle state and motion ownership.
     pub(super) fn propagate_to_descendants(&mut self, ancestor: &str, on: bool, ts: Instant) {
-        let descendants: Vec<RoomName> = self.topology.descendants_of(ancestor).to_vec();
-        if descendants.is_empty() {
+        let Some(ancestor_idx) = self.topology.room_idx(ancestor) else {
+            return;
+        };
+        let descendant_idxs: Vec<RoomIdx> =
+            self.topology.descendants_of(ancestor_idx).to_vec();
+        if descendant_idxs.is_empty() {
             return;
         }
+        let descendants: Vec<RoomName> = descendant_idxs
+            .iter()
+            .map(|&idx| self.topology.room(idx).name.clone())
+            .collect();
         tracing::info!(
             ancestor,
             descendants = ?descendants,
@@ -417,10 +425,18 @@ impl EventProcessor {
     /// window would be destroyed every time z2m re-publishes the
     /// parent group's state after the child turned on.
     fn soft_propagate_to_descendants(&mut self, ancestor: &str, on: bool, ts: Instant) {
-        let descendants: Vec<RoomName> = self.topology.descendants_of(ancestor).to_vec();
-        if descendants.is_empty() {
+        let Some(ancestor_idx) = self.topology.room_idx(ancestor) else {
+            return;
+        };
+        let descendant_idxs: Vec<RoomIdx> =
+            self.topology.descendants_of(ancestor_idx).to_vec();
+        if descendant_idxs.is_empty() {
             return;
         }
+        let descendants: Vec<RoomName> = descendant_idxs
+            .iter()
+            .map(|&idx| self.topology.room(idx).name.clone())
+            .collect();
         tracing::debug!(
             ancestor,
             descendants = ?descendants,

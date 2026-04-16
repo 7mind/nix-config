@@ -105,7 +105,7 @@ pub(super) async fn refresh_state(
         );
         for plug_name in zigbee_plugs {
             if let Err(e) = bridge.publish_get(plug_name).await {
-                tracing::warn!(plug = plug_name.as_str(), error = ?e, "failed to request zigbee plug refresh");
+                tracing::warn!(plug = plug_name, error = ?e, "failed to request zigbee plug refresh");
             }
             tokio::time::sleep(GET_BURST_INTERPACKET_DELAY).await;
         }
@@ -138,10 +138,10 @@ pub(super) async fn refresh_state(
             zwave_plugs = zwave_map.len(),
             "phase 4: refreshing zwave plug states"
         );
-        for (&node_id, name) in zwave_map {
-            tracing::info!(node_id, name = name.as_str(), "requesting zwave value refresh");
-            if let Err(e) = bridge.publish_zwave_refresh(node_id).await {
-                tracing::warn!(node_id, error = ?e, "failed to request zwave refresh");
+        for (node_id, name) in &zwave_map {
+            tracing::info!(node_id = node_id, name = name, "requesting zwave value refresh");
+            if let Err(e) = bridge.publish_zwave_refresh(*node_id).await {
+                tracing::warn!(node_id = node_id, error = ?e, "failed to request zwave refresh");
             }
             tokio::time::sleep(GET_BURST_INTERPACKET_DELAY).await;
         }
@@ -181,7 +181,7 @@ pub(super) async fn refresh_state(
         for name in trv_names {
             if let Err(e) = bridge.publish_get_trv(name).await {
                 tracing::warn!(
-                    device = name.as_str(),
+                    device = name,
                     error = ?e,
                     "failed to request TRV state refresh"
                 );
@@ -191,7 +191,7 @@ pub(super) async fn refresh_state(
         for name in wt_names {
             if let Err(e) = bridge.publish_get(name).await {
                 tracing::warn!(
-                    device = name.as_str(),
+                    device = name,
                     error = ?e,
                     "failed to request wall thermostat state refresh"
                 );

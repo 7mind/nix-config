@@ -391,10 +391,14 @@ impl EventProcessor {
         // the motion-owned room should turn off.
         let mut actions = Vec::new();
         for sensor_name in newly_stale_sensors {
-            let rooms: Vec<String> = self
+            let room_idxs: Vec<crate::topology::RoomIdx> = self
                 .topology
                 .rooms_for_motion(&sensor_name)
                 .to_vec();
+            let rooms: Vec<String> = room_idxs
+                .iter()
+                .map(|&idx| self.topology.room(idx).name.clone())
+                .collect();
             for room_name in &rooms {
                 let zone = self.world.light_zones.get(room_name);
                 let is_motion_owned = zone.is_some_and(|z| z.is_motion_owned());
