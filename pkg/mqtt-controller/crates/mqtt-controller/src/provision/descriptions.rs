@@ -26,6 +26,10 @@ pub async fn reconcile_descriptions(
     let mut summary = ReconcileSummary::default();
 
     for (friendly_name, entry) in &config.devices {
+        // Z-Wave devices are managed by Z-Wave JS UI, not z2m.
+        if entry.ieee_address().starts_with("zwave:") {
+            continue;
+        }
         let Some(desired) = entry.description() else {
             continue;
         };

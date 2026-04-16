@@ -34,6 +34,10 @@ pub async fn reconcile_names(
     // devices that need renaming.
     let mut plan: Vec<(&str, String, &str)> = Vec::new();
     for (ieee, desired_name) in &config.name_by_address {
+        // Z-Wave devices are managed by Z-Wave JS UI, not z2m.
+        if ieee.starts_with("zwave:") {
+            continue;
+        }
         let Some(found) = by_address.get(ieee.as_str()) else {
             tracing::warn!(
                 ieee = %ieee,

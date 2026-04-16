@@ -31,17 +31,13 @@ impl EventProcessor {
         tracing::info!(device, button, gesture = ?gesture, "button_event");
         match gesture {
             Gesture::DoubleTap => {
-                self.world
-                    .last_double_tap
-                    .insert((device.to_string(), button.to_string()), ts);
-                // Cancel any deferred press for this (device, button) —
-                // the single was the first tap of this double-tap, not a
-                // standalone press.
                 let key = (device.to_string(), button.to_string());
                 if let Some(pending) = self.world.pending_presses.remove(&key) {
                     if pending.already_fired {
                         // Press was early-fired (room was OFF); the room is
                         // now turning on, so DoubleTap would be redundant.
+                        // Do NOT record last_double_tap — that would suppress
+                        // subsequent single-press events for 2 seconds.
                         tracing::info!(
                             device,
                             button,
@@ -55,6 +51,12 @@ impl EventProcessor {
                         "cancelled deferred press (hardware double-tap arrived)"
                     );
                 }
+                // Record last_double_tap ONLY for real (non-suppressed) double-taps.
+                // This starts the double_tap_suppression window that guards
+                // against Sonoff firmware's inter-sequence cooldown quirk.
+                self.world
+                    .last_double_tap
+                    .insert((device.to_string(), button.to_string()), ts);
                 self.dispatch_bindings(device, button, Gesture::DoubleTap, ts)
             }
             Gesture::Press => {

@@ -79,6 +79,38 @@ async fn start_kitchen_with_motion_setup() -> (TestBroker, TestClient, tokio::sy
     (broker, test_client, shutdown)
 }
 
+/// Spin up a broker, test client, and daemon using the Sonoff bedroom
+/// config (SceneToggle on Press, SceneCycle on DoubleTap). Used for
+/// double-tap suppression regression tests. Returns the clock handle
+/// so tests can advance it for deferred press flushing.
+async fn start_bedroom_sonoff_setup() -> (TestBroker, TestClient, tokio::sync::mpsc::Sender<()>, Arc<FakeClock>) {
+    let broker = TestBroker::start().await;
+    let test_client = TestClient::connect(&broker, "test-client").await;
+
+    test_client
+        .subscribe("zigbee2mqtt/hue-lz-bedroom/set")
+        .await;
+    test_client
+        .subscribe("zigbee2mqtt/hue-lz-bedroom/get")
+        .await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let clock = Arc::new(FakeClock::new(12));
+    let cfg = common::fixtures::kitchen_with_sonoff_config();
+    let shutdown = common::spawn_daemon(cfg, &broker, clock.clone());
+
+    wait_for_count(&test_client, "zigbee2mqtt/hue-lz-bedroom/get", 1).await;
+
+    // Seed the room's actual state as OFF so the daemon knows it and
+    // can_early_fire_press works (requires actual.is_known()).
+    test_client
+        .publish("zigbee2mqtt/hue-lz-bedroom", r#"{"state":"OFF"}"#)
+        .await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    (broker, test_client, shutdown, clock)
+}
+
 async fn wait_for_count(client: &TestClient, topic: &str, count: usize) {
     client
         .inbox
@@ -593,5 +625,81 @@ async fn parent_off_without_prior_on_preserves_child() {
         second,
         serde_json::json!({ "scene_recall": 2 }),
         "child should still be on after parent OFF (no prior ON), got: {second}"
+    );
+}
+
+/// Regression: early-fired double-tap must NOT record last_double_tap,
+/// so subsequent single-press events are not suppressed.
+///
+/// Scenario:
+/// 1. Room OFF → double-tap → Press early-fires (turns ON), DoubleTap suppressed
+/// 2. Immediately single-click → should turn OFF (SceneToggle)
+/// 3. Previously: single-click was suppressed for 2s because last_double_tap was recorded
+///
+/// Uses multi_thread runtime because the deferred press deferral window
+/// flush relies on the daemon's tick loop. With FakeClock, the daemon
+/// spins when the OS-time deadline is in the past; multi-thread ensures
+/// the test thread can advance the FakeClock to unblock the flush.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn early_fired_double_tap_does_not_suppress_subsequent_press() {
+    let (_broker, test_client, _shutdown, clock) = start_bedroom_sonoff_setup().await;
+
+    // 1. Double-tap from OFF: Sonoff sends single_button_1 then double_button_1.
+    //    The Press early-fires (room OFF → SceneToggle → ON).
+    //    The DoubleTap is suppressed (already_fired).
+    test_client
+        .publish("zigbee2mqtt/sonoff-ts-bedroom/action", "single_button_1")
+        .await;
+    let msgs = test_client
+        .inbox
+        .wait_for("zigbee2mqtt/hue-lz-bedroom/set", 1, Duration::from_secs(3))
+        .await;
+    let first: serde_json::Value = serde_json::from_slice(&msgs[0]).unwrap();
+    assert_eq!(
+        first,
+        serde_json::json!({"scene_recall": 1}),
+        "early-fired press should turn on with scene 1"
+    );
+
+    // DoubleTap arrives — should be suppressed (already_fired).
+    test_client
+        .publish("zigbee2mqtt/sonoff-ts-bedroom/action", "double_button_1")
+        .await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Confirm no additional action from DoubleTap.
+    let count = test_client.inbox.count("zigbee2mqtt/hue-lz-bedroom/set").await;
+    assert_eq!(count, 1, "DoubleTap should be suppressed (already_fired)");
+
+    // 2. Immediately single-click to turn off.
+    //    Previously this was suppressed by double_tap_suppression.
+    //    After fix: last_double_tap was NOT recorded, so Press is not suppressed.
+    test_client
+        .publish("zigbee2mqtt/sonoff-ts-bedroom/action", "single_button_1")
+        .await;
+
+    // Give the daemon a moment to receive and defer the press before
+    // advancing the clock past the 0.8s deferral window.
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // Advance the FakeClock past the 0.8s deferral window so the daemon's
+    // tick handler can flush the deferred press. The daemon's sleep uses
+    // OS Instant for wakeup but flush_pending_presses checks against
+    // clock.now(), so we must advance the FakeClock.
+    clock.advance(Duration::from_secs(1));
+
+    let msgs = test_client
+        .inbox
+        .wait_for("zigbee2mqtt/hue-lz-bedroom/set", 2, Duration::from_secs(3))
+        .await;
+    let second: serde_json::Value = serde_json::from_slice(&msgs[1]).unwrap();
+    // Room is ON (from step 1). The new Press is deferred 0.8s (room ON →
+    // can_early_fire_press returns false). After 0.8s flush: SceneToggle →
+    // ON → OFF.
+    let state = second.get("state").and_then(|v| v.as_str());
+    assert_eq!(
+        state,
+        Some("OFF"),
+        "single-click after early-fired double-tap should NOT be suppressed; got: {second}"
     );
 }
