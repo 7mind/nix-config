@@ -19,10 +19,13 @@ macro_rules! define_idx {
         pub struct $name(u32);
 
         impl $name {
-            /// Construct from a raw `u32`. `build`-side use only;
-            /// runtime callers should obtain indexes from topology
-            /// accessors, never fabricate them.
-            pub(in crate::topology) const fn new(v: u32) -> Self {
+            /// Construct from a raw `u32`. Topology-internal: callers
+            /// should obtain indexes from topology accessors, never
+            /// fabricate them. The constructor is exposed at crate
+            /// scope so the dispatcher and other in-crate consumers
+            /// can synthesize indexes when iterating known catalogs
+            /// (e.g. heating zones).
+            pub(crate) const fn new(v: u32) -> Self {
                 Self(v)
             }
 

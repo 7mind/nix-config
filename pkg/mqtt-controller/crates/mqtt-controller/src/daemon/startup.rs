@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
 use crate::domain::event::Event;
+use crate::effect_dispatch;
 use crate::logic::EventProcessor;
 use crate::mqtt::MqttBridge;
 use crate::time::Clock;
@@ -244,14 +245,9 @@ async fn drain_until(
                     seen_groups.insert(group.clone());
                 }
                 let actions = processor.handle_event(event);
-                for action in actions {
-                    if let Err(e) = bridge.publish_action(&action).await {
-                        tracing::error!(
-                            error = ?e,
-                            "failed to publish action during startup refresh"
-                        );
-                    }
-                }
+                let topology = processor.topology().clone();
+                let effects = effect_dispatch::actions_to_effects(actions, &topology);
+                effect_dispatch::dispatch(bridge, &topology, &effects).await;
             }
             Ok(None) => break, // channel closed
             Err(_) => break,    // timeout

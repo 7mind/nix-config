@@ -1,27 +1,83 @@
 //! Event-log helpers for the web dashboard's decision-trace stream.
 //!
-//! These convert domain types ([`Event`], [`Action`]) into the wire DTOs
+//! These convert domain types ([`Event`], [`Effect`]) into the wire DTOs
 //! the frontend renders. Distinct from `web::snapshot`, which builds
 //! periodic state snapshots; the event-log path runs once per processed
 //! event.
 
 use mqtt_controller_wire::ActionDto;
 
-use crate::domain::action::{Action, ActionTarget};
+use crate::domain::Effect;
 use crate::topology::Topology;
 
-/// Convert an [`Action`] to a wire DTO.
-pub fn action_to_dto(action: &Action) -> ActionDto {
-    let (target_kind, target) = match &action.target {
-        ActionTarget::Group(name) => ("group", name.as_str()),
-        ActionTarget::Device(name) => ("device", name.as_str()),
-        ActionTarget::DeviceGet(name) => ("device_get", name.as_str()),
-        ActionTarget::Raw { topic, .. } => ("raw", topic.as_str()),
-    };
-    ActionDto {
-        target: target.to_string(),
-        target_kind: target_kind.to_string(),
-        payload_json: serde_json::to_string(&action.payload).unwrap_or_default(),
+/// Convert an [`Effect`] to a wire DTO for the event log.
+pub fn effect_to_dto(effect: &Effect, topology: &Topology) -> ActionDto {
+    match effect {
+        Effect::PublishGroupSet { room, payload } => {
+            let target = topology.room(*room).group_name.clone();
+            ActionDto {
+                target,
+                target_kind: "group".into(),
+                payload_json: serde_json::to_string(payload).unwrap_or_default(),
+            }
+        }
+        Effect::PublishDeviceSet { device, payload } => ActionDto {
+            target: topology.device_name(*device).to_string(),
+            target_kind: "device".into(),
+            payload_json: serde_json::to_string(payload).unwrap_or_default(),
+        },
+        Effect::PublishDeviceGet { device } => ActionDto {
+            target: topology.device_name(*device).to_string(),
+            target_kind: "device_get".into(),
+            payload_json: r#"{"state":""}"#.into(),
+        },
+        Effect::PublishGetTrv { trv } => ActionDto {
+            target: topology.device_name(*trv).to_string(),
+            target_kind: "device_get".into(),
+            payload_json: "{}".into(),
+        },
+        Effect::PublishZwaveRefresh { plug } => ActionDto {
+            target: topology.device_name(plug.device()).to_string(),
+            target_kind: "device_get".into(),
+            payload_json: "{}".into(),
+        },
+        Effect::PublishHaDiscoveryZone { zone } => {
+            let name = topology
+                .heating_config()
+                .map(|cfg| cfg.zones[zone.as_usize()].name.clone())
+                .unwrap_or_default();
+            ActionDto {
+                target: name,
+                target_kind: "raw".into(),
+                payload_json: "<discovery>".into(),
+            }
+        }
+        Effect::PublishHaDiscoveryTrv { trv } => ActionDto {
+            target: topology.device_name(*trv).to_string(),
+            target_kind: "raw".into(),
+            payload_json: "<discovery>".into(),
+        },
+        Effect::PublishHaStateZone { zone, state } => {
+            let name = topology
+                .heating_config()
+                .map(|cfg| cfg.zones[zone.as_usize()].name.clone())
+                .unwrap_or_default();
+            ActionDto {
+                target: name,
+                target_kind: "raw".into(),
+                payload_json: state.to_string(),
+            }
+        }
+        Effect::PublishHaStateTrv { trv, state } => ActionDto {
+            target: topology.device_name(*trv).to_string(),
+            target_kind: "raw".into(),
+            payload_json: state.to_string(),
+        },
+        Effect::PublishRaw { topic, payload, .. } => ActionDto {
+            target: topic.clone(),
+            target_kind: "raw".into(),
+            payload_json: payload.clone(),
+        },
     }
 }
 
@@ -151,23 +207,36 @@ pub fn extract_event_entities(
     entities
 }
 
-/// Combine event entities with action-target entities into a deduped list.
+/// Combine event entities with effect-target entities into a deduped list.
 pub fn finish_involved_entities(
     mut entities: Vec<String>,
-    actions: &[crate::domain::action::Action],
+    effects: &[Effect],
     topology: &Topology,
 ) -> Vec<String> {
-    for action in actions {
-        let target_name = match &action.target {
-            crate::domain::action::ActionTarget::Group(name) => name,
-            crate::domain::action::ActionTarget::Device(name) => name,
-            crate::domain::action::ActionTarget::DeviceGet(name) => name,
-            crate::domain::action::ActionTarget::Raw { .. } => continue,
-        };
-        entities.push(target_name.clone());
-        if let crate::domain::action::ActionTarget::Group(group) = &action.target {
-            if let Some(room) = topology.room_by_group_name(group) {
-                entities.push(room.name.clone());
+    for effect in effects {
+        match effect {
+            Effect::PublishGroupSet { room, .. } => {
+                let r = topology.room(*room);
+                entities.push(r.group_name.clone());
+                entities.push(r.name.clone());
+            }
+            Effect::PublishDeviceSet { device, .. }
+            | Effect::PublishDeviceGet { device } => {
+                entities.push(topology.device_name(*device).to_string());
+            }
+            Effect::PublishGetTrv { trv } => {
+                entities.push(topology.device_name(*trv).to_string());
+            }
+            Effect::PublishZwaveRefresh { plug } => {
+                entities.push(topology.device_name(plug.device()).to_string());
+            }
+            Effect::PublishHaDiscoveryZone { .. }
+            | Effect::PublishHaDiscoveryTrv { .. }
+            | Effect::PublishHaStateZone { .. }
+            | Effect::PublishHaStateTrv { .. }
+            | Effect::PublishRaw { .. } => {
+                // Raw publishes don't have an addressable entity in
+                // the usual sense; skip.
             }
         }
     }
