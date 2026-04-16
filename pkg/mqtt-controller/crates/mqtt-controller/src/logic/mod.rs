@@ -211,46 +211,15 @@ impl EventProcessor {
     }
 
     /// Pre-arm kill switch rules for all plugs that are currently ON.
+    /// Delegates to the shared per-plug arming helper used by the
+    /// runtime off→on path; only the log messages differ.
     pub fn arm_kill_switches_for_active_plugs(&mut self, ts: Instant) {
-        use crate::entities::plug::KillSwitchRuleState;
-        let topology = self.topology.clone();
-        for (device_name, plug) in &mut self.world.plugs {
-            if !plug.actual.value().is_some_and(|a| a.on) {
-                continue;
-            }
-            let power = plug.power();
-            for &idx in topology.bindings_for_power_below(device_name) {
-                let resolved = &topology.bindings()[idx];
-                let rule_name = resolved.name.clone();
-                let entry = plug
-                    .kill_switch_rules
-                    .entry(rule_name.clone())
-                    .or_insert(KillSwitchRuleState::Inactive);
-                if matches!(entry, KillSwitchRuleState::Suppressed | KillSwitchRuleState::Armed) {
-                    continue;
-                }
-                *entry = KillSwitchRuleState::Armed;
-                if let Some(current_power) = power {
-                    if let crate::config::Trigger::PowerBelow { watts, .. } = &resolved.trigger {
-                        if current_power < *watts {
-                            tracing::info!(
-                                plug = device_name.as_str(),
-                                rule = rule_name.as_str(),
-                                power = current_power,
-                                threshold = watts,
-                                "startup: pre-arming AND seeding idle (power already below threshold)"
-                            );
-                            *entry = KillSwitchRuleState::Idle { since: ts };
-                            continue;
-                        }
-                    }
-                }
-                tracing::info!(
-                    plug = device_name.as_str(),
-                    rule = rule_name.as_str(),
-                    "startup: pre-arming kill switch for active plug"
-                );
-            }
+        let active: Vec<(String, Option<f64>)> = self.world.plugs.iter()
+            .filter(|(_, p)| p.actual.value().is_some_and(|a| a.on))
+            .map(|(name, p)| (name.clone(), p.power()))
+            .collect();
+        for (device, power) in active {
+            self.arm_kill_switch_rules(&device, power, ts, crate::logic::plugs::ArmCause::Startup);
         }
     }
 

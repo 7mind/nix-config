@@ -70,7 +70,7 @@ impl EventProcessor {
 
         // Off-to-on transition: arm kill switch rules.
         if on == Some(true) && (!was_on || !was_known) {
-            self.arm_kill_switch_rules(device, clamped_power, ts);
+            self.arm_kill_switch_rules(device, clamped_power, ts, ArmCause::OffOnTransition);
         }
 
         // Confirm target if actual matches.
@@ -317,12 +317,16 @@ impl EventProcessor {
 
     // ----- private helpers ---------------------------------------------------
 
-    /// Arm kill switch rules for a plug that just turned on.
-    fn arm_kill_switch_rules(
+    /// Arm kill switch rules for a plug. Used in two contexts:
+    /// off→on runtime transitions and the daemon's startup pre-arm
+    /// for plugs that are already on. The state-machine logic is
+    /// identical; only the log messages differ. See [`ArmCause`].
+    pub(super) fn arm_kill_switch_rules(
         &mut self,
         device: &str,
         seed_power: Option<f64>,
         ts: Instant,
+        cause: ArmCause,
     ) {
         let topology = self.topology.clone();
         let plug = self.world.plug(device);
@@ -351,7 +355,7 @@ impl EventProcessor {
                             rule = %rule_name,
                             power = current_power,
                             threshold = watts,
-                            "auto-arm: seeding idle (power already below threshold)"
+                            "{}", cause.idle_msg(),
                         );
                         *entry = KillSwitchRuleState::Idle { since: ts };
                         continue;
@@ -359,14 +363,38 @@ impl EventProcessor {
                 }
             }
 
-            tracing::info!(
-                device,
-                rule = %rule_name,
-                "auto-arm: arming kill switch on off->on transition"
-            );
+            tracing::info!(device, rule = %rule_name, "{}", cause.arm_msg());
         }
     }
+}
 
+/// Why we are arming kill switches on a plug. Distinguishes log lines
+/// between the two callers without duplicating the underlying state
+/// machine.
+#[derive(Debug, Clone, Copy)]
+pub(super) enum ArmCause {
+    /// Daemon startup: plug was already on when we connected.
+    Startup,
+    /// Runtime: plug just transitioned from off to on.
+    OffOnTransition,
+}
+
+impl ArmCause {
+    fn idle_msg(&self) -> &'static str {
+        match self {
+            Self::Startup => "startup: pre-arming AND seeding idle (power already below threshold)",
+            Self::OffOnTransition => "auto-arm: seeding idle (power already below threshold)",
+        }
+    }
+    fn arm_msg(&self) -> &'static str {
+        match self {
+            Self::Startup => "startup: pre-arming kill switch for active plug",
+            Self::OffOnTransition => "auto-arm: arming kill switch on off->on transition",
+        }
+    }
+}
+
+impl crate::logic::EventProcessor {
     /// Apply kill switch fire results: suppress all rules on the device,
     /// update plug state, produce turn-off actions.
     fn apply_kill_switch_fired(
