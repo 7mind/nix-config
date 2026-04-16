@@ -97,6 +97,11 @@ pub(super) fn broadcast_state_updates(
 /// dispatch. Driven by the [`crate::effect_dispatch::TouchedEntities`]
 /// set produced by the dispatcher, so we only push deltas that actually
 /// changed.
+///
+/// Heating zones share global pump timers (`min_cycle_remaining_secs`,
+/// `min_pause_remaining_secs`) — when ANY zone is touched we have to
+/// rebroadcast all zones so untouched zone cards don't show stale
+/// countdowns. (See Codex review 2026-04.)
 pub(super) fn broadcast_touched(
     processor: &EventProcessor,
     tx: &broadcast::Sender<mqtt_controller_wire::ServerMessage>,
@@ -117,10 +122,15 @@ pub(super) fn broadcast_touched(
         }
     }
     if let Some(cfg) = topology.heating_config() {
-        for &zone_idx in &touched.heating_zones {
-            let zone_name = &cfg.zones[zone_idx.as_usize()].name;
-            if let Some(snap) = snapshot::build_heating_zone_snapshot(processor, zone_name, now) {
-                let _ = tx.send(mqtt_controller_wire::ServerMessage::HeatingZoneUpdate(snap));
+        if !touched.heating_zones.is_empty() {
+            // Heating zones share global pump timers; any zone touch
+            // means every zone's countdown may have changed.
+            for zone in &cfg.zones {
+                if let Some(snap) =
+                    snapshot::build_heating_zone_snapshot(processor, &zone.name, now)
+                {
+                    let _ = tx.send(mqtt_controller_wire::ServerMessage::HeatingZoneUpdate(snap));
+                }
             }
         }
     }

@@ -17,7 +17,9 @@ use crate::web::decision_capture;
 use crate::web::event_log;
 use crate::web::server::WebHandle;
 
-use super::web_bridge::{broadcast_touched, handle_ws_command, recv_ws_cmd};
+use super::web_bridge::{
+    broadcast_state_updates, broadcast_touched, handle_ws_command, recv_ws_cmd,
+};
 
 /// Tick interval for evaluating kill-switch deadlines.
 const TICK_INTERVAL: Duration = Duration::from_secs(5);
@@ -118,6 +120,14 @@ pub(super) async fn run_event_loop(
             &event,
             Event::ButtonPress { .. }
         );
+        // Tick handlers (`evaluate_target_staleness`,
+        // `evaluate_actual_staleness`, schedule, kill-switch holdoffs,
+        // heating reconciliation) can flip target/freshness fields on
+        // arbitrary entities without emitting effects. Rather than
+        // teach each tick path to publish its touched-entity set, fall
+        // back to a full broadcast on every tick — ticks are slow
+        // (5 s interval) so the cost is negligible.
+        let is_tick = matches!(&event, Event::Tick { .. });
 
         // The event itself can mutate world state without producing
         // any effect (group/plug/TRV/WT echoes, motion updates, …);
@@ -182,8 +192,14 @@ pub(super) async fn run_event_loop(
             }
 
             // Broadcast incremental state updates for entities that
-            // were actually touched by this batch of effects.
-            broadcast_touched(processor, tx, &touched, now);
+            // were actually touched by this batch of effects. Tick
+            // events get a full sweep because tick handlers mutate
+            // target/freshness silently (see comment above).
+            if is_tick {
+                broadcast_state_updates(processor, tx, now);
+            } else {
+                broadcast_touched(processor, tx, &touched, now);
+            }
         }
     }
     tracing::info!("event channel closed; daemon shutting down");
