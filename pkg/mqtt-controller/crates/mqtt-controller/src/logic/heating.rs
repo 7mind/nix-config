@@ -138,14 +138,14 @@ impl EventProcessor {
 
         // Temperature handling for open window detection.
         if let Some(temp) = local_temperature {
-            trv.open_window.temp_last_updated = Some(now);
-            if trv.open_window.awaiting_baseline {
-                trv.open_window.temp_at_relay_on = Some(temp);
-                trv.open_window.temp_high_water = Some(temp);
-                trv.open_window.baseline_established_at = Some(now);
-                trv.open_window.awaiting_baseline = false;
-            }
-            if trv.open_window.temp_at_relay_on.is_some() {
+            trv.last_temp_at = Some(now);
+            // Only track baseline/high-water while a detection cycle is
+            // active (relay-ON). Backfill the baseline if relay-ON found us
+            // without a fresh temperature reading.
+            if trv.open_window.baseline_established_at.is_some() {
+                if trv.open_window.temp_at_relay_on.is_none() {
+                    trv.open_window.temp_at_relay_on = Some(temp);
+                }
                 trv.open_window.temp_high_water = Some(
                     trv.open_window.temp_high_water.map_or(temp, |hw| hw.max(temp)),
                 );
@@ -302,27 +302,19 @@ impl EventProcessor {
             // OFF -> ON edge.
             zone.relay_on_since = Some(now);
             if self.startup_complete {
-                // Capture the pending ON command time for baseline detection.
-                let on_command_at = zone.target.since();
                 for trv_dev in &trv_devices {
                     let trv = self.world.trv(trv_dev);
-                    let has_post_command_temp = on_command_at
-                        .zip(trv.open_window.temp_last_updated)
-                        .is_some_and(|(cmd, temp)| temp >= cmd);
-                    if has_post_command_temp {
-                        let temp = trv.actual.value()
-                            .and_then(|a| a.local_temperature);
-                        trv.open_window.temp_at_relay_on = temp;
-                        trv.open_window.temp_high_water = temp;
-                        trv.open_window.baseline_established_at = trv.open_window.temp_last_updated;
-                        trv.open_window.awaiting_baseline = false;
+                    // Use the last known temperature as the baseline, provided
+                    // it is fresh. The detection clock always starts at the
+                    // relay-ON moment, independent of when the reading was
+                    // physically taken. If no fresh temperature is available
+                    // the baseline is backfilled by the next arriving sample.
+                    let baseline = if trv.has_fresh_temp(now) {
+                        trv.actual.value().and_then(|a| a.local_temperature)
                     } else {
-                        trv.open_window.temp_at_relay_on = None;
-                        trv.open_window.temp_high_water = None;
-                        trv.open_window.baseline_established_at = None;
-                        trv.open_window.awaiting_baseline = true;
-                    }
-                    trv.open_window.checked = false;
+                        None
+                    };
+                    trv.open_window.start_detection(now, baseline);
                 }
             }
             // Confirm the target ON.
@@ -791,7 +783,7 @@ impl EventProcessor {
 
                 let min_observation = detect_dur / 2;
                 let grace = Duration::from_secs(5 * 60);
-                let has_post_baseline_sample = trv.open_window.temp_last_updated
+                let has_post_baseline_sample = trv.last_temp_at
                     .is_some_and(|t| t > baseline_at);
                 let observation_elapsed =
                     now.duration_since(baseline_at) >= min_observation;
@@ -865,11 +857,19 @@ impl EventProcessor {
                     // Clear inhibition: set placeholder for schedule to overwrite.
                     trv.target.set_and_command(TrvTarget::Setpoint(0.0), Owner::Schedule, now);
                     trv.target.confirm(now);
-                    trv.open_window.checked = false;
-                    trv.open_window.temp_at_relay_on = None;
-                    trv.open_window.temp_high_water = None;
-                    trv.open_window.baseline_established_at = None;
-                    trv.open_window.awaiting_baseline = relay_on;
+                    if relay_on {
+                        // Restart detection from now with a fresh baseline so
+                        // the TRV has at least `min_observation` to recover
+                        // before being re-evaluated.
+                        let baseline = if trv.has_fresh_temp(now) {
+                            trv.actual.value().and_then(|a| a.local_temperature)
+                        } else {
+                            None
+                        };
+                        trv.open_window.start_detection(now, baseline);
+                    } else {
+                        trv.open_window.reset();
+                    }
                     tracing::info!(
                         trv = %zt.device, zone = %zone.name,
                         "open window inhibition expired, schedule will restore setpoint"

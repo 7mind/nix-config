@@ -68,25 +68,38 @@ impl Default for TrvActual {
 }
 
 /// Open window detection algorithm state.
+///
+/// A detection cycle is active iff `baseline_established_at.is_some()`. The
+/// cycle starts on the zone's relay-ON edge and ends on relay-OFF ([`reset`]).
 #[derive(Debug, Clone, Default)]
 pub struct OpenWindowState {
-    /// Temperature when relay turned on (baseline for detection).
+    /// Baseline temperature at relay-ON. `None` if the relay turned on while
+    /// no fresh temperature reading was available — in that case the first
+    /// post-ON sample backfills this field.
     pub temp_at_relay_on: Option<f64>,
-    /// Highest temperature observed since relay turned on.
+    /// Highest temperature observed since detection started.
     pub temp_high_water: Option<f64>,
     /// True once detection has been performed in this relay-on cycle.
     pub checked: bool,
-    /// True when relay turned on but no fresh temp was available for baseline.
-    pub awaiting_baseline: bool,
-    /// When the baseline was established (for detection window measurement).
+    /// When the detection cycle started (the relay-ON edge). The detection
+    /// clock runs from this instant, independent of when the baseline sample
+    /// was physically measured.
     pub baseline_established_at: Option<Instant>,
-    /// When the last temperature sample was received.
-    pub temp_last_updated: Option<Instant>,
 }
 
 impl OpenWindowState {
     pub fn reset(&mut self) {
         *self = Self::default();
+    }
+
+    /// Begin a detection cycle at `now` with the given baseline temperature
+    /// (pass `None` if no fresh reading is available; the first arriving
+    /// sample will backfill it).
+    pub fn start_detection(&mut self, now: Instant, baseline_temp: Option<f64>) {
+        self.temp_at_relay_on = baseline_temp;
+        self.temp_high_water = baseline_temp;
+        self.baseline_established_at = Some(now);
+        self.checked = false;
     }
 }
 
@@ -101,6 +114,10 @@ pub struct TrvEntity {
     pub open_window: OpenWindowState,
     /// When ANY state update was last received (device liveness).
     pub last_seen: Option<Instant>,
+    /// When a temperature-bearing report was last received. Persists across
+    /// relay on/off cycles so the next relay-ON edge can decide whether the
+    /// last known temperature is fresh enough to use as a baseline.
+    pub last_temp_at: Option<Instant>,
     /// Tick generation when setpoint was last changed (for dedup).
     pub setpoint_dirty_gen: u64,
     /// Remembers which force type was last applied (PressureGroup or MinCycle).
@@ -116,6 +133,7 @@ impl Default for TrvEntity {
             actual: TassActual::new(),
             open_window: OpenWindowState::default(),
             last_seen: None,
+            last_temp_at: None,
             setpoint_dirty_gen: 0,
             last_force_reason: None,
         }
@@ -127,6 +145,13 @@ impl TrvEntity {
     pub fn is_stale(&self, now: Instant) -> bool {
         self.last_seen
             .is_some_and(|seen| now.duration_since(seen) >= STALE_THRESHOLD)
+    }
+
+    /// True if we've received a temperature-bearing report recently enough
+    /// that the last known temperature can be trusted as a detection baseline.
+    pub fn has_fresh_temp(&self, now: Instant) -> bool {
+        self.last_temp_at
+            .is_some_and(|t| now.duration_since(t) < STALE_THRESHOLD)
     }
 
     /// True if this TRV is currently inhibited (open window protection).

@@ -25,39 +25,68 @@
       fi
     '';
 
-    # Validate SSH_AUTH_SOCK on each prompt; recover if the socket went stale
-    # (e.g. SSH reconnect while inside tmux leaves existing shells with a dead path).
+    # `resock`: manually re-point SSH_AUTH_SOCK at a live agent.
+    # Probes forwarded sockets first, deletes dead ones, falls back to the
+    # local agent. Intended for use after SSH reconnects into a persisted
+    # tmux/screen session where existing shells hold a stale SSH_AUTH_SOCK.
     programs.zsh.initContent = lib.mkIf cfg-meta.isLinux ''
-      _smind_fix_ssh_sock() {
-        [[ -S "''${SSH_AUTH_SOCK:-}" ]] && return
+      resock() {
+        emulate -L zsh
+        setopt local_options null_glob
 
-        # Try forwarded agent sockets (OpenSSH >=10 stores them in ~/.ssh/agent/)
-        if [[ -d "$HOME/.ssh/agent" ]]; then
-          local sock
-          for sock in "$HOME"/.ssh/agent/*(N=Om); do
-            [[ -S "$sock" ]] && { export SSH_AUTH_SOCK="$sock"; return; }
+        # Forwarded-socket locations: OpenSSH default is /tmp/ssh-*/agent.*;
+        # some setups expose them under ~/.ssh/agent/.
+        local -a forwarded=( /tmp/ssh-*/agent.*(=om) $HOME/.ssh/agent/*(=om) )
+        local runtime_dir="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+        local -a locals=( "$runtime_dir/gcr/ssh" "$runtime_dir/ssh-agent" )
+        local sock rc
+
+        _resock_try() {
+          # returns 0 if agent responded (has keys or empty), 2 if unreachable
+          SSH_AUTH_SOCK="$1" command timeout 1 ssh-add -l >/dev/null 2>&1
+          rc=$?
+          (( rc != 2 ))
+        }
+
+        if (( ''${#forwarded} == 0 )); then
+          print "resock: no forwarded sockets found"
+        else
+          print "resock: probing ''${#forwarded} forwarded socket(s)"
+          for sock in $forwarded; do
+            printf '  %s ... ' "$sock"
+            if _resock_try "$sock"; then
+              print "alive"
+              export SSH_AUTH_SOCK="$sock"
+              print "resock: SSH_AUTH_SOCK -> $sock"
+              unfunction _resock_try
+              return 0
+            fi
+            print "dead (removing)"
+            rm -f -- "$sock"
           done
         fi
 
-        # Try tmux session environment (update-environment refreshes it on attach)
-        if [[ -n "''${TMUX:-}" ]]; then
-          local val
-          val=$(tmux show-environment SSH_AUTH_SOCK 2>/dev/null) || true
-          if [[ "$val" == SSH_AUTH_SOCK=* ]]; then
-            local candidate="''${val#SSH_AUTH_SOCK=}"
-            [[ -S "$candidate" ]] && { export SSH_AUTH_SOCK="$candidate"; return; }
+        print "resock: falling back to local agent"
+        for sock in $locals; do
+          printf '  %s ... ' "$sock"
+          if [[ ! -S "$sock" ]]; then
+            print "missing"
+            continue
           fi
-        fi
-
-        # Fall back to local agents (GCR, then HM standalone ssh-agent)
-        local runtime_dir="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-        local candidate
-        for candidate in "$runtime_dir/gcr/ssh" "$runtime_dir/ssh-agent"; do
-          [[ -S "$candidate" ]] && { export SSH_AUTH_SOCK="$candidate"; return; }
+          if _resock_try "$sock"; then
+            print "alive"
+            export SSH_AUTH_SOCK="$sock"
+            print "resock: SSH_AUTH_SOCK -> $sock"
+            unfunction _resock_try
+            return 0
+          fi
+          print "unresponsive"
         done
+
+        unfunction _resock_try
+        print -u2 "resock: no working agent found"
+        return 1
       }
-      autoload -Uz add-zsh-hook
-      add-zsh-hook precmd _smind_fix_ssh_sock
     '';
   };
 }
