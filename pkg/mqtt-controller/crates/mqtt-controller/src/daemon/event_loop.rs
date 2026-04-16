@@ -119,12 +119,20 @@ pub(super) async fn run_event_loop(
             Event::ButtonPress { .. }
         );
 
+        // The event itself can mutate world state without producing
+        // any effect (group/plug/TRV/WT echoes, motion updates, …);
+        // capture the implied touched-entities BEFORE handing the
+        // event to the processor so the dashboard sees those updates
+        // alongside effect-driven ones.
+        let topology = processor.topology().clone();
+        let mut touched = effect_dispatch::touched_from_event(&event, &topology);
+
         let effects = processor.handle_event(event);
 
-        // Dispatch effects to MQTT and capture the touched-entities set
-        // for incremental broadcast.
-        let topology = processor.topology().clone();
-        let touched = effect_dispatch::dispatch(bridge, &topology, &effects).await;
+        // Dispatch effects to MQTT and merge the effect-side touched
+        // set into the broadcast set.
+        let dispatch_touched = effect_dispatch::dispatch(bridge, &topology, &effects).await;
+        touched.extend(dispatch_touched);
 
         // Broadcast to WebSocket clients.
         if let Some(tx) = &broadcast_tx {
