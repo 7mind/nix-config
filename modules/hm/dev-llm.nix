@@ -88,6 +88,12 @@ in
       default = true;
       description = "Include Co-Authored-By: <llm> in commit message";
     };
+
+    smind.hm.dev.llm.fullscreenTui.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Enable fullscreen TUI mode for agent CLIs that support it";
+    };
   };
 
   config = lib.mkMerge [
@@ -111,6 +117,7 @@ in
         settings = {
           alwaysThinkingEnabled = true;
           theme = "dark";
+          tui = lib.mkIf config.smind.hm.dev.llm.fullscreenTui.enable "fullscreen";
           permissions = {
             allow = [ "Edit(/tmp/**)" ];
           };
