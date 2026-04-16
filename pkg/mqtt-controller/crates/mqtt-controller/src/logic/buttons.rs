@@ -8,7 +8,8 @@
 use std::time::{Duration, Instant};
 
 use crate::config::switch_model::Gesture;
-use crate::domain::action::{Action, Payload};
+use crate::domain::Effect;
+use crate::domain::action::Payload;
 use crate::entities::PendingPress;
 use crate::entities::light_zone::LightZoneTarget;
 use crate::entities::plug::PlugTarget;
@@ -27,7 +28,7 @@ impl EventProcessor {
         button: &str,
         gesture: Gesture,
         ts: Instant,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         tracing::info!(device, button, gesture = ?gesture, "button_event");
         let Some(device_idx) = self.topology.device_idx(device) else {
             // Unknown device — no bindings can match.
@@ -126,7 +127,7 @@ impl EventProcessor {
         button: &str,
         device_idx: crate::topology::DeviceIdx,
         ts: Instant,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         let key = (device.to_string(), button.to_string());
         let window =
             Duration::from_secs_f64(self.defaults.soft_double_tap_window_seconds);
@@ -185,7 +186,7 @@ impl EventProcessor {
         button: &str,
         device_idx: crate::topology::DeviceIdx,
         ts: Instant,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         let key = (device.to_string(), button.to_string());
         if let Some(pending) = self.world.pending_presses.remove(&key) {
             let window =
@@ -284,7 +285,7 @@ impl EventProcessor {
         button: &str,
         gesture: Gesture,
         ts: Instant,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         let indexes: Vec<BindingIdx> = self
             .topology
             .bindings_for_button(device, button, gesture)
@@ -310,7 +311,7 @@ impl EventProcessor {
         rule_name: &str,
         effect: &ResolvedEffect,
         ts: Instant,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         match effect {
             ResolvedEffect::SceneCycle { room } => {
                 let room_name = self.topology.room(*room).name.clone();
@@ -362,14 +363,14 @@ impl EventProcessor {
                                     target = target.as_str(),
                                     "action rule → confirm-off: second tap, turning off"
                                 );
-                                let plug = self.world.plug(&target);
-                                plug.target
+                                let plug_entity = self.world.plug(&target);
+                                plug_entity.target
                                     .set_and_command(PlugTarget::Off, Owner::User, ts);
-                                plug.on_off_clear_kill_switches();
-                                return vec![Action::for_device(
-                                    target,
-                                    Payload::device_off(),
-                                )];
+                                plug_entity.on_off_clear_kill_switches();
+                                return vec![Effect::PublishDeviceSet {
+                                    device: plug.device(),
+                                    payload: Payload::device_off(),
+                                }];
                             }
                         }
                         tracing::info!(
@@ -404,7 +405,7 @@ impl EventProcessor {
                 if is_on {
                     plug_entity.on_off_clear_kill_switches();
                 }
-                vec![Action::for_device(target, payload)]
+                vec![Effect::PublishDeviceSet { device: plug.device(), payload }]
             }
             ResolvedEffect::TurnOn { plug } => {
                 let target = self.topology.device_name(plug.device()).to_string();
@@ -416,7 +417,7 @@ impl EventProcessor {
                 let plug_entity = self.world.plug(&target);
                 plug_entity.target
                     .set_and_command(PlugTarget::On, Owner::User, ts);
-                vec![Action::for_device(target, Payload::device_on())]
+                vec![Effect::PublishDeviceSet { device: plug.device(), payload: Payload::device_on() }]
             }
             ResolvedEffect::TurnOff { plug } => {
                 let target = self.topology.device_name(plug.device()).to_string();
@@ -429,12 +430,12 @@ impl EventProcessor {
                 plug_entity.target
                     .set_and_command(PlugTarget::Off, Owner::User, ts);
                 plug_entity.on_off_clear_kill_switches();
-                vec![Action::for_device(target, Payload::device_off())]
+                vec![Effect::PublishDeviceSet { device: plug.device(), payload: Payload::device_off() }]
             }
             ResolvedEffect::TurnOffAllZones => {
                 tracing::info!(rule = rule_name, "action rule → turn off all zones");
                 let mut out = Vec::new();
-                for room in self.topology.rooms() {
+                for (room_idx, room) in self.topology.rooms_with_idx() {
                     let zone = self.world.light_zone(&room.name);
                     if zone.is_on() {
                         tracing::info!(
@@ -449,10 +450,10 @@ impl EventProcessor {
                             .set_and_command(LightZoneTarget::Off, Owner::Schedule, ts);
                         zone.last_press_at = None;
                         zone.last_off_at = Some(ts);
-                        out.push(Action::new(
-                            &room.group_name,
-                            Payload::state_off(room.off_transition_seconds),
-                        ));
+                        out.push(Effect::PublishGroupSet {
+                            room: room_idx,
+                            payload: Payload::state_off(room.off_transition_seconds),
+                        });
                     }
                 }
                 out
@@ -461,7 +462,7 @@ impl EventProcessor {
     }
 
     /// Flush all pending presses whose deadline has passed.
-    pub(super) fn flush_pending_presses(&mut self, ts: Instant) -> Vec<Action> {
+    pub(super) fn flush_pending_presses(&mut self, ts: Instant) -> Vec<Effect> {
         let expired: Vec<_> = self
             .world
             .pending_presses

@@ -2,14 +2,14 @@
 
 use std::time::Instant;
 
-use crate::domain::action::Action;
+use crate::domain::Effect;
 use crate::topology::ResolvedTrigger;
 
 use super::EventProcessor;
 
 impl EventProcessor {
     /// Evaluate scheduled `At` triggers. Called on every tick.
-    pub(super) fn evaluate_at_triggers(&mut self, ts: Instant) -> Vec<Action> {
+    pub(super) fn evaluate_at_triggers(&mut self, ts: Instant) -> Vec<Effect> {
         let sun = self.sun_times();
         let current_hour = self.clock.local_hour();
         let current_minute = self.clock.local_minute();

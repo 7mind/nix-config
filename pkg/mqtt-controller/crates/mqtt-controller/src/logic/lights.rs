@@ -6,7 +6,8 @@
 
 use std::time::{Duration, Instant};
 
-use crate::domain::action::{Action, Payload};
+use crate::domain::Effect;
+use crate::domain::action::Payload;
 use crate::entities::light_zone::{LightZoneActual, LightZoneTarget};
 use crate::tass::Owner;
 use crate::topology::{RoomIdx, RoomName};
@@ -18,11 +19,12 @@ impl EventProcessor {
     /// cycle: every press advances the cycle unconditionally, no time
     /// component, no toggle-off. The cycle index only resets when the
     /// lights physically go off.
-    pub(super) fn execute_scene_cycle(&mut self, room_name: &str, ts: Instant) -> Vec<Action> {
+    pub(super) fn execute_scene_cycle(&mut self, room_name: &str, ts: Instant) -> Vec<Effect> {
         let scenes_for_now = self.scenes_for_room(room_name);
-        let Some(room) = self.topology.room_by_name(room_name) else {
+        let Some(room_idx) = self.topology.room_idx(room_name) else {
             return Vec::new();
         };
+        let room = self.topology.room(room_idx);
         let group_name = room.group_name.clone();
 
         if scenes_for_now.is_empty() {
@@ -48,24 +50,25 @@ impl EventProcessor {
             branch,
             "scene_cycle → scene_recall"
         );
-        let action = Action::new(
-            group_name.clone(),
-            Payload::scene_recall(next_scene),
-        );
+        let effect = Effect::PublishGroupSet {
+            room: room_idx,
+            payload: Payload::scene_recall(next_scene),
+        };
         self.write_after_on(room_name, ts, next_idx, next_scene, Owner::User);
         self.propagate_to_descendants(room_name, true, ts);
-        vec![action]
+        vec![effect]
     }
 
     /// `SceneToggle` effect -- pure on/off toggle. If room is off, turn
     /// on with the first scene in the active slot. If room is on, turn
     /// off. No cycle window, no scene advancement. Designed for buttons
     /// that use hardware double-tap for scene cycling.
-    pub(super) fn execute_scene_toggle(&mut self, room_name: &str, ts: Instant) -> Vec<Action> {
+    pub(super) fn execute_scene_toggle(&mut self, room_name: &str, ts: Instant) -> Vec<Effect> {
         let scenes_for_now = self.scenes_for_room(room_name);
-        let Some(room) = self.topology.room_by_name(room_name) else {
+        let Some(room_idx) = self.topology.room_idx(room_name) else {
             return Vec::new();
         };
+        let room = self.topology.room(room_idx);
         let group_name = room.group_name.clone();
         let off_transition = room.off_transition_seconds;
 
@@ -85,13 +88,13 @@ impl EventProcessor {
                 branch = "on (was off)",
                 "scene_toggle → scene_recall"
             );
-            let action = Action::new(
-                group_name.clone(),
-                Payload::scene_recall(first),
-            );
+            let effect = Effect::PublishGroupSet {
+                room: room_idx,
+                payload: Payload::scene_recall(first),
+            };
             self.write_after_on(room_name, ts, 0, first, Owner::User);
             self.propagate_to_descendants(room_name, true, ts);
-            vec![action]
+            vec![effect]
         } else {
             tracing::info!(
                 room = room_name,
@@ -101,7 +104,7 @@ impl EventProcessor {
                 "scene_toggle → state OFF"
             );
             let mut out = Vec::new();
-            self.publish_off(room_name, &group_name, off_transition, ts, &mut out, Owner::User);
+            self.publish_off(room_name, room_idx, off_transition, ts, &mut out, Owner::User);
             out
         }
     }
@@ -110,11 +113,12 @@ impl EventProcessor {
     /// 1. If room is off -> turn on with first scene
     /// 2. If within cycle window -> advance to next scene
     /// 3. If outside cycle window -> turn off
-    pub(super) fn execute_scene_toggle_cycle(&mut self, room_name: &str, ts: Instant) -> Vec<Action> {
+    pub(super) fn execute_scene_toggle_cycle(&mut self, room_name: &str, ts: Instant) -> Vec<Effect> {
         let scenes_for_now = self.scenes_for_room(room_name);
-        let Some(room) = self.topology.room_by_name(room_name) else {
+        let Some(room_idx) = self.topology.room_idx(room_name) else {
             return Vec::new();
         };
+        let room = self.topology.room(room_idx);
         let group_name = room.group_name.clone();
         let off_transition = room.off_transition_seconds;
 
@@ -140,13 +144,13 @@ impl EventProcessor {
                 branch = "fresh on (was physically off)",
                 "scene_toggle_cycle → scene_recall"
             );
-            let action = Action::new(
-                group_name.clone(),
-                Payload::scene_recall(first),
-            );
+            let effect = Effect::PublishGroupSet {
+                room: room_idx,
+                payload: Payload::scene_recall(first),
+            };
             self.write_after_on(room_name, ts, 0, first, Owner::User);
             self.propagate_to_descendants(room_name, true, ts);
-            vec![action]
+            vec![effect]
         } else if within_window {
             // Branch 2: cycle to next scene mod N.
             let n = scenes_for_now.len();
@@ -166,13 +170,13 @@ impl EventProcessor {
                 branch = "cycle advance (within window)",
                 "scene_toggle_cycle → scene_recall"
             );
-            let action = Action::new(
-                group_name.clone(),
-                Payload::scene_recall(next_scene),
-            );
+            let effect = Effect::PublishGroupSet {
+                room: room_idx,
+                payload: Payload::scene_recall(next_scene),
+            };
             self.write_after_on(room_name, ts, next_idx, next_scene, Owner::User);
             self.propagate_to_descendants(room_name, true, ts);
-            vec![action]
+            vec![effect]
         } else {
             // Branch 3: window expired -> toggle off.
             let elapsed_ms = elapsed_since_last
@@ -187,17 +191,18 @@ impl EventProcessor {
                 "scene_toggle_cycle → state OFF"
             );
             let mut out = Vec::new();
-            self.publish_off(room_name, &group_name, off_transition, ts, &mut out, Owner::User);
+            self.publish_off(room_name, room_idx, off_transition, ts, &mut out, Owner::User);
             out
         }
     }
 
     /// `TurnOffRoom` effect -- turn off a room group with its configured
     /// off transition.
-    pub(super) fn execute_turn_off_room(&mut self, room_name: &str, ts: Instant) -> Vec<Action> {
-        let Some(room) = self.topology.room_by_name(room_name) else {
+    pub(super) fn execute_turn_off_room(&mut self, room_name: &str, ts: Instant) -> Vec<Effect> {
+        let Some(room_idx) = self.topology.room_idx(room_name) else {
             return Vec::new();
         };
+        let room = self.topology.room(room_idx);
         let group_name = room.group_name.clone();
         let off_transition = room.off_transition_seconds;
         tracing::info!(
@@ -207,15 +212,16 @@ impl EventProcessor {
             "turn_off_room → state OFF"
         );
         let mut out = Vec::new();
-        self.publish_off(room_name, &group_name, off_transition, ts, &mut out, Owner::User);
+        self.publish_off(room_name, room_idx, off_transition, ts, &mut out, Owner::User);
         out
     }
 
     /// `BrightnessStep` effect -- step brightness up or down.
-    pub(super) fn execute_brightness_step(&mut self, room_name: &str, step: i16, transition: f64) -> Vec<Action> {
-        let Some(room) = self.topology.room_by_name(room_name) else {
+    pub(super) fn execute_brightness_step(&mut self, room_name: &str, step: i16, transition: f64) -> Vec<Effect> {
+        let Some(room_idx) = self.topology.room_idx(room_name) else {
             return Vec::new();
         };
+        let room = self.topology.room(room_idx);
         let group_name = room.group_name.clone();
         tracing::info!(
             room = room_name,
@@ -224,14 +230,18 @@ impl EventProcessor {
             transition,
             "brightness_step"
         );
-        vec![Action::new(group_name, Payload::brightness_step(step, transition))]
+        vec![Effect::PublishGroupSet {
+            room: room_idx,
+            payload: Payload::brightness_step(step, transition),
+        }]
     }
 
     /// `BrightnessMove` effect -- start continuous brightness change (hold).
-    pub(super) fn execute_brightness_move(&mut self, room_name: &str, rate: i16) -> Vec<Action> {
-        let Some(room) = self.topology.room_by_name(room_name) else {
+    pub(super) fn execute_brightness_move(&mut self, room_name: &str, rate: i16) -> Vec<Effect> {
+        let Some(room_idx) = self.topology.room_idx(room_name) else {
             return Vec::new();
         };
+        let room = self.topology.room(room_idx);
         let group_name = room.group_name.clone();
         tracing::info!(
             room = room_name,
@@ -239,22 +249,29 @@ impl EventProcessor {
             rate,
             "brightness_move"
         );
-        vec![Action::new(group_name, Payload::brightness_move(rate))]
+        vec![Effect::PublishGroupSet {
+            room: room_idx,
+            payload: Payload::brightness_move(rate),
+        }]
     }
 
     /// `BrightnessStop` effect -- stop continuous brightness change
     /// (hold release). Implemented as brightness_move with rate 0.
-    pub(super) fn execute_brightness_stop(&mut self, room_name: &str) -> Vec<Action> {
-        let Some(room) = self.topology.room_by_name(room_name) else {
+    pub(super) fn execute_brightness_stop(&mut self, room_name: &str) -> Vec<Effect> {
+        let Some(room_idx) = self.topology.room_idx(room_name) else {
             return Vec::new();
         };
+        let room = self.topology.room(room_idx);
         let group_name = room.group_name.clone();
         tracing::info!(
             room = room_name,
             group = %group_name,
             "brightness_stop"
         );
-        vec![Action::new(group_name, Payload::brightness_move(0))]
+        vec![Effect::PublishGroupSet {
+            room: room_idx,
+            payload: Payload::brightness_move(0),
+        }]
     }
 
     // ----- shared helpers ---------------------------------------------------
@@ -262,16 +279,16 @@ impl EventProcessor {
     pub(super) fn publish_off(
         &mut self,
         room_name: &str,
-        group_name: &str,
+        room_idx: RoomIdx,
         off_transition: f64,
         ts: Instant,
-        out: &mut Vec<Action>,
+        out: &mut Vec<Effect>,
         owner: Owner,
     ) {
-        out.push(Action::new(
-            group_name.to_string(),
-            Payload::state_off(off_transition),
-        ));
+        out.push(Effect::PublishGroupSet {
+            room: room_idx,
+            payload: Payload::state_off(off_transition),
+        });
         self.write_after_off(room_name, ts, owner);
         self.propagate_to_descendants(room_name, false, ts);
     }
@@ -306,7 +323,7 @@ impl EventProcessor {
         group_name: &str,
         on: bool,
         ts: Instant,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         let Some(room) = self.topology.room_by_group_name(group_name) else {
             return Vec::new();
         };

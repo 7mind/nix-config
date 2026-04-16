@@ -14,6 +14,7 @@ use crate::topology::{DeviceIdx, PlugIdx, RoomIdx, ZoneIdx};
 /// One thing the controller wants to publish to MQTT, expressed in
 /// terms of typed topology indexes.
 #[derive(Debug, Clone, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum Effect {
     /// Publish to `zigbee2mqtt/<group>/set` for the room's z2m group.
     PublishGroupSet { room: RoomIdx, payload: Payload },
@@ -47,4 +48,38 @@ pub enum Effect {
     /// Escape hatch for arbitrary MQTT publishes that don't fit the
     /// typed variants. Use sparingly.
     PublishRaw { topic: String, payload: String, retain: bool },
+}
+
+impl Effect {
+    /// The payload this effect will publish, if any. Used by tests to
+    /// assert on the shape of emitted commands.
+    pub fn payload(&self) -> Option<&Payload> {
+        match self {
+            Effect::PublishGroupSet { payload, .. }
+            | Effect::PublishDeviceSet { payload, .. } => Some(payload),
+            _ => None,
+        }
+    }
+
+    /// The targeted device, if any. Used by tests and the touched-set
+    /// computation.
+    pub fn target_device(&self) -> Option<DeviceIdx> {
+        match self {
+            Effect::PublishDeviceSet { device, .. }
+            | Effect::PublishDeviceGet { device }
+            | Effect::PublishGetTrv { trv: device }
+            | Effect::PublishHaDiscoveryTrv { trv: device }
+            | Effect::PublishHaStateTrv { trv: device, .. } => Some(*device),
+            Effect::PublishZwaveRefresh { plug } => Some(plug.device()),
+            _ => None,
+        }
+    }
+
+    /// The targeted room, if any.
+    pub fn target_room(&self) -> Option<RoomIdx> {
+        match self {
+            Effect::PublishGroupSet { room, .. } => Some(*room),
+            _ => None,
+        }
+    }
 }

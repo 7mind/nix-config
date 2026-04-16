@@ -10,7 +10,8 @@
 
 use std::time::{Duration, Instant};
 
-use crate::domain::action::{Action, Payload};
+use crate::domain::Effect;
+use crate::domain::action::Payload;
 use crate::domain::event::Event;
 use crate::entities::heating_zone::HeatingZoneTarget;
 use crate::tass::TargetPhase;
@@ -36,9 +37,10 @@ const WT_REFRESH_INTERVAL: Duration = Duration::from_secs(5 * 60);
 /// for the log message ("TRV" or "wall thermostat").
 fn reassert_manual_mode_if_needed(
     device: &str,
+    device_idx: crate::topology::DeviceIdx,
     current_mode: Option<&str>,
     device_kind: &str,
-) -> Vec<Action> {
+) -> Vec<Effect> {
     match current_mode {
         Some("manual") | None => Vec::new(),
         Some(m) => {
@@ -47,10 +49,10 @@ fn reassert_manual_mode_if_needed(
                 current_mode = m,
                 "{device_kind} operating_mode is not 'manual', reasserting"
             );
-            vec![Action::for_device(
-                device.to_string(),
-                Payload::OperatingMode { operating_mode: "manual" },
-            )]
+            vec![Effect::PublishDeviceSet {
+                device: device_idx,
+                payload: Payload::OperatingMode { operating_mode: "manual" },
+            }]
         }
     }
 }
@@ -58,7 +60,7 @@ fn reassert_manual_mode_if_needed(
 impl EventProcessor {
     // ---- Event dispatch -------------------------------------------------------
 
-    pub(super) fn handle_heating_event(&mut self, event: &Event) -> Vec<Action> {
+    pub(super) fn handle_heating_event(&mut self, event: &Event) -> Vec<Effect> {
         // Clone once at the dispatch boundary so the per-handler bodies
         // can borrow the config alongside `&mut self.world` without
         // fighting the borrow checker.
@@ -107,7 +109,7 @@ impl EventProcessor {
 
     // ---- Tick handler ---------------------------------------------------------
 
-    pub(super) fn handle_heating_tick(&mut self) -> Vec<Action> {
+    pub(super) fn handle_heating_tick(&mut self) -> Vec<Effect> {
         self.heating_tick_gen += 1;
         let mut actions = Vec::new();
 
@@ -116,10 +118,9 @@ impl EventProcessor {
         if !self.startup_complete {
             self.startup_complete = true;
             for zone in &heating_config.zones {
-                actions.push(Action::get_device_state(
-                    zone.relay.clone(),
-                    Payload::GetState { state: "" },
-                ));
+                if let Some(relay_idx) = self.topology.device_idx(&zone.relay) {
+                    actions.push(Effect::PublishDeviceGet { device: relay_idx });
+                }
                 tracing::info!(
                     zone = %zone.name,
                     relay = %zone.relay,
@@ -166,10 +167,9 @@ impl EventProcessor {
                         .unwrap_or(0),
                     "wall thermostat stale: sending GET to provoke state report"
                 );
-                actions.push(Action::get_device_state(
-                    zone.relay.clone(),
-                    Payload::GetState { state: "" },
-                ));
+                if let Some(relay_idx) = self.topology.device_idx(&zone.relay) {
+                    actions.push(Effect::PublishDeviceGet { device: relay_idx });
+                }
             }
         }
 
@@ -180,10 +180,9 @@ impl EventProcessor {
         if should_refresh {
             self.last_wt_refresh = Some(now);
             for zone in &heating_config.zones {
-                actions.push(Action::get_device_state(
-                    zone.relay.clone(),
-                    Payload::GetState { state: "" },
-                ));
+                if let Some(relay_idx) = self.topology.device_idx(&zone.relay) {
+                    actions.push(Effect::PublishDeviceGet { device: relay_idx });
+                }
             }
         }
 
@@ -213,20 +212,26 @@ impl EventProcessor {
     }
     // ---- Device mode enforcement ----------------------------------------------
 
-    fn check_trv_mode(&self, device: &str) -> Vec<Action> {
+    fn check_trv_mode(&self, device: &str) -> Vec<Effect> {
+        let Some(device_idx) = self.topology.device_idx(device) else {
+            return Vec::new();
+        };
         let mode = self.world.trvs.get(device)
             .and_then(|t| t.actual.value())
             .and_then(|a| a.operating_mode.as_deref());
-        reassert_manual_mode_if_needed(device, mode, "TRV")
+        reassert_manual_mode_if_needed(device, device_idx, mode, "TRV")
     }
 
-    fn check_wt_mode(&self, device: &str) -> Vec<Action> {
+    fn check_wt_mode(&self, device: &str) -> Vec<Effect> {
         let Some(heating_config) = &self.heating_config else { return Vec::new() };
+        let Some(device_idx) = self.topology.device_idx(device) else {
+            return Vec::new();
+        };
         let mode = heating_config.zones.iter()
             .find(|z| z.relay == device)
             .and_then(|z| self.world.heating_zones.get(&z.name))
             .and_then(|hz| hz.wt_operating_mode.as_deref());
-        reassert_manual_mode_if_needed(device, mode, "wall thermostat")
+        reassert_manual_mode_if_needed(device, device_idx, mode, "wall thermostat")
     }
     // ---- Pump tracking helpers ------------------------------------------------
 

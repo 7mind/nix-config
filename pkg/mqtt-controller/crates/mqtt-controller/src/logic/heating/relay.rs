@@ -7,7 +7,8 @@
 use std::time::{Duration, Instant};
 
 use crate::config::heating::HeatingConfig;
-use crate::domain::action::{Action, Payload};
+use crate::domain::Effect;
+use crate::domain::action::Payload;
 use crate::entities::heating_zone::HeatingZoneTarget;
 use crate::entities::trv::{ForceOpenReason, TrvTarget};
 use crate::logic::EventProcessor;
@@ -20,7 +21,7 @@ impl EventProcessor {
         &mut self,
         heating_config: &HeatingConfig,
         now: Instant,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         let mut actions = Vec::new();
         let min_cycle = Duration::from_secs(heating_config.heat_pump.min_cycle_seconds);
         let min_pause = Duration::from_secs(heating_config.heat_pump.min_pause_seconds);
@@ -31,6 +32,7 @@ impl EventProcessor {
         struct ZoneDecision {
             zone_name: String,
             relay: String,
+            relay_idx: crate::topology::DeviceIdx,
             has_demand: bool,
             relay_on: bool,
             target: Option<HeatingZoneTarget>,
@@ -41,6 +43,7 @@ impl EventProcessor {
                 if !hz.relay_state_known {
                     return None;
                 }
+                let relay_idx = self.topology.device_idx(&zone.relay)?;
                 let has_demand = zone.trvs.iter().any(|zt| {
                     self.world.trvs.get(&zt.device)
                         .is_some_and(|t| t.has_effective_demand(now, md, mdf))
@@ -48,6 +51,7 @@ impl EventProcessor {
                 Some(ZoneDecision {
                     zone_name: zone.name.clone(),
                     relay: zone.relay.clone(),
+                    relay_idx,
                     has_demand,
                     relay_on: hz.is_relay_on(),
                     target: hz.target.value().cloned(),
@@ -66,7 +70,7 @@ impl EventProcessor {
                         .unwrap_or(true)
                 };
                 if allowed {
-                    actions.push(Action::for_device(d.relay.clone(), Payload::device_on()));
+                    actions.push(Effect::PublishDeviceSet { device: d.relay_idx, payload: Payload::device_on() });
                     let hz = self.world.heating_zone(&d.zone_name);
                     hz.target.set_and_command(HeatingZoneTarget::Heating, Owner::Schedule, now);
                     hz.desired_relay_gen = tick_gen;
@@ -91,7 +95,7 @@ impl EventProcessor {
                     let hz = self.world.heating_zone(&d.zone_name);
                     hz.target.set_and_command(HeatingZoneTarget::Off, Owner::Schedule, now);
                     hz.desired_relay_gen = tick_gen;
-                    actions.push(Action::for_device(d.relay.clone(), Payload::device_off()));
+                    actions.push(Effect::PublishDeviceSet { device: d.relay_idx, payload: Payload::device_off() });
                     tracing::info!(
                         zone = %d.zone_name, relay = %d.relay,
                         "heating: cancelling stale relay ON (demand gone, min_cycle ok)"
@@ -134,7 +138,7 @@ impl EventProcessor {
                     let hz = self.world.heating_zone(&d.zone_name);
                     hz.target.set_and_command(HeatingZoneTarget::Off, Owner::Schedule, now);
                     hz.desired_relay_gen = tick_gen;
-                    actions.push(Action::for_device(d.relay.clone(), Payload::device_off()));
+                    actions.push(Effect::PublishDeviceSet { device: d.relay_idx, payload: Payload::device_off() });
                     tracing::info!(
                         zone = %d.zone_name, relay = %d.relay,
                         "heating: requesting relay OFF (pump stays running)"
@@ -154,7 +158,7 @@ impl EventProcessor {
                         let hz = self.world.heating_zone(&d.zone_name);
                         hz.target.set_and_command(HeatingZoneTarget::Off, Owner::Schedule, now);
                         hz.desired_relay_gen = tick_gen;
-                        actions.push(Action::for_device(d.relay.clone(), Payload::device_off()));
+                        actions.push(Effect::PublishDeviceSet { device: d.relay_idx, payload: Payload::device_off() });
                         tracing::info!(
                             zone = %d.zone_name, relay = %d.relay,
                             "heating: requesting relay OFF (pump stopping)"
@@ -186,7 +190,7 @@ impl EventProcessor {
                             let hz = self.world.heating_zone(&d.zone_name);
                             hz.target.set_and_command(HeatingZoneTarget::Off, Owner::Schedule, now);
                             hz.desired_relay_gen = tick_gen;
-                            actions.push(Action::for_device(d.relay.clone(), Payload::device_off()));
+                            actions.push(Effect::PublishDeviceSet { device: d.relay_idx, payload: Payload::device_off() });
                             tracing::warn!(
                                 zone = %d.zone_name, relay = %d.relay,
                                 "min_cycle hold OVERRIDDEN: no forceable TRVs \
@@ -212,10 +216,12 @@ impl EventProcessor {
                                     );
                                     trv.last_force_reason = Some(ForceOpenReason::MinCycle);
                                     trv.setpoint_dirty_gen = tick_gen;
-                                    actions.push(Action::for_device(
-                                        zt.device.clone(),
-                                        Payload::trv_setpoint(MAX_SETPOINT),
-                                    ));
+                                    if let Some(trv_idx) = self.topology.device_idx(&zt.device) {
+                                        actions.push(Effect::PublishDeviceSet {
+                                            device: trv_idx,
+                                            payload: Payload::trv_setpoint(MAX_SETPOINT),
+                                        });
+                                    }
                                     tracing::info!(
                                         trv = %zt.device,
                                         zone = %d.zone_name,
@@ -239,7 +245,7 @@ impl EventProcessor {
     pub(super) fn reconcile_relays(
         &self,
         heating_config: &HeatingConfig,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         let mut actions = Vec::new();
 
         for zone in &heating_config.zones {
@@ -275,7 +281,9 @@ impl EventProcessor {
             } else {
                 Payload::device_off()
             };
-            actions.push(Action::for_device(zone.relay.clone(), payload));
+            if let Some(relay_idx) = self.topology.device_idx(&zone.relay) {
+                actions.push(Effect::PublishDeviceSet { device: relay_idx, payload });
+            }
             tracing::info!(
                 zone = %zone.name,
                 relay = %zone.relay,

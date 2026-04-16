@@ -119,12 +119,11 @@ pub(super) async fn run_event_loop(
             Event::ButtonPress { .. }
         );
 
-        let actions = processor.handle_event(event);
+        let effects = processor.handle_event(event);
 
-        // Translate to typed effects, then dispatch to MQTT and capture
-        // the touched-entities set for incremental broadcast.
+        // Dispatch effects to MQTT and capture the touched-entities set
+        // for incremental broadcast.
         let topology = processor.topology().clone();
-        let effects = effect_dispatch::actions_to_effects(actions, &topology);
         let touched = effect_dispatch::dispatch(bridge, &topology, &effects).await;
 
         // Broadcast to WebSocket clients.

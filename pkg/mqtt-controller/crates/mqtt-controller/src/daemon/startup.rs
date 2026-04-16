@@ -244,9 +244,8 @@ async fn drain_until(
                 if let Event::GroupState { group, .. } = &event {
                     seen_groups.insert(group.clone());
                 }
-                let actions = processor.handle_event(event);
+                let effects = processor.handle_event(event);
                 let topology = processor.topology().clone();
-                let effects = effect_dispatch::actions_to_effects(actions, &topology);
                 effect_dispatch::dispatch(bridge, &topology, &effects).await;
             }
             Ok(None) => break, // channel closed

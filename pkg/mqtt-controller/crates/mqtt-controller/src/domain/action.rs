@@ -1,76 +1,12 @@
-//! Actions flowing OUT of the controller. Every state-machine transition
-//! returns a `Vec<Action>`; the MQTT bridge serializes each action's
-//! `Payload` to JSON and publishes it to the right `zigbee2mqtt/<group>/set`
-//! topic.
+//! MQTT payload bodies. Each variant serializes to the exact JSON shape
+//! z2m expects.
+//!
+//! Module name retained for git history; the `Action` and `ActionTarget`
+//! wrappers were removed as part of the Effect refactor — every state
+//! transition now returns [`crate::domain::Effect`] directly, which
+//! references targets by typed topology index instead of by string.
 
 use serde::Serialize;
-
-/// Where to publish an action: a z2m group or a specific device.
-#[derive(Debug, Clone, PartialEq)]
-pub enum ActionTarget {
-    /// Publish to `zigbee2mqtt/<group_name>/set`.
-    Group(String),
-    /// Publish to `zigbee2mqtt/<device_name>/set`.
-    Device(String),
-    /// Publish to `zigbee2mqtt/<device_name>/get` — request fresh state.
-    DeviceGet(String),
-    /// Publish to an arbitrary MQTT topic with explicit retain flag.
-    /// Used for HA discovery configs and controller state updates.
-    Raw { topic: String, retain: bool },
-}
-
-/// One thing the controller wants to publish to MQTT.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Action {
-    pub target: ActionTarget,
-    pub payload: Payload,
-}
-
-impl Action {
-    /// Construct a group-targeted action (the common case for room
-    /// scene cycling).
-    pub fn new(group_name: impl Into<String>, payload: Payload) -> Self {
-        Self {
-            target: ActionTarget::Group(group_name.into()),
-            payload,
-        }
-    }
-
-    /// Construct a device-targeted action (for smart plugs).
-    pub fn for_device(device_name: impl Into<String>, payload: Payload) -> Self {
-        Self {
-            target: ActionTarget::Device(device_name.into()),
-            payload,
-        }
-    }
-
-    /// The friendly_name to publish to, regardless of target kind.
-    /// Used by the MQTT bridge to build the topic.
-    pub fn target_name(&self) -> &str {
-        match &self.target {
-            ActionTarget::Group(name)
-            | ActionTarget::Device(name)
-            | ActionTarget::DeviceGet(name) => name,
-            ActionTarget::Raw { topic, .. } => topic,
-        }
-    }
-
-    /// Construct a device GET action (request fresh state from device).
-    pub fn get_device_state(device_name: impl Into<String>, payload: Payload) -> Self {
-        Self {
-            target: ActionTarget::DeviceGet(device_name.into()),
-            payload,
-        }
-    }
-
-    /// Construct a raw MQTT publish action (for HA discovery, state updates).
-    pub fn raw(topic: impl Into<String>, payload: Payload, retain: bool) -> Self {
-        Self {
-            target: ActionTarget::Raw { topic: topic.into(), retain },
-            payload,
-        }
-    }
-}
 
 /// One JSON body to publish on a `/set` topic. Each variant serializes to
 /// the exact JSON shape z2m expects — same shapes the bento rules emit.
@@ -227,19 +163,5 @@ mod tests {
         let p = Payload::device_off();
         let json = serde_json::to_string(&p).unwrap();
         assert_eq!(json, r#"{"state":"OFF"}"#);
-    }
-
-    #[test]
-    fn action_target_name_group() {
-        let a = Action::new("hue-lz-kitchen", Payload::scene_recall(1));
-        assert_eq!(a.target_name(), "hue-lz-kitchen");
-        assert!(matches!(a.target, ActionTarget::Group(_)));
-    }
-
-    #[test]
-    fn action_target_name_device() {
-        let a = Action::for_device("z2m-p-printer", Payload::device_on());
-        assert_eq!(a.target_name(), "z2m-p-printer");
-        assert!(matches!(a.target, ActionTarget::Device(_)));
     }
 }

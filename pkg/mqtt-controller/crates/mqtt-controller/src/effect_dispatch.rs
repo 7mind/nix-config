@@ -10,54 +10,9 @@
 use std::collections::BTreeSet;
 
 use crate::domain::Effect;
-use crate::domain::action::{Action, ActionTarget, Payload};
+use crate::domain::ha_discovery;
 use crate::mqtt::{MqttBridge, MqttError};
 use crate::topology::{DeviceIdx, PlugIdx, RoomIdx, Topology, ZoneIdx};
-
-/// Translate a legacy [`Action`] into an [`Effect`] using the topology
-/// to resolve string names to indexes. Used during the migration from
-/// `Vec<Action>` returning logic to `Vec<Effect>` returning logic.
-///
-/// Returns `None` if the action references a name that's not in the
-/// topology (for `Group` and `Device` targets) — the caller's logic
-/// should never produce such actions, but if it does we drop them
-/// silently rather than panicking.
-pub fn action_to_effect(action: Action, topology: &Topology) -> Option<Effect> {
-    match action.target {
-        ActionTarget::Group(group_name) => {
-            let room = topology.room_idx_by_group(&group_name)?;
-            Some(Effect::PublishGroupSet { room, payload: action.payload })
-        }
-        ActionTarget::Device(device_name) => {
-            let device = topology.device_idx(&device_name)?;
-            Some(Effect::PublishDeviceSet { device, payload: action.payload })
-        }
-        ActionTarget::DeviceGet(device_name) => {
-            let device = topology.device_idx(&device_name)?;
-            Some(Effect::PublishDeviceGet { device })
-        }
-        ActionTarget::Raw { topic, retain } => {
-            // Only `RawString` payloads make sense for raw publishes;
-            // other payload variants serialize to JSON which is not
-            // what callers expect for HA discovery / state updates.
-            let payload = match action.payload {
-                Payload::RawString(s) => s,
-                other => serde_json::to_string(&other).unwrap_or_default(),
-            };
-            Some(Effect::PublishRaw { topic, payload, retain })
-        }
-    }
-}
-
-/// Convenience: translate a slice of actions into effects, dropping
-/// any that don't resolve. Used by the daemon's command handlers
-/// during the migration.
-pub fn actions_to_effects(actions: Vec<Action>, topology: &Topology) -> Vec<Effect> {
-    actions
-        .into_iter()
-        .filter_map(|a| action_to_effect(a, topology))
-        .collect()
-}
 
 /// Set of entities touched by a batch of dispatched effects. Used by the
 /// daemon's event loop to issue incremental broadcasts instead of a
@@ -198,13 +153,13 @@ async fn dispatch_one(
                 .heating_config()
                 .expect("zone effect requires heating config");
             let zone_cfg = &cfg.zones[zone.as_usize()];
-            let action = crate::domain::ha_discovery::zone_discovery_action(&zone_cfg.name);
-            publish_legacy_action(bridge, &action).await
+            let publish = ha_discovery::zone_discovery_publish(&zone_cfg.name);
+            bridge.publish_raw(&publish.topic, publish.payload.as_bytes(), true).await
         }
         Effect::PublishHaDiscoveryTrv { trv } => {
             let trv_name = topology.device_name(*trv);
-            let action = crate::domain::ha_discovery::trv_discovery_action(trv_name);
-            publish_legacy_action(bridge, &action).await
+            let publish = ha_discovery::trv_discovery_publish(trv_name);
+            bridge.publish_raw(&publish.topic, publish.payload.as_bytes(), true).await
         }
         Effect::PublishHaStateZone { zone, state } => {
             touched.touch_zone(*zone);
@@ -212,16 +167,14 @@ async fn dispatch_one(
                 .heating_config()
                 .expect("zone effect requires heating config");
             let zone_cfg = &cfg.zones[zone.as_usize()];
-            let action =
-                crate::domain::ha_discovery::state_update_action("zone", &zone_cfg.name, state);
-            publish_legacy_action(bridge, &action).await
+            let topic = ha_discovery::state_topic("zone", &zone_cfg.name);
+            bridge.publish_raw(&topic, state.as_bytes(), true).await
         }
         Effect::PublishHaStateTrv { trv, state } => {
             touched.touch_zone_for_trv(topology, *trv);
             let trv_name = topology.device_name(*trv);
-            let action =
-                crate::domain::ha_discovery::state_update_action("trv", trv_name, state);
-            publish_legacy_action(bridge, &action).await
+            let topic = ha_discovery::state_topic("trv", trv_name);
+            bridge.publish_raw(&topic, state.as_bytes(), true).await
         }
         Effect::PublishRaw { topic, payload, retain } => {
             bridge.publish_raw(topic, payload.as_bytes(), *retain).await
@@ -229,22 +182,3 @@ async fn dispatch_one(
     }
 }
 
-/// Helper for HA discovery / state update actions which currently
-/// produce a legacy [`crate::domain::action::Action`] with a `Raw`
-/// target. Translates that wrapper into the underlying MQTT publish.
-async fn publish_legacy_action(
-    bridge: &MqttBridge,
-    action: &crate::domain::action::Action,
-) -> Result<(), MqttError> {
-    use crate::domain::action::ActionTarget;
-    match &action.target {
-        ActionTarget::Raw { topic, retain } => {
-            let bytes = match &action.payload {
-                Payload::RawString(s) => s.as_bytes().to_vec(),
-                other => serde_json::to_vec(other)?,
-            };
-            bridge.publish_raw(topic, &bytes, *retain).await
-        }
-        _ => unreachable!("HA discovery actions are always Raw"),
-    }
-}

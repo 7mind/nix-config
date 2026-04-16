@@ -108,8 +108,7 @@ pub async fn run(
     // Turn off any motion-controlled room that was left on before
     // restart. No cooldown is applied so motion sensors can
     // immediately re-trigger if someone is actually in the room.
-    let startup_off = processor.startup_turn_off_motion_zones(clock.now());
-    let startup_effects = effect_dispatch::actions_to_effects(startup_off, &topology);
+    let startup_effects = processor.startup_turn_off_motion_zones(clock.now());
     effect_dispatch::dispatch(&bridge, &topology, &startup_effects).await;
     processor.arm_kill_switches_for_active_plugs(clock.now());
 

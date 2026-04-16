@@ -5,7 +5,8 @@
 
 use std::time::{Duration, Instant};
 
-use crate::domain::action::{Action, Payload};
+use crate::domain::Effect;
+use crate::domain::action::Payload;
 use crate::entities::plug::{KillSwitchRuleState, PlugActual, PlugTarget};
 use crate::tass::{ActualFreshness, Owner, TargetPhase};
 use crate::topology::ResolvedTrigger;
@@ -24,7 +25,7 @@ impl EventProcessor {
         on: Option<bool>,
         power: Option<f64>,
         ts: Instant,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         let clamped_power = power.map(|w| w.max(0.0));
 
         let plug = self.world.plug(device);
@@ -96,7 +97,7 @@ impl EventProcessor {
         device: &str,
         power: f64,
         ts: Instant,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         let topology = self.topology.clone();
         let Some(device_idx) = topology.device_idx(device) else {
             return Vec::new();
@@ -221,7 +222,7 @@ impl EventProcessor {
     /// Tick-based kill switch evaluation. Checks all plugs that are on
     /// for idle rules whose holdoff has elapsed.
     /// Ports `KillSwitchEvaluator::tick()`.
-    pub(super) fn evaluate_kill_switch_ticks(&mut self, ts: Instant) -> Vec<Action> {
+    pub(super) fn evaluate_kill_switch_ticks(&mut self, ts: Instant) -> Vec<Effect> {
         let topology = self.topology.clone();
         let bindings_snapshot = topology.bindings().to_vec();
 
@@ -413,7 +414,7 @@ impl crate::logic::EventProcessor {
         device: &str,
         fired: &[(String, String)],
         ts: Instant,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         if fired.is_empty() {
             return Vec::new();
         }
@@ -429,7 +430,12 @@ impl crate::logic::EventProcessor {
                 .target
                 .set_and_command(PlugTarget::Off, Owner::Rule, ts);
             target_plug.on_off_clear_kill_switches();
-            out.push(Action::for_device(target, Payload::device_off()));
+            if let Some(device_idx) = self.topology.device_idx(target) {
+                out.push(Effect::PublishDeviceSet {
+                    device: device_idx,
+                    payload: Payload::device_off(),
+                });
+            }
         }
         out
     }

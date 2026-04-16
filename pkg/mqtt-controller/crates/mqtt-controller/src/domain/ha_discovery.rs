@@ -1,16 +1,15 @@
 //! HA MQTT auto-discovery: derive controller state for TRVs and zones,
-//! build discovery config and state update [`Action`]s.
+//! build discovery config payloads and topic strings.
 //!
 //! All functions are pure — no I/O, no MQTT. The heating logic
-//! calls these from [`crate::logic::heating`]
-//! and returns the resulting actions alongside its normal control actions.
+//! returns typed [`crate::domain::Effect`]s; the effect dispatcher
+//! calls into this module to build the wire-level retained payloads.
 
 use std::fmt;
 use std::time::{Duration, Instant};
 
 use serde_json::json;
 
-use super::action::{Action, Payload};
 use crate::entities::heating_zone::HeatingZoneEntity;
 use crate::entities::trv::TrvEntity;
 
@@ -246,17 +245,24 @@ fn display_name(device_name: &str) -> String {
         .join(" ")
 }
 
-/// Build a retained HA discovery config Action.
-///
+/// One retained HA-discovery config publish: `(topic, payload)`.
+/// Both fields are returned as owned strings so the caller can hand
+/// them to the MQTT bridge without further allocation.
+pub struct DiscoveryPublish {
+    pub topic: String,
+    pub payload: String,
+}
+
+/// Build the (topic, payload) pair for a retained HA discovery config.
 /// `entity_type` is the topic segment ("trv" / "zone") and matches the
-/// one used by `state_topic` / `state_update_action`. `kind_label`
-/// is the prefix shown in HA ("TRV" / "Zone").
-fn discovery_action(
+/// one used by `state_topic`. `kind_label` is the prefix shown in HA
+/// ("TRV" / "Zone").
+fn discovery_publish(
     entity_type: &str,
     kind_label: &str,
     name: &str,
     options: &[&str],
-) -> Action {
+) -> DiscoveryPublish {
     let config = json!({
         "name": format!("{kind_label} {} State", display_name(name)),
         "state_topic": state_topic(entity_type, name),
@@ -265,30 +271,20 @@ fn discovery_action(
         "options": options,
         "device": ha_device_block(),
     });
-    Action::raw(
-        discovery_config_topic(entity_type, name),
-        Payload::RawString(serde_json::to_string(&config).expect("JSON serialization")),
-        true,
-    )
+    DiscoveryPublish {
+        topic: discovery_config_topic(entity_type, name),
+        payload: serde_json::to_string(&config).expect("JSON serialization"),
+    }
 }
 
-/// Build the retained HA discovery config Action for a TRV entity.
-pub fn trv_discovery_action(device_name: &str) -> Action {
-    discovery_action("trv", "TRV", device_name, TrvDerivedState::ALL_OPTIONS)
+/// Discovery-config publish for a TRV entity.
+pub fn trv_discovery_publish(device_name: &str) -> DiscoveryPublish {
+    discovery_publish("trv", "TRV", device_name, TrvDerivedState::ALL_OPTIONS)
 }
 
-/// Build the retained HA discovery config Action for a zone entity.
-pub fn zone_discovery_action(zone_name: &str) -> Action {
-    discovery_action("zone", "Zone", zone_name, ZoneDerivedState::ALL_OPTIONS)
-}
-
-/// Build a retained state update Action.
-pub fn state_update_action(entity_type: &str, name: &str, state_str: &str) -> Action {
-    Action::raw(
-        state_topic(entity_type, name),
-        Payload::RawString(state_str.to_string()),
-        true,
-    )
+/// Discovery-config publish for a zone entity.
+pub fn zone_discovery_publish(zone_name: &str) -> DiscoveryPublish {
+    discovery_publish("zone", "Zone", zone_name, ZoneDerivedState::ALL_OPTIONS)
 }
 
 // ---------------------------------------------------------------------------
@@ -298,7 +294,6 @@ pub fn state_update_action(entity_type: &str, name: &str, state_str: &str) -> Ac
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::action::ActionTarget;
     use crate::entities::trv::{
         ForceOpenReason, HeatingRunningState, TrvActual, TrvEntity, TrvTarget,
     };
@@ -422,28 +417,18 @@ mod tests {
     // ---- Discovery config shape ----
 
     #[test]
-    fn trv_discovery_config_is_retained() {
-        let action = trv_discovery_action("bosch-trv-kitchen");
-        assert!(matches!(action.target, ActionTarget::Raw { retain: true, .. }));
-    }
-
-    #[test]
     fn trv_discovery_config_topic_format() {
-        let action = trv_discovery_action("bosch-trv-kitchen");
+        let publish = trv_discovery_publish("bosch-trv-kitchen");
         assert_eq!(
-            action.target_name(),
+            publish.topic,
             "homeassistant/sensor/mqtt_ctrl_trv_bosch_trv_kitchen_state/config"
         );
     }
 
     #[test]
     fn trv_discovery_config_contains_options() {
-        let action = trv_discovery_action("bosch-trv-kitchen");
-        let json_str = match &action.payload {
-            Payload::RawString(s) => s.clone(),
-            _ => panic!("expected RawString"),
-        };
-        let v: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+        let publish = trv_discovery_publish("bosch-trv-kitchen");
+        let v: serde_json::Value = serde_json::from_str(&publish.payload).unwrap();
         assert_eq!(v["device_class"], "enum");
         assert!(v["options"].as_array().unwrap().len() > 0);
         assert_eq!(v["state_topic"], "mqtt-controller/heating/trv/bosch-trv-kitchen/state");
@@ -451,25 +436,19 @@ mod tests {
 
     #[test]
     fn zone_discovery_config_topic_format() {
-        let action = zone_discovery_action("master-bedroom");
+        let publish = zone_discovery_publish("master-bedroom");
         assert_eq!(
-            action.target_name(),
+            publish.topic,
             "homeassistant/sensor/mqtt_ctrl_zone_master_bedroom_state/config"
         );
     }
 
     #[test]
-    fn state_update_is_retained_bare_string() {
-        let action = state_update_action("trv", "bosch-trv-kitchen", "HEAT_DEMAND");
-        assert!(matches!(action.target, ActionTarget::Raw { retain: true, .. }));
+    fn state_topic_format() {
         assert_eq!(
-            action.target_name(),
+            state_topic("trv", "bosch-trv-kitchen"),
             "mqtt-controller/heating/trv/bosch-trv-kitchen/state"
         );
-        match &action.payload {
-            Payload::RawString(s) => assert_eq!(s, "HEAT_DEMAND"),
-            _ => panic!("expected RawString"),
-        }
     }
 
     #[test]

@@ -43,21 +43,18 @@ pub(super) async fn handle_ws_command(
             let _ = reply.send(topo);
         }
         WsCommand::RecallScene { room, scene_id } => {
-            let actions = processor.web_recall_scene(&room, scene_id, clock.now());
+            let effects = processor.web_recall_scene(&room, scene_id, clock.now());
             let topology = processor.topology().clone();
-            let effects = effect_dispatch::actions_to_effects(actions, &topology);
             effect_dispatch::dispatch(bridge, &topology, &effects).await;
         }
         WsCommand::SetRoomOff { room } => {
-            let actions = processor.web_set_room_off(&room, clock.now());
+            let effects = processor.web_set_room_off(&room, clock.now());
             let topology = processor.topology().clone();
-            let effects = effect_dispatch::actions_to_effects(actions, &topology);
             effect_dispatch::dispatch(bridge, &topology, &effects).await;
         }
         WsCommand::TogglePlug { device } => {
-            let actions = processor.web_toggle_plug(&device, clock.now());
+            let effects = processor.web_toggle_plug(&device, clock.now());
             let topology = processor.topology().clone();
-            let effects = effect_dispatch::actions_to_effects(actions, &topology);
             effect_dispatch::dispatch(bridge, &topology, &effects).await;
         }
     }

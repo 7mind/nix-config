@@ -5,7 +5,8 @@
 use std::time::Instant;
 
 use crate::config::heating::{HeatingConfig, Weekday};
-use crate::domain::action::{Action, Payload};
+use crate::domain::Effect;
+use crate::domain::action::Payload;
 use crate::entities::trv::TrvTarget;
 use crate::logic::EventProcessor;
 use crate::tass::{Owner, TargetPhase};
@@ -20,7 +21,7 @@ impl EventProcessor {
         hour: u8,
         minute: u8,
         now: Instant,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         let mut actions = Vec::new();
         let tick_gen = self.heating_tick_gen;
 
@@ -53,10 +54,12 @@ impl EventProcessor {
                     now,
                 );
                 trv.setpoint_dirty_gen = tick_gen;
-                actions.push(Action::for_device(
-                    zt.device.clone(),
-                    Payload::trv_setpoint(target_temp),
-                ));
+                if let Some(trv_idx) = self.topology.device_idx(&zt.device) {
+                    actions.push(Effect::PublishDeviceSet {
+                        device: trv_idx,
+                        payload: Payload::trv_setpoint(target_temp),
+                    });
+                }
 
                 tracing::info!(
                     trv = %zt.device,
@@ -73,7 +76,7 @@ impl EventProcessor {
     pub(super) fn reconcile_setpoints(
         &self,
         heating_config: &HeatingConfig,
-    ) -> Vec<Action> {
+    ) -> Vec<Effect> {
         let mut actions = Vec::new();
 
         for zone in &heating_config.zones {
@@ -94,10 +97,12 @@ impl EventProcessor {
                     Some(TrvTarget::ForcedOpen { .. }) => MAX_SETPOINT,
                     None => continue,
                 };
-                actions.push(Action::for_device(
-                    zt.device.clone(),
-                    Payload::trv_setpoint(target_sp),
-                ));
+                if let Some(trv_idx) = self.topology.device_idx(&zt.device) {
+                    actions.push(Effect::PublishDeviceSet {
+                        device: trv_idx,
+                        payload: Payload::trv_setpoint(target_sp),
+                    });
+                }
                 tracing::info!(
                     trv = %zt.device,
                     target = target_sp,

@@ -1,6 +1,8 @@
 //! MQTT bridge: parses incoming z2m messages into [`crate::domain::Event`],
-//! serializes [`crate::domain::Action`] back to z2m's wire format, drives
-//! the rumqttc event loop.
+//! exposes thin pub/sub helpers (publish_group_set, publish_device_set,
+//! publish_raw) that the [`crate::effect_dispatch`] module calls to
+//! translate typed [`crate::domain::Effect`]s into wire-level publishes,
+//! and drives the rumqttc event loop.
 //!
 //! Architecture:
 //!
