@@ -65,6 +65,14 @@ pub struct ProvisionOptions {
     /// with the same id and name already exists.
     pub force_update: bool,
 
+    /// Rewrite every per-device option even when z2m's state cache
+    /// reports a matching value. Escape hatch for devices that report
+    /// a setting as applied while the hardware actually hasn't synced
+    /// — e.g. the Sonoff S60ZBTPF inching bug
+    /// (<https://github.com/Koenkk/zigbee2mqtt/issues/31604>), or the
+    /// S31 overload_protection case we hit on raspi5m.
+    pub force_options: bool,
+
     /// Remove members and groups present in z2m but not in the config.
     /// Default is additive-only.
     pub prune: bool,
@@ -89,6 +97,7 @@ impl Default for ProvisionOptions {
         Self {
             dry_run: false,
             force_update: false,
+            force_options: false,
             prune: false,
             timeout: Duration::from_secs(5),
             settle: Duration::from_millis(400),

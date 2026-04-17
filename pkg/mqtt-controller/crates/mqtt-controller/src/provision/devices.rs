@@ -42,7 +42,7 @@ pub async fn reconcile_devices(
 
         for (opt_key, opt_value) in opts {
             let current = existing_obj.and_then(|o| o.get(opt_key));
-            if current == Some(opt_value) {
+            if !options.force_options && current == Some(opt_value) {
                 tracing::info!(
                     device = %friendly_name,
                     key = %opt_key,
@@ -51,10 +51,10 @@ pub async fn reconcile_devices(
                 summary.skipped += 1;
                 continue;
             }
-            let verb = if options.dry_run {
-                "[dry-run] would set"
-            } else {
-                "set"
+            let verb = match (options.dry_run, options.force_options) {
+                (true, _) => "[dry-run] would set",
+                (false, true) => "[force] set",
+                (false, false) => "set",
             };
             tracing::info!(
                 device = %friendly_name,

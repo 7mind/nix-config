@@ -90,6 +90,14 @@ struct ProvisionArgs {
     #[arg(long)]
     force_update: bool,
 
+    /// Rewrite every per-device option unconditionally, bypassing the
+    /// dedup check against z2m's state cache. Use when a device is
+    /// known to report a stale value (e.g. Sonoff inching/overload
+    /// settings that show DISABLE while the hardware still has the
+    /// setting active).
+    #[arg(long)]
+    force_options: bool,
+
     /// Remove members and groups present in z2m but not in the config.
     /// Default is additive-only.
     #[arg(long)]
@@ -212,6 +220,7 @@ async fn run_provision(args: ProvisionArgs) -> Result<()> {
         devices = config.devices.len(),
         dry_run = args.dry_run,
         force_update = args.force_update,
+        force_options = args.force_options,
         prune = args.prune,
         "loaded config (provision)"
     );
@@ -220,6 +229,7 @@ async fn run_provision(args: ProvisionArgs) -> Result<()> {
     let options = ProvisionOptions {
         dry_run: args.dry_run,
         force_update: args.force_update,
+        force_options: args.force_options,
         prune: args.prune,
         timeout: Duration::from_secs_f64(args.timeout),
         settle: Duration::from_millis(400),
