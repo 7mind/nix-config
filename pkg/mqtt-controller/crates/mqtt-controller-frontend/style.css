@@ -88,7 +88,7 @@ header h1 {
 /* Room and plug cards */
 .card-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: 0.75rem;
 }
 
@@ -97,6 +97,7 @@ header h1 {
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 0.75rem;
+    min-width: 0;
 }
 
 .card-header {
@@ -104,6 +105,7 @@ header h1 {
     align-items: center;
     gap: 0.5rem;
     margin-bottom: 0.5rem;
+    min-width: 0;
 }
 
 .status-dot {
@@ -114,17 +116,60 @@ header h1 {
 }
 .status-dot.on { background: var(--on); }
 .status-dot.off { background: var(--off); }
+.status-dot.unknown { background: var(--text-muted); opacity: 0.5; }
 
 .card-name {
     font-weight: 600;
     font-size: 0.95rem;
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .card-meta {
     font-size: 0.8rem;
     color: var(--text-muted);
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    align-items: center;
+}
+
+.cycle-info {
+    color: var(--text-muted);
+}
+
+/* TASS line */
+.tass-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: center;
+    padding: 0.25rem 0;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    border-top: 1px dashed var(--border);
+    margin-top: 0.25rem;
+}
+
+.tass-label {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    font-size: 0.65rem;
+}
+
+.tass-value {
+    color: var(--text);
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+    font-size: 0.7rem;
+}
+
+.tass-owner {
+    font-style: italic;
 }
 
 .badge {
@@ -132,7 +177,7 @@ header h1 {
     font-size: 0.7rem;
     padding: 0.1rem 0.4rem;
     border-radius: 3px;
-    margin-right: 0.25rem;
+    margin-right: 0.15rem;
 }
 .badge.motion { background: var(--motion); color: #000; }
 .badge.slot { background: var(--border); }
@@ -178,23 +223,203 @@ header h1 {
     font-size: 0.65rem;
     padding: 0.15rem 0.4rem;
     margin-left: auto;
+    flex-shrink: 0;
 }
 
-/* JSON detail view */
-.json-detail {
+/* Section labels */
+.section-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
     margin-top: 0.5rem;
-    padding: 0.5rem;
+    margin-bottom: 0.25rem;
+}
+
+/* Lights grid */
+.lights-section {
+    margin-top: 0.25rem;
+}
+
+.lights-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 0.25rem;
+}
+
+.light-tile {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.4rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    min-width: 0;
+}
+
+.light-name {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+/* Switches section */
+.switches-section {
+    margin-top: 0.25rem;
+}
+
+.switch-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+
+.switch-chip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.45rem;
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 4px;
     font-size: 0.7rem;
-    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
-    overflow-x: auto;
-    white-space: pre-wrap;
-    word-break: break-all;
-    max-height: 300px;
-    overflow-y: auto;
+    cursor: help;
+    max-width: 200px;
+}
+
+.switch-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.switch-popup {
+    display: none;
+    position: absolute;
+    z-index: 100;
+    top: 100%;
+    left: 0;
+    margin-top: 0.25rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    min-width: 260px;
+    max-width: 420px;
+}
+
+.switch-chip:hover .switch-popup,
+.switch-chip:focus-within .switch-popup {
+    display: block;
+}
+
+.switch-popup-table {
+    border-collapse: collapse;
+    font-size: 0.7rem;
+    width: 100%;
+}
+
+.switch-popup-table th {
+    text-align: left;
+    padding: 0.2rem 0.5rem;
     color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    font-weight: 500;
+}
+
+.switch-popup-table td {
+    padding: 0.2rem 0.5rem;
+    color: var(--text);
+}
+
+.switch-popup-table .mono {
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+    color: var(--text-muted);
+}
+
+/* Motion sensors section */
+.motion-section {
+    margin-top: 0.25rem;
+}
+
+.cooldown-row {
+    margin-bottom: 0.2rem;
+}
+
+.motion-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.motion-row {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.7rem;
+    min-width: 0;
+}
+
+.motion-device {
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex-shrink: 1;
+    max-width: 40%;
+}
+
+.motion-state {
+    color: var(--text);
+    flex-shrink: 0;
+}
+
+.motion-meta {
+    display: inline-flex;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+    color: var(--text-muted);
+    font-size: 0.65rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.muted {
+    color: var(--text-muted);
+}
+
+.mono {
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+}
+
+/* Kill-switch rules on plug cards */
+.killswitch-section {
+    margin-top: 0.35rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.killswitch-rules {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    font-size: 0.7rem;
+}
+
+.killswitch-rule {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+    min-width: 0;
 }
 
 /* Heating cards */
@@ -210,12 +435,15 @@ header h1 {
     padding: 0.25rem 0;
     border-top: 1px solid var(--border);
     font-size: 0.8rem;
+    min-width: 0;
 }
 
 .trv-device {
     font-weight: 500;
     min-width: 0;
-    flex-shrink: 1;
+    flex: 0 1 auto;
+    max-width: 40%;
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
@@ -283,6 +511,59 @@ header h1 {
     background: var(--surface-hover);
 }
 
+/* JSON modal */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1rem;
+}
+
+.modal-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    width: min(720px, 100%);
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.modal-title {
+    flex: 1;
+    font-weight: 600;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.modal-body {
+    margin: 0;
+    padding: 0.75rem;
+    background: var(--bg);
+    font-size: 0.75rem;
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+    color: var(--text-muted);
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    flex: 1;
+}
+
 /* Event log */
 .event-log h2 {
     font-size: 1rem;
@@ -294,6 +575,7 @@ header h1 {
     align-items: center;
     gap: 0.5rem;
     margin-bottom: 0.5rem;
+    flex-wrap: wrap;
 }
 
 .filter-summary {
@@ -303,6 +585,7 @@ header h1 {
     text-overflow: ellipsis;
     white-space: nowrap;
     flex: 1;
+    min-width: 0;
 }
 
 .log-list {

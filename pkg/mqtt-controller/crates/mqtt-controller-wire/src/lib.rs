@@ -42,21 +42,29 @@ pub struct TassActualInfo {
     pub since_ago_ms: Option<u64>,
 }
 
-/// Info about a switch that controls a room or plug.
+/// Info about a switch that controls a room or plug. Grouped by the
+/// physical switch device (one entry per device, not per button).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SwitchInfo {
     pub device: String,
-    pub button: String,
-    /// Last event from this switch, if any.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_event: Option<SwitchEventInfo>,
+    /// Buttons on this device with actions attached.
+    pub buttons: Vec<SwitchButtonInfo>,
 }
 
-/// A recent switch event.
+/// One button on a switch, with all actions bound across gestures.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct SwitchEventInfo {
+pub struct SwitchButtonInfo {
+    pub button: String,
+    pub actions: Vec<SwitchActionInfo>,
+}
+
+/// One (gesture, effect) action assignment for a switch button.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SwitchActionInfo {
+    /// Gesture: "press", "hold", "hold_release", "double_tap", "soft_double_tap".
     pub gesture: String,
-    pub ago_ms: u64,
+    /// Human-readable effect: "scene_cycle: kitchen-cooker", "toggle: z2m-p-printer", etc.
+    pub description: String,
 }
 
 /// Motion sensor state for the systems view.
@@ -71,6 +79,21 @@ pub struct MotionSensorInfo {
     pub freshness: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub since_ago_ms: Option<u64>,
+    /// Configured occupancy_timeout for the sensor (seconds before it
+    /// will report unoccupied after motion stops).
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    pub occupancy_timeout_secs: u32,
+    /// Configured max_illuminance gate (lux), or `None` if unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_illuminance: Option<u32>,
+}
+
+/// One light in a light zone. Individual light state is not tracked by
+/// the backend — lights inherit the zone's aggregate state. This struct
+/// exists so the UI can list member devices per zone.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LightInfo {
+    pub device: String,
 }
 
 /// Kill switch rule state for the systems view.
@@ -120,6 +143,17 @@ pub struct RoomSnapshot {
     /// Motion sensors for this room with their current state.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub motion_sensors: Vec<MotionSensorInfo>,
+    /// Individual member lights. No per-light state (lights inherit
+    /// the zone); this is the device inventory only.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lights: Vec<LightInfo>,
+    /// Configured `motion_off_cooldown_seconds` for the room. 0 = no cooldown.
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    pub motion_off_cooldown_secs: u32,
+    /// Remaining seconds of cooldown after the most recent OFF.
+    /// `None` once the cooldown has expired (or if no OFF recorded).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub motion_cooldown_remaining_secs: Option<u64>,
 }
 
 /// Current state of one smart plug.
@@ -175,6 +209,10 @@ pub struct HeatingZoneSnapshot {
 }
 
 fn is_zero_u64(v: &u64) -> bool {
+    *v == 0
+}
+
+fn is_zero_u32(v: &u32) -> bool {
     *v == 0
 }
 
@@ -382,6 +420,9 @@ mod tests {
                 actual: None,
                 switches: vec![],
                 motion_sensors: vec![],
+                lights: vec![],
+                motion_off_cooldown_secs: 0,
+                motion_cooldown_remaining_secs: None,
             }],
             plugs: vec![PlugSnapshot {
                 device: "z2m-p-printer".into(),
@@ -506,6 +547,9 @@ mod tests {
             actual: None,
             switches: vec![],
             motion_sensors: vec![],
+            lights: vec![],
+            motion_off_cooldown_secs: 0,
+            motion_cooldown_remaining_secs: None,
             active_slot: None,
             scene_ids: vec![],
         }))

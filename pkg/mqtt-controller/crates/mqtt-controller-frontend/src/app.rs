@@ -1,4 +1,4 @@
-//! Root application component with tab navigation.
+//! Root application component with tab navigation and global JSON modal.
 
 use leptos::prelude::*;
 
@@ -6,6 +6,7 @@ use crate::components::event_log::EventLog;
 use crate::components::heating_card::HeatingCards;
 use crate::components::plug_card::PlugCards;
 use crate::components::room_card::RoomCards;
+use crate::components::shared::JsonModal;
 use crate::ws::WsState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,15 +95,6 @@ pub fn App() -> impl IntoView {
                     <TabButton tab=Tab::Rooms active=active_tab set_active=set_active_tab label="Rooms" />
                     <TabButton tab=Tab::Plugs active=active_tab set_active=set_active_tab label="Plugs" />
                     <TabButton tab=Tab::Heating active=active_tab set_active=set_active_tab label="Heating" />
-                    <button
-                        class="btn"
-                        on:click={
-                            let set_filter = ws.set_filter_entities;
-                            move |_| set_filter.set(std::collections::BTreeSet::new())
-                        }
-                    >
-                        "Unselect all"
-                    </button>
                 </div>
                 <ConnectionBadge ws=ws.clone() />
             </header>
@@ -129,6 +121,7 @@ pub fn App() -> impl IntoView {
                     <EventLog />
                 </section>
             </div>
+            <JsonModal />
         </div>
     }
 }

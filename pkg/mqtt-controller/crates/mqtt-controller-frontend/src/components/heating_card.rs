@@ -1,187 +1,156 @@
-//! Heating zone cards showing relay state and TRV details.
+//! Heating-zone cards: relay + TRV rollup.
 
 use leptos::prelude::*;
 
 use mqtt_controller_wire::HeatingZoneSnapshot;
 
+use crate::components::shared::{EntityFilterCheckbox, JsonButton};
 use crate::ws::WsState;
 
 #[component]
 pub fn HeatingCards() -> impl IntoView {
     let ws = expect_context::<WsState>();
-    let snapshot = ws.snapshot;
+    let heating_names = ws.heating_names;
 
     view! {
         <div class="card-grid">
+            <For
+                each=move || heating_names.get()
+                key=|name| name.clone()
+                children=move |name| {
+                    view! { <HeatingZoneCard name=name /> }
+                }
+            />
+        </div>
+    }
+}
+
+#[component]
+fn HeatingZoneCard(name: String) -> impl IntoView {
+    let ws = expect_context::<WsState>();
+    let Some(signal) = ws.heating_signal(&name) else {
+        return view! { <div class="card">"(missing zone "{name}")"</div> }.into_any();
+    };
+    let display_name = name.clone();
+    let display_name_title = name.clone();
+    let json_name = name.clone();
+
+    view! {
+        <div class="card heating-card">
+            <div class="card-header">
+                <EntityFilterCheckbox name=name.clone() />
+                <span class=move || if signal.with(|z| z.relay_on) { "status-dot on" } else { "status-dot off" }></span>
+                <span class="card-name" title=display_name_title>{display_name}</span>
+                <JsonButton
+                    title=format!("Heating: {}", json_name)
+                    build_json=move || serde_json::to_string_pretty(&signal.get()).unwrap_or_default()
+                />
+            </div>
+
+            <HeatingMeta signal=signal />
+            <TrvList signal=signal />
+        </div>
+    }.into_any()
+}
+
+#[component]
+fn HeatingMeta(signal: RwSignal<HeatingZoneSnapshot>) -> impl IntoView {
+    view! {
+        <div class="card-meta">
             {move || {
-                snapshot.get().map(|snap| {
-                    snap.heating_zones.iter().map(|zone| {
-                        let zone = zone.clone();
-                        view! { <HeatingZoneCard zone=zone /> }
-                    }).collect::<Vec<_>>()
-                }).unwrap_or_default()
+                let z = signal.get();
+                let relay_text = if !z.relay_state_known {
+                    "relay: ?".to_string()
+                } else if z.relay_on {
+                    "relay: ON".to_string()
+                } else {
+                    "relay: OFF".to_string()
+                };
+                view! {
+                    <span>{relay_text}</span>
+                    <span class="relay-device">{format!(" ({})", z.relay_device)}</span>
+                    {z.relay_stale.then(|| view! { <span class="badge inhibited">" stale"</span> })}
+                    {(z.min_cycle_remaining_secs > 0).then(|| view! {
+                        <span class="badge unknown">{format!(" min_cycle {}s", z.min_cycle_remaining_secs)}</span>
+                    })}
+                    {(z.min_pause_remaining_secs > 0).then(|| view! {
+                        <span class="badge unknown">{format!(" min_pause {}s", z.min_pause_remaining_secs)}</span>
+                    })}
+                }
             }}
         </div>
     }
 }
 
 #[component]
-fn HeatingZoneCard(zone: HeatingZoneSnapshot) -> impl IntoView {
-    let ws = expect_context::<WsState>();
-    let relay_class = if zone.relay_on {
-        "status-dot on"
-    } else {
-        "status-dot off"
-    };
-    let relay_text = if !zone.relay_state_known {
-        "relay: ?".to_string()
-    } else if zone.relay_on {
-        "relay: ON".to_string()
-    } else {
-        "relay: OFF".to_string()
-    };
-
-    let filter_name = zone.name.clone();
-    let detail_name = zone.name.clone();
-    let display_name = zone.name.clone();
-    let json_text = serde_json::to_string_pretty(&zone).unwrap_or_default();
-
-    let filter_ws = ws.clone();
-    let filter_entities = ws.filter_entities;
-    let detail_entity = ws.detail_entity;
-    let detail_ws = ws.clone();
-
-    let filter_name_cb = filter_name.clone();
-
-    let trv_views: Vec<_> = zone
-        .trvs
-        .iter()
-        .map(|trv| {
-            let temp = trv
-                .local_temperature
-                .map(|t| format!("{t:.1}\u{00b0}C"))
-                .unwrap_or_else(|| "?\u{00b0}C".into());
-            let setpoint = trv
-                .setpoint
-                .map(|s| format!(" \u{2192} {s:.1}\u{00b0}C"))
-                .unwrap_or_default();
-            let demand = trv
-                .pi_heating_demand
-                .map(|d| format!(" {d}%"))
-                .unwrap_or_default();
-            let battery = trv
-                .battery
-                .map(|b| format!(" bat:{b}%"))
-                .unwrap_or_default();
-
-            let rs_class = match trv.running_state.as_str() {
-                "heat" => "badge heat",
-                "idle" => "badge idle",
-                _ => "badge unknown",
-            };
-
-            let inhibited_badge = trv.inhibited.then(|| {
-                view! { <span class="badge inhibited">"window"</span> }
-            });
-            let forced_badge = trv.forced.then(|| {
-                view! { <span class="badge unknown">"forced"</span> }
-            });
-
-            let device = trv.device.clone();
-
-            let schedule_view = if !trv.schedule.is_empty() {
-                let name = trv.schedule.clone();
-                let rows = parse_schedule_rows(&trv.schedule_summary);
-                Some(view! {
-                    <details class="schedule-popup">
-                        <summary class="badge schedule-badge">{name}</summary>
-                        <table class="schedule-table">
-                            <thead><tr><th>"Time"</th><th>"Setpoint"</th></tr></thead>
-                            <tbody>
-                                {rows.into_iter().map(|(time, setpoint)| view! {
-                                    <tr><td>{time}</td><td>{setpoint}</td></tr>
-                                }).collect::<Vec<_>>()}
-                            </tbody>
-                        </table>
-                    </details>
-                })
-            } else {
-                None
-            };
-
-            view! {
-                <div class="trv-row">
-                    <span class="trv-device">{device}</span>
-                    {schedule_view}
-                    <span class="trv-temp">{temp}{setpoint}</span>
-                    <span class=rs_class>{trv.running_state.clone()}{demand}</span>
-                    {inhibited_badge}
-                    {forced_badge}
-                    <span class="trv-battery">{battery}</span>
-                </div>
-            }
-        })
-        .collect();
-
+fn TrvList(signal: RwSignal<HeatingZoneSnapshot>) -> impl IntoView {
     view! {
-        <div class="card heating-card">
-            <div class="card-header">
-                <input
-                    type="checkbox"
-                    class="entity-filter-cb"
-                    prop:checked=move || filter_entities.get().contains(&filter_name_cb)
-                    on:change={
-                        let name = filter_name.clone();
-                        move |_| filter_ws.toggle_filter(&name)
-                    }
-                />
-                <span class=relay_class></span>
-                <span class="card-name">{display_name.clone()}</span>
-                <button
-                    class="btn detail-btn"
-                    on:click={
-                        let name = detail_name.clone();
-                        move |_| {
-                            detail_ws.set_detail_entity.update(|current| {
-                                if current.as_deref() == Some(&name) {
-                                    *current = None;
-                                } else {
-                                    *current = Some(name.clone());
-                                }
-                            });
-                        }
-                    }
-                >
-                    "JSON"
-                </button>
-            </div>
-            <div class="card-meta">
-                <span>{relay_text}</span>
-                <span class="relay-device">{format!(" ({})", zone.relay_device)}</span>
-                {(zone.relay_stale).then(|| view! {
-                    <span class="badge inhibited">" stale"</span>
-                })}
-                {(zone.min_cycle_remaining_secs > 0).then(|| view! {
-                    <span class="badge unknown">{format!(" min_cycle {}s", zone.min_cycle_remaining_secs)}</span>
-                })}
-                {(zone.min_pause_remaining_secs > 0).then(|| view! {
-                    <span class="badge unknown">{format!(" min_pause {}s", zone.min_pause_remaining_secs)}</span>
-                })}
-            </div>
-            <div class="trv-list">
-                {trv_views}
-            </div>
+        <div class="trv-list">
             {move || {
-                let show = detail_entity.get().as_deref() == Some(display_name.as_str());
-                show.then(|| view! {
-                    <pre class="json-detail">{json_text.clone()}</pre>
-                })
+                let trvs = signal.with(|z| z.trvs.clone());
+                trvs.into_iter().map(|trv| {
+                    let temp = trv
+                        .local_temperature
+                        .map(|t| format!("{t:.1}\u{00b0}C"))
+                        .unwrap_or_else(|| "?\u{00b0}C".into());
+                    let setpoint = trv
+                        .setpoint
+                        .map(|s| format!(" \u{2192} {s:.1}\u{00b0}C"))
+                        .unwrap_or_default();
+                    let demand = trv
+                        .pi_heating_demand
+                        .map(|d| format!(" {d}%"))
+                        .unwrap_or_default();
+                    let battery = trv
+                        .battery
+                        .map(|b| format!(" bat:{b}%"))
+                        .unwrap_or_default();
+                    let rs_class = match trv.running_state.as_str() {
+                        "heat" => "badge heat",
+                        "idle" => "badge idle",
+                        _ => "badge unknown",
+                    };
+                    let inhibited_badge = trv.inhibited.then(|| view! {
+                        <span class="badge inhibited">"window"</span>
+                    });
+                    let forced_badge = trv.forced.then(|| view! {
+                        <span class="badge unknown">"forced"</span>
+                    });
+                    let schedule_view = (!trv.schedule.is_empty()).then(|| {
+                        let rows = parse_schedule_rows(&trv.schedule_summary);
+                        view! {
+                            <details class="schedule-popup">
+                                <summary class="badge schedule-badge">{trv.schedule.clone()}</summary>
+                                <table class="schedule-table">
+                                    <thead><tr><th>"Time"</th><th>"Setpoint"</th></tr></thead>
+                                    <tbody>
+                                        {rows.into_iter().map(|(time, setpoint)| view! {
+                                            <tr><td>{time}</td><td>{setpoint}</td></tr>
+                                        }).collect::<Vec<_>>()}
+                                    </tbody>
+                                </table>
+                            </details>
+                        }
+                    });
+
+                    let device_title = trv.device.clone();
+                    view! {
+                        <div class="trv-row" title=device_title>
+                            <span class="trv-device">{trv.device}</span>
+                            {schedule_view}
+                            <span class="trv-temp">{temp}{setpoint}</span>
+                            <span class=rs_class>{trv.running_state.clone()}{demand}</span>
+                            {inhibited_badge}
+                            {forced_badge}
+                            <span class="trv-battery">{battery}</span>
+                        </div>
+                    }
+                }).collect::<Vec<_>>()
             }}
         </div>
     }
 }
 
-/// Parse "00:00–06:00 → 21°C, 06:00–23:00 → 18°C" into (time, setpoint) rows.
 fn parse_schedule_rows(summary: &str) -> Vec<(String, String)> {
     if summary.is_empty() {
         return Vec::new();

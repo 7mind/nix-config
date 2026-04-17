@@ -1,4 +1,6 @@
-//! Scrolling event/decision log with entity filtering and clear/copy.
+//! Event/decision log with entity filtering, keyed diffing, and toolbar.
+
+use std::collections::BTreeSet;
 
 use leptos::prelude::*;
 
@@ -12,63 +14,96 @@ pub fn EventLog() -> impl IntoView {
     let entries = ws.log_entries;
     let filter = ws.filter_entities;
 
-    let filtered = move || {
+    // Memoize the filtered entry list so downstream readers only
+    // re-compute when entries or filter actually change.
+    let filtered = Memo::new(move |_| {
         let filter_set = filter.get();
         let all = entries.get();
         if filter_set.is_empty() {
             all
         } else {
             all.into_iter()
-                .filter(|entry| {
-                    entry
-                        .involved_entities
-                        .iter()
-                        .any(|e| filter_set.contains(e))
-                })
+                .filter(|e| e.involved_entities.iter().any(|n| filter_set.contains(n)))
                 .collect()
         }
-    };
+    });
 
+    view! {
+        <EventLogToolbar />
+        <div class="log-list">
+            <For
+                each=move || filtered.get()
+                key=|entry| entry.seq
+                children=|entry| view! { <LogEntry entry=entry /> }
+            />
+        </div>
+    }
+}
+
+#[component]
+fn EventLogToolbar() -> impl IntoView {
+    let ws = expect_context::<WsState>();
     let ws_clear = ws.clone();
-    let filter_copy = ws.filter_entities;
-    let entries_copy = ws.log_entries;
+    let ws_copy = ws.clone();
+    let ws_select_all = ws.clone();
+    let ws_unselect_all = ws.clone();
 
     view! {
         <div class="log-toolbar">
+            <button class="btn" on:click=move |_| ws_clear.clear_log()>"Clear"</button>
             <button
                 class="btn"
                 on:click=move |_| {
-                    ws_clear.clear_log();
+                    let entries = ws_copy.log_entries.get();
+                    let filter = ws_copy.filter_entities.get();
+                    copy_log_to_clipboard(entries, filter);
                 }
-            >
-                "Clear"
-            </button>
+            >"Copy"</button>
             <button
                 class="btn"
                 on:click=move |_| {
-                    copy_log_to_clipboard(entries_copy.get(), filter_copy.get());
+                    let all = all_known_entities(&ws_select_all);
+                    ws_select_all.set_filter_entities.set(all);
                 }
-            >
-                "Copy"
-            </button>
+            >"Select all"</button>
+            <button
+                class="btn"
+                on:click=move |_| {
+                    ws_unselect_all.set_filter_entities.set(BTreeSet::new());
+                }
+            >"Unselect all"</button>
             <FilterSummary />
         </div>
-        <div class="log-list">
-            {move || {
-                filtered().iter().map(|entry| {
-                    let entry = entry.clone();
-                    view! { <LogEntry entry=entry /> }
-                }).collect::<Vec<_>>()
-            }}
-        </div>
     }
+}
+
+/// Union of every known entity name (rooms + their groups + plugs +
+/// heating zones + relays + TRVs). Used by `Select all`.
+fn all_known_entities(ws: &WsState) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    if let Some(topo) = ws.topology.get() {
+        for room in &topo.rooms {
+            out.insert(room.name.clone());
+            out.insert(room.group_name.clone());
+        }
+        for plug in &topo.plugs {
+            out.insert(plug.clone());
+        }
+        for zone in &topo.heating_zones {
+            out.insert(zone.name.clone());
+            out.insert(zone.relay_device.clone());
+            for trv in &zone.trv_devices {
+                out.insert(trv.clone());
+            }
+        }
+    }
+    out
 }
 
 #[component]
 fn FilterSummary() -> impl IntoView {
     let ws = expect_context::<WsState>();
     let filter = ws.filter_entities;
-
     view! {
         <span class="filter-summary">
             {move || {
@@ -76,8 +111,7 @@ fn FilterSummary() -> impl IntoView {
                 if set.is_empty() {
                     "showing all".to_string()
                 } else {
-                    let names: Vec<_> = set.iter().cloned().collect();
-                    format!("filter: {}", names.join(", "))
+                    format!("filter ({}): {}", set.len(), set.iter().cloned().collect::<Vec<_>>().join(", "))
                 }
             }}
         </span>
@@ -89,30 +123,22 @@ fn LogEntry(entry: DecisionLogEntry) -> impl IntoView {
     let time = format_epoch_ms(entry.timestamp_epoch_ms);
     let summary = entry.event_summary.clone();
 
-    let decisions_div = if !entry.decisions.is_empty() {
-        let text = entry.decisions.join("; ");
-        Some(view! { <div class="decisions">{text}</div> })
-    } else {
-        None
-    };
+    let decisions_div = (!entry.decisions.is_empty()).then(|| {
+        view! { <div class="decisions">{entry.decisions.join("; ")}</div> }
+    });
 
-    let actions_div = if !entry.actions_emitted.is_empty() {
+    let actions_div = (!entry.actions_emitted.is_empty()).then(|| {
         let text = entry
             .actions_emitted
             .iter()
             .map(|a| format!("{} -> {}", a.target, a.payload_json))
             .collect::<Vec<_>>()
             .join("; ");
-        Some(view! { <div class="actions">{text}</div> })
-    } else {
-        None
-    };
+        view! { <div class="actions">{text}</div> }
+    });
 
-    let entities_text = if !entry.involved_entities.is_empty() {
-        Some(entry.involved_entities.join(", "))
-    } else {
-        None
-    };
+    let entities_text = (!entry.involved_entities.is_empty())
+        .then(|| entry.involved_entities.join(", "));
 
     view! {
         <div class="log-entry">
@@ -133,10 +159,7 @@ fn format_epoch_ms(ms: u64) -> String {
     format!("{h:02}:{m:02}:{s:02}")
 }
 
-fn copy_log_to_clipboard(
-    entries: Vec<DecisionLogEntry>,
-    filter: std::collections::BTreeSet<String>,
-) {
+fn copy_log_to_clipboard(entries: Vec<DecisionLogEntry>, filter: BTreeSet<String>) {
     let filtered: Vec<_> = if filter.is_empty() {
         entries
     } else {
@@ -181,6 +204,6 @@ fn copy_log_to_clipboard(
 
     if let Some(window) = web_sys::window() {
         let clipboard = window.navigator().clipboard();
-        let _: js_sys::Promise = clipboard.write_text(&text);
+        let _ = clipboard.write_text(&text);
     }
 }

@@ -1,12 +1,13 @@
 //! Conversion from TASS entities ([`LightZoneEntity`], [`PlugEntity`])
 //! to wire DTOs ([`RoomSnapshot`], [`PlugSnapshot`]).
 
-use std::time::Instant;
+use std::collections::BTreeMap;
+use std::time::{Duration, Instant};
 
 use mqtt_controller_wire::{
-    FullStateSnapshot, HeatingZoneInfo, HeatingZoneSnapshot, KillSwitchRuleInfo,
-    MotionSensorInfo, PlugSnapshot, RoomInfo, RoomSnapshot, SlotInfo, SwitchInfo, TopologyInfo,
-    TrvSnapshot,
+    FullStateSnapshot, HeatingZoneInfo, HeatingZoneSnapshot, KillSwitchRuleInfo, LightInfo,
+    MotionSensorInfo, PlugSnapshot, RoomInfo, RoomSnapshot, SlotInfo, SwitchActionInfo,
+    SwitchButtonInfo, SwitchInfo, TopologyInfo, TrvSnapshot,
 };
 
 use crate::entities::light_zone::LightZoneEntity;
@@ -117,6 +118,16 @@ fn room_snapshot_from(
         now,
     );
 
+    let lights = build_room_lights(processor.topology(), room);
+    let motion_cooldown_remaining_secs = zone
+        .and_then(|z| z.last_off_at)
+        .and_then(|last_off| {
+            let cooldown = Duration::from_secs(room.motion_off_cooldown_seconds as u64);
+            let elapsed = now.duration_since(last_off);
+            cooldown.checked_sub(elapsed).map(|d| d.as_secs())
+        })
+        .filter(|&s| s > 0);
+
     RoomSnapshot {
         name: room.name.clone(),
         group_name: room.group_name.clone(),
@@ -136,6 +147,9 @@ fn room_snapshot_from(
         actual: zone.map(|z| tass_actual_info(&z.actual, now)),
         switches,
         motion_sensors,
+        lights,
+        motion_off_cooldown_secs: room.motion_off_cooldown_seconds,
+        motion_cooldown_remaining_secs,
     }
 }
 
@@ -350,36 +364,137 @@ fn format_schedule_summary(schedule: &crate::config::heating::TemperatureSchedul
         .join(", ")
 }
 
-/// Collect button-trigger switches from bindings that satisfy `pred`,
-/// deduped on `(device, button)`. Used by both room views (filter by
-/// effect.room) and plug views (filter by effect.target).
-fn collect_switches(
-    topology: &Topology,
-    pred: impl Fn(&crate::topology::ResolvedBinding) -> bool,
-) -> Vec<SwitchInfo> {
-    let mut switches = Vec::new();
-    for binding in topology.bindings() {
-        if !pred(binding) {
-            continue;
-        }
-        if let ResolvedTrigger::Button { device, button, .. } = &binding.trigger {
-            let device_name = topology.device_name(*device);
-            if !switches.iter().any(|s: &SwitchInfo| s.device == device_name && s.button == *button) {
-                switches.push(SwitchInfo {
-                    device: device_name.to_string(),
-                    button: button.clone(),
-                    last_event: None,
-                });
-            }
-        }
-    }
-    switches
-}
-
 /// Collect switches bound to a room from the topology's bindings.
 fn build_room_switches(topology: &Topology, room_name: &str) -> Vec<SwitchInfo> {
     let room_idx = topology.room_idx(room_name);
     collect_switches(topology, |b| b.effect.room() == room_idx)
+}
+
+/// Collect button-trigger switches from bindings that satisfy `pred`,
+/// grouped by device. Each device lists its buttons; each button lists
+/// every (gesture, effect) action attached.
+///
+/// Used by both room views (filter bindings by `effect.room()`) and
+/// plug views (filter bindings by `effect.target_plug()`).
+fn collect_switches(
+    topology: &Topology,
+    pred: impl Fn(&crate::topology::ResolvedBinding) -> bool,
+) -> Vec<SwitchInfo> {
+    // device -> button -> [(gesture, description)]
+    let mut grouped: BTreeMap<String, BTreeMap<String, Vec<SwitchActionInfo>>> = BTreeMap::new();
+    for binding in topology.bindings() {
+        if !pred(binding) {
+            continue;
+        }
+        if let ResolvedTrigger::Button {
+            device,
+            button,
+            gesture,
+        } = &binding.trigger
+        {
+            let device_name = topology.device_name(*device).to_string();
+            let action = SwitchActionInfo {
+                gesture: gesture_label(*gesture),
+                description: describe_effect(topology, &binding.effect),
+            };
+            grouped
+                .entry(device_name)
+                .or_default()
+                .entry(button.clone())
+                .or_default()
+                .push(action);
+        }
+    }
+    grouped
+        .into_iter()
+        .map(|(device, buttons)| SwitchInfo {
+            device,
+            buttons: buttons
+                .into_iter()
+                .map(|(button, actions)| SwitchButtonInfo { button, actions })
+                .collect(),
+        })
+        .collect()
+}
+
+/// Human-readable label for a `Gesture`. Matches the lowercase variants
+/// used in the config JSON and in the frontend.
+fn gesture_label(g: crate::config::switch_model::Gesture) -> String {
+    use crate::config::switch_model::Gesture;
+    match g {
+        Gesture::Press => "press",
+        Gesture::Hold => "hold",
+        Gesture::HoldRelease => "hold_release",
+        Gesture::DoubleTap => "double_tap",
+        Gesture::SoftDoubleTap => "soft_double_tap",
+    }
+    .to_string()
+}
+
+/// One-line description of a resolved effect for the UI popup.
+fn describe_effect(
+    topology: &Topology,
+    effect: &crate::topology::ResolvedEffect,
+) -> String {
+    use crate::topology::ResolvedEffect;
+    let room_name = |r| topology.room(r).name.clone();
+    let plug_name = |p: crate::topology::PlugIdx| topology.device_name(p.device()).to_string();
+    match effect {
+        ResolvedEffect::SceneCycle { room } => format!("scene_cycle → {}", room_name(*room)),
+        ResolvedEffect::SceneToggle { room } => format!("scene_toggle → {}", room_name(*room)),
+        ResolvedEffect::SceneToggleCycle { room } => {
+            format!("scene_toggle_cycle → {}", room_name(*room))
+        }
+        ResolvedEffect::TurnOffRoom { room } => format!("turn_off → {}", room_name(*room)),
+        ResolvedEffect::BrightnessStep { room, step, .. } => {
+            format!("brightness_step {step:+} → {}", room_name(*room))
+        }
+        ResolvedEffect::BrightnessMove { room, rate } => {
+            format!("brightness_move {rate:+} → {}", room_name(*room))
+        }
+        ResolvedEffect::BrightnessStop { room } => {
+            format!("brightness_stop → {}", room_name(*room))
+        }
+        ResolvedEffect::Toggle {
+            plug,
+            confirm_off_seconds,
+        } => match confirm_off_seconds {
+            Some(s) => format!("toggle (confirm {s}s) → {}", plug_name(*plug)),
+            None => format!("toggle → {}", plug_name(*plug)),
+        },
+        ResolvedEffect::TurnOn { plug } => format!("turn_on → {}", plug_name(*plug)),
+        ResolvedEffect::TurnOff { plug } => format!("turn_off → {}", plug_name(*plug)),
+        ResolvedEffect::TurnOffAllZones => "turn_off_all_zones".to_string(),
+    }
+}
+
+/// Collect the member lights of a room as a flat list of device names.
+/// Member strings in the config are `"<friendly_name>/<endpoint>"`; we
+/// strip the endpoint and dedup so each light appears once.
+fn build_room_lights(
+    topology: &Topology,
+    room: &crate::topology::ResolvedRoom,
+) -> Vec<LightInfo> {
+    let mut seen: BTreeMap<String, ()> = BTreeMap::new();
+    let mut out = Vec::new();
+    for member in &room.members {
+        let device = member.split('/').next().unwrap_or(member);
+        if seen.contains_key(device) {
+            continue;
+        }
+        // Only surface members that are known lights in the catalog.
+        if topology
+            .device_idx(device)
+            .map(|i| topology.device_kind(i) == crate::topology::DeviceKind::Light)
+            .unwrap_or(false)
+        {
+            seen.insert(device.to_string(), ());
+            out.push(LightInfo {
+                device: device.to_string(),
+            });
+        }
+    }
+    out
 }
 
 /// Build motion sensor info for a room from bound motion bindings.
@@ -404,6 +519,8 @@ fn build_room_motion_sensors(
                 illuminance,
                 freshness,
                 since_ago_ms,
+                occupancy_timeout_secs: mb.occupancy_timeout_seconds,
+                max_illuminance: mb.max_illuminance,
             }
         })
         .collect()
