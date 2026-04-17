@@ -145,15 +145,26 @@ fn TrvList(signal: RwSignal<HeatingZoneSnapshot>) -> impl IntoView {
                     });
 
                     let device_title = trv.device.clone();
+                    let trv_target = trv.target.clone();
+                    let trv_target_value = trv.target_value.clone();
+                    let trv_actual = trv.actual.clone();
                     view! {
-                        <div class="trv-row" title=device_title>
-                            <span class="trv-device">{trv.device}</span>
-                            {schedule_view}
-                            <span class="trv-temp">{temp}{setpoint}</span>
-                            <span class=rs_class>{trv.running_state.clone()}{demand}</span>
-                            {inhibited_badge}
-                            {forced_badge}
-                            <span class="trv-battery">{battery}</span>
+                        <div class="trv-block" title=device_title>
+                            <div class="trv-row">
+                                <span class="trv-device">{trv.device}</span>
+                                {schedule_view}
+                                <span class="trv-temp">{temp}{setpoint}</span>
+                                <span class=rs_class>{trv.running_state.clone()}{demand}</span>
+                                {inhibited_badge}
+                                {forced_badge}
+                                <span class="trv-battery">{battery}</span>
+                            </div>
+                            {tass_state_row(
+                                trv_target,
+                                trv_target_value,
+                                trv_actual,
+                                None::<()>,
+                            )}
                         </div>
                     }
                 }).collect::<Vec<_>>()

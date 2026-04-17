@@ -177,7 +177,17 @@ impl EventProcessor {
         let first_contact = !zone.relay_state_known;
         zone.relay_state_known = true;
         let was_on = zone.is_relay_on();
-    
+        // First contact: seed `actual` even when the observed state
+        // matches the default (was_on=false, on=false). Without this the
+        // zone's actual stays Unknown forever for a zone that starts
+        // off and never transitions.
+        if first_contact {
+            zone.actual.update(
+                HeatingZoneActual { relay_on: on, temperature: local_temperature },
+                now,
+            );
+        }
+
         if was_on == on {
             // First contact with relay OFF: seed pump_off_since.
             if first_contact && !on && !pump_running {

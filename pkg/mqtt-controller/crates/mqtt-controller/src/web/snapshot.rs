@@ -9,7 +9,7 @@ use mqtt_controller_wire::{
     HeatingZoneTargetValue, KillSwitchRuleInfo, LightActualValue, LightInfo, LightSnapshot,
     MotionSensorInfo, PlugActualValue, PlugSnapshot, PlugTargetValue, RoomActualValue, RoomInfo,
     RoomSnapshot, RoomTargetValue, SlotInfo, SwitchActionInfo, SwitchButtonInfo, SwitchInfo,
-    TopologyInfo, TrvSnapshot,
+    TopologyInfo, TrvSnapshot, TrvTargetValue,
 };
 
 use crate::entities::heating_zone::{HeatingZoneActual as HzActual, HeatingZoneTarget as HzTarget};
@@ -404,6 +404,9 @@ fn build_one_heating_zone(
                 forced: trv.is_some_and(|t| t.is_forced_open()),
                 schedule: zt.schedule.clone(),
                 schedule_summary,
+                target: trv.map(|t| tass_target_info(&t.target, now)),
+                target_value: trv.and_then(|t| t.target.value()).map(trv_target_value),
+                actual: trv.map(|t| tass_actual_info(&t.actual, now)),
             }
         })
         .collect();
@@ -761,6 +764,22 @@ fn light_actual_value(a: &crate::entities::light::LightActual) -> LightActualVal
         brightness: a.brightness,
         color_temp: a.color_temp,
         color_xy: a.color_xy,
+    }
+}
+
+fn trv_target_value(t: &crate::entities::trv::TrvTarget) -> TrvTargetValue {
+    use crate::entities::trv::{ForceOpenReason, TrvTarget};
+    match t {
+        TrvTarget::Setpoint(temp) => TrvTargetValue::Setpoint {
+            temperature: *temp,
+        },
+        TrvTarget::Inhibited { .. } => TrvTargetValue::Inhibited,
+        TrvTarget::ForcedOpen { reason } => TrvTargetValue::ForcedOpen {
+            reason: match reason {
+                ForceOpenReason::PressureGroup => "pressure_group".to_string(),
+                ForceOpenReason::MinCycle => "min_cycle".to_string(),
+            },
+        },
     }
 }
 

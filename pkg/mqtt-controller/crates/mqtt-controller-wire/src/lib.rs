@@ -104,6 +104,23 @@ pub struct LightActualValue {
     pub color_xy: Option<(f64, f64)>,
 }
 
+/// Target value for a TRV.
+///
+/// `Inhibited` carries no deadline here — the `until` instant in the
+/// domain type is a native `Instant` that doesn't serialize. The fact
+/// that the TRV is inhibited is surfaced; the UI can show remaining
+/// time via a separate field if we need it later.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum TrvTargetValue {
+    /// Schedule-driven target setpoint in degrees Celsius.
+    Setpoint { temperature: f64 },
+    /// Open-window detection active — min setpoint.
+    Inhibited,
+    /// Force-open by a rule; `reason` is `"pressure_group"` or `"min_cycle"`.
+    ForcedOpen { reason: String },
+}
+
 /// Info about a switch that controls a room or plug. Grouped by the
 /// physical switch device (one entry per device, not per button).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -341,6 +358,17 @@ pub struct TrvSnapshot {
     /// e.g. `"00:00–06:00 → 21°C, 06:00–23:00 → 18°C, 23:00–24:00 → 21°C"`
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub schedule_summary: String,
+    /// TASS target phase/owner/since metadata.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<TassTargetInfo>,
+    /// Typed target value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_value: Option<TrvTargetValue>,
+    /// TASS actual freshness/since metadata. The TRV's typed actual
+    /// value is already exposed as the flat `local_temperature`,
+    /// `setpoint`, `battery`, `running_state` fields above.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actual: Option<TassActualInfo>,
 }
 
 /// Full state snapshot sent on connect or on explicit request.
@@ -570,6 +598,9 @@ mod tests {
                     forced: false,
                     schedule: "living".into(),
                     schedule_summary: "00:00\u{2013}07:00 \u{2192} 18\u{00b0}C, 07:00\u{2013}22:00 \u{2192} 21\u{00b0}C, 22:00\u{2013}24:00 \u{2192} 18\u{00b0}C".into(),
+                    target: None,
+                    target_value: None,
+                    actual: None,
                 }],
                 min_cycle_remaining_secs: 0,
                 min_pause_remaining_secs: 0,

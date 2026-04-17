@@ -492,13 +492,24 @@ header h1 {
     margin-top: 0.25rem;
 }
 
+.trv-block {
+    border-top: 1px solid var(--border);
+    padding: 0.2rem 0 0.35rem 0;
+}
+
+.trv-block .tass-line {
+    border-top: none;
+    padding-top: 0;
+    padding-left: 0.25rem;
+    margin-top: 0;
+}
+
 .trv-row {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 0.4rem;
-    padding: 0.25rem 0;
-    border-top: 1px solid var(--border);
+    padding: 0.15rem 0;
     font-size: 0.8rem;
     min-width: 0;
 }

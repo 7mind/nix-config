@@ -86,6 +86,25 @@ impl TassValueDisplay for mqtt_controller_wire::LightActualValue {
     }
 }
 
+impl TassValueDisplay for mqtt_controller_wire::TrvTargetValue {
+    fn to_pill(&self) -> String {
+        use mqtt_controller_wire::TrvTargetValue::*;
+        match self {
+            Setpoint { temperature } => format!("{temperature:.1}°C"),
+            Inhibited => "inhibited (window)".into(),
+            ForcedOpen { reason } => format!("forced · {reason}"),
+        }
+    }
+}
+
+/// Placeholder impl for the unit type so callers can pass `None::<()>`
+/// when an entity has no typed value for one side of the TASS row.
+impl TassValueDisplay for () {
+    fn to_pill(&self) -> String {
+        String::new()
+    }
+}
+
 /// Small checkbox that toggles entity membership in the filter set.
 #[component]
 pub fn EntityFilterCheckbox(name: String) -> impl IntoView {

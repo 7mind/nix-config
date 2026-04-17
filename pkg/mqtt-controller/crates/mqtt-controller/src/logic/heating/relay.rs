@@ -59,6 +59,51 @@ impl EventProcessor {
             })
             .collect();
 
+        // --- Phase 0: steady-state target seed ---
+        //
+        // A zone whose demand matches its relay state needs no command,
+        // so Phases 1-3 never touch its target — it stays `Unset`. That
+        // makes the UI show "no target" / no owner for perfectly healthy
+        // zones. Seed it here to match observed state so the dashboard
+        // shows `schedule · confirmed · off/heating` immediately.
+        //
+        // Only runs on the first tick per zone (target unset). Subsequent
+        // transitions are driven by Phases 1-3 as before.
+        for d in &decisions {
+            if d.target.is_some() {
+                continue;
+            }
+            let seed = if d.has_demand || d.relay_on {
+                HeatingZoneTarget::Heating
+            } else {
+                HeatingZoneTarget::Off
+            };
+            let hz = self.world.heating_zone(&d.zone_name);
+            hz.target.set_and_command(seed, Owner::Schedule, now);
+            hz.target.confirm(now);
+            hz.desired_relay_gen = tick_gen;
+            tracing::debug!(
+                zone = %d.zone_name,
+                ?seed,
+                has_demand = d.has_demand,
+                relay_on = d.relay_on,
+                "heating: seeding zone target from observed steady state"
+            );
+        }
+        // Refresh targets in the decisions snapshot so the following
+        // phases see the seeded values.
+        let decisions: Vec<ZoneDecision> = decisions
+            .into_iter()
+            .map(|d| {
+                let target = self
+                    .world
+                    .heating_zones
+                    .get(&d.zone_name)
+                    .and_then(|hz| hz.target.value().cloned());
+                ZoneDecision { target, ..d }
+            })
+            .collect();
+
         // --- Phase 1: ON requests ---
         for d in &decisions {
             if d.has_demand && d.target != Some(HeatingZoneTarget::Heating) {
