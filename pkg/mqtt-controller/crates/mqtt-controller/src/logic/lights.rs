@@ -474,4 +474,28 @@ impl EventProcessor {
             }
         }
     }
+
+    /// Record per-light state as published by z2m. Read-only update; no
+    /// commands, no propagation. The group-level [`LightZoneEntity`] is
+    /// unaffected — it receives its own update via [`Event::GroupState`].
+    pub(super) fn handle_light_state(
+        &mut self,
+        device: &str,
+        on: bool,
+        brightness: Option<u8>,
+        color_temp: Option<u16>,
+        color_xy: Option<(f64, f64)>,
+        ts: Instant,
+    ) {
+        let light = self.world.light(device);
+        light.actual.update(
+            crate::entities::light::LightActual {
+                on,
+                brightness,
+                color_temp,
+                color_xy,
+            },
+            ts,
+        );
+    }
 }

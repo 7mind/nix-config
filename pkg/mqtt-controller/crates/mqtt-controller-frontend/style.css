@@ -318,6 +318,18 @@ header h1 {
     overflow: hidden;
     text-overflow: ellipsis;
     min-width: 0;
+    flex: 1;
+}
+
+.light-brightness {
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+    font-size: 0.65rem;
+    color: var(--text);
+}
+
+.light-stale {
+    font-size: 0.6rem;
+    padding: 0 0.3rem;
 }
 
 /* Switches section */

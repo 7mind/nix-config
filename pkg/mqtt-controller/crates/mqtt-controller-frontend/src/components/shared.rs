@@ -7,6 +7,85 @@ use mqtt_controller_wire::{SwitchInfo, TassActualInfo, TassTargetInfo};
 
 use crate::ws::WsState;
 
+/// Anything renderable as a short value-pill string. Implemented by
+/// each wire-level typed TASS value so `TassStateRow` can stay generic.
+pub trait TassValueDisplay {
+    fn to_pill(&self) -> String;
+}
+
+impl TassValueDisplay for mqtt_controller_wire::RoomTargetValue {
+    fn to_pill(&self) -> String {
+        use mqtt_controller_wire::RoomTargetValue::*;
+        match self {
+            Off => "off".into(),
+            On { scene_id, cycle_idx } => format!("on · S{scene_id} · #{cycle_idx}"),
+        }
+    }
+}
+
+impl TassValueDisplay for mqtt_controller_wire::RoomActualValue {
+    fn to_pill(&self) -> String {
+        use mqtt_controller_wire::RoomActualValue::*;
+        match self {
+            On => "on".into(),
+            Off => "off".into(),
+        }
+    }
+}
+
+impl TassValueDisplay for mqtt_controller_wire::PlugTargetValue {
+    fn to_pill(&self) -> String {
+        use mqtt_controller_wire::PlugTargetValue::*;
+        match self {
+            On => "on".into(),
+            Off => "off".into(),
+        }
+    }
+}
+
+impl TassValueDisplay for mqtt_controller_wire::PlugActualValue {
+    fn to_pill(&self) -> String {
+        let base = if self.on { "on" } else { "off" };
+        match self.power {
+            Some(w) => format!("{base} · {w:.1} W"),
+            None => base.to_string(),
+        }
+    }
+}
+
+impl TassValueDisplay for mqtt_controller_wire::HeatingZoneTargetValue {
+    fn to_pill(&self) -> String {
+        use mqtt_controller_wire::HeatingZoneTargetValue::*;
+        match self {
+            Heating => "heating".into(),
+            Off => "off".into(),
+        }
+    }
+}
+
+impl TassValueDisplay for mqtt_controller_wire::HeatingZoneActualValue {
+    fn to_pill(&self) -> String {
+        let base = if self.relay_on { "relay on" } else { "relay off" };
+        match self.temperature {
+            Some(t) => format!("{base} · {t:.1}°C"),
+            None => base.to_string(),
+        }
+    }
+}
+
+impl TassValueDisplay for mqtt_controller_wire::LightActualValue {
+    fn to_pill(&self) -> String {
+        let on = if self.on { "on" } else { "off" };
+        match self.brightness {
+            Some(b) => {
+                let pct = (b as u16 * 100 / 254) as u8;
+                format!("{on} · {pct}%")
+            }
+            None => on.to_string(),
+        }
+    }
+}
+
 /// Small checkbox that toggles entity membership in the filter set.
 #[component]
 pub fn EntityFilterCheckbox(name: String) -> impl IntoView {
@@ -139,16 +218,24 @@ pub fn JsonModal() -> impl IntoView {
     }
 }
 
-/// A row of colored pills summarizing an entity's TASS state:
-/// `target: [phase] [value] [owner]   actual: [freshness] [value]`.
-#[component]
-pub fn TassStateRow(
+/// Render a TASS state row with typed target/actual values. Generic
+/// over the target and actual kinds so each entity passes its own
+/// typed DTOs.
+pub fn tass_state_row<T, A>(
     target: Option<TassTargetInfo>,
+    target_value: Option<T>,
     actual: Option<TassActualInfo>,
-) -> impl IntoView {
+    actual_value: Option<A>,
+) -> impl IntoView
+where
+    T: TassValueDisplay + 'static,
+    A: TassValueDisplay + 'static,
+{
     if target.is_none() && actual.is_none() {
         return ().into_any();
     }
+    let target_pill = target_value.map(|v| v.to_pill());
+    let actual_pill = actual_value.map(|v| v.to_pill());
     view! {
         <div class="tass-line">
             {target.map(|t| {
@@ -156,14 +243,13 @@ pub fn TassStateRow(
                 let phase_class = format!("badge phase-{phase}");
                 let owner = t.owner.clone();
                 let owner_class = format!("badge owner-{owner}");
-                let value = t.value.clone();
                 let since = t.since_ago_ms.map(format_ago_ms);
                 view! {
                     <span class="tass-group">
                         <span class="tass-label">"target"</span>
                         <span class=phase_class>{phase}</span>
-                        {(!value.is_empty()).then(|| view! {
-                            <span class="badge tass-value">{value}</span>
+                        {target_pill.map(|p| view! {
+                            <span class="badge tass-value">{p}</span>
                         })}
                         {(!owner.is_empty()).then(|| view! {
                             <span class=owner_class>{owner}</span>
@@ -175,14 +261,13 @@ pub fn TassStateRow(
             {actual.map(|a| {
                 let freshness = a.freshness.clone();
                 let freshness_class = format!("badge freshness-{freshness}");
-                let value = a.value.clone();
                 let since = a.since_ago_ms.map(format_ago_ms);
                 view! {
                     <span class="tass-group">
                         <span class="tass-label">"actual"</span>
                         <span class=freshness_class>{freshness}</span>
-                        {(!value.is_empty()).then(|| view! {
-                            <span class="badge tass-value">{value}</span>
+                        {actual_pill.map(|p| view! {
+                            <span class="badge tass-value">{p}</span>
                         })}
                         {since.map(|s| view! { <span class="tass-since">{s}</span> })}
                     </span>

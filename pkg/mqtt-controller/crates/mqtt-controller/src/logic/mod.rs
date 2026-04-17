@@ -97,6 +97,17 @@ impl EventProcessor {
                 ts,
             } => self.handle_occupancy(&sensor, occupied, illuminance, ts),
             Event::GroupState { group, on, ts } => self.handle_group_state(&group, on, ts),
+            Event::LightState {
+                device,
+                on,
+                brightness,
+                color_temp,
+                color_xy,
+                ts,
+            } => {
+                self.handle_light_state(&device, on, brightness, color_temp, color_xy, ts);
+                Vec::new()
+            }
             Event::PlugState {
                 device,
                 on,

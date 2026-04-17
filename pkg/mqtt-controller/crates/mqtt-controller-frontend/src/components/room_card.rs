@@ -7,10 +7,10 @@
 
 use leptos::prelude::*;
 
-use mqtt_controller_wire::{ClientMessage, RoomSnapshot};
+use mqtt_controller_wire::{ClientMessage, LightSnapshot, RoomSnapshot};
 
 use crate::components::shared::{
-    format_ago_ms, EntityFilterCheckbox, JsonButton, SwitchChip, TassStateRow,
+    format_ago_ms, tass_state_row, EntityFilterCheckbox, JsonButton, SwitchChip,
 };
 use crate::ws::WsState;
 
@@ -107,7 +107,7 @@ fn RoomTassLine(signal: RwSignal<RoomSnapshot>) -> impl IntoView {
     view! {
         {move || {
             let r = signal.get();
-            view! { <TassStateRow target=r.target actual=r.actual /> }
+            tass_state_row(r.target, r.target_value, r.actual, r.actual_value)
         }}
     }
 }
@@ -116,28 +116,76 @@ fn RoomTassLine(signal: RwSignal<RoomSnapshot>) -> impl IntoView {
 fn RoomLights(signal: RwSignal<RoomSnapshot>) -> impl IntoView {
     view! {
         {move || {
-            let r = signal.get();
-            if r.lights.is_empty() {
+            let members = signal.with(|r| r.lights.clone());
+            if members.is_empty() {
                 return ().into_any();
             }
-            let physically_on = r.physically_on;
-            let lights = r.lights.clone();
+            let zone_on = signal.with(|r| r.physically_on);
             view! {
                 <div class="lights-section">
                     <div class="section-label">"Lights"</div>
                     <div class="lights-grid">
-                        {lights.into_iter().map(|light| {
-                            let device_title = light.device.clone();
-                            view! {
-                                <div class="light-tile" title=device_title>
-                                    <span class=if physically_on { "status-dot on" } else { "status-dot off" }></span>
-                                    <span class="light-name">{light.device}</span>
-                                </div>
-                            }
+                        {members.into_iter().map(|m| view! {
+                            <LightTile device=m.device zone_on=zone_on />
                         }).collect::<Vec<_>>()}
                     </div>
                 </div>
             }.into_any()
+        }}
+    }
+}
+
+#[component]
+fn LightTile(device: String, zone_on: bool) -> impl IntoView {
+    let ws = expect_context::<WsState>();
+    let signal = ws.light_signal(&device);
+    let device_title = device.clone();
+    let device_label = device.clone();
+
+    // If we don't have a per-light signal yet (initial-snapshot race),
+    // fall back to the zone's on/off.
+    view! {
+        <div class="light-tile" title=device_title>
+            {match signal {
+                Some(sig) => view! {
+                    <LightTileInner sig=sig fallback_on=zone_on />
+                }.into_any(),
+                None => {
+                    let cls = if zone_on { "status-dot on" } else { "status-dot off" };
+                    view! { <span class=cls></span> }.into_any()
+                }
+            }}
+            <span class="light-name">{device_label}</span>
+        </div>
+    }
+}
+
+#[component]
+fn LightTileInner(sig: RwSignal<LightSnapshot>, fallback_on: bool) -> impl IntoView {
+    view! {
+        {move || {
+            let l = sig.get();
+            let fresh = l.actual.as_ref().map_or(false, |a| a.freshness == "fresh");
+            let known = l.actual_value.is_some();
+            let on = l.actual_value.as_ref().map(|a| a.on).unwrap_or(fallback_on);
+            let dot_class = if !known {
+                "status-dot off unknown"
+            } else if on {
+                "status-dot on"
+            } else {
+                "status-dot off"
+            };
+            let staleness = (!fresh && known)
+                .then(|| l.actual.as_ref().map(|a| a.freshness.clone()).unwrap_or_default());
+            let brightness = l.actual_value.as_ref().and_then(|a| a.brightness).map(|b| {
+                let pct = (b as u16 * 100 / 254) as u8;
+                format!("{pct}%")
+            });
+            view! {
+                <span class=dot_class></span>
+                {brightness.map(|b| view! { <span class="light-brightness">{b}</span> })}
+                {staleness.map(|s| view! { <span class="badge inhibited light-stale">{s}</span> })}
+            }
         }}
     }
 }

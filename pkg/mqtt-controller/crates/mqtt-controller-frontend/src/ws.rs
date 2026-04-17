@@ -17,8 +17,8 @@ use wasm_bindgen::JsCast;
 use web_sys::{CloseEvent, ErrorEvent, MessageEvent, WebSocket};
 
 use mqtt_controller_wire::{
-    ClientMessage, DecisionLogEntry, FullStateSnapshot, HeatingZoneSnapshot, PlugSnapshot,
-    RoomSnapshot, ServerMessage, TopologyInfo,
+    ClientMessage, DecisionLogEntry, EntityUpdate, FullStateSnapshot, HeatingZoneSnapshot,
+    LightSnapshot, PlugSnapshot, RoomSnapshot, ServerMessage, TopologyInfo,
 };
 
 const MAX_LOG_ENTRIES: usize = 200;
@@ -79,6 +79,8 @@ pub struct WsState {
     pub plug_names: RwSignal<Vec<String>>,
     /// Ordered list of heating zone names.
     pub heating_names: RwSignal<Vec<String>>,
+    /// Ordered list of individual light device names.
+    pub light_names: RwSignal<Vec<String>>,
 
     /// Log entries (newest first).
     pub log_entries: ReadSignal<Vec<DecisionLogEntry>>,
@@ -98,6 +100,7 @@ pub struct WsState {
     rooms: EntityMap<RoomSnapshot>,
     plugs: EntityMap<PlugSnapshot>,
     heating: EntityMap<HeatingZoneSnapshot>,
+    lights: EntityMap<LightSnapshot>,
     ws_inner: StoredValue<WsInner, LocalStorage>,
     set_connected: WriteSignal<bool>,
     set_topology: WriteSignal<Option<TopologyInfo>>,
@@ -118,6 +121,7 @@ impl WsState {
             room_names: RwSignal::new(Vec::new()),
             plug_names: RwSignal::new(Vec::new()),
             heating_names: RwSignal::new(Vec::new()),
+            light_names: RwSignal::new(Vec::new()),
             log_entries,
             filter_entities,
             set_filter_entities,
@@ -126,6 +130,7 @@ impl WsState {
             rooms: StoredValue::new_local(BTreeMap::new()),
             plugs: StoredValue::new_local(BTreeMap::new()),
             heating: StoredValue::new_local(BTreeMap::new()),
+            lights: StoredValue::new_local(BTreeMap::new()),
             ws_inner: StoredValue::new_local(WsInner::new()),
             set_connected,
             set_topology,
@@ -149,6 +154,11 @@ impl WsState {
     /// Look up the reactive signal for a heating zone by name.
     pub fn heating_signal(&self, name: &str) -> Option<RwSignal<HeatingZoneSnapshot>> {
         self.heating.with_value(|m| m.get(name).copied())
+    }
+
+    /// Look up the reactive signal for a light by device name.
+    pub fn light_signal(&self, device: &str) -> Option<RwSignal<LightSnapshot>> {
+        self.lights.with_value(|m| m.get(device).copied())
     }
 
     /// Clear the event log.
@@ -213,9 +223,11 @@ impl WsState {
         let rooms = self.rooms;
         let plugs = self.plugs;
         let heating = self.heating;
+        let lights = self.lights;
         let room_names = self.room_names;
         let plug_names = self.plug_names;
         let heating_names = self.heating_names;
+        let light_names = self.light_names;
 
         // On open: mark connected, request snapshot + topology.
         let ws_for_open = ws.clone();
@@ -241,7 +253,17 @@ impl WsState {
             };
             match msg {
                 ServerMessage::StateSnapshot(snap) => {
-                    apply_full_snapshot(rooms, plugs, heating, room_names, plug_names, heating_names, snap);
+                    apply_full_snapshot(
+                        rooms,
+                        plugs,
+                        heating,
+                        lights,
+                        room_names,
+                        plug_names,
+                        heating_names,
+                        light_names,
+                        snap,
+                    );
                 }
                 ServerMessage::Topology(topo) => {
                     set_topology.set(Some(topo));
@@ -252,15 +274,20 @@ impl WsState {
                         entries.truncate(MAX_LOG_ENTRIES);
                     });
                 }
-                ServerMessage::RoomUpdate(room) => {
-                    upsert_entity(rooms, room_names, room.name.clone(), room);
-                }
-                ServerMessage::PlugUpdate(plug) => {
-                    upsert_entity(plugs, plug_names, plug.device.clone(), plug);
-                }
-                ServerMessage::HeatingZoneUpdate(zone) => {
-                    upsert_entity(heating, heating_names, zone.name.clone(), zone);
-                }
+                ServerMessage::Entity(update) => match update {
+                    EntityUpdate::Room(room) => {
+                        upsert_entity(rooms, room_names, room.name.clone(), room);
+                    }
+                    EntityUpdate::Plug(plug) => {
+                        upsert_entity(plugs, plug_names, plug.device.clone(), plug);
+                    }
+                    EntityUpdate::HeatingZone(zone) => {
+                        upsert_entity(heating, heating_names, zone.name.clone(), zone);
+                    }
+                    EntityUpdate::Light(light) => {
+                        upsert_entity(lights, light_names, light.device.clone(), light);
+                    }
+                },
             }
         });
         ws.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
@@ -315,14 +342,17 @@ fn apply_full_snapshot(
     rooms: EntityMap<RoomSnapshot>,
     plugs: EntityMap<PlugSnapshot>,
     heating: EntityMap<HeatingZoneSnapshot>,
+    lights: EntityMap<LightSnapshot>,
     room_names: RwSignal<Vec<String>>,
     plug_names: RwSignal<Vec<String>>,
     heating_names: RwSignal<Vec<String>>,
+    light_names: RwSignal<Vec<String>>,
     snap: FullStateSnapshot,
 ) {
     sync_map(rooms, room_names, snap.rooms, |r| r.name.clone());
     sync_map(plugs, plug_names, snap.plugs, |p| p.device.clone());
     sync_map(heating, heating_names, snap.heating_zones, |z| z.name.clone());
+    sync_map(lights, light_names, snap.lights, |l| l.device.clone());
 }
 
 /// Diff a full list into the per-entity map: update existing signals,

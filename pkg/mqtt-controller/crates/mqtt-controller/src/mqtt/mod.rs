@@ -313,36 +313,22 @@ async fn run_eventloop(
     }
 }
 
-/// Subscribe to all MQTT topics the topology requires. Used on initial
-/// connect and on every reconnect.
+/// Subscribe to the two wildcard namespaces we care about and let the
+/// parser classify each incoming publish by topic shape + topology
+/// lookup. Called on initial connect and on every reconnect (broker
+/// discards subscriptions when `clean_session=true`).
+///
+/// Individual devices don't need enumeration here — adding a device to
+/// the catalog starts delivering its publishes without a re-subscribe.
+/// Unrelated traffic (`bridge/*`, `*/availability`, our own
+/// `*/set|*/get` echoes, Z-Wave node admin topics) is filtered in
+/// [`parse::parse_event`].
 async fn subscribe_all_topics(
     client: &AsyncClient,
-    topology: &Topology,
+    _topology: &Topology,
 ) -> Result<(), MqttError> {
-    for sw in topology.all_switch_device_names() {
-        client.subscribe(topics::device_action_topic(sw), QoS::AtLeastOnce).await?;
-    }
-    for sensor in topology.all_motion_sensor_names() {
-        client.subscribe(topics::state_topic(sensor), QoS::AtLeastOnce).await?;
-    }
-    for group in topology.all_group_names() {
-        client.subscribe(topics::state_topic(group), QoS::AtLeastOnce).await?;
-    }
-    for plug in topology.all_plug_names() {
-        if !topology.is_zwave_plug(plug) {
-            client.subscribe(topics::state_topic(plug), QoS::AtLeastOnce).await?;
-        }
-    }
-    for trv in topology.all_trv_names() {
-        client.subscribe(topics::state_topic(trv), QoS::AtLeastOnce).await?;
-    }
-    for wt in topology.all_wall_thermostat_names() {
-        client.subscribe(topics::state_topic(wt), QoS::AtLeastOnce).await?;
-    }
-    for plug in topology.zwave_plug_names() {
-        client.subscribe(topics::zwave_switch_state_topic(plug), QoS::AtLeastOnce).await?;
-        client.subscribe(topics::zwave_meter_power_topic(plug), QoS::AtLeastOnce).await?;
-    }
+    client.subscribe("zigbee2mqtt/#", QoS::AtLeastOnce).await?;
+    client.subscribe("zwave/#", QoS::AtLeastOnce).await?;
     Ok(())
 }
 

@@ -5,13 +5,17 @@ use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 use mqtt_controller_wire::{
-    FullStateSnapshot, HeatingZoneInfo, HeatingZoneSnapshot, KillSwitchRuleInfo, LightInfo,
-    MotionSensorInfo, PlugSnapshot, RoomInfo, RoomSnapshot, SlotInfo, SwitchActionInfo,
-    SwitchButtonInfo, SwitchInfo, TopologyInfo, TrvSnapshot,
+    FullStateSnapshot, HeatingZoneActualValue, HeatingZoneInfo, HeatingZoneSnapshot,
+    HeatingZoneTargetValue, KillSwitchRuleInfo, LightActualValue, LightInfo, LightSnapshot,
+    MotionSensorInfo, PlugActualValue, PlugSnapshot, PlugTargetValue, RoomActualValue, RoomInfo,
+    RoomSnapshot, RoomTargetValue, SlotInfo, SwitchActionInfo, SwitchButtonInfo, SwitchInfo,
+    TopologyInfo, TrvSnapshot,
 };
 
-use crate::entities::light_zone::LightZoneEntity;
-use crate::entities::plug::{KillSwitchRuleState, PlugEntity};
+use crate::entities::heating_zone::{HeatingZoneActual as HzActual, HeatingZoneTarget as HzTarget};
+use crate::entities::light::LightEntity;
+use crate::entities::light_zone::{LightZoneActual, LightZoneEntity, LightZoneTarget};
+use crate::entities::plug::{KillSwitchRuleState, PlugActual, PlugEntity, PlugTarget};
 use crate::entities::WorldState;
 use crate::logic::EventProcessor;
 use crate::topology::{MotionBinding, ResolvedTrigger, Topology};
@@ -41,13 +45,86 @@ pub fn build_full_snapshot(processor: &EventProcessor, now: Instant) -> FullStat
         .collect();
 
     let heating_zones = build_heating_zone_snapshots(processor, now);
+    let lights = build_all_light_snapshots(processor, now);
 
     FullStateSnapshot {
         rooms,
         plugs,
         heating_zones,
+        lights,
         timestamp_epoch_ms: epoch_ms,
     }
+}
+
+/// Per-light snapshot builder used for both the full snapshot and
+/// incremental `Entity(Light)` updates.
+pub fn build_light_snapshot(
+    processor: &EventProcessor,
+    device: &str,
+    now: Instant,
+) -> Option<LightSnapshot> {
+    // We allow snapshots even for lights that haven't reported yet so
+    // the frontend can render their tile in an "unknown" state.
+    let topology = processor.topology();
+    let device_idx = topology.device_idx(device)?;
+    if topology.device_kind(device_idx) != crate::topology::DeviceKind::Light {
+        return None;
+    }
+    let entity = processor.world().lights.get(device);
+    let room = light_room_of(topology, device);
+    Some(light_snapshot_from(device, room, entity, now))
+}
+
+/// Build snapshots for every light in the catalog.
+fn build_all_light_snapshots(processor: &EventProcessor, now: Instant) -> Vec<LightSnapshot> {
+    let topology = processor.topology();
+    let mut out = Vec::new();
+    for room in topology.rooms() {
+        for member in &room.members {
+            let device = member.split('/').next().unwrap_or(member);
+            if !topology.is_light(device) {
+                continue;
+            }
+            if out.iter().any(|l: &LightSnapshot| l.device == device) {
+                continue;
+            }
+            let entity = processor.world().lights.get(device);
+            out.push(light_snapshot_from(
+                device,
+                Some(room.name.clone()),
+                entity,
+                now,
+            ));
+        }
+    }
+    out
+}
+
+fn light_snapshot_from(
+    device: &str,
+    room: Option<String>,
+    entity: Option<&LightEntity>,
+    now: Instant,
+) -> LightSnapshot {
+    LightSnapshot {
+        device: device.to_string(),
+        room,
+        actual: entity.map(|l| tass_actual_info(&l.actual, now)),
+        actual_value: entity.and_then(|l| l.actual.value()).map(light_actual_value),
+    }
+}
+
+/// Return the room name this light is a member of, if any.
+fn light_room_of(topology: &crate::topology::Topology, device: &str) -> Option<String> {
+    for room in topology.rooms() {
+        for member in &room.members {
+            let name = member.split('/').next().unwrap_or(member);
+            if name == device {
+                return Some(room.name.clone());
+            }
+        }
+    }
+    None
 }
 
 /// Build a single room snapshot for incremental updates.
@@ -144,7 +221,13 @@ fn room_snapshot_from(
         active_slot,
         scene_ids,
         target: zone.map(|z| tass_target_info(&z.target, now)),
+        target_value: zone
+            .and_then(|z| z.target.value())
+            .map(room_target_value),
         actual: zone.map(|z| tass_actual_info(&z.actual, now)),
+        actual_value: zone
+            .and_then(|z| z.actual.value())
+            .map(room_actual_value),
         switches,
         motion_sensors,
         lights,
@@ -183,7 +266,13 @@ fn plug_snapshot_from(
         kill_switch_holdoff_secs: processor.kill_switch_holdoff_secs(device),
         power_watts: plug.and_then(|p| p.power()),
         target: plug.map(|p| tass_target_info(&p.target, now)),
+        target_value: plug
+            .and_then(|p| p.target.value())
+            .map(plug_target_value),
         actual: plug.map(|p| tass_actual_info(&p.actual, now)),
+        actual_value: plug
+            .and_then(|p| p.actual.value())
+            .map(plug_actual_value),
         kill_switch_rules: build_kill_switch_rules(plug, device, topology, now),
         linked_switches: build_linked_switches(topology, device),
     }
@@ -329,6 +418,10 @@ fn build_one_heating_zone(
         min_cycle_remaining_secs,
         min_pause_remaining_secs,
         relay_stale,
+        target: hz.map(|h| tass_target_info(&h.target, now)),
+        target_value: hz.and_then(|h| h.target.value()).map(heating_target_value),
+        actual: hz.map(|h| tass_actual_info(&h.actual, now)),
+        actual_value: hz.and_then(|h| h.actual.value()).map(heating_actual_value),
     }
 }
 
@@ -585,37 +678,89 @@ fn ago_ms(now: Instant, then: Instant) -> u64 {
     now.duration_since(then).as_millis() as u64
 }
 
-/// Convert a TASS target to a wire DTO.
-fn tass_target_info<T: std::fmt::Debug>(
+/// Convert TASS target lifecycle metadata to its wire shape
+/// (phase/owner/since — the typed value lives on the entity snapshot).
+fn tass_target_info<T>(
     target: &crate::tass::TassTarget<T>,
     now: Instant,
 ) -> mqtt_controller_wire::TassTargetInfo {
     mqtt_controller_wire::TassTargetInfo {
-        value: target
-            .value()
-            .map(|v| format!("{v:?}"))
-            .unwrap_or_default(),
         phase: target.phase().to_string(),
-        owner: target
-            .owner()
-            .map(|o| o.to_string())
-            .unwrap_or_default(),
+        owner: target.owner().map(|o| o.to_string()).unwrap_or_default(),
         since_ago_ms: target.since().map(|t| ago_ms(now, t)),
     }
 }
 
-/// Convert a TASS actual to a wire DTO.
-fn tass_actual_info<T: std::fmt::Debug>(
+/// Convert TASS actual freshness metadata to its wire shape.
+fn tass_actual_info<T>(
     actual: &crate::tass::TassActual<T>,
     now: Instant,
 ) -> mqtt_controller_wire::TassActualInfo {
     mqtt_controller_wire::TassActualInfo {
-        value: actual
-            .value()
-            .map(|v| format!("{v:?}"))
-            .unwrap_or_default(),
         freshness: actual.freshness().to_string(),
         since_ago_ms: actual.since().map(|t| ago_ms(now, t)),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Typed-value converters: domain TASS values → wire-crate counterparts.
+// Kept inline here so `snapshot.rs` owns the whole domain→wire boundary.
+// ---------------------------------------------------------------------------
+
+fn room_target_value(t: &LightZoneTarget) -> RoomTargetValue {
+    match t {
+        LightZoneTarget::Off => RoomTargetValue::Off,
+        LightZoneTarget::On {
+            scene_id,
+            cycle_idx,
+        } => RoomTargetValue::On {
+            scene_id: *scene_id,
+            cycle_idx: *cycle_idx,
+        },
+    }
+}
+
+fn room_actual_value(a: &LightZoneActual) -> RoomActualValue {
+    match a {
+        LightZoneActual::On => RoomActualValue::On,
+        LightZoneActual::Off => RoomActualValue::Off,
+    }
+}
+
+fn plug_target_value(t: &PlugTarget) -> PlugTargetValue {
+    match t {
+        PlugTarget::On => PlugTargetValue::On,
+        PlugTarget::Off => PlugTargetValue::Off,
+    }
+}
+
+fn plug_actual_value(a: &PlugActual) -> PlugActualValue {
+    PlugActualValue {
+        on: a.on,
+        power: a.power,
+    }
+}
+
+fn heating_target_value(t: &HzTarget) -> HeatingZoneTargetValue {
+    match t {
+        HzTarget::Heating => HeatingZoneTargetValue::Heating,
+        HzTarget::Off => HeatingZoneTargetValue::Off,
+    }
+}
+
+fn heating_actual_value(a: &HzActual) -> HeatingZoneActualValue {
+    HeatingZoneActualValue {
+        relay_on: a.relay_on,
+        temperature: a.temperature,
+    }
+}
+
+fn light_actual_value(a: &crate::entities::light::LightActual) -> LightActualValue {
+    LightActualValue {
+        on: a.on,
+        brightness: a.brightness,
+        color_temp: a.color_temp,
+        color_xy: a.color_xy,
     }
 }
 

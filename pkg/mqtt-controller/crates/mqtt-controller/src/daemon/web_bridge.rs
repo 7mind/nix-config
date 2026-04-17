@@ -73,21 +73,22 @@ pub(super) fn broadcast_state_updates(
     tx: &broadcast::Sender<mqtt_controller_wire::ServerMessage>,
     now: Instant,
 ) {
+    use mqtt_controller_wire::{EntityUpdate, ServerMessage};
     let topology = processor.topology();
     for room in topology.rooms() {
         if let Some(snap) = snapshot::build_room_snapshot(processor, &room.name, now) {
-            let _ = tx.send(mqtt_controller_wire::ServerMessage::RoomUpdate(snap));
+            let _ = tx.send(ServerMessage::Entity(EntityUpdate::Room(snap)));
         }
     }
     for plug_name in topology.all_plug_names() {
         if let Some(snap) = snapshot::build_plug_snapshot(processor, plug_name, now) {
-            let _ = tx.send(mqtt_controller_wire::ServerMessage::PlugUpdate(snap));
+            let _ = tx.send(ServerMessage::Entity(EntityUpdate::Plug(snap)));
         }
     }
     if let Some(cfg) = topology.heating_config() {
         for zone in &cfg.zones {
             if let Some(snap) = snapshot::build_heating_zone_snapshot(processor, &zone.name, now) {
-                let _ = tx.send(mqtt_controller_wire::ServerMessage::HeatingZoneUpdate(snap));
+                let _ = tx.send(ServerMessage::Entity(EntityUpdate::HeatingZone(snap)));
             }
         }
     }
@@ -108,17 +109,24 @@ pub(super) fn broadcast_touched(
     touched: &crate::effect_dispatch::TouchedEntities,
     now: Instant,
 ) {
+    use mqtt_controller_wire::{EntityUpdate, ServerMessage};
     let topology = processor.topology();
     for &room_idx in &touched.rooms {
         let room_name = &topology.room(room_idx).name;
         if let Some(snap) = snapshot::build_room_snapshot(processor, room_name, now) {
-            let _ = tx.send(mqtt_controller_wire::ServerMessage::RoomUpdate(snap));
+            let _ = tx.send(ServerMessage::Entity(EntityUpdate::Room(snap)));
         }
     }
     for &plug_idx in &touched.plugs {
         let plug_name = topology.device_name(plug_idx.device());
         if let Some(snap) = snapshot::build_plug_snapshot(processor, plug_name, now) {
-            let _ = tx.send(mqtt_controller_wire::ServerMessage::PlugUpdate(snap));
+            let _ = tx.send(ServerMessage::Entity(EntityUpdate::Plug(snap)));
+        }
+    }
+    for &light_idx in &touched.lights {
+        let device = topology.device_name(light_idx);
+        if let Some(snap) = snapshot::build_light_snapshot(processor, device, now) {
+            let _ = tx.send(ServerMessage::Entity(EntityUpdate::Light(snap)));
         }
     }
     if let Some(cfg) = topology.heating_config() {
@@ -129,7 +137,7 @@ pub(super) fn broadcast_touched(
                 if let Some(snap) =
                     snapshot::build_heating_zone_snapshot(processor, &zone.name, now)
                 {
-                    let _ = tx.send(mqtt_controller_wire::ServerMessage::HeatingZoneUpdate(snap));
+                    let _ = tx.send(ServerMessage::Entity(EntityUpdate::HeatingZone(snap)));
                 }
             }
         }

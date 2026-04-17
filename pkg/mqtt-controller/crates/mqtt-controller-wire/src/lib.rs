@@ -11,13 +11,12 @@ use serde::{Deserialize, Serialize};
 // Snapshots (server → client)
 // ---------------------------------------------------------------------------
 
-/// TASS target state summary for the frontend.
+/// TASS target lifecycle metadata for the frontend. Typed value lives
+/// on each entity's snapshot (e.g. `RoomSnapshot::target_value`), this
+/// struct only carries the phase/owner/since triple.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct TassTargetInfo {
-    /// Human-readable target value (e.g. "On(S1)", "Off", "21.0 C").
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub value: String,
-    /// Target phase: "unset", "pending", "commanded", "confirmed".
+    /// Target phase: "unset", "pending", "commanded", "confirmed", "stale".
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub phase: String,
     /// Who set the target: "user", "motion", "schedule", "webui", "system", "rule".
@@ -28,18 +27,81 @@ pub struct TassTargetInfo {
     pub since_ago_ms: Option<u64>,
 }
 
-/// TASS actual state summary for the frontend.
+/// TASS actual freshness metadata.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct TassActualInfo {
-    /// Human-readable actual value (e.g. "On", "Off", "20.5 C").
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub value: String,
     /// Actual freshness: "unknown", "fresh", "stale".
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub freshness: String,
     /// Milliseconds since the last reading.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub since_ago_ms: Option<u64>,
+}
+
+// ---------------------------------------------------------------------------
+// Typed TASS values, one per entity kind. These are the structured
+// counterparts of the old debug-formatted `value: String` on
+// TassTargetInfo/TassActualInfo. The frontend renders them per-kind.
+// ---------------------------------------------------------------------------
+
+/// Target value for a light zone (room).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum RoomTargetValue {
+    Off,
+    On { scene_id: u8, cycle_idx: usize },
+}
+
+/// Actual aggregate value for a light zone (room).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum RoomActualValue {
+    On,
+    Off,
+}
+
+/// Target value for a smart plug.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum PlugTargetValue {
+    On,
+    Off,
+}
+
+/// Actual value for a smart plug. `power` is in watts when available.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PlugActualValue {
+    pub on: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub power: Option<f64>,
+}
+
+/// Target value for a heating zone.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum HeatingZoneTargetValue {
+    Heating,
+    Off,
+}
+
+/// Actual value for a heating zone.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct HeatingZoneActualValue {
+    pub relay_on: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub temperature: Option<f64>,
+}
+
+/// Actual value for an individual light.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LightActualValue {
+    pub on: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub brightness: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_temp: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_xy: Option<(f64, f64)>,
 }
 
 /// Info about a switch that controls a room or plug. Grouped by the
@@ -88,12 +150,29 @@ pub struct MotionSensorInfo {
     pub max_illuminance: Option<u32>,
 }
 
-/// One light in a light zone. Individual light state is not tracked by
-/// the backend — lights inherit the zone's aggregate state. This struct
-/// exists so the UI can list member devices per zone.
+/// One light in a light zone. Topology info only — membership list.
+/// Live per-light state is streamed separately via [`LightSnapshot`].
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LightInfo {
     pub device: String,
+}
+
+/// Per-bulb live state. Individual lights are read-only from the
+/// controller's perspective (the group is the control surface) so only
+/// an actual-state summary is exposed.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LightSnapshot {
+    pub device: String,
+    /// Which zone this light belongs to, if any. Lets the frontend
+    /// route updates to the correct room card without a topology lookup.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub room: Option<String>,
+    /// TASS actual freshness/since metadata.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actual: Option<TassActualInfo>,
+    /// Typed actual value; `None` until the first reading arrives.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actual_value: Option<LightActualValue>,
 }
 
 /// Kill switch rule state for the systems view.
@@ -131,12 +210,18 @@ pub struct RoomSnapshot {
 
     // --- TASS system view fields ---
 
-    /// TASS target state.
+    /// TASS target phase/owner/since metadata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<TassTargetInfo>,
-    /// TASS actual state.
+    /// Typed target value; `None` when target phase is unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_value: Option<RoomTargetValue>,
+    /// TASS actual freshness/since metadata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actual: Option<TassActualInfo>,
+    /// Typed actual value; `None` until the first reading arrives.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actual_value: Option<RoomActualValue>,
     /// Switches bound to this room.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub switches: Vec<SwitchInfo>,
@@ -174,12 +259,18 @@ pub struct PlugSnapshot {
 
     // --- TASS system view fields ---
 
-    /// TASS target state.
+    /// TASS target phase/owner/since metadata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<TassTargetInfo>,
-    /// TASS actual state.
+    /// Typed target value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_value: Option<PlugTargetValue>,
+    /// TASS actual freshness/since metadata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actual: Option<TassActualInfo>,
+    /// Typed actual value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actual_value: Option<PlugActualValue>,
     /// Kill switch rules with their current state.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub kill_switch_rules: Vec<KillSwitchRuleInfo>,
@@ -206,6 +297,18 @@ pub struct HeatingZoneSnapshot {
     /// True if the wall thermostat hasn't reported state recently.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub relay_stale: bool,
+    /// TASS target phase/owner/since metadata.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<TassTargetInfo>,
+    /// Typed target value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_value: Option<HeatingZoneTargetValue>,
+    /// TASS actual freshness/since metadata.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actual: Option<TassActualInfo>,
+    /// Typed actual value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actual_value: Option<HeatingZoneActualValue>,
 }
 
 fn is_zero_u64(v: &u64) -> bool {
@@ -247,6 +350,9 @@ pub struct FullStateSnapshot {
     pub plugs: Vec<PlugSnapshot>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub heating_zones: Vec<HeatingZoneSnapshot>,
+    /// Per-bulb live state. One entry per light device in the catalog.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lights: Vec<LightSnapshot>,
     /// Wall-clock timestamp of when this snapshot was taken (Unix epoch ms).
     pub timestamp_epoch_ms: u64,
 }
@@ -363,12 +469,20 @@ pub enum ServerMessage {
     Topology(TopologyInfo),
     /// Real-time event + decision log entry.
     EventLog(DecisionLogEntry),
-    /// Incremental room state update (after any event that changes a room).
-    RoomUpdate(RoomSnapshot),
-    /// Incremental plug state update.
-    PlugUpdate(PlugSnapshot),
-    /// Incremental heating zone state update.
-    HeatingZoneUpdate(HeatingZoneSnapshot),
+    /// Incremental update for any single entity kind. Replaces the
+    /// former `RoomUpdate`/`PlugUpdate`/`HeatingZoneUpdate` trio.
+    Entity(EntityUpdate),
+}
+
+/// One entity update, tagged by kind. Carries a fresh snapshot of the
+/// entity; the frontend routes by variant into its per-kind map.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind", content = "data")]
+pub enum EntityUpdate {
+    Room(RoomSnapshot),
+    Plug(PlugSnapshot),
+    HeatingZone(HeatingZoneSnapshot),
+    Light(LightSnapshot),
 }
 
 // ---------------------------------------------------------------------------
@@ -417,7 +531,9 @@ mod tests {
                 active_slot: Some("day".into()),
                 scene_ids: vec![1, 2, 3],
                 target: None,
+                target_value: None,
                 actual: None,
+                actual_value: None,
                 switches: vec![],
                 motion_sensors: vec![],
                 lights: vec![],
@@ -431,7 +547,9 @@ mod tests {
                 kill_switch_holdoff_secs: Some(600),
                 power_watts: Some(120.5),
                 target: None,
+                target_value: None,
                 actual: None,
+                actual_value: None,
                 kill_switch_rules: vec![],
                 linked_switches: vec![],
             }],
@@ -456,6 +574,21 @@ mod tests {
                 min_cycle_remaining_secs: 0,
                 min_pause_remaining_secs: 0,
                 relay_stale: false,
+                target: None,
+                target_value: None,
+                actual: None,
+                actual_value: None,
+            }],
+            lights: vec![LightSnapshot {
+                device: "hue-l-kitchen-1".into(),
+                room: Some("kitchen".into()),
+                actual: None,
+                actual_value: Some(LightActualValue {
+                    on: true,
+                    brightness: Some(254),
+                    color_temp: Some(366),
+                    color_xy: None,
+                }),
             }],
             timestamp_epoch_ms: 1700000000000,
         });
@@ -534,26 +667,69 @@ mod tests {
 
     #[test]
     fn server_message_has_type_tag() {
-        let json = serde_json::to_string(&ServerMessage::RoomUpdate(RoomSnapshot {
-            name: "x".into(),
-            group_name: "g".into(),
-            physically_on: false,
-            motion_owned: false,
-            cycle_idx: 0,
-            last_press_ago_ms: None,
-            last_off_ago_ms: None,
-            motion_active_sensors: vec![],
-            target: None,
-            actual: None,
-            switches: vec![],
-            motion_sensors: vec![],
-            lights: vec![],
-            motion_off_cooldown_secs: 0,
-            motion_cooldown_remaining_secs: None,
-            active_slot: None,
-            scene_ids: vec![],
-        }))
+        let json = serde_json::to_string(&ServerMessage::Entity(EntityUpdate::Room(
+            RoomSnapshot {
+                name: "x".into(),
+                group_name: "g".into(),
+                physically_on: false,
+                motion_owned: false,
+                cycle_idx: 0,
+                last_press_ago_ms: None,
+                last_off_ago_ms: None,
+                motion_active_sensors: vec![],
+                target: None,
+                target_value: None,
+                actual: None,
+                actual_value: None,
+                switches: vec![],
+                motion_sensors: vec![],
+                lights: vec![],
+                motion_off_cooldown_secs: 0,
+                motion_cooldown_remaining_secs: None,
+                active_slot: None,
+                scene_ids: vec![],
+            },
+        )))
         .unwrap();
-        assert!(json.contains(r#""type":"RoomUpdate""#));
+        assert!(json.contains(r#""type":"Entity""#));
+        assert!(json.contains(r#""kind":"Room""#));
+    }
+
+    #[test]
+    fn entity_update_light_round_trip() {
+        let msg = ServerMessage::Entity(EntityUpdate::Light(LightSnapshot {
+            device: "hue-l-a".into(),
+            room: Some("study".into()),
+            actual: Some(TassActualInfo {
+                freshness: "fresh".into(),
+                since_ago_ms: Some(12_000),
+            }),
+            actual_value: Some(LightActualValue {
+                on: true,
+                brightness: Some(180),
+                color_temp: Some(300),
+                color_xy: Some((0.45, 0.41)),
+            }),
+        }));
+        let json = serde_json::to_string(&msg).unwrap();
+        let back: ServerMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(msg, back);
+    }
+
+    #[test]
+    fn room_target_value_round_trip() {
+        let on = RoomTargetValue::On {
+            scene_id: 2,
+            cycle_idx: 1,
+        };
+        let json = serde_json::to_string(&on).unwrap();
+        assert!(json.contains(r#""kind":"on""#));
+        assert!(json.contains(r#""scene_id":2"#));
+        let back: RoomTargetValue = serde_json::from_str(&json).unwrap();
+        assert_eq!(on, back);
+
+        let off = RoomTargetValue::Off;
+        let json = serde_json::to_string(&off).unwrap();
+        assert_eq!(json, r#"{"kind":"off"}"#);
     }
 }

@@ -43,6 +43,18 @@ pub(super) fn parse_event(topology: &Topology, p: &Publish, clock: &dyn Clock) -
         });
     }
 
+    // With the wildcard subscription (`zigbee2mqtt/#`) we also receive
+    // traffic we don't care about. Filter the obvious classes early so
+    // we don't try to JSON-parse a bridge inventory blob every time it
+    // flips.
+    if rest.starts_with("bridge/")
+        || rest.ends_with("/availability")
+        || rest.ends_with("/set")
+        || rest.ends_with("/get")
+    {
+        return None;
+    }
+
     // State topic → motion sensor or group. The friendly name is the
     // entire `rest`. We branch by topology lookup.
     let name = rest;
@@ -141,6 +153,35 @@ pub(super) fn parse_event(topology: &Topology, p: &Publish, clock: &dyn Clock) -
             sensor: name.to_string(),
             occupied,
             illuminance,
+            ts: now,
+        });
+    }
+
+    if topology.is_light(name) {
+        // Individual bulb state: we don't target lights (groups are the
+        // control surface) but do track actual state for the UI.
+        let value: serde_json::Value = serde_json::from_slice(&p.payload).ok()?;
+        let state_str = value.get("state")?.as_str()?;
+        let on = state_str.eq_ignore_ascii_case("ON");
+        let brightness = value
+            .get("brightness")
+            .and_then(|v| v.as_u64())
+            .map(|n| n.min(255) as u8);
+        let color_temp = value
+            .get("color_temp")
+            .and_then(|v| v.as_u64())
+            .map(|n| n.min(u16::MAX as u64) as u16);
+        let color_xy = value.get("color").and_then(|c| {
+            let x = c.get("x")?.as_f64()?;
+            let y = c.get("y")?.as_f64()?;
+            Some((x, y))
+        });
+        return Some(Event::LightState {
+            device: name.to_string(),
+            on,
+            brightness,
+            color_temp,
+            color_xy,
             ts: now,
         });
     }

@@ -5,6 +5,7 @@
 //! transient event-processing state.
 
 pub mod heating_zone;
+pub mod light;
 pub mod light_zone;
 pub mod motion_sensor;
 pub mod plug;
@@ -14,6 +15,7 @@ use std::collections::BTreeMap;
 use std::time::Instant;
 
 pub use heating_zone::{HeatingZoneActual, HeatingZoneEntity, HeatingZoneTarget};
+pub use light::{LightActual, LightEntity};
 pub use light_zone::{LightZoneActual, LightZoneEntity, LightZoneTarget};
 pub use motion_sensor::{MotionActual, MotionSensorEntity};
 pub use plug::{KillSwitchRuleState, PlugActual, PlugEntity, PlugTarget};
@@ -36,6 +38,7 @@ pub struct PendingPress {
 pub struct WorldState {
     // --- TASS entities ---
     pub light_zones: BTreeMap<String, LightZoneEntity>,
+    pub lights: BTreeMap<String, LightEntity>,
     pub plugs: BTreeMap<String, PlugEntity>,
     pub motion_sensors: BTreeMap<String, MotionSensorEntity>,
     pub heating_zones: BTreeMap<String, HeatingZoneEntity>,
@@ -57,6 +60,7 @@ impl WorldState {
     pub fn new() -> Self {
         Self {
             light_zones: BTreeMap::new(),
+            lights: BTreeMap::new(),
             plugs: BTreeMap::new(),
             motion_sensors: BTreeMap::new(),
             heating_zones: BTreeMap::new(),
@@ -73,6 +77,11 @@ impl WorldState {
         self.light_zones
             .entry(name.to_string())
             .or_default()
+    }
+
+    /// Get or create an individual light entity.
+    pub fn light(&mut self, name: &str) -> &mut LightEntity {
+        self.lights.entry(name.to_string()).or_default()
     }
 
     /// Get or create a plug entity.

@@ -514,6 +514,13 @@ impl Topology {
             .unwrap_or(false)
     }
 
+    /// True if `device` is a Light.
+    pub fn is_light(&self, device: &str) -> bool {
+        self.device_idx(device)
+            .map(|i| self.device_kind(i) == DeviceKind::Light)
+            .unwrap_or(false)
+    }
+
     /// All wall thermostat device friendly names.
     pub fn all_wall_thermostat_names(&self) -> Vec<&str> {
         self.wall_thermostat_devices

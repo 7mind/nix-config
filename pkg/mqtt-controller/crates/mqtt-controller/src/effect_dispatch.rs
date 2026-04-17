@@ -23,6 +23,8 @@ pub struct TouchedEntities {
     pub rooms: BTreeSet<RoomIdx>,
     pub plugs: BTreeSet<PlugIdx>,
     pub heating_zones: BTreeSet<ZoneIdx>,
+    /// Individual lights whose actual state changed.
+    pub lights: BTreeSet<DeviceIdx>,
 }
 
 impl TouchedEntities {
@@ -40,6 +42,10 @@ impl TouchedEntities {
 
     pub fn touch_zone(&mut self, zone: ZoneIdx) {
         self.heating_zones.insert(zone);
+    }
+
+    pub fn touch_light(&mut self, light: DeviceIdx) {
+        self.lights.insert(light);
     }
 
     /// Touch the device if it's a plug; otherwise no-op. Used by
@@ -82,6 +88,7 @@ impl TouchedEntities {
         self.rooms.extend(other.rooms);
         self.plugs.extend(other.plugs);
         self.heating_zones.extend(other.heating_zones);
+        self.lights.extend(other.lights);
     }
 }
 
@@ -115,6 +122,11 @@ pub fn touched_from_event(event: &Event, topology: &Topology) -> TouchedEntities
         Event::PlugState { device, .. } | Event::PlugPowerUpdate { device, .. } => {
             if let Some(plug_idx) = topology.plug_idx_by_name(device) {
                 touched.touch_plug(plug_idx);
+            }
+        }
+        Event::LightState { device, .. } => {
+            if let Some(dev) = topology.device_idx(device) {
+                touched.touch_light(dev);
             }
         }
         Event::TrvState { device, .. } => {

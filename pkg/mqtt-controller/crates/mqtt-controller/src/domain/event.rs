@@ -38,6 +38,19 @@ pub enum Event {
         ts: Instant,
     },
 
+    /// z2m published a state update for an individual light bulb. The
+    /// controller doesn't target individual lights (groups are the
+    /// control surface) but records the actual state per-light so the
+    /// UI can show members of a zone and their current state.
+    LightState {
+        device: String,
+        on: bool,
+        brightness: Option<u8>,
+        color_temp: Option<u16>,
+        color_xy: Option<(f64, f64)>,
+        ts: Instant,
+    },
+
     /// z2m published a state update for a smart plug we subscribe to.
     /// Carries the on/off state and, if the plug supports power
     /// monitoring, the real-time power reading in watts.

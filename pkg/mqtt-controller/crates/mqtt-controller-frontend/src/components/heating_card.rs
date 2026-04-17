@@ -4,7 +4,7 @@ use leptos::prelude::*;
 
 use mqtt_controller_wire::HeatingZoneSnapshot;
 
-use crate::components::shared::{EntityFilterCheckbox, JsonButton};
+use crate::components::shared::{tass_state_row, EntityFilterCheckbox, JsonButton};
 use crate::ws::WsState;
 
 #[component]
@@ -48,9 +48,20 @@ fn HeatingZoneCard(name: String) -> impl IntoView {
             </div>
 
             <HeatingMeta signal=signal />
+            <HeatingTassLine signal=signal />
             <TrvList signal=signal />
         </div>
     }.into_any()
+}
+
+#[component]
+fn HeatingTassLine(signal: RwSignal<HeatingZoneSnapshot>) -> impl IntoView {
+    view! {
+        {move || {
+            let z = signal.get();
+            tass_state_row(z.target, z.target_value, z.actual, z.actual_value)
+        }}
+    }
 }
 
 #[component]

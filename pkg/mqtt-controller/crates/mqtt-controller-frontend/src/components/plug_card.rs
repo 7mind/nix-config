@@ -5,7 +5,7 @@ use leptos::prelude::*;
 use mqtt_controller_wire::{ClientMessage, PlugSnapshot};
 
 use crate::components::shared::{
-    format_ago_ms, EntityFilterCheckbox, JsonButton, SwitchChip, TassStateRow,
+    format_ago_ms, tass_state_row, EntityFilterCheckbox, JsonButton, SwitchChip,
 };
 use crate::ws::WsState;
 
@@ -98,7 +98,7 @@ fn PlugTassLine(signal: RwSignal<PlugSnapshot>) -> impl IntoView {
     view! {
         {move || {
             let p = signal.get();
-            view! { <TassStateRow target=p.target actual=p.actual /> }
+            tass_state_row(p.target, p.target_value, p.actual, p.actual_value)
         }}
     }
 }

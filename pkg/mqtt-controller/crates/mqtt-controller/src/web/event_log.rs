@@ -142,6 +142,10 @@ pub fn summarize_event(event: &crate::domain::event::Event) -> String {
             format!("wall thermostat {device}: relay {state}")
         }
         crate::domain::event::Event::Tick { .. } => "tick".to_string(),
+        crate::domain::event::Event::LightState { device, on, brightness, .. } => {
+            let b = brightness.map(|b| format!(" bri={b}")).unwrap_or_default();
+            format!("light {device}: {}{b}", if *on { "ON" } else { "OFF" })
+        }
     }
 }
 
@@ -203,6 +207,20 @@ pub fn extract_event_entities(
             }
         }
         crate::domain::event::Event::Tick { .. } => {}
+        crate::domain::event::Event::LightState { device, .. } => {
+            entities.push(device.clone());
+            // Also include the zone the light belongs to so the filter
+            // can surface it on the room's card.
+            for room in topology.rooms() {
+                for member in &room.members {
+                    let m = member.split('/').next().unwrap_or(member);
+                    if m == device {
+                        entities.push(room.name.clone());
+                        break;
+                    }
+                }
+            }
+        }
     }
     entities
 }
