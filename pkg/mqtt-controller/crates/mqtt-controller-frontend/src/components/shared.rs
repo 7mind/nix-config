@@ -1,8 +1,9 @@
-//! Shared UI primitives: filter checkbox, JSON button, switch chip, modal.
+//! Shared UI primitives: filter checkbox, JSON button, switch chip, modal,
+//! TASS state pill strip.
 
 use leptos::prelude::*;
 
-use mqtt_controller_wire::SwitchInfo;
+use mqtt_controller_wire::{SwitchInfo, TassActualInfo, TassTargetInfo};
 
 use crate::ws::WsState;
 
@@ -136,6 +137,59 @@ pub fn JsonModal() -> impl IntoView {
             }.into_any()
         }}
     }
+}
+
+/// A row of colored pills summarizing an entity's TASS state:
+/// `target: [phase] [value] [owner]   actual: [freshness] [value]`.
+#[component]
+pub fn TassStateRow(
+    target: Option<TassTargetInfo>,
+    actual: Option<TassActualInfo>,
+) -> impl IntoView {
+    if target.is_none() && actual.is_none() {
+        return ().into_any();
+    }
+    view! {
+        <div class="tass-line">
+            {target.map(|t| {
+                let phase = t.phase.clone();
+                let phase_class = format!("badge phase-{phase}");
+                let owner = t.owner.clone();
+                let owner_class = format!("badge owner-{owner}");
+                let value = t.value.clone();
+                let since = t.since_ago_ms.map(format_ago_ms);
+                view! {
+                    <span class="tass-group">
+                        <span class="tass-label">"target"</span>
+                        <span class=phase_class>{phase}</span>
+                        {(!value.is_empty()).then(|| view! {
+                            <span class="badge tass-value">{value}</span>
+                        })}
+                        {(!owner.is_empty()).then(|| view! {
+                            <span class=owner_class>{owner}</span>
+                        })}
+                        {since.map(|s| view! { <span class="tass-since">{s}</span> })}
+                    </span>
+                }
+            })}
+            {actual.map(|a| {
+                let freshness = a.freshness.clone();
+                let freshness_class = format!("badge freshness-{freshness}");
+                let value = a.value.clone();
+                let since = a.since_ago_ms.map(format_ago_ms);
+                view! {
+                    <span class="tass-group">
+                        <span class="tass-label">"actual"</span>
+                        <span class=freshness_class>{freshness}</span>
+                        {(!value.is_empty()).then(|| view! {
+                            <span class="badge tass-value">{value}</span>
+                        })}
+                        {since.map(|s| view! { <span class="tass-since">{s}</span> })}
+                    </span>
+                }
+            })}
+        </div>
+    }.into_any()
 }
 
 /// Pretty-print an elapsed millisecond count as "3s", "12m", or "1h 4m".

@@ -10,7 +10,7 @@ use leptos::prelude::*;
 use mqtt_controller_wire::{ClientMessage, RoomSnapshot};
 
 use crate::components::shared::{
-    format_ago_ms, EntityFilterCheckbox, JsonButton, SwitchChip,
+    format_ago_ms, EntityFilterCheckbox, JsonButton, SwitchChip, TassStateRow,
 };
 use crate::ws::WsState;
 
@@ -107,28 +107,7 @@ fn RoomTassLine(signal: RwSignal<RoomSnapshot>) -> impl IntoView {
     view! {
         {move || {
             let r = signal.get();
-            let Some(target) = r.target.clone() else { return ().into_any(); };
-            let Some(actual) = r.actual.clone() else { return ().into_any(); };
-            let target_text = if target.value.is_empty() {
-                "unset".to_string()
-            } else {
-                format!("{} ({})", target.value, target.phase)
-            };
-            let actual_text = if actual.value.is_empty() {
-                format!("— ({})", actual.freshness)
-            } else {
-                format!("{} ({})", actual.value, actual.freshness)
-            };
-            let owner = (!target.owner.is_empty()).then(|| target.owner.clone());
-            view! {
-                <div class="tass-line">
-                    <span class="tass-label">"target"</span>
-                    <span class="tass-value">{target_text}</span>
-                    {owner.map(|o| view! { <span class="tass-owner">{format!("by {o}")}</span> })}
-                    <span class="tass-label">"actual"</span>
-                    <span class="tass-value">{actual_text}</span>
-                </div>
-            }.into_any()
+            view! { <TassStateRow target=r.target actual=r.actual /> }
         }}
     }
 }

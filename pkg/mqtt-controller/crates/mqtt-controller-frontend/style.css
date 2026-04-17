@@ -11,6 +11,26 @@
     --motion: #f9a826;
     --heat: #e94560;
     --idle: #4ecca3;
+
+    /* TASS target-phase colors */
+    --phase-unset: #555;
+    --phase-pending: #f9a826;
+    --phase-commanded: #4a9eff;
+    --phase-confirmed: #4ecca3;
+    --phase-stale: #e94560;
+
+    /* TASS actual-freshness colors */
+    --fresh-unknown: #555;
+    --fresh-fresh: #4ecca3;
+    --fresh-stale: #e94560;
+
+    /* Owner colors */
+    --owner-user: #4a9eff;
+    --owner-motion: #f9a826;
+    --owner-schedule: #c178ee;
+    --owner-webui: #4ed1cc;
+    --owner-system: #888;
+    --owner-rule: #d94979;
 }
 
 * {
@@ -146,31 +166,64 @@ header h1 {
 .tass-line {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.35rem;
+    gap: 0.5rem;
     align-items: center;
     padding: 0.25rem 0;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     color: var(--text-muted);
     border-top: 1px dashed var(--border);
     margin-top: 0.25rem;
+}
+
+.tass-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    flex-wrap: wrap;
 }
 
 .tass-label {
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--text-muted);
+    font-size: 0.6rem;
+    margin-right: 0.1rem;
+}
+
+.tass-since {
+    color: var(--text-muted);
+    font-size: 0.65rem;
+    font-style: italic;
+}
+
+/* TASS value pill (neutral, mono) */
+.badge.tass-value {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
     font-size: 0.65rem;
 }
 
-.tass-value {
-    color: var(--text);
-    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
-    font-size: 0.7rem;
-}
+/* Target phase badges */
+.badge.phase-unset { background: var(--phase-unset); color: var(--text); }
+.badge.phase-pending { background: var(--phase-pending); color: #000; }
+.badge.phase-commanded { background: var(--phase-commanded); color: #fff; }
+.badge.phase-confirmed { background: var(--phase-confirmed); color: #000; }
+.badge.phase-stale { background: var(--phase-stale); color: #fff; }
 
-.tass-owner {
-    font-style: italic;
-}
+/* Actual freshness badges */
+.badge.freshness-unknown { background: var(--fresh-unknown); color: var(--text); }
+.badge.freshness-fresh { background: var(--fresh-fresh); color: #000; }
+.badge.freshness-stale { background: var(--fresh-stale); color: #fff; }
+
+/* Owner badges */
+.badge.owner-user { background: var(--owner-user); color: #fff; }
+.badge.owner-motion { background: var(--owner-motion); color: #000; }
+.badge.owner-schedule { background: var(--owner-schedule); color: #fff; }
+.badge.owner-webui { background: var(--owner-webui); color: #000; }
+.badge.owner-system { background: var(--owner-system); color: #fff; }
+.badge.owner-rule { background: var(--owner-rule); color: #fff; }
 
 .badge {
     display: inline-block;
