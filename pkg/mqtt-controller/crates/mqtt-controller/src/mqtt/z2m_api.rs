@@ -53,6 +53,11 @@ struct BridgeDevice {
     device_type: String,
 }
 
+#[derive(Deserialize)]
+struct BridgeGroup {
+    friendly_name: String,
+}
+
 /// Connect, wait for the initial dump, and return `friendly_name →
 /// cached state JSON`. Retries on transient failures or empty responses
 /// (z2m up but inventory not yet published — common race on boot).
@@ -99,14 +104,21 @@ pub async fn fetch_device_states_with_retry(
 }
 
 /// Connect to z2m's WebSocket API, collect the initial state dump,
-/// and return a map of friendly_name -> cached state JSON.
+/// and return a map of `friendly_name → cached state JSON`. The map
+/// contains entries for both individual **devices** and **z2m groups**
+/// (those publish on the same `zigbee2mqtt/<friendly_name>` topic
+/// pattern and are indistinguishable from the envelope alone).
 ///
 /// z2m sends on connect:
-///   1. Bridge topics (bridge/state, bridge/info, bridge/devices, etc.)
-///   2. Per-device cached state (topic = friendly_name, payload = full state)
+///   1. Bridge topics (`bridge/state`, `bridge/info`, `bridge/devices`,
+///      `bridge/groups`, `bridge/logging`, etc.)
+///   2. Per-entity cached state — one message per device and per group
+///      that has ever had a retained publish.
 ///
-/// We collect until we've seen state for all non-coordinator devices
-/// listed in bridge/devices, then disconnect.
+/// We collect until every non-coordinator device from `bridge/devices`
+/// AND every group from `bridge/groups` has a state entry (or the
+/// timeout elapses). `bridge/groups` used to be silently dropped, which
+/// caused the daemon seed to miss every zone's aggregate state.
 pub async fn fetch_device_states(
     ws_url: &str,
     timeout: Duration,
@@ -120,6 +132,7 @@ pub async fn fetch_device_states(
 
     let (_, mut read) = ws_stream.split();
     let mut device_names: Option<HashSet<String>> = None;
+    let mut group_names: Option<HashSet<String>> = None;
     let mut states: HashMap<String, Value> = HashMap::new();
     let deadline = tokio::time::Instant::now() + timeout;
 
@@ -129,8 +142,10 @@ pub async fn fetch_device_states(
             Ok(Some(Err(e))) => return Err(StateCacheError::Message(e)),
             Ok(None) => break,
             Err(_) => {
+                // Timeout after we got at least the device list: return
+                // what we have. Groups may be missing retained state if
+                // they never published; not fatal.
                 if device_names.is_some() {
-                    // Timeout after we got the device list — return what we have
                     break;
                 }
                 return Err(StateCacheError::Timeout(timeout));
@@ -158,26 +173,47 @@ pub async fn fetch_device_states(
                     .collect();
                 tracing::info!(
                     devices = names.len(),
-                    "WebSocket: received device inventory"
+                    "z2m WebSocket: received device inventory"
                 );
                 device_names = Some(names);
+            }
+            "bridge/groups" => {
+                let groups: Vec<BridgeGroup> =
+                    serde_json::from_value(envelope.payload)?;
+                let names: HashSet<String> =
+                    groups.into_iter().map(|g| g.friendly_name).collect();
+                tracing::info!(
+                    groups = names.len(),
+                    "z2m WebSocket: received group inventory"
+                );
+                group_names = Some(names);
             }
             t if t.starts_with("bridge/") => continue,
             t if t.ends_with("/availability") => continue,
             name => {
                 states.insert(name.to_string(), envelope.payload);
-                if let Some(ref names) = device_names {
-                    if names.iter().all(|n| states.contains_key(n)) {
-                        tracing::info!(
-                            devices = states.len(),
-                            "WebSocket: received state for all devices"
-                        );
-                        break;
-                    }
+                if seen_all(&device_names, &group_names, &states) {
+                    tracing::info!(
+                        entries = states.len(),
+                        "z2m WebSocket: received state for all devices + groups"
+                    );
+                    break;
                 }
             }
         }
     }
 
     Ok(states)
+}
+
+/// True when both the device and group inventory messages have been
+/// seen AND every listed name has a corresponding state entry.
+fn seen_all(
+    devices: &Option<HashSet<String>>,
+    groups: &Option<HashSet<String>>,
+    states: &HashMap<String, Value>,
+) -> bool {
+    let Some(d) = devices else { return false };
+    let Some(g) = groups else { return false };
+    d.iter().all(|n| states.contains_key(n)) && g.iter().all(|n| states.contains_key(n))
 }

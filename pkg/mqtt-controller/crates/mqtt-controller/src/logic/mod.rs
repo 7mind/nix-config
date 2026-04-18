@@ -375,9 +375,15 @@ impl EventProcessor {
         }
     }
 
-    /// Motion sensors report every ~10-30s (temperature/battery updates).
-    /// If no update arrives for 2 minutes, the sensor may be offline.
-    const MOTION_SENSOR_STALE_THRESHOLD: Duration = Duration::from_secs(120);
+    /// Motion sensors publish on real events (occupancy transitions +
+    /// battery/temperature updates), which in a quiet room naturally
+    /// produces 2–4 min gaps between messages. 2 min tripped the stale
+    /// detector ~40×/sensor/day for no useful reason. 5 min is comfortably
+    /// above that idle gap while still letting us treat a genuinely
+    /// dead sensor as not-occupied before any downstream motion-off
+    /// logic matters (rooms have their own `occupancy_timeout_seconds`
+    /// ~60 s, which fires long before the stale fallback).
+    const MOTION_SENSOR_STALE_THRESHOLD: Duration = Duration::from_secs(300);
 
     /// Plugs with power monitoring report every few seconds when on.
     /// 10 minutes without any update is suspicious.

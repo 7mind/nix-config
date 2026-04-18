@@ -291,9 +291,14 @@ in
         script = let
           z2mPort = config.smind.services.zigbee2mqtt.port;
           z2mWsUrl = "ws://localhost:${toString z2mPort}/api";
+          # zwave-js-server is embedded in ZJS-UI on port 3000 (firewall
+          # already opened in modules/nixos/zwave.nix). Plain WebSocket
+          # + JSON-RPC — see src/daemon/zwave_server.rs.
+          zwaveWsUrl = "ws://localhost:3000";
         in ''
           exec ${cfg.package}/bin/mqtt-controller --verbose daemon ${commonArgs} \
             --z2m-ws-url ${z2mWsUrl} \
+            --zwave-ws-url ${zwaveWsUrl} \
             --timezone ${cfg.timezone} \
             ${lib.optionalString cfg.web.enable
               "--web-port ${toString cfg.web.port} --web-assets-dir ${cfg.package}/share/mqtt-controller/web"}

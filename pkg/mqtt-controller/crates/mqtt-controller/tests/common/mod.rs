@@ -259,7 +259,7 @@ pub fn spawn_daemon(
         format!("mqtt-controller-test-{}", uuid::Uuid::new_v4()),
     );
     tokio::spawn(async move {
-        let daemon_fut = mqtt_controller::daemon::run(config, mqtt, None, clock, None);
+        let daemon_fut = mqtt_controller::daemon::run(config, mqtt, None, None, clock, None);
         tokio::select! {
             res = daemon_fut => {
                 if let Err(e) = res {

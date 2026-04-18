@@ -135,6 +135,15 @@ struct DaemonArgs {
     #[arg(long)]
     z2m_ws_url: String,
 
+    /// `zwave-js-server` WebSocket URL for the startup state seed.
+    /// Example: `ws://localhost:3000`. ZJS-UI embeds `zwave-js-server`
+    /// on this port; the daemon queries its native JSON-RPC protocol
+    /// once on startup to prime every z-wave plug's actual state.
+    /// Optional: omit to skip the z-wave seed (state will populate
+    /// from live MQTT publishes instead).
+    #[arg(long)]
+    zwave_ws_url: Option<String>,
+
     /// IANA timezone name for time-of-day slot dispatch (e.g.
     /// "Europe/Amsterdam"). Defaults to the system's TZ environment
     /// variable, falling back to UTC.
@@ -300,7 +309,15 @@ async fn run_daemon(args: DaemonArgs) -> Result<()> {
         None
     };
 
-    mqtt_controller::daemon::run(config, mqtt, Some(args.z2m_ws_url), clock, web).await
+    mqtt_controller::daemon::run(
+        config,
+        mqtt,
+        Some(args.z2m_ws_url),
+        args.zwave_ws_url,
+        clock,
+        web,
+    )
+    .await
 }
 
 fn resolve_timezone(explicit: Option<&str>) -> Result<chrono_tz::Tz> {

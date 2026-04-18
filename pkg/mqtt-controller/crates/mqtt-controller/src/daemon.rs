@@ -58,6 +58,7 @@ mod startup;
 mod web_bridge;
 mod z2m_seed;
 mod zwave_seed;
+mod zwave_server;
 
 #[derive(Debug, Error)]
 pub enum DaemonError {
@@ -72,14 +73,16 @@ pub enum DaemonError {
 ///
 /// If `web` is `Some`, the event loop serves WebSocket commands and
 /// broadcasts state updates / decision logs to connected clients.
-/// Optional — `None` disables the z2m startup seed entirely (useful for
-/// integration tests and deployments that don't run the z2m frontend).
-/// When disabled the daemon starts with unknown state; live publishes
-/// from the wildcard subscription fill it in.
+/// Both `z2m_ws_url` and `zwave_ws_url` are optional — `None` disables
+/// that bridge's startup seed. Useful for integration tests and for
+/// deployments without the z2m frontend or `zwave-js-server`.
+/// When disabled, the daemon starts with unknown state for that bridge;
+/// live publishes from the wildcard MQTT subscription fill it in.
 pub async fn run(
     config: Config,
     mqtt: MqttConfig,
     z2m_ws_url: Option<String>,
+    zwave_ws_url: Option<String>,
     clock: Arc<dyn Clock>,
     web: Option<WebHandle>,
 ) -> anyhow::Result<()> {
@@ -106,10 +109,6 @@ pub async fn run(
         port = mqtt.port,
         "connecting to mqtt"
     );
-    // Clone the mqtt config before handing it to the bridge — startup
-    // spins up a short-lived parallel client for the Z-Wave JS UI API
-    // seed, and needs its own credentials.
-    let mqtt_for_seed = mqtt.clone();
     let (bridge, event_rx) = MqttBridge::start(mqtt, topology.clone(), clock.clone())
         .await
         .context("connecting to mqtt broker")?;
@@ -118,8 +117,8 @@ pub async fn run(
         &mut processor,
         &topology,
         &*clock,
-        &mqtt_for_seed,
         z2m_ws_url.as_deref(),
+        zwave_ws_url.as_deref(),
     )
     .await?;
     let mut event_rx = event_rx;

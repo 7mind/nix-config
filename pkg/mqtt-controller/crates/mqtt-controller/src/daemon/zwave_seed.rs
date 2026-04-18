@@ -1,15 +1,16 @@
 //! Z-Wave state seed: prime `WorldState.plugs` for every known z-wave
-//! plug from Z-Wave JS UI's cached `getNodes` response.
+//! plug from `zwave-js-server`'s `start_listening` response. One plain
+//! WebSocket round-trip; no MQTT.
 //!
-//! Replaces the old per-node `refreshValues` radio-poll phase. One MQTT
-//! round-trip returns every node's cached switch/power values, so we
-//! can build up TASS state instantly — even for sleeping or currently
-//! unresponsive nodes. Ongoing updates still flow in through the
-//! daemon's `zwave/#` wildcard subscription.
+//! ZJS-UI embeds `zwave-js-server` on a separate port (default 3000).
+//! The server returns the complete driver state including every node's
+//! current values — the same data the MQTT `getNodes` call used to
+//! give us, but via a dedicated protocol that doesn't require running
+//! a second MQTT client at startup.
 //!
-//! If the seed fails (gateway offline, timeout), the daemon continues
-//! with no z-wave plug state; real publishes during normal operation
-//! eventually populate it.
+//! Seed failure is non-fatal: the daemon logs and continues. The
+//! wildcard `zwave/#` MQTT subscription is already active, so any
+//! future publish will populate the missing state.
 //!
 //! Any effects produced by the seeded `Event::PlugState` events are
 //! discarded — at seed time the kill-switch state machine only arms
@@ -20,16 +21,16 @@ use std::time::Duration;
 
 use crate::domain::event::Event;
 use crate::logic::EventProcessor;
-use crate::mqtt::zwave_api::ZwaveApiClient;
-use crate::mqtt::MqttConfig;
 use crate::time::Clock;
 use crate::topology::Topology;
+
+use super::zwave_server;
 
 /// Seed per-plug actual state for every known Z-Wave plug. Returns the
 /// number of plugs successfully seeded.
 pub async fn seed_zwave_state(
     processor: &mut EventProcessor,
-    mqtt_config: &MqttConfig,
+    ws_url: &str,
     topology: &Topology,
     clock: &dyn Clock,
     timeout: Duration,
@@ -41,17 +42,16 @@ pub async fn seed_zwave_state(
 
     tracing::info!(
         zwave_plugs = zwave_plugs.len(),
-        "zwave seed: calling getNodes for bulk state fetch"
+        ws_url,
+        "zwave seed: calling zwave-js-server start_listening"
     );
-    let mut client = ZwaveApiClient::connect(mqtt_config, timeout).await?;
-    let nodes = client.get_nodes(timeout).await?;
-    client.disconnect().await;
+    let nodes = zwave_server::fetch_nodes(ws_url, timeout).await?;
 
     let now = clock.now();
     let mut seeded = 0;
     for node in nodes {
         let Some(&plug_name) = zwave_plugs.get(&node.node_id) else {
-            // Node known to ZJS-UI but not in our catalog — ignore.
+            // Node known to zwave-js-server but not in our catalog — ignore.
             continue;
         };
         let Some(on) = node.switch_on else {

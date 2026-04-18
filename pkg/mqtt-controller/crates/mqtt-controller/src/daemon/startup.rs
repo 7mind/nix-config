@@ -1,21 +1,20 @@
 //! Startup state seed: prime the world state from z2m (WebSocket API)
-//! and Z-Wave JS UI (MQTT `getNodes` API) before the event loop takes
-//! over.
+//! and `zwave-js-server` (WebSocket API on port 3000) before the event
+//! loop takes over.
 //!
-//! Both seeds talk directly to each bridge's own API instead of relying
-//! on retained MQTT or per-device `/get` cascades. One RTT per bridge
-//! covers every device in one shot, including sleeping or offline ones
-//! (the bridge returns its cached state).
+//! Both seeds talk directly to each bridge's own native WebSocket API
+//! — no MQTT. One RTT per bridge covers every entity in one shot,
+//! including sleeping or offline ones (each bridge returns its cached
+//! state).
 //!
 //! Seed failure is non-fatal: the daemon logs and continues. The
-//! wildcard `zigbee2mqtt/#` + `zwave/#` subscriptions are already
+//! wildcard `zigbee2mqtt/#` + `zwave/#` MQTT subscriptions are already
 //! active at this point, so any live publishes that arrive during or
 //! after startup flow into the event loop and fill in state.
 
 use std::time::Duration;
 
 use crate::logic::EventProcessor;
-use crate::mqtt::MqttConfig;
 use crate::time::Clock;
 use crate::topology::Topology;
 
@@ -32,7 +31,7 @@ const Z2M_SEED_TIMEOUT: Duration = Duration::from_secs(15);
 const Z2M_SEED_RETRY_DELAY: Duration = Duration::from_secs(5);
 const Z2M_SEED_ATTEMPTS: u32 = 6;
 
-/// Z-Wave JS UI `getNodes` call is a single MQTT request/response.
+/// `zwave-js-server` handshake is 4 round-trips; 5 s is ample locally.
 const ZWAVE_SEED_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Prime the world state for every zigbee + z-wave entity the topology
@@ -42,8 +41,8 @@ pub(super) async fn refresh_state(
     processor: &mut EventProcessor,
     topology: &Topology,
     clock: &dyn Clock,
-    mqtt_config: &MqttConfig,
     z2m_ws_url: Option<&str>,
+    zwave_ws_url: Option<&str>,
 ) -> Result<(), DaemonError> {
     // --- z2m: bulk state via WebSocket /api (skipped if no URL) ---
     if let Some(ws_url) = z2m_ws_url {
@@ -81,25 +80,33 @@ pub(super) async fn refresh_state(
         tracing::info!("z2m seed skipped (no WebSocket URL configured)");
     }
 
-    // --- z-wave: bulk state via MQTT getNodes API ---
+    // --- z-wave: bulk state via zwave-js-server WebSocket ---
     if !topology.zwave_node_id_to_name().is_empty() {
-        match zwave_seed::seed_zwave_state(
-            processor,
-            mqtt_config,
-            topology,
-            clock,
-            ZWAVE_SEED_TIMEOUT,
-        )
-        .await
-        {
-            Ok(seeded) => {
-                tracing::info!(seeded, "zwave seed: plug states primed from getNodes");
-            }
-            Err(e) => {
-                tracing::warn!(
-                    error = %e,
-                    "zwave seed failed; continuing without z-wave state (live publishes will populate)"
-                );
+        match zwave_ws_url {
+            Some(url) => match zwave_seed::seed_zwave_state(
+                processor,
+                url,
+                topology,
+                clock,
+                ZWAVE_SEED_TIMEOUT,
+            )
+            .await
+            {
+                Ok(seeded) => {
+                    tracing::info!(
+                        seeded,
+                        "zwave seed: plug states primed from zwave-js-server"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "zwave seed failed; continuing without z-wave state (live publishes will populate)"
+                    );
+                }
+            },
+            None => {
+                tracing::info!("zwave seed skipped (no zwave-js-server URL configured)");
             }
         }
     }
