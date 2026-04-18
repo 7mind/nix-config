@@ -38,6 +38,7 @@
   smind.hm.megasync = {
     enable = true;
     gnomeTheme.enable = true;
+    dev.llm.fullscreenTui.enable = false;
   };
 
   home.pointerCursor = {

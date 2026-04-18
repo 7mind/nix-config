@@ -46,8 +46,6 @@
     vscodium.fontSize = 14;
     ghostty.fontSize = 11;
 
-    dev.llm.fullscreenTui.enable = false;
-
     desktop.cosmic.minimal-keybindings = true;
 
     apps.prusa-3d-printing.enable = true;
