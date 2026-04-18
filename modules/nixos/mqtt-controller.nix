@@ -288,8 +288,13 @@ in
         # state-machine branch that produced it. Drop the flag here
         # once the runtime is stable to quiet the logs back down to
         # warnings/errors only.
-        script = ''
-          exec ${cfg.package}/bin/mqtt-controller --verbose daemon ${commonArgs} --timezone ${cfg.timezone} \
+        script = let
+          z2mPort = config.smind.services.zigbee2mqtt.port;
+          z2mWsUrl = "ws://localhost:${toString z2mPort}/api";
+        in ''
+          exec ${cfg.package}/bin/mqtt-controller --verbose daemon ${commonArgs} \
+            --z2m-ws-url ${z2mWsUrl} \
+            --timezone ${cfg.timezone} \
             ${lib.optionalString cfg.web.enable
               "--web-port ${toString cfg.web.port} --web-assets-dir ${cfg.package}/share/mqtt-controller/web"}
         '';

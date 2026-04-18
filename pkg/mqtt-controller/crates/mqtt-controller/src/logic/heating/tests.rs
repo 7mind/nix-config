@@ -25,9 +25,7 @@ impl EffectTestExt for Effect {
         match self {
             Effect::PublishGroupSet { room, .. } => topo.room(*room).group_name.clone(),
             Effect::PublishDeviceSet { device, .. }
-            | Effect::PublishDeviceGet { device }
-            | Effect::PublishGetTrv { trv: device } => topo.device_name(*device).to_string(),
-            Effect::PublishZwaveRefresh { plug } => topo.device_name(plug.device()).to_string(),
+            | Effect::PublishDeviceGet { device } => topo.device_name(*device).to_string(),
             // HA / raw → fall back to the full MQTT topic.
             other => other.topic(topo),
         }

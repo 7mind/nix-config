@@ -31,16 +31,6 @@ pub fn effect_to_dto(effect: &Effect, topology: &Topology) -> ActionDto {
             target_kind: "device_get".into(),
             payload_json: r#"{"state":""}"#.into(),
         },
-        Effect::PublishGetTrv { trv } => ActionDto {
-            target: topology.device_name(*trv).to_string(),
-            target_kind: "device_get".into(),
-            payload_json: "{}".into(),
-        },
-        Effect::PublishZwaveRefresh { plug } => ActionDto {
-            target: topology.device_name(plug.device()).to_string(),
-            target_kind: "device_get".into(),
-            payload_json: "{}".into(),
-        },
         Effect::PublishHaDiscoveryZone { zone } => {
             let name = topology
                 .heating_config()
@@ -241,12 +231,6 @@ pub fn finish_involved_entities(
             Effect::PublishDeviceSet { device, .. }
             | Effect::PublishDeviceGet { device } => {
                 entities.push(topology.device_name(*device).to_string());
-            }
-            Effect::PublishGetTrv { trv } => {
-                entities.push(topology.device_name(*trv).to_string());
-            }
-            Effect::PublishZwaveRefresh { plug } => {
-                entities.push(topology.device_name(plug.device()).to_string());
             }
             Effect::PublishHaDiscoveryZone { .. }
             | Effect::PublishHaDiscoveryTrv { .. }

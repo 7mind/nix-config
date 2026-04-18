@@ -31,18 +31,14 @@ async fn start_kitchen_setup() -> (TestBroker, TestClient, tokio::sync::mpsc::Se
             .subscribe(&format!("zigbee2mqtt/{group}"))
             .await;
     }
-    for group in ["hue-lz-kitchen-cooker", "hue-lz-kitchen-dining", "hue-lz-kitchen-all"] {
-        test_client
-            .subscribe(&format!("zigbee2mqtt/{group}/get"))
-            .await;
-    }
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     let clock = Arc::new(FakeClock::new(12));
     let cfg = common::fixtures::kitchen_config();
     let shutdown = common::spawn_daemon(cfg, &broker, clock);
 
-    wait_for_count(&test_client, "zigbee2mqtt/hue-lz-kitchen-all/get", 1).await;
+    // Let the daemon's wildcard SUBSCRIBE round-trip complete.
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     (broker, test_client, shutdown)
 }
@@ -63,18 +59,14 @@ async fn start_kitchen_with_motion_setup() -> (TestBroker, TestClient, tokio::sy
             .subscribe(&format!("zigbee2mqtt/{group}"))
             .await;
     }
-    for group in ["hue-lz-kitchen-cooker", "hue-lz-kitchen-dining", "hue-lz-kitchen-all"] {
-        test_client
-            .subscribe(&format!("zigbee2mqtt/{group}/get"))
-            .await;
-    }
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     let clock = Arc::new(FakeClock::new(12));
     let cfg = common::fixtures::kitchen_with_motion_config();
     let shutdown = common::spawn_daemon(cfg, &broker, clock);
 
-    wait_for_count(&test_client, "zigbee2mqtt/hue-lz-kitchen-all/get", 1).await;
+    // Let the daemon's wildcard SUBSCRIBE round-trip complete.
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     (broker, test_client, shutdown)
 }
@@ -90,16 +82,14 @@ async fn start_bedroom_sonoff_setup() -> (TestBroker, TestClient, tokio::sync::m
     test_client
         .subscribe("zigbee2mqtt/hue-lz-bedroom/set")
         .await;
-    test_client
-        .subscribe("zigbee2mqtt/hue-lz-bedroom/get")
-        .await;
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     let clock = Arc::new(FakeClock::new(12));
     let cfg = common::fixtures::kitchen_with_sonoff_config();
     let shutdown = common::spawn_daemon(cfg, &broker, clock.clone());
 
-    wait_for_count(&test_client, "zigbee2mqtt/hue-lz-bedroom/get", 1).await;
+    // Let the daemon's wildcard SUBSCRIBE round-trip complete.
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     // Seed the room's actual state as OFF so the daemon knows it and
     // can_early_fire_press works (requires actual.is_known()).

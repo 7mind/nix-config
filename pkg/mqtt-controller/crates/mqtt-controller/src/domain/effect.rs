@@ -11,7 +11,7 @@
 use crate::domain::action::Payload;
 use crate::domain::ha_discovery;
 use crate::mqtt::topics;
-use crate::topology::{DeviceIdx, PlugIdx, RoomIdx, Topology, ZoneIdx};
+use crate::topology::{DeviceIdx, RoomIdx, Topology, ZoneIdx};
 
 /// One thing the controller wants to publish to MQTT, expressed in
 /// terms of typed topology indexes.
@@ -25,15 +25,10 @@ pub enum Effect {
     PublishDeviceSet { device: DeviceIdx, payload: Payload },
 
     /// Publish `{"state":""}` to `zigbee2mqtt/<device>/get` to force
-    /// z2m to query and re-publish the device's current state.
+    /// z2m to query and re-publish the device's current state. Used at
+    /// runtime by the heating controller (wall thermostat keepalive);
+    /// startup seed hits the WebSocket API instead.
     PublishDeviceGet { device: DeviceIdx },
-
-    /// Publish a TRV-specific climate query (multi-attribute /get).
-    PublishGetTrv { trv: DeviceIdx },
-
-    /// Publish a Z-Wave value refresh request (writeValue read) for
-    /// a Z-Wave plug.
-    PublishZwaveRefresh { plug: PlugIdx },
 
     /// Publish the retained HA discovery config for a heating zone.
     PublishHaDiscoveryZone { zone: ZoneIdx },
@@ -69,10 +64,8 @@ impl Effect {
         match self {
             Effect::PublishDeviceSet { device, .. }
             | Effect::PublishDeviceGet { device }
-            | Effect::PublishGetTrv { trv: device }
             | Effect::PublishHaDiscoveryTrv { trv: device }
             | Effect::PublishHaStateTrv { trv: device, .. } => Some(*device),
-            Effect::PublishZwaveRefresh { plug } => Some(plug.device()),
             _ => None,
         }
     }
@@ -100,14 +93,9 @@ impl Effect {
                     topics::set_topic(topology.device_name(*device))
                 }
             }
-            Effect::PublishDeviceGet { device }
-            | Effect::PublishGetTrv { trv: device } => {
+            Effect::PublishDeviceGet { device } => {
                 topics::get_topic(topology.device_name(*device))
             }
-            Effect::PublishZwaveRefresh { .. } => format!(
-                "{}refreshValues/set",
-                crate::mqtt::codec::zwave_api::GATEWAY_PREFIX,
-            ),
             Effect::PublishHaDiscoveryZone { zone } => {
                 let name = zone_name(topology, *zone);
                 ha_discovery::discovery_topic("zone", &name)
@@ -136,8 +124,6 @@ impl Effect {
                 serde_json::to_string(payload).unwrap_or_default()
             }
             Effect::PublishDeviceGet { .. } => r#"{"state":""}"#.into(),
-            Effect::PublishGetTrv { .. } => "{}".into(),
-            Effect::PublishZwaveRefresh { .. } => "{}".into(),
             Effect::PublishHaDiscoveryZone { .. }
             | Effect::PublishHaDiscoveryTrv { .. } => "<discovery>".into(),
             Effect::PublishHaStateZone { state, .. }

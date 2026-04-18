@@ -1,5 +1,19 @@
-//! WebSocket-based bulk state cache. Connects to z2m's WebSocket API
-//! and collects the initial state dump pushed on connect.
+//! zigbee2mqtt WebSocket API client.
+//!
+//! One entry point: [`fetch_device_states`]. Opens the `/api` endpoint,
+//! consumes the initial dump z2m pushes on connect (`bridge/state`,
+//! `bridge/info`, `bridge/devices`, then one message per device with
+//! its cached state), and returns a `friendly_name → state JSON` map.
+//!
+//! Shared between:
+//!   - the **provisioner**, which uses it for per-device-option dedup, and
+//!   - the **daemon startup seed**, which uses it to prime every
+//!     entity's actual state in a single MQTT-less round-trip (replacing
+//!     the former retained-drain + `/get` cascade).
+//!
+//! Works for sleeping/offline devices (z2m has their cached state).
+//! Requires the z2m frontend to be enabled — already required by the
+//! provisioner, so not a new operational concern.
 
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
@@ -37,6 +51,51 @@ struct BridgeDevice {
     friendly_name: String,
     #[serde(rename = "type")]
     device_type: String,
+}
+
+/// Connect, wait for the initial dump, and return `friendly_name →
+/// cached state JSON`. Retries on transient failures or empty responses
+/// (z2m up but inventory not yet published — common race on boot).
+/// Fails only after `attempts` tries with `retry_delay` between them.
+pub async fn fetch_device_states_with_retry(
+    ws_url: &str,
+    timeout: Duration,
+    attempts: u32,
+    retry_delay: Duration,
+) -> Result<HashMap<String, Value>, StateCacheError> {
+    let mut last_err: Option<StateCacheError> = None;
+    for attempt in 1..=attempts {
+        match fetch_device_states(ws_url, timeout).await {
+            Ok(cache) if cache.is_empty() => {
+                tracing::warn!(
+                    attempt,
+                    max = attempts,
+                    "z2m WebSocket state cache returned empty; retrying"
+                );
+            }
+            Ok(cache) => {
+                tracing::info!(
+                    devices = cache.len(),
+                    attempt,
+                    "z2m WebSocket state cache loaded"
+                );
+                return Ok(cache);
+            }
+            Err(e) => {
+                tracing::warn!(
+                    attempt,
+                    max = attempts,
+                    error = %e,
+                    "z2m WebSocket state cache fetch failed"
+                );
+                last_err = Some(e);
+            }
+        }
+        if attempt < attempts {
+            tokio::time::sleep(retry_delay).await;
+        }
+    }
+    Err(last_err.unwrap_or(StateCacheError::Timeout(timeout)))
 }
 
 /// Connect to z2m's WebSocket API, collect the initial state dump,

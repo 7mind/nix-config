@@ -127,6 +127,14 @@ struct DaemonArgs {
     #[command(flatten)]
     mqtt: CommonMqttArgs,
 
+    /// z2m WebSocket API URL for the startup state seed.
+    /// Example: `ws://localhost:8080/api`. Same endpoint the provisioner
+    /// uses; the daemon now calls it once on startup to prime every
+    /// entity's actual state in one round-trip (no more per-group `/get`
+    /// cascade).
+    #[arg(long)]
+    z2m_ws_url: String,
+
     /// IANA timezone name for time-of-day slot dispatch (e.g.
     /// "Europe/Amsterdam"). Defaults to the system's TZ environment
     /// variable, falling back to UTC.
@@ -292,7 +300,7 @@ async fn run_daemon(args: DaemonArgs) -> Result<()> {
         None
     };
 
-    mqtt_controller::daemon::run(config, mqtt, clock, web).await
+    mqtt_controller::daemon::run(config, mqtt, Some(args.z2m_ws_url), clock, web).await
 }
 
 fn resolve_timezone(explicit: Option<&str>) -> Result<chrono_tz::Tz> {

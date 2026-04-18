@@ -111,24 +111,5 @@ pub enum Event {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn button_press_event_roundtrip() {
-        let event = Event::ButtonPress {
-            device: "hue-s-kitchen".into(),
-            button: "on".into(),
-            gesture: Gesture::Press,
-            ts: Instant::now(),
-        };
-        match event {
-            Event::ButtonPress { device, button, gesture, .. } => {
-                assert_eq!(device, "hue-s-kitchen");
-                assert_eq!(button, "on");
-                assert_eq!(gesture, Gesture::Press);
-            }
-            _ => panic!("expected ButtonPress"),
-        }
-    }
-}
+#[path = "event_tests.rs"]
+mod tests;

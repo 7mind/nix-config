@@ -56,6 +56,8 @@ use crate::web::server::WebHandle;
 mod event_loop;
 mod startup;
 mod web_bridge;
+mod z2m_seed;
+mod zwave_seed;
 
 #[derive(Debug, Error)]
 pub enum DaemonError {
@@ -70,9 +72,14 @@ pub enum DaemonError {
 ///
 /// If `web` is `Some`, the event loop serves WebSocket commands and
 /// broadcasts state updates / decision logs to connected clients.
+/// Optional — `None` disables the z2m startup seed entirely (useful for
+/// integration tests and deployments that don't run the z2m frontend).
+/// When disabled the daemon starts with unknown state; live publishes
+/// from the wildcard subscription fill it in.
 pub async fn run(
     config: Config,
     mqtt: MqttConfig,
+    z2m_ws_url: Option<String>,
     clock: Arc<dyn Clock>,
     web: Option<WebHandle>,
 ) -> anyhow::Result<()> {
@@ -99,11 +106,23 @@ pub async fn run(
         port = mqtt.port,
         "connecting to mqtt"
     );
-    let (bridge, mut event_rx) = MqttBridge::start(mqtt, topology.clone(), clock.clone())
+    // Clone the mqtt config before handing it to the bridge — startup
+    // spins up a short-lived parallel client for the Z-Wave JS UI API
+    // seed, and needs its own credentials.
+    let mqtt_for_seed = mqtt.clone();
+    let (bridge, event_rx) = MqttBridge::start(mqtt, topology.clone(), clock.clone())
         .await
         .context("connecting to mqtt broker")?;
 
-    startup::refresh_state(&mut processor, &bridge, &mut event_rx, &topology, &*clock).await?;
+    startup::refresh_state(
+        &mut processor,
+        &topology,
+        &*clock,
+        &mqtt_for_seed,
+        z2m_ws_url.as_deref(),
+    )
+    .await?;
+    let mut event_rx = event_rx;
 
     // Turn off any motion-controlled room that was left on before
     // restart. No cooldown is applied so motion sensors can

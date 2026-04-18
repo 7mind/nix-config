@@ -36,6 +36,8 @@
 pub mod codec;
 mod parse;
 pub mod topics;
+pub mod z2m_api;
+pub mod zwave_api;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -221,47 +223,12 @@ impl MqttBridge {
 
     /// Publish a `{"state": ""}` to `<name>/get` to force z2m to query
     /// the current state and re-publish it on the matching state topic.
-    /// Used by the startup state refresh for groups and Zigbee plugs
-    /// whose retained messages didn't arrive.
+    /// Used at runtime by the heating controller to keep wall
+    /// thermostats alive (startup seed uses the WebSocket API instead).
     pub async fn publish_get(&self, name: &str) -> Result<(), MqttError> {
         let topic = topics::get_topic(name);
         self.client
             .publish(topic, QoS::AtLeastOnce, false, br#"{"state":""}"#.as_slice())
-            .await?;
-        Ok(())
-    }
-
-    /// Request a fresh value publish for a Z-Wave node's binary switch
-    /// state. Publishes a `writeValue` API call that reads (not writes)
-    /// the current value, causing Z-Wave JS UI to re-publish the
-    /// `currentValue` topic.
-    ///
-    /// Z-Wave JS UI doesn't support the zigbee2mqtt-style `<topic>/get`
-    /// pattern, so we use the MQTT API's `refreshValues` command instead.
-    pub async fn publish_zwave_refresh(
-        &self,
-        node_id: u16,
-    ) -> Result<(), MqttError> {
-        let topic = format!(
-            "{}refreshValues/set",
-            crate::mqtt::codec::zwave_api::GATEWAY_PREFIX,
-        );
-        let payload = serde_json::json!({"args": [node_id]});
-        self.client
-            .publish(topic, QoS::AtLeastOnce, false, serde_json::to_vec(&payload)?)
-            .await?;
-        Ok(())
-    }
-
-    /// Publish a `/get` for TRV climate attributes that the heating
-    /// controller needs: temperature, demand, running state, setpoint.
-    /// Unlike `publish_get` which sends `{"state":""}`, this queries
-    /// the specific climate attributes Bosch BTH-RA exposes.
-    pub async fn publish_get_trv(&self, name: &str) -> Result<(), MqttError> {
-        let topic = topics::get_topic(name);
-        let payload = br#"{"local_temperature":"","pi_heating_demand":"","running_state":"","occupied_heating_setpoint":"","operating_mode":"","battery":""}"#;
-        self.client
-            .publish(topic, QoS::AtLeastOnce, false, payload.as_slice())
             .await?;
         Ok(())
     }

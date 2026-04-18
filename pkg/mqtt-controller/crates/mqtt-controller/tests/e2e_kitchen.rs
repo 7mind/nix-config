@@ -21,6 +21,12 @@ use mqtt_controller::time::FakeClock;
 
 /// Helper: spin up a broker, a publisher client, then a daemon. Returns
 /// the broker, the test client, and the shutdown handle for the daemon.
+///
+/// Tests run the daemon with the z2m WebSocket seed disabled (there's
+/// no z2m frontend in the test harness), so its only startup work is
+/// subscribing to `zigbee2mqtt/#` and `zwave/#`. A short sleep gives
+/// the SUBSCRIBE round-trip time to complete before tests start
+/// firing publishes.
 async fn start_kitchen_setup() -> (TestBroker, TestClient, tokio::sync::mpsc::Sender<()>) {
     let broker = TestBroker::start().await;
     let test_client = TestClient::connect(&broker, "test-client").await;
@@ -36,62 +42,17 @@ async fn start_kitchen_setup() -> (TestBroker, TestClient, tokio::sync::mpsc::Se
             .subscribe(&format!("zigbee2mqtt/{group}"))
             .await;
     }
-    // Also subscribe to /get topics so we can see the daemon's startup
-    // refresh chatter (used by one test below).
-    for group in ["hue-lz-kitchen-cooker", "hue-lz-kitchen-dining", "hue-lz-kitchen-all"] {
-        test_client
-            .subscribe(&format!("zigbee2mqtt/{group}/get"))
-            .await;
-    }
-    // Tiny grace so the SUBACKs land before we start firing publishes.
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     let clock = Arc::new(FakeClock::new(12));
     let cfg = common::fixtures::kitchen_config();
     let shutdown = common::spawn_daemon(cfg, &broker, clock);
 
-    // Wait for the daemon's startup state refresh to complete. Without
-    // any retained messages it'll fall through phase 1 (300 ms wait),
-    // then publish 3 /get's (3 × 50 ms inter-publish delay), then wait
-    // up to 2 s in phase 3 for responses that never come. Total ~2.5 s.
-    // Tests don't need to wait the full window — once the /get burst
-    // has gone out, the daemon is processing events normally.
-    wait_for_count(&test_client, "zigbee2mqtt/hue-lz-kitchen-all/get", 1).await;
+    // Wait for the daemon's wildcard SUBSCRIBE to take effect. Loopback
+    // is fast; 200 ms is comfortably above the SUBACK round-trip.
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     (broker, test_client, shutdown)
-}
-
-/// Polling helper used in place of `wait_for(... 1, ...)` when the test
-/// just wants to know "has the first message arrived yet?". Faster
-/// failure modes than the bigger wait_for.
-async fn wait_for_count(client: &TestClient, topic: &str, count: usize) {
-    client
-        .inbox
-        .wait_for(topic, count, Duration::from_secs(5))
-        .await;
-}
-
-#[tokio::test]
-async fn daemon_startup_publishes_get_to_every_group() {
-    let broker = TestBroker::start().await;
-    let test_client = TestClient::connect(&broker, "test-client-startup").await;
-
-    // Subscribe to /get topics BEFORE starting the daemon so we capture
-    // the startup state-refresh burst.
-    for group in ["hue-lz-kitchen-cooker", "hue-lz-kitchen-dining", "hue-lz-kitchen-all"] {
-        test_client
-            .subscribe(&format!("zigbee2mqtt/{group}/get"))
-            .await;
-    }
-    tokio::time::sleep(Duration::from_millis(50)).await;
-
-    let clock = Arc::new(FakeClock::new(12));
-    let cfg = common::fixtures::kitchen_config();
-    let _shutdown = common::spawn_daemon(cfg, &broker, clock);
-
-    for group in ["hue-lz-kitchen-cooker", "hue-lz-kitchen-dining", "hue-lz-kitchen-all"] {
-        wait_for_count(&test_client, &format!("zigbee2mqtt/{group}/get"), 1).await;
-    }
 }
 
 #[tokio::test]
