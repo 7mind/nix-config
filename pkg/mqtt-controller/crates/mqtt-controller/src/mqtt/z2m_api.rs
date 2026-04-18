@@ -192,10 +192,10 @@ pub async fn fetch_device_states(
             t if t.ends_with("/availability") => continue,
             name => {
                 states.insert(name.to_string(), envelope.payload);
-                if seen_all(&device_names, &group_names, &states) {
+                if seen_all_devices(&device_names, &states) {
                     tracing::info!(
                         entries = states.len(),
-                        "z2m WebSocket: received state for all devices + groups"
+                        "z2m WebSocket: received state for all devices"
                     );
                     break;
                 }
@@ -203,17 +203,23 @@ pub async fn fetch_device_states(
         }
     }
 
+    // `group_names` is gathered for diagnostics but not waited on. z2m's
+    // WebSocket replay pushes device retained state but not group state
+    // — groups fill in via the long-lived MQTT wildcard subscription's
+    // own retained-message delivery. Kept the `bridge/groups` collection
+    // so the log tells us what we missed if debugging.
+    let _ = group_names;
+
     Ok(states)
 }
 
-/// True when both the device and group inventory messages have been
-/// seen AND every listed name has a corresponding state entry.
-fn seen_all(
+/// True when the device inventory has been received AND every listed
+/// device has a corresponding state entry. Termination condition for
+/// the initial-dump drain.
+fn seen_all_devices(
     devices: &Option<HashSet<String>>,
-    groups: &Option<HashSet<String>>,
     states: &HashMap<String, Value>,
 ) -> bool {
     let Some(d) = devices else { return false };
-    let Some(g) = groups else { return false };
-    d.iter().all(|n| states.contains_key(n)) && g.iter().all(|n| states.contains_key(n))
+    d.iter().all(|n| states.contains_key(n))
 }
