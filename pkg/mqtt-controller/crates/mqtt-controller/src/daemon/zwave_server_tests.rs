@@ -63,7 +63,7 @@ fn parse_node_full_entry() {
 }
 
 #[test]
-fn parse_node_defaults_empty_name_to_nodeID_form() {
+fn parse_node_defaults_empty_name_to_node_id_form() {
     let entry = json!({"nodeId": 3, "name": "", "values": []});
     let n = parse_node(&entry).unwrap();
     assert_eq!(n.current_name, "nodeID_3");

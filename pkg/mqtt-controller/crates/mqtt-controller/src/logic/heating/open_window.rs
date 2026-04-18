@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use crate::config::heating::HeatingConfig;
 use crate::domain::Effect;
 use crate::domain::action::Payload;
-use crate::entities::trv::{HeatingRunningState, TrvTarget};
+use crate::entities::trv::TrvTarget;
 use crate::logic::EventProcessor;
 use crate::tass::Owner;
 
@@ -28,6 +28,8 @@ impl EventProcessor {
             heating_config.open_window.inhibit_minutes as u64 * 60,
         );
         let inhibit_minutes = heating_config.open_window.inhibit_minutes;
+        let min_demand = heating_config.heat_pump.min_demand_percent;
+        let min_demand_fallback = heating_config.heat_pump.min_demand_percent_fallback;
         let tick_gen = self.heating_tick_gen;
 
         for zone in &heating_config.zones {
@@ -56,12 +58,18 @@ impl EventProcessor {
                 if trv.is_inhibited(now) || trv.is_forced_open() {
                     continue;
                 }
-                // Skip TRVs with no heat demand.
-                let has_demand = trv.actual.value().is_some_and(|a| {
-                    a.pi_heating_demand.unwrap_or(0) > 0
-                        || a.running_state == HeatingRunningState::Heat
-                });
-                if !has_demand {
+                // Skip TRVs without meaningful heat demand. We deliberately
+                // gate on `has_effective_demand` (which matches the HA
+                // `HEAT_DEMAND` classifier) instead of a looser
+                // `pi_heating_demand > 0 || running_state == Heat` so
+                // that a TRV displaying as IDLE cannot be flipped to
+                // OPEN_WINDOW just because its PID is still reporting
+                // a trickle (1–4%) of residual demand. Bosch BTH-RA
+                // valves commonly idle with non-zero `pi_heating_demand`
+                // while `running_state=idle`, and inhibiting them
+                // because the room didn't warm is a false positive —
+                // they weren't asking to heat in the first place.
+                if !trv.has_effective_demand(now, min_demand, min_demand_fallback) {
                     trv.open_window.checked = true;
                     continue;
                 }

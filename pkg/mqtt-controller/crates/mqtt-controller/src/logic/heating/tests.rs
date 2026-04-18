@@ -422,6 +422,81 @@ fn open_window_inhibits_trv() {
     assert!(trv.is_inhibited(clk.now()));
 }
 
+/// Regression test for the "IDLE TRV jumps to OPEN_WINDOW" bug.
+///
+/// A zone with two TRVs. TRV-A has genuine demand and drives the relay
+/// ON. TRV-B sits at `pi_heating_demand=2, running_state=idle` — below
+/// the `min_demand_percent=5` threshold, so HA renders it as IDLE (via
+/// `has_raw_demand`). Since TRV-B isn't actually heating, its room
+/// temperature doesn't rise while the relay is on.
+///
+/// Before the fix, the open-window detector's *own* permissive demand
+/// check (`demand>0 || state==Heat`) treated TRV-B as "has demand" and
+/// inhibited it as if a window were open. After the fix we require
+/// `has_effective_demand` — i.e. the same threshold HA uses for
+/// `HEAT_DEMAND` — so an IDLE-displayed TRV is not a candidate.
+#[test]
+fn open_window_ignores_trv_with_demand_below_min_threshold() {
+    let mut cfg = make_config(
+        vec![HeatingZone {
+            name: "bath".into(),
+            relay: "wt-bath".into(),
+            trvs: vec![
+                ZoneTrv { device: "trv-heat".into(), schedule: "s".into() },
+                ZoneTrv { device: "trv-low".into(), schedule: "s".into() },
+            ],
+        }],
+        BTreeMap::from([("s".into(), TemperatureSchedule { days: full_week(20.0) })]),
+        vec![],
+    );
+    cfg.heating.as_mut().unwrap().open_window = OpenWindowProtection {
+        detection_minutes: 1,
+        inhibit_minutes: 80,
+    };
+    let (mut ep, clk) = setup(&cfg);
+    tick(&mut ep);
+
+    // Confirm both TRVs' setpoints so schedule dedup kicks in.
+    echo_setpoint(&mut ep, "trv-heat", 20.0, &clk);
+    echo_setpoint(&mut ep, "trv-low", 20.0, &clk);
+
+    // TRV-heat asks for heat; TRV-low has sub-threshold demand and
+    // reports idle. Local temperature is the same for both so we're
+    // testing the demand-classification path, not the temp path.
+    send_trv_demand(&mut ep, "trv-heat", 18.0, 50, "heat", 20.0, &clk);
+    send_trv_demand(&mut ep, "trv-low", 20.0, 2, "idle", 20.0, &clk);
+    tick(&mut ep);
+    echo_relay(&mut ep, "wt-bath", true, &clk);
+
+    clk.advance(Duration::from_secs(5));
+    send_trv_demand(&mut ep, "trv-heat", 18.0, 50, "heat", 20.0, &clk);
+    send_trv_demand(&mut ep, "trv-low", 20.0, 2, "idle", 20.0, &clk);
+
+    // Past detection window.
+    clk.advance(Duration::from_secs(65));
+    send_trv_demand(&mut ep, "trv-heat", 18.5, 50, "heat", 20.0, &clk);
+    send_trv_demand(&mut ep, "trv-low", 20.0, 2, "idle", 20.0, &clk);
+    let actions = tick(&mut ep);
+
+    // TRV-low must NOT get an inhibit setpoint.
+    let inhibit_low: Vec<_> = actions
+        .iter()
+        .filter(|a| {
+            a.target_name(&ep) == "trv-low"
+                && a.payload_json(&ep).contains("\"occupied_heating_setpoint\":5")
+        })
+        .collect();
+    assert!(
+        inhibit_low.is_empty(),
+        "IDLE TRV with sub-threshold pi_heating_demand must not be inhibited by open-window detection"
+    );
+    let trv_low = ep.world.trvs.get("trv-low").unwrap();
+    assert!(
+        !trv_low.is_inhibited(clk.now()),
+        "trv-low should not be in the Inhibited target state"
+    );
+}
+
 // -- Mode enforcement --
 
 #[test]
