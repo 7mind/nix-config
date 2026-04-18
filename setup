@@ -308,6 +308,38 @@ do_refresh() {
     fi
 }
 
+# Re-point SSH_AUTH_SOCK at a live ssh-agent when running inside an ssh/tmux
+# session where the current socket may be stale (e.g. reconnected ssh forward).
+# Mirrors the `resock` zsh function from modules/hm/ssh.nix. Best-effort:
+# never fails the build — nix copy / git push over ssh will just fall back
+# to whatever SSH_AUTH_SOCK was already set to.
+do_resock() {
+    [[ -n "${SSH_CONNECTION:-}" || -n "${TMUX:-}" ]] || return 0
+
+    local runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+    local -a candidates=()
+
+    # Forwarded sockets from ssh -A, newest first
+    while IFS= read -r sock; do
+        [[ -S "$sock" ]] && candidates+=("$sock")
+    done < <(ls -t /tmp/ssh-*/agent.* "$HOME"/.ssh/agent/* 2>/dev/null)
+
+    # Local agents (gcr from gnome-keyring / standalone ssh-agent)
+    for sock in "$runtime_dir/gcr/ssh" "$runtime_dir/ssh-agent"; do
+        [[ -S "$sock" ]] && candidates+=("$sock")
+    done
+
+    for sock in "${candidates[@]}"; do
+        if SSH_AUTH_SOCK="$sock" timeout 1 ssh-add -l >/dev/null 2>&1; then
+            export SSH_AUTH_SOCK="$sock"
+            echo "==> resock: SSH_AUTH_SOCK -> $sock"
+            return 0
+        fi
+    done
+    echo "    resock: no working ssh-agent found (non-fatal)" >&2
+    return 0
+}
+
 decrypt_password_key() {
     local password_key="${HOME}/age-key.age"
     if [[ ! -f "$password_key" ]]; then
@@ -542,6 +574,7 @@ main() {
     fi
 
     cd "$SCRIPT_DIR"
+    do_resock
     load_host_meta
     expand_host_specifiers
     validate_hosts
