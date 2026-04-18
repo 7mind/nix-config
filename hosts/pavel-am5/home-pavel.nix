@@ -25,6 +25,8 @@
 
   smind.hm.apps.prusa-3d-printing.enable = true;
 
+  smind.hm.dev.llm.fullscreenTui.enable = false;
+
   smind.hm.electron-wrappers = {
     enable = true;
     slack.enable = true;
