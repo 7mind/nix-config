@@ -238,6 +238,35 @@ in
         };
       };
 
+      # Force provisioner: same as the oneshot above, but with
+      # `--force-options` so it rewrites every per-device option even
+      # if z2m reports them as already applied. Escape hatch for
+      # devices whose reported state diverges from the physical state
+      # (e.g. Sonoff `inching_control`, `overload_protection`).
+      #
+      # NOT wanted by any target — run on demand:
+      #
+      #   sudo systemctl start mqtt-controller-force-provision.service
+      #   sudo journalctl -u mqtt-controller-force-provision.service -f
+      systemd.services.mqtt-controller-force-provision = {
+        description = "Force-rewrite zigbee2mqtt device options (bypasses state-cache dedup)";
+        after = [ "zigbee2mqtt.service" "mosquitto.service" "network-online.target" ];
+        wants = [ "zigbee2mqtt.service" "mosquitto.service" "network-online.target" ];
+        script = let
+          z2mPort = config.smind.services.zigbee2mqtt.port;
+          z2mWsUrl = "ws://localhost:${toString z2mPort}/api";
+        in ''
+          exec ${cfg.package}/bin/mqtt-controller --verbose provision ${commonArgs} \
+            --z2m-ws-url ${z2mWsUrl} \
+            --force-options
+        '';
+        serviceConfig = {
+          Type = "oneshot";
+          LoadCredential = "mqtt-password:${cfg.mqtt.passwordFile}";
+          DynamicUser = true;
+        };
+      };
+
       # Long-running daemon. Starts only after the provisioner has
       # succeeded so its first state-refresh sees the right groups.
       systemd.services.mqtt-controller = {
