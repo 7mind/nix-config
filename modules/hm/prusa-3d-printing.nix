@@ -13,7 +13,7 @@
 
       # CAD / Design
       freecad
-      openscad
+      openscad-unstable
       blender
       solvespace
       dune3d
