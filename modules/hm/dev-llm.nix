@@ -1,11 +1,10 @@
-{
-  config,
-  lib,
-  pkgs,
-  cfg-meta,
-  outerConfig,
-  inputs,
-  ...
+{ config
+, lib
+, pkgs
+, cfg-meta
+, outerConfig
+, inputs
+, ...
 }:
 let
   jsonFormat = pkgs.formats.json { };
@@ -109,6 +108,7 @@ in
     (lib.mkIf config.smind.hm.dev.llm.enable {
       home.sessionVariables = {
         OLLAMA_API_BASE = "http://127.0.0.1:11434";
+        OPENCODE_ENABLE_EXA = "1";
         # AIDER_DARK_MODE = "true";
       };
 
@@ -242,7 +242,16 @@ in
         };
         settings = {
           autoupdate = false;
-          model = "ollama/minimax-m2.7";
+          disabled_providers = [ "openrouter" ];
+          extraPackages = with pkgs; [
+            rust-analyzer
+            nixd
+            pyright
+          ];
+          model = "ollama-cloud/minimax-m2.7";
+          # web = {
+          #   enable = true;
+          # };
           plugin = [ "opencode-gemini-auth@latest" ];
           provider = {
             google = {
@@ -253,6 +262,15 @@ in
                       thinkingLevel = "xhigh";
                       includeThoughts = true;
                     };
+                  };
+                };
+              };
+            };
+            openai = {
+              models = {
+                "gpt-5.4" = {
+                  options = {
+                    reasoningEffort = "xhigh";
                   };
                 };
               };
@@ -269,6 +287,18 @@ in
                     output = config.smind.hm.dev.llm.devstralContextSize;
                   };
                 };
+              };
+            };
+            ollama-cloud = {
+              npm = "@ai-sdk/openai-compatible";
+              name = "Ollama Cloud";
+              options = {
+                baseURL = "https://ollama.com/v1";
+              };
+              models = {
+                "minimax-m2.7" = { };
+                "kimi-k2:1t" = { };
+                "kimi-k2.5" = { };
               };
             };
           };
