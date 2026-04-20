@@ -241,7 +241,7 @@ in
           theme = "dark";
         };
         settings = {
-          autoupdate = "disabled";
+          autoupdate = false;
           model = "ollama/minimax-m2.7";
           plugin = [ "opencode-gemini-auth@latest" ];
           provider = {
