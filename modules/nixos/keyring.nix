@@ -184,6 +184,7 @@ in
       environment.systemPackages = with pkgs; [
         seahorse
         gcr
+        libsecret # provides secret-tool for manual NetworkPassword seeding
       ];
 
       # PAM integration for auto-unlock on login

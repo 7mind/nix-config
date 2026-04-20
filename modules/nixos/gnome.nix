@@ -366,9 +366,12 @@
     };
 
     services.gvfs.enable = true;
-    # Remove MTP volume monitor files so gvfsd-mtp can't be D-Bus activated
+    # Base off pkgs.gnome.gvfs (gnomeSupport=true) — the default services.gvfs.package.
+    # Starting from bare pkgs.gvfs would pick gnomeSupport=false, drop libsecret/gcr/goa
+    # and apply -Dkeyring=false, which makes gvfsd-smb's g_vfs_keyring_is_available()
+    # return FALSE: no Remember UI, no keyring lookup, no keyring save for SMB shares.
     services.gvfs.package = lib.mkIf config.smind.desktop.gnome.gvfs.disableMtp
-      (pkgs.gvfs.overrideAttrs (old: {
+      (pkgs.gnome.gvfs.overrideAttrs (old: {
         postInstall = (old.postInstall or "") + ''
           rm -f $out/share/gvfs/remote-volume-monitors/mtp.monitor
           rm -f $out/share/dbus-1/services/org.gtk.vfs.MTPVolumeMonitor.service
