@@ -1,10 +1,11 @@
-{ config
-, lib
-, pkgs
-, cfg-meta
-, outerConfig
-, inputs
-, ...
+{
+  config,
+  lib,
+  pkgs,
+  cfg-meta,
+  outerConfig,
+  inputs,
+  ...
 }:
 let
   jsonFormat = pkgs.formats.json { };
@@ -231,7 +232,8 @@ in
       };
 
       # Vibe does not support skills — uses pre-composed context from llm-prompts package
-      home.file.".vibe/prompts/default_with_custom_instructions.md".source = llmPrompts.contextWithEnvFile;
+      home.file.".vibe/prompts/default_with_custom_instructions.md".source =
+        llmPrompts.contextWithEnvFile;
 
       programs.opencode = {
         enable = true;
@@ -239,8 +241,8 @@ in
           theme = "dark";
         };
         settings = {
-          autoupdate = "notify";
-          model = config.smind.hm.dev.llm.opencodeDefaultModel;
+          autoupdate = "disabled";
+          model = "ollama/minimax-m2.7";
           plugin = [ "opencode-gemini-auth@latest" ];
           provider = {
             google = {
@@ -248,7 +250,7 @@ in
                 "gemini-3-pro-preview" = {
                   options = {
                     thinkingConfig = {
-                      thinkingLevel = "high";
+                      thinkingLevel = "xhigh";
                       includeThoughts = true;
                     };
                   };
@@ -312,10 +314,8 @@ in
 
         (pkgs.callPackage "${cfg-meta.paths.pkg}/yolo/default.nix" {
           inherit copilotConfig;
-          podmanSocketPath =
-            if rootlessPodmanEnabled then rootlessPodmanSocketPath else null;
-          podmanSocketUri =
-            if rootlessPodmanEnabled then rootlessPodmanSocketUri else null;
+          podmanSocketPath = if rootlessPodmanEnabled then rootlessPodmanSocketPath else null;
+          podmanSocketUri = if rootlessPodmanEnabled then rootlessPodmanSocketUri else null;
         })
       ];
     })
