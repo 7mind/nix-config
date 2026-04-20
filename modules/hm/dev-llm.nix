@@ -240,14 +240,17 @@ in
         tui = {
           theme = "dark";
         };
+
+        extraPackages = with pkgs; [
+          rust-analyzer
+          nixd
+          pyright
+        ];
+
         settings = {
           autoupdate = false;
           disabled_providers = [ "openrouter" ];
-          extraPackages = with pkgs; [
-            rust-analyzer
-            nixd
-            pyright
-          ];
+
           model = "ollama-cloud/minimax-m2.7";
           # web = {
           #   enable = true;
@@ -309,10 +312,12 @@ in
             list = "allow";
             grep = "allow";
             websearch = "allow";
+            apply_patch = "allow";
             codesearch = "allow";
             bash = "allow";
             task = "allow";
             lsp = "allow";
+            question = "allow";
             webfetch = "allow";
             skill = "allow";
             todoread = "allow";
