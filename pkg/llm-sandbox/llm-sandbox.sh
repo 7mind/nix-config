@@ -71,7 +71,6 @@ fi
 BWRAP_ARGS=(
   --unshare-all
   --share-net
-  --new-session
   --die-with-parent
   --dev /dev
   --proc /proc

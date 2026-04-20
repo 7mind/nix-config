@@ -27,6 +27,7 @@
         "fs.inotify.max_user_watches" = 1048576;
         "kernel.perf_event_paranoid" = 1; # intellij profiler
         "kernel.kptr_restrict" = 0; # intellij profiler
+        "dev.tty.legacy_tiocsti" = 0; # disable TIOCSTI injection; lets llm-sandbox drop --new-session so SIGWINCH reaches TUIs
       };
       kernelParams = [
         #"video=efifb:off"
