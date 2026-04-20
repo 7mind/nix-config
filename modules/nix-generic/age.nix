@@ -77,11 +77,26 @@ in
     })
 
     # Fallback for hosts with age disabled or no master identity.
-    # Empty masterIdentities so disabled hosts don't inject an invalid
-    # dummy pubkey into the merged ageWrapper (breaks update-masterkeys).
+    # agenix-rekey asserts masterIdentities is non-empty, so provide a dummy at
+    # mkDefault priority — real config overrides it whenever present,
+    # which means update-masterkeys never sees the placeholder. The
+    # paired HM module (modules/hm/age.nix) propagates outerConfig's
+    # masterIdentities instead of setting its own dummy, so the merged
+    # ageWrapper stays clean.
+    #
+    # Safety: the `"age"` pubkey is not a valid age recipient (valid
+    # recipients start with `age1...`). If this dummy somehow reached a
+    # real rekey operation, `age -e -r age` fails loudly with
+    # "unknown recipient type: age" — no secret can ever be encrypted
+    # to it. Setting this placeholder is therefore safe.
     (lib.mkIf (!config.smind.age.enable || !hasMasterIdentity) {
       age.rekey = {
-        masterIdentities = lib.mkDefault [];
+        masterIdentities = lib.mkDefault [
+          {
+            identity = "/does-not-exist";
+            pubkey = "age";
+          }
+        ];
         storageMode = lib.mkDefault "derivation";
       };
     })

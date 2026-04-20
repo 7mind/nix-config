@@ -45,7 +45,7 @@ jobs:
               rmdir "$mod"
             fi
           done
-          nix flake check --no-build '.'
+          nix flake check --no-build '.?submodules=0'
   build-mac:
     strategy:
       fail-fast: false

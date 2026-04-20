@@ -49,9 +49,11 @@ let
       '';
 
   kanataConfigDirs = lib.mapAttrs buildKanataConfig cfg.kanata.keyboards;
-  switcherKeyboards = lib.filterAttrs (
+  # Skip kanata-switcher entirely when owner is unset. The switcher's systemd unit
+  # needs a concrete user, so we can't produce a valid config otherwise.
+  switcherKeyboards = lib.optionalAttrs (owner != null) (lib.filterAttrs (
     _: keyboardCfg: keyboardCfg.kanata-switcher.enable && keyboardCfg.port != null
-  ) cfg.kanata.keyboards;
+  ) cfg.kanata.keyboards);
   switcherKeyboardNames = lib.attrNames switcherKeyboards;
   switcherServiceNames = map (
     keyboardName: "kanata-switcher-${keyboardName}.service"
@@ -140,10 +142,6 @@ in
           message = "smind.keyboard.super-remap.kanata.keyboards must define at least one keyboard";
         }
         {
-          assertion = (switcherKeyboardNames == [ ]) || owner != null;
-          message = "smind.keyboard.super-remap.kanata-switcher requires smind.host.owner to be set";
-        }
-        {
           assertion = builtins.length nonNullPorts == builtins.length (lib.unique nonNullPorts);
           message = "smind.keyboard.super-remap.kanata.keyboards: port conflict — each keyboard must use a unique port. Current assignments: ${
             lib.concatStringsSep ", " (lib.mapAttrsToList (name: kb: "${name}=${toString kb.port}") (lib.filterAttrs (_: kb: kb.port != null) cfg.kanata.keyboards))
@@ -154,6 +152,10 @@ in
         assertion = (!keyboardCfg.kanata-switcher.enable) || keyboardCfg.port != null;
         message = "smind.keyboard.super-remap.kanata.keyboards.${keyboardName}.kanata-switcher requires a non-null port";
       }) cfg.kanata.keyboards;
+
+      warnings = lib.optional
+        (owner == null && lib.any (kb: kb.kanata-switcher.enable && kb.port != null) (lib.attrValues cfg.kanata.keyboards))
+        "smind.keyboard.super-remap.kanata-switcher is configured but smind.host.owner is null; skipping switcher setup.";
 
       environment.systemPackages = [ config.services.kanata.package ];
 

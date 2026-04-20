@@ -5,28 +5,26 @@ let
 in
 {
   config = lib.mkMerge [
-    # Always propagate hostPubkey to suppress agenix-rekey dummy-key warnings
+    # Always propagate hostPubkey and masterIdentities from the outer (system)
+    # config. hostPubkey suppresses agenix-rekey dummy-key warnings; real
+    # masterIdentities satisfy agenix-rekey's non-empty assertion without
+    # polluting the merged ageWrapper used by update-masterkeys.
     {
-      age.rekey.hostPubkey = outerConfig.age.rekey.hostPubkey;
+      age.rekey = {
+        hostPubkey = outerConfig.age.rekey.hostPubkey;
+        masterIdentities = outerConfig.age.rekey.masterIdentities;
+      };
     }
 
-    # Copy rekey config from outer config when age is enabled
     (lib.mkIf ageEnabled {
       age.rekey = {
-        masterIdentities = outerConfig.age.rekey.masterIdentities;
         storageMode = outerConfig.age.rekey.storageMode;
         localStorageDir = outerConfig.age.rekey.localStorageDir;
       };
     })
 
-    # Fallback for HM configs with age disabled.
-    # Empty masterIdentities so disabled users don't inject an invalid
-    # dummy pubkey into the merged ageWrapper (breaks update-masterkeys).
     (lib.mkIf (!ageEnabled) {
-      age.rekey = {
-        masterIdentities = [];
-        storageMode = "derivation";
-      };
+      age.rekey.storageMode = "derivation";
     })
   ];
 }

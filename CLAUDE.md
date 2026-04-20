@@ -16,17 +16,18 @@ When changing shared modules, check all hosts:
 ./verify-configs --verbose
 ```
 
-When new features touch both private and public modules, check whether hosts build without private modules:
-
-```bash
-# Build all public hosts without private modules
-./verify-configs --verbose --no-submodules
-```
+When verifying new features, run the same steps as CI:
+  1. Check whether hosts build without private modules:
+    ```bash
+    # Build all public hosts without private modules
+    ./verify-configs --verbose --no-submodules
+    ```
+  2. Run `nix flake check --no-build '.?submodules=0'`
 
 Prefer using `./verify-configs`/`nix build --dry-run` over `nix build` for verification to avoid slow building of packages.
 When changing Home Manager activations a full nix build may still be required as those require executing activations themselves to verify their correctness.
 
-This repository uses git submodules. Always use `?submodules=1` when building or using `nix eval`:
+This repository uses git submodules. Always use `?submodules=1` when building or using `nix eval` (unless verifying CI steps):
 
 ```bash
 # Build a specific host configuration
