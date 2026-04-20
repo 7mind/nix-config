@@ -24,7 +24,7 @@
         set -g default-terminal "tmux-256color"
 
         # Truecolor: GNOME Terminal (VTE) typically reports TERM=xterm-256color
-        set -as terminal-features ",xterm*:RGB"
+        set -as terminal-features ",xterm*:RGB:sync"
 
         # Skip catppuccin window format — we set our own after the plugin loads.
         set -g @catppuccin_window_status_style "none"
