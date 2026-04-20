@@ -71,7 +71,7 @@ pub use bindings::{Binding, Effect, Trigger};
 pub use catalog::{CommonFields, DeviceCatalogEntry, IeeeAddress};
 pub use defaults::Defaults;
 pub use heating::HeatingConfig;
-pub use room::Room;
+pub use room::{MotionMode, Room};
 pub use scenes::{Scene, SceneSchedule, Slot, SlotName};
 pub use switch_model::{Gesture, SwitchModel};
 pub use time_expr::TimeExpr;

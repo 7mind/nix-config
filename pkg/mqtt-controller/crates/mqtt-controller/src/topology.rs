@@ -22,6 +22,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::config::DeviceCatalogEntry;
 use crate::config::catalog::PlugProtocol;
+use crate::config::room::MotionMode;
 use crate::config::switch_model::{Gesture, SwitchModel};
 
 mod build;
@@ -64,6 +65,8 @@ pub struct ResolvedRoom {
     pub scenes: crate::config::SceneSchedule,
     pub off_transition_seconds: f64,
     pub motion_off_cooldown_seconds: u32,
+    /// How motion events drive this room. See [`MotionMode`].
+    pub motion_mode: MotionMode,
 
     /// Motion sensors bound to this room. Empty if none.
     pub bound_motion: Vec<MotionBinding>,

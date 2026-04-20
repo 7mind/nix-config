@@ -6,6 +6,7 @@
 
 use std::time::{Duration, Instant};
 
+use crate::config::room::MotionMode;
 use crate::domain::Effect;
 use crate::domain::action::Payload;
 use crate::entities::light_zone::{LightZoneActual, LightZoneTarget};
@@ -15,6 +16,62 @@ use crate::topology::{RoomIdx, RoomName};
 use super::EventProcessor;
 
 impl EventProcessor {
+    /// True when a room is in the middle of a live off-only occupancy
+    /// session — the central invariant guarding Motion ownership
+    /// across user presses, OFF-echoes, and ancestor propagation.
+    /// All three conditions must hold:
+    ///
+    ///   * the room is configured as `MotionMode::OffOnly`;
+    ///   * the zone's target is currently motion-owned (a claim was
+    ///     actually made — lux/cooldown-suppressed events stay
+    ///     non-motion-owned, so they don't get backdoored);
+    ///   * at least one bound sensor is currently fresh+occupied
+    ///     (no zombie claim from a past session whose sensor went
+    ///     stale without publishing `occupied=false`).
+    ///
+    /// Every place that could silently wipe a Motion claim consults
+    /// this helper: [`Self::resolve_zone_owner`], the preserve-motion
+    /// branch of [`Self::handle_group_state`], and descendant
+    /// propagation in [`Self::propagate_to_descendants`] and
+    /// [`Self::soft_propagate_to_descendants`].
+    pub(super) fn off_only_session_live(&self, room_name: &str) -> bool {
+        let Some(room) = self.topology.room_by_name(room_name) else {
+            return false;
+        };
+        if room.motion_mode != MotionMode::OffOnly {
+            return false;
+        }
+        let zone_motion_owned = self
+            .world
+            .light_zones
+            .get(room_name)
+            .and_then(|z| z.target.owner())
+            == Some(Owner::Motion);
+        if !zone_motion_owned {
+            return false;
+        }
+        room.bound_motion.iter().any(|bm| {
+            self.world
+                .motion_sensors
+                .get(&bm.sensor)
+                .is_some_and(|s| s.is_occupied())
+        })
+    }
+
+    /// Pick the owner for a write driven by a user-originated action (a
+    /// physical button press, a web UI click, etc). Returns
+    /// `Owner::Motion` only when [`Self::off_only_session_live`]
+    /// reports a live session — the one case where user actions must
+    /// not be allowed to defeat the scheduled motion-off. Every other
+    /// case returns `default_owner` unchanged so the lux/cooldown gate
+    /// suppression is honoured and zombie claims don't backdoor it.
+    pub(super) fn resolve_zone_owner(&self, room_name: &str, default_owner: Owner) -> Owner {
+        if self.off_only_session_live(room_name) {
+            Owner::Motion
+        } else {
+            default_owner
+        }
+    }
     /// `SceneCycle` effect -- wall switch on-button behavior. Pure scene
     /// cycle: every press advances the cycle unconditionally, no time
     /// component, no toggle-off. The cycle index only resets when the
@@ -54,7 +111,8 @@ impl EventProcessor {
             room: room_idx,
             payload: Payload::scene_recall(next_scene),
         };
-        self.write_after_on(room_name, ts, next_idx, next_scene, Owner::User);
+        let owner = self.resolve_zone_owner(room_name, Owner::User);
+        self.write_after_on(room_name, ts, next_idx, next_scene, owner);
         self.propagate_to_descendants(room_name, true, ts);
         vec![effect]
     }
@@ -92,7 +150,8 @@ impl EventProcessor {
                 room: room_idx,
                 payload: Payload::scene_recall(first),
             };
-            self.write_after_on(room_name, ts, 0, first, Owner::User);
+            let owner = self.resolve_zone_owner(room_name, Owner::User);
+            self.write_after_on(room_name, ts, 0, first, owner);
             self.propagate_to_descendants(room_name, true, ts);
             vec![effect]
         } else {
@@ -104,7 +163,8 @@ impl EventProcessor {
                 "scene_toggle → state OFF"
             );
             let mut out = Vec::new();
-            self.publish_off(room_name, room_idx, off_transition, ts, &mut out, Owner::User);
+            let owner = self.resolve_zone_owner(room_name, Owner::User);
+            self.publish_off(room_name, room_idx, off_transition, ts, &mut out, owner);
             out
         }
     }
@@ -148,7 +208,8 @@ impl EventProcessor {
                 room: room_idx,
                 payload: Payload::scene_recall(first),
             };
-            self.write_after_on(room_name, ts, 0, first, Owner::User);
+            let owner = self.resolve_zone_owner(room_name, Owner::User);
+            self.write_after_on(room_name, ts, 0, first, owner);
             self.propagate_to_descendants(room_name, true, ts);
             vec![effect]
         } else if within_window {
@@ -174,7 +235,8 @@ impl EventProcessor {
                 room: room_idx,
                 payload: Payload::scene_recall(next_scene),
             };
-            self.write_after_on(room_name, ts, next_idx, next_scene, Owner::User);
+            let owner = self.resolve_zone_owner(room_name, Owner::User);
+            self.write_after_on(room_name, ts, next_idx, next_scene, owner);
             self.propagate_to_descendants(room_name, true, ts);
             vec![effect]
         } else {
@@ -191,7 +253,8 @@ impl EventProcessor {
                 "scene_toggle_cycle → state OFF"
             );
             let mut out = Vec::new();
-            self.publish_off(room_name, room_idx, off_transition, ts, &mut out, Owner::User);
+            let owner = self.resolve_zone_owner(room_name, Owner::User);
+            self.publish_off(room_name, room_idx, off_transition, ts, &mut out, owner);
             out
         }
     }
@@ -212,7 +275,8 @@ impl EventProcessor {
             "turn_off_room → state OFF"
         );
         let mut out = Vec::new();
-        self.publish_off(room_name, room_idx, off_transition, ts, &mut out, Owner::User);
+        let owner = self.resolve_zone_owner(room_name, Owner::User);
+        self.publish_off(room_name, room_idx, off_transition, ts, &mut out, owner);
         out
     }
 
@@ -365,8 +429,18 @@ impl EventProcessor {
             );
         } else {
             // Off transition: reset zone to clean state.
+            //
+            // Special case for off-only rooms whose occupancy session
+            // is still live: preserve `Owner::Motion` instead of wiping
+            // to `Owner::System`. Without this, a user-driven off
+            // inside the session loses the motion claim on the echo,
+            // so the subsequent on would be user-owned and the
+            // vacancy transition would no longer authorise the
+            // auto-off.
+            let preserve_motion = self.off_only_session_live(&room_name);
+            let owner = if preserve_motion { Owner::Motion } else { Owner::System };
             let zone = self.world.light_zone(&room_name);
-            zone.target.set_and_command(LightZoneTarget::Off, Owner::System, ts);
+            zone.target.set_and_command(LightZoneTarget::Off, owner, ts);
             zone.target.confirm(ts);
             zone.last_off_at = Some(ts);
             tracing::info!(
@@ -374,7 +448,9 @@ impl EventProcessor {
                 room = %room_name,
                 from = was_on,
                 to = on,
-                "group state echo → on→off transition (motion ownership cleared)"
+                ?owner,
+                preserve_motion,
+                "group state echo → on→off transition"
             );
         }
 
@@ -411,20 +487,32 @@ impl EventProcessor {
              toggle-off branch instead of fresh-on)"
         );
         for desc in descendants {
+            // A descendant running off-only with a live session MUST
+            // keep its Motion ownership even when an ancestor in a
+            // different mode (OnOff/OnOnly) propagates. Without this
+            // check, an ancestor's motion-on or button-press would
+            // silently wipe the child's motion claim, and the child's
+            // own vacancy would then fail the `is_motion_owned` gate
+            // — leaving the child lit indefinitely.
+            let preserve_motion = self.off_only_session_live(&desc);
+            let owner = if preserve_motion { Owner::Motion } else { Owner::System };
             let zone = self.world.light_zone(&desc);
             if on {
-                // Propagate on: set target to System-owned On (clears any
-                // stale motion ownership or cycle state from a prior session)
-                // and update actual. scene_id 0 is a placeholder — the
-                // parent's scene_recall command drove the bulbs.
+                // Propagate on: align target/actual to match the
+                // ancestor's physical state. `scene_id 0` is a
+                // placeholder — the parent's scene_recall drove the
+                // bulbs. `owner` preserves Motion when the descendant
+                // is mid-session, else falls back to System so a
+                // non-off-only child's stale motion claim (if any)
+                // still gets cleared as before.
                 zone.target.set_and_command(
                     LightZoneTarget::On { scene_id: 0, cycle_idx: 0 },
-                    Owner::System,
+                    owner,
                     ts,
                 );
                 zone.actual.update(LightZoneActual::On, ts);
             } else {
-                zone.target.set_and_command(LightZoneTarget::Off, Owner::System, ts);
+                zone.target.set_and_command(LightZoneTarget::Off, owner, ts);
                 zone.actual.update(LightZoneActual::Off, ts);
                 zone.last_off_at = Some(ts);
             }
@@ -462,6 +550,12 @@ impl EventProcessor {
              (preserving cycle state)"
         );
         for desc in descendants {
+            // Same off-only-session carve-out as the non-soft
+            // propagation: preserve Motion on the descendant when its
+            // occupancy session is still live, so the child's own
+            // vacancy can still fire state_off.
+            let preserve_motion = self.off_only_session_live(&desc);
+            let owner = if preserve_motion { Owner::Motion } else { Owner::System };
             let zone = self.world.light_zone(&desc);
             let new_actual = if on { LightZoneActual::On } else { LightZoneActual::Off };
             zone.actual.update(new_actual, ts);
@@ -469,7 +563,7 @@ impl EventProcessor {
                 // Clear descendant target on OFF echo — prevents stale
                 // target=On from making is_on() return true after the
                 // parent group physically went off.
-                zone.target.set_and_command(LightZoneTarget::Off, Owner::System, ts);
+                zone.target.set_and_command(LightZoneTarget::Off, owner, ts);
                 zone.last_off_at = Some(ts);
             }
         }

@@ -134,6 +134,7 @@ fn small_topology() -> Arc<Topology> {
             scenes: day_scenes(),
             off_transition_seconds: 0.8,
             motion_off_cooldown_seconds: 0,
+            motion_mode: Default::default(),
         }],
         bindings: vec![
             Binding {

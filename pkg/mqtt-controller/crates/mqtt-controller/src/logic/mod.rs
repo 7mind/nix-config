@@ -182,7 +182,32 @@ impl EventProcessor {
     }
 
     /// Turn off all motion-controlled rooms that are physically on at startup.
+    ///
+    /// Per-mode behaviour:
+    ///   * [`MotionMode::OnOff`] — always force off. Motion has full
+    ///     authority for both on and off, so discarding retained-on
+    ///     state at startup is safe; motion will re-trigger if someone
+    ///     is in the room.
+    ///   * [`MotionMode::OnOnly`] — never force off. Motion never owns
+    ///     the off path, so a startup auto-off would contradict the
+    ///     mode.
+    ///   * [`MotionMode::OffOnly`] — conditional on seed state. Two
+    ///     competing failure modes pull in opposite directions:
+    ///     (a) cached occupancy can be minutes stale, so blindly
+    ///         preserving a retained-on room based on seeded "occupied"
+    ///         can leave an empty room lit for up to the Hue sensor's
+    ///         timeout;
+    ///     (b) unconditionally forcing off loses the active session
+    ///         when someone is still in the room — a later manual ON
+    ///         would be user-owned and the eventual vacancy ignored.
+    ///     We accept (a) as the lesser evil: if any bound sensor is
+    ///     seeded-occupied, adopt `Motion + On` so the first live
+    ///     vacancy still authorises state_off; otherwise fail safe by
+    ///     forcing off. Stale seeded-true self-resolves within one
+    ///     Hue-timeout window (≈ 60 s) when the sensor publishes a
+    ///     live `occupied=false`.
     pub fn startup_turn_off_motion_zones(&mut self, ts: Instant) -> Vec<Effect> {
+        use crate::config::MotionMode;
         use crate::domain::action::Payload;
         use crate::entities::light_zone::{LightZoneActual, LightZoneTarget};
         use crate::tass::Owner;
@@ -193,30 +218,70 @@ impl EventProcessor {
             if !zone.actual_is_on() {
                 continue;
             }
-            if room.has_motion_sensor() {
-                tracing::info!(
-                    room = %room.name,
-                    group = %room.group_name,
-                    transition = room.off_transition_seconds,
-                    "startup: turning off motion-controlled zone (no cooldown)"
-                );
-                zone.target
-                    .set_and_command(LightZoneTarget::Off, Owner::System, ts);
-                // Deliberate TASS bypass: fabricate actual=Off at startup so
-                // motion sensors can immediately re-trigger if someone is in
-                // the room. Without this, actual stays On (from retained echo)
-                // and motion-on gates block.
-                zone.actual.update(LightZoneActual::Off, ts);
-                out.push(Effect::PublishGroupSet {
-                    room: room_idx,
-                    payload: Payload::state_off(room.off_transition_seconds),
-                });
-            } else {
+            if !room.has_motion_sensor() {
                 tracing::info!(
                     room = %room.name,
                     "startup: room is physically on; leaving user-owned (no motion sensor)"
                 );
+                continue;
             }
+            match room.motion_mode {
+                MotionMode::OnOnly => {
+                    tracing::info!(
+                        room = %room.name,
+                        "startup: on-only motion-equipped zone is physically on; preserving retained state"
+                    );
+                    continue;
+                }
+                MotionMode::OffOnly => {
+                    let any_sensor_seeded_occupied =
+                        room.bound_motion.iter().any(|bm| {
+                            self.world
+                                .motion_sensors
+                                .get(&bm.sensor)
+                                .is_some_and(|s| s.is_occupied())
+                        });
+                    if any_sensor_seeded_occupied {
+                        tracing::info!(
+                            room = %room.name,
+                            "startup: off-only zone physically on and a bound sensor is seeded occupied; adopting motion ownership so vacancy can authorise off"
+                        );
+                        let zone = self.world.light_zone(&room.name);
+                        zone.target.adopt(
+                            LightZoneTarget::On { scene_id: 0, cycle_idx: 0 },
+                            Owner::Motion,
+                            ts,
+                        );
+                        continue;
+                    }
+                    tracing::info!(
+                        room = %room.name,
+                        group = %room.group_name,
+                        transition = room.off_transition_seconds,
+                        "startup: off-only zone physically on but no bound sensor seeded occupied → fail-safe OFF"
+                    );
+                }
+                MotionMode::OnOff => {
+                    tracing::info!(
+                        room = %room.name,
+                        group = %room.group_name,
+                        transition = room.off_transition_seconds,
+                        "startup: turning off motion-controlled zone (no cooldown)"
+                    );
+                }
+            }
+            let zone = self.world.light_zone(&room.name);
+            zone.target
+                .set_and_command(LightZoneTarget::Off, Owner::System, ts);
+            // Deliberate TASS bypass: fabricate actual=Off at startup so
+            // motion sensors can immediately re-trigger if someone is in
+            // the room. Without this, actual stays On (from retained echo)
+            // and motion-on gates block.
+            zone.actual.update(LightZoneActual::Off, ts);
+            out.push(Effect::PublishGroupSet {
+                room: room_idx,
+                payload: Payload::state_off(room.off_transition_seconds),
+            });
         }
         out
     }
@@ -266,13 +331,14 @@ impl EventProcessor {
             room: room_idx,
             payload: Payload::scene_recall(scene_id),
         };
+        let owner = self.resolve_zone_owner(room_name, Owner::WebUI);
         let zone = self.world.light_zone(room_name);
         zone.target.set_and_command(
             LightZoneTarget::On {
                 scene_id,
                 cycle_idx,
             },
-            Owner::WebUI,
+            owner,
             ts,
         );
         zone.last_press_at = Some(ts);
@@ -298,7 +364,8 @@ impl EventProcessor {
         );
 
         let mut out = Vec::new();
-        self.publish_off(room_name, room_idx, off_transition, ts, &mut out, Owner::WebUI);
+        let owner = self.resolve_zone_owner(room_name, Owner::WebUI);
+        self.publish_off(room_name, room_idx, off_transition, ts, &mut out, owner);
         out
     }
 
@@ -468,6 +535,11 @@ impl EventProcessor {
                             crate::tass::Owner::System,
                             now,
                         );
+                        // Arm the motion cooldown — the stale sweep's
+                        // state_off is still motion-driven (treating a
+                        // silent sensor as vacancy).
+                        zone.last_off_at = Some(now);
+                        zone.last_motion_off_at = Some(now);
                     }
                 }
             }

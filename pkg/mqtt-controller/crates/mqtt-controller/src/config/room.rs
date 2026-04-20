@@ -7,6 +7,25 @@ use serde::{Deserialize, Serialize};
 
 use super::scenes::SceneSchedule;
 
+/// How motion events drive this room's lights.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum MotionMode {
+    /// Full automation: motion-on turns lights on (motion-owned), motion-off
+    /// turns them off. The historical default.
+    #[default]
+    OnOff,
+    /// Motion-on turns lights on (user-owned, i.e. ownership does NOT
+    /// transfer to motion). Motion-off never fires — lights stay on until
+    /// explicitly turned off.
+    OnOnly,
+    /// Motion-on claims motion ownership but does NOT turn lights on.
+    /// Motion-off turns lights off if they are currently on. A user/web
+    /// press while the zone is motion-owned preserves that ownership, so
+    /// manual control cannot defeat the automatic off.
+    OffOnly,
+}
+
 /// One room. Same shape as the entries in `defineRooms`'s `rooms` list,
 /// after defaults have been resolved.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -54,6 +73,12 @@ pub struct Room {
     /// Override of `defaults.room.motion_off_cooldown_seconds`. Same
     /// "always rendered" reasoning.
     pub motion_off_cooldown_seconds: u32,
+
+    /// How motion events drive this room's lights. See [`MotionMode`].
+    /// Defaults to `on-off` when omitted so pre-existing configs keep
+    /// behaving identically. The Nix layer always renders it explicitly.
+    #[serde(default)]
+    pub motion_mode: MotionMode,
 }
 
 #[cfg(test)]

@@ -101,6 +101,7 @@ fn kitchen_room(
         scenes: day_scenes(vec![1, 2, 3]),
         off_transition_seconds: 0.8,
         motion_off_cooldown_seconds: 0,
+        motion_mode: Default::default(),
     }
 }
 

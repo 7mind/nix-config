@@ -270,9 +270,17 @@ fn RoomMotionSensors(signal: RwSignal<RoomSnapshot>) -> impl IntoView {
             let sensors = r.motion_sensors.clone();
             let cooldown_remaining = r.motion_cooldown_remaining_secs;
             let cooldown_total = r.motion_off_cooldown_secs;
+            let mode = r.motion_mode;
             view! {
                 <div class="motion-section">
-                    <div class="section-label">"Motion"</div>
+                    <div class="section-label">
+                        "Motion"
+                        {(!mode.is_default()).then(|| view! {
+                            <span class="badge muted" style="margin-left:0.4em">
+                                {format!("mode: {}", mode.as_label())}
+                            </span>
+                        })}
+                    </div>
                     {cooldown_remaining.map(|remaining| view! {
                         <div class="cooldown-row">
                             <span class="badge inhibited">

@@ -7,9 +7,9 @@ use std::time::{Duration, Instant};
 use mqtt_controller_wire::{
     FullStateSnapshot, HeatingZoneActualValue, HeatingZoneInfo, HeatingZoneSnapshot,
     HeatingZoneTargetValue, KillSwitchRuleInfo, LightActualValue, LightInfo, LightSnapshot,
-    MotionSensorInfo, PlugActualValue, PlugSnapshot, PlugTargetValue, RoomActualValue, RoomInfo,
-    RoomSnapshot, RoomTargetValue, SlotInfo, SwitchActionInfo, SwitchButtonInfo, SwitchInfo,
-    TopologyInfo, TrvSnapshot, TrvTargetValue,
+    MotionMode as WireMotionMode, MotionSensorInfo, PlugActualValue, PlugSnapshot, PlugTargetValue,
+    RoomActualValue, RoomInfo, RoomSnapshot, RoomTargetValue, SlotInfo, SwitchActionInfo,
+    SwitchButtonInfo, SwitchInfo, TopologyInfo, TrvSnapshot, TrvTargetValue,
 };
 
 use crate::entities::heating_zone::{HeatingZoneActual as HzActual, HeatingZoneTarget as HzTarget};
@@ -196,8 +196,11 @@ fn room_snapshot_from(
     );
 
     let lights = build_room_lights(processor.topology(), room);
+    // Reflect the actual gate: cooldown only counts when the last off
+    // was motion-driven. Other offs (user press, startup fail-safe,
+    // ancestor propagation) don't arm this cooldown.
     let motion_cooldown_remaining_secs = zone
-        .and_then(|z| z.last_off_at)
+        .and_then(|z| z.last_motion_off_at)
         .and_then(|last_off| {
             let cooldown = Duration::from_secs(room.motion_off_cooldown_seconds as u64);
             let elapsed = now.duration_since(last_off);
@@ -233,6 +236,15 @@ fn room_snapshot_from(
         lights,
         motion_off_cooldown_secs: room.motion_off_cooldown_seconds,
         motion_cooldown_remaining_secs,
+        motion_mode: wire_motion_mode(room.motion_mode),
+    }
+}
+
+fn wire_motion_mode(mode: crate::config::MotionMode) -> WireMotionMode {
+    match mode {
+        crate::config::MotionMode::OnOff => WireMotionMode::OnOff,
+        crate::config::MotionMode::OnOnly => WireMotionMode::OnOnly,
+        crate::config::MotionMode::OffOnly => WireMotionMode::OffOnly,
     }
 }
 

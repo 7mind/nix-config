@@ -23,8 +23,19 @@ pub struct LightZoneEntity {
     pub actual: TassActual<LightZoneActual>,
     /// Timestamp of most recent button press (for cycle window).
     pub last_press_at: Option<Instant>,
-    /// Timestamp of most recent OFF transition (for motion cooldown).
+    /// Timestamp of the most recent OFF transition from any cause:
+    /// user press, motion-off, startup fail-safe, ancestor
+    /// propagation, etc. Used for the UI "time since off" display.
     pub last_off_at: Option<Instant>,
+    /// Timestamp of the most recent MOTION-DRIVEN OFF — the narrower
+    /// signal used for the off-only motion cooldown gate. Only
+    /// `dispatch_motion_off` and the stale-sensor-triggered motion-off
+    /// in `evaluate_actual_staleness` arm this; other off paths
+    /// (user presses, startup fail-safe, ancestor propagation, group
+    /// echoes from externally-driven offs) deliberately do NOT, so
+    /// e.g. a startup fail-safe off doesn't trigger cooldown when the
+    /// subsequent echo race would otherwise arm `last_off_at`.
+    pub last_motion_off_at: Option<Instant>,
 }
 
 impl Default for LightZoneEntity {
@@ -34,6 +45,7 @@ impl Default for LightZoneEntity {
             actual: TassActual::new(),
             last_press_at: None,
             last_off_at: None,
+            last_motion_off_at: None,
         }
     }
 }

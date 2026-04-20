@@ -14,7 +14,7 @@ use crate::entities::PendingPress;
 use crate::entities::light_zone::LightZoneTarget;
 use crate::entities::plug::PlugTarget;
 use crate::tass::Owner;
-use crate::topology::{BindingIdx, ResolvedEffect};
+use crate::topology::{BindingIdx, ResolvedEffect, RoomIdx};
 
 use super::EventProcessor;
 
@@ -434,25 +434,49 @@ impl EventProcessor {
             }
             ResolvedEffect::TurnOffAllZones => {
                 tracing::info!(rule = rule_name, "action rule → turn off all zones");
+                // Snapshot room metadata first — `resolve_zone_owner` takes
+                // `&self` and would conflict with the mutable borrow of
+                // `world.light_zone` below. For off-only rooms currently
+                // inside a live session (motion-owned AND a bound sensor
+                // is fresh+occupied), `resolve_zone_owner` returns
+                // `Owner::Motion`, preserving the session so a later
+                // vacancy still fires off. Every other case falls through
+                // to `Owner::Schedule` as before.
+                let rooms: Vec<(RoomIdx, String, String, f64, Owner)> = self
+                    .topology
+                    .rooms_with_idx()
+                    .map(|(idx, r)| {
+                        let owner =
+                            self.resolve_zone_owner(&r.name, Owner::Schedule);
+                        (
+                            idx,
+                            r.name.clone(),
+                            r.group_name.clone(),
+                            r.off_transition_seconds,
+                            owner,
+                        )
+                    })
+                    .collect();
                 let mut out = Vec::new();
-                for (room_idx, room) in self.topology.rooms_with_idx() {
-                    let zone = self.world.light_zone(&room.name);
+                for (room_idx, room_name, group_name, off_transition, owner) in rooms {
+                    let zone = self.world.light_zone(&room_name);
                     if zone.is_on() {
                         tracing::info!(
                             rule = rule_name,
-                            room = room.name.as_str(),
-                            group = room.group_name.as_str(),
+                            room = room_name.as_str(),
+                            group = group_name.as_str(),
+                            ?owner,
                             "turning off zone"
                         );
                         // Only set target — actual updates come from
                         // z2m group echoes (TASS: actual = observations).
                         zone.target
-                            .set_and_command(LightZoneTarget::Off, Owner::Schedule, ts);
+                            .set_and_command(LightZoneTarget::Off, owner, ts);
                         zone.last_press_at = None;
                         zone.last_off_at = Some(ts);
                         out.push(Effect::PublishGroupSet {
                             room: room_idx,
-                            payload: Payload::state_off(room.off_transition_seconds),
+                            payload: Payload::state_off(off_transition),
                         });
                     }
                 }

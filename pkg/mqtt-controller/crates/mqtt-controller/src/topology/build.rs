@@ -561,6 +561,7 @@ impl Topology {
                 scenes: room.scenes.clone(),
                 off_transition_seconds: room.off_transition_seconds,
                 motion_off_cooldown_seconds: room.motion_off_cooldown_seconds,
+                motion_mode: room.motion_mode,
                 bound_motion,
             });
         }

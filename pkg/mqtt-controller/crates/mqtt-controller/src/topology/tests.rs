@@ -85,6 +85,7 @@ fn room(
         scenes: day_scenes(),
         off_transition_seconds: 0.8,
         motion_off_cooldown_seconds: 0,
+        motion_mode: Default::default(),
     }
 }
 
@@ -105,6 +106,7 @@ fn room_with_group_name(
         scenes: day_scenes(),
         off_transition_seconds: 0.8,
         motion_off_cooldown_seconds: 0,
+        motion_mode: Default::default(),
     }
 }
 
@@ -385,6 +387,7 @@ fn duplicate_group_friendly_name_rejected() {
                 scenes: day_scenes(),
                 off_transition_seconds: 0.8,
                 motion_off_cooldown_seconds: 0,
+                motion_mode: Default::default(),
             },
             Room {
                 name: "b".into(),
@@ -396,6 +399,7 @@ fn duplicate_group_friendly_name_rejected() {
                 scenes: day_scenes(),
                 off_transition_seconds: 0.8,
                 motion_off_cooldown_seconds: 0,
+                motion_mode: Default::default(),
             },
         ],
     );

@@ -256,6 +256,36 @@ pub struct RoomSnapshot {
     /// `None` once the cooldown has expired (or if no OFF recorded).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub motion_cooldown_remaining_secs: Option<u64>,
+    /// How motion events drive this room's lights. See the Rust-side
+    /// `MotionMode` enum. Serialised as `"on-off" | "on-only" | "off-only"`.
+    #[serde(default, skip_serializing_if = "MotionMode::is_default")]
+    pub motion_mode: MotionMode,
+}
+
+/// Frontend mirror of the config-side `MotionMode`. Kept in this crate so
+/// it compiles under `wasm32-unknown-unknown`; variant names and serde
+/// renaming must stay in sync with `mqtt_controller::config::MotionMode`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum MotionMode {
+    #[default]
+    OnOff,
+    OnOnly,
+    OffOnly,
+}
+
+impl MotionMode {
+    pub fn is_default(&self) -> bool {
+        matches!(self, MotionMode::OnOff)
+    }
+
+    pub fn as_label(&self) -> &'static str {
+        match self {
+            MotionMode::OnOff => "on-off",
+            MotionMode::OnOnly => "on-only",
+            MotionMode::OffOnly => "off-only",
+        }
+    }
 }
 
 /// Current state of one smart plug.
@@ -567,6 +597,7 @@ mod tests {
                 lights: vec![],
                 motion_off_cooldown_secs: 0,
                 motion_cooldown_remaining_secs: None,
+                motion_mode: MotionMode::OnOff,
             }],
             plugs: vec![PlugSnapshot {
                 device: "z2m-p-printer".into(),
@@ -717,6 +748,7 @@ mod tests {
                 lights: vec![],
                 motion_off_cooldown_secs: 0,
                 motion_cooldown_remaining_secs: None,
+                motion_mode: MotionMode::OnOff,
                 active_slot: None,
                 scene_ids: vec![],
             },

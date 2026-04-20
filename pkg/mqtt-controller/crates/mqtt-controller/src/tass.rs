@@ -138,6 +138,58 @@ impl<T> TassTarget<T> {
         self.since = Some(ts);
     }
 
+    /// Adopt a value without emitting a command: set `value` + `owner` and
+    /// mark phase `Confirmed`. Use when the controller is matching target
+    /// to an already-observed actual state (cold-start seed, healing a
+    /// stale target, etc). Contrast with [`Self::set_and_command`] which
+    /// transitions to `Commanded` and expects a later actual echo.
+    ///
+    /// Phase invariant (debug-asserted): callers must only adopt over
+    /// `Unset`, `Stale`, or `Confirmed` — adopting over `Commanded` or
+    /// `Pending` would race a legitimate in-flight command and silently
+    /// drop it.
+    pub fn adopt(&mut self, value: T, owner: Owner, ts: Instant) {
+        debug_assert!(
+            matches!(
+                self.phase,
+                TargetPhase::Unset | TargetPhase::Stale | TargetPhase::Confirmed
+            ),
+            "adopt() requires Unset/Stale/Confirmed (would race an in-flight command), got {:?}",
+            self.phase
+        );
+        self.value = Some(value);
+        self.phase = TargetPhase::Confirmed;
+        self.owner = Some(owner);
+        self.since = Some(ts);
+    }
+
+    /// Reassign only the owner, leaving value and phase untouched.
+    /// No-op if the target has no value yet (Unset has no ownership to
+    /// reassign). Use when a latched claim needs to be released or
+    /// handed over to a different owner without emitting a command.
+    ///
+    /// `since` is refreshed ONLY when the phase has no in-flight
+    /// command tied to it (Confirmed / Stale). For `Commanded` and
+    /// `Pending` the `since` field is what the periodic staleness sweep
+    /// uses to detect dropped commands — refreshing it on an owner
+    /// handover would mask a lost command indefinitely (e.g. repeated
+    /// off-only motion-on re-publishes would keep resetting the
+    /// 10s-stale clock on a user's un-echoed scene_recall).
+    pub fn reassign_owner(&mut self, owner: Owner, ts: Instant) {
+        if self.value.is_none() {
+            return;
+        }
+        self.owner = Some(owner);
+        match self.phase {
+            TargetPhase::Commanded | TargetPhase::Pending => {
+                // Preserve the original lifecycle timestamp.
+            }
+            TargetPhase::Confirmed | TargetPhase::Stale | TargetPhase::Unset => {
+                self.since = Some(ts);
+            }
+        }
+    }
+
     /// Mark target as Confirmed (actual state matches target).
     /// Valid from Commanded, Stale, or Confirmed (idempotent). A late
     /// echo arriving after staleness should still confirm. Panics from
