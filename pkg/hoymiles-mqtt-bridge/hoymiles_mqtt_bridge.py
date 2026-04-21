@@ -84,6 +84,7 @@ INVERTER_SENSORS: tuple[SensorSpec, ...] = (
     SensorSpec("temperature", "Temperature", "°C", "temperature", "measurement", 0.1),
     SensorSpec("warning_number", "Warning Count", None, None, "measurement"),
     SensorSpec("link_status", "Link Status", None, None, "measurement"),
+    SensorSpec("modulation_index_signal", "Modulation Index", None, None, "measurement"),
 )
 
 # Per-PV-port (DC side).
@@ -104,6 +105,9 @@ DTU_SENSORS: tuple[SensorSpec, ...] = (
     SensorSpec("dtu_power", "Total Power", "W", "power", "measurement"),
     SensorSpec("dtu_daily_energy", "Total Daily Energy", "Wh", "energy", "total_increasing"),
     SensorSpec("dtu_total_energy", "Total Lifetime Energy", "Wh", "energy", "total_increasing"),
+    # Raw vendor value; scale varies with firmware (0-99 on WiFi, dBm-ish on
+    # SIM). Left unit-less — HA will graph it as a plain number.
+    SensorSpec("signal_strength", "Signal Strength", None, None, "measurement"),
 )
 
 # Cross-DTU "installation" device: same shape as DTU sensors but summed across
@@ -166,6 +170,47 @@ def _device_block(*, identifiers: str, name: str, model: str | None,
     return block
 
 
+def _binary_sensor_payload(*, unique_id: str, name: str, state_topic: str,
+                           availability_topic: str, value_template: str,
+                           device_class: str | None, device: dict[str, Any],
+                           diagnostic: bool = False) -> dict[str, Any]:
+    """HA MQTT-discovery payload for a binary_sensor.
+
+    `value_template` must render to the literal `ON` or `OFF`.
+    """
+    payload: dict[str, Any] = {
+        "uniq_id": unique_id,
+        "name": name,
+        "stat_t": state_topic,
+        "val_tpl": value_template,
+        "pl_on": "ON",
+        "pl_off": "OFF",
+        "avty_t": availability_topic,
+        "dev": device,
+    }
+    if device_class is not None:
+        payload["dev_cla"] = device_class
+    if diagnostic:
+        payload["ent_cat"] = "diagnostic"
+    return payload
+
+
+def _button_payload(*, unique_id: str, name: str, command_topic: str,
+                    availability_topic: str, device_class: str | None,
+                    device: dict[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "uniq_id": unique_id,
+        "name": name,
+        "cmd_t": command_topic,
+        "avty_t": availability_topic,
+        "dev": device,
+        "ent_cat": "config",
+    }
+    if device_class is not None:
+        payload["dev_cla"] = device_class
+    return payload
+
+
 def _discovery_payload(*, unique_id: str, name: str, state_topic: str,
                        availability_topic: str, value_template: str,
                        spec: SensorSpec, device: dict[str, Any]) -> dict[str, Any]:
@@ -200,6 +245,7 @@ class DtuRuntime:
     dtu_sn: str | None = None
     dtu_model: str | None = None
     dtu_sw: str | None = None
+    signal_strength: int | None = None
     poll_count: int = 0
     # Set of (inverter_sn, port_number-or-None) pairs we've already emitted
     # HA-discovery messages for. None means "the inverter itself, not a port".
@@ -220,6 +266,10 @@ async def refresh_encryption(rt: DtuRuntime) -> None:
     rt.dtu_sn = info.dtu_serial_number
     rt.dtu_model = get_dtu_model_name(rt.dtu_sn)
     rt.dtu_sw = generate_dtu_version_string(info.dtu_info.dtu_sw_version)
+    # signal_strength is reported as a positive integer on a vendor-specific
+    # scale (typically 0-99 for WiFi, dBm-like for SIM). Pass through raw and
+    # let HA graph it.
+    rt.signal_strength = int(info.dtu_info.signal_strength)
     if info.dtu_info.dfs and is_encrypted_dtu(info.dtu_info.dfs):
         new_rand = info.dtu_info.enc_rand
         if not rt.dtu.is_encrypted or rt.dtu.enc_rand != new_rand:
@@ -359,6 +409,21 @@ def discovery_messages(rt: DtuRuntime, inverters: dict[str, dict[str, Any]],
             spec=spec,
             device=dtu_dev,
         )))
+    # DTU restart button. `cmd_t` is per-DTU so the bridge can route to the
+    # right runtime without parsing argv.
+    restart_topic = f"{base_topic}/{rt.dtu_sn}/command/restart"
+    restart_uid = f"hoymiles_{rt.dtu_sn}_restart"
+    dtu_msgs.append((
+        f"{discovery_prefix}/button/{restart_uid}/config",
+        _button_payload(
+            unique_id=restart_uid,
+            name="Restart DTU",
+            command_topic=restart_topic,
+            availability_topic=dtu_avail,
+            device_class="restart",
+            device=dtu_dev,
+        ),
+    ))
     grouped[(rt.dtu_sn, -1)] = dtu_msgs
 
     for inv_sn, inv_state in inverters.items():
@@ -384,6 +449,37 @@ def discovery_messages(rt: DtuRuntime, inverters: dict[str, dict[str, Any]],
                 spec=spec,
                 device=inv_dev,
             )))
+        # Binary derivatives of the same numeric state topic.
+        link_uid = f"hoymiles_{inv_sn}_connected"
+        inv_msgs.append((
+            f"{discovery_prefix}/binary_sensor/{link_uid}/config",
+            _binary_sensor_payload(
+                unique_id=link_uid,
+                name="Connected",
+                state_topic=inv_state_topic,
+                availability_topic=dtu_avail,
+                value_template=("{{ 'ON' if (value_json.link_status | int(0)) "
+                                "> 0 else 'OFF' }}"),
+                device_class="connectivity",
+                device=inv_dev,
+                diagnostic=True,
+            ),
+        ))
+        problem_uid = f"hoymiles_{inv_sn}_problem"
+        inv_msgs.append((
+            f"{discovery_prefix}/binary_sensor/{problem_uid}/config",
+            _binary_sensor_payload(
+                unique_id=problem_uid,
+                name="Problem",
+                state_topic=inv_state_topic,
+                availability_topic=dtu_avail,
+                value_template=("{{ 'ON' if (value_json.warning_number | int(0)) "
+                                "> 0 else 'OFF' }}"),
+                device_class="problem",
+                device=inv_dev,
+                diagnostic=True,
+            ),
+        ))
         grouped[(inv_sn, None)] = inv_msgs
 
         # Port sensors: one device per port keeps the HA UI clean and lets
@@ -449,6 +545,35 @@ def installation_discovery_messages(*, base_topic: str, discovery_prefix: str
     return out
 
 
+async def dispatch_commands(client: aiomqtt.Client, runtimes: list[DtuRuntime],
+                            *, base_topic: str) -> None:
+    """Subscribe to `<base>/+/command/+` and dispatch supported commands."""
+    topic_filter = f"{base_topic}/+/command/+"
+    await client.subscribe(topic_filter)
+    LOG.info("subscribed to command topic %s", topic_filter)
+
+    async for msg in client.messages:
+        topic = str(msg.topic)
+        # hoymiles/<dtu_sn>/command/<action>
+        parts = topic.split("/")
+        if len(parts) != 4 or parts[0] != base_topic or parts[2] != "command":
+            LOG.warning("ignoring unexpected command topic: %s", topic)
+            continue
+        dtu_sn, action = parts[1], parts[3]
+        rt = next((r for r in runtimes if r.dtu_sn == dtu_sn), None)
+        if rt is None:
+            LOG.warning("command for unknown DTU %s", dtu_sn)
+            continue
+        try:
+            if action == "restart":
+                LOG.info("[%s] restart-DTU command received", rt.endpoint.name)
+                await rt.dtu.async_restart_dtu()
+            else:
+                LOG.warning("[%s] unknown action %r", rt.endpoint.name, action)
+        except Exception:
+            LOG.exception("[%s] command %r failed", rt.endpoint.name, action)
+
+
 async def publish(client: aiomqtt.Client, topic: str, payload: Any, *, retain: bool = False) -> None:
     if isinstance(payload, (dict, list)):
         body = json.dumps(payload, separators=(",", ":"))
@@ -500,6 +625,8 @@ async def poll_dtu(rt: DtuRuntime, client: aiomqtt.Client, *,
                 rt.response_shape_logged = True
 
             dtu_state, inverters = build_state_payload(real)
+            if rt.signal_strength is not None:
+                dtu_state["signal_strength"] = rt.signal_strength
 
             grouped = discovery_messages(
                 rt, inverters, discovery_prefix, base_topic
@@ -606,6 +733,9 @@ async def run() -> None:
 
                 installation_lock = asyncio.Lock()
                 async with asyncio.TaskGroup() as tg:
+                    tg.create_task(dispatch_commands(
+                        client, runtimes, base_topic=base_topic,
+                    ))
                     for rt in runtimes:
                         tg.create_task(poll_dtu(
                             rt, client,
