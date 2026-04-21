@@ -42,6 +42,9 @@ from hoymiles_wifi.hoymiles import (
     is_encrypted_dtu,
 )
 
+# Empirical: protobuf reports inverter SNs as int64 in sgs/pv records but
+# the DTU's own SN at the parent message level is already a string.
+
 LOG = logging.getLogger("hoymiles_mqtt_bridge")
 
 # Re-detect DTU encryption parameters every N polls. The rolling `enc_rand` is
@@ -196,8 +199,8 @@ async def refresh_encryption(rt: DtuRuntime) -> None:
         # AppInfo failure is not fatal here — async_get_real_data_new will
         # also tell us if the DTU is offline. Just leave settings as-is.
         return
-    rt.dtu_sn = generate_inverter_serial_number(info.dtu_info.dtu_sn)
-    rt.dtu_model = get_dtu_model_name(info.dtu_info.dtu_hw_version)
+    rt.dtu_sn = info.dtu_serial_number
+    rt.dtu_model = get_dtu_model_name(rt.dtu_sn)
     rt.dtu_sw = generate_dtu_version_string(info.dtu_info.dtu_sw_version)
     if info.dtu_info.dfs and is_encrypted_dtu(info.dtu_info.dfs):
         new_rand = info.dtu_info.enc_rand
@@ -284,7 +287,7 @@ def discovery_messages(rt: DtuRuntime, inverters: dict[str, dict[str, Any]],
         inv_dev = _device_block(
             identifiers=f"hoymiles_inv_{inv_sn}",
             name=f"Hoymiles Inverter {inv_sn}",
-            model=None,
+            model=get_inverter_model_name(inv_sn) or None,
             sw_version=inv_state.get("firmware_version"),
             via_device=f"hoymiles_dtu_{rt.dtu_sn}",
         )
@@ -369,8 +372,9 @@ async def poll_dtu(rt: DtuRuntime, client: aiomqtt.Client, *,
 
             if rt.dtu_sn is None:
                 # Fall back to the SN the data carries; refresh_encryption
-                # would normally set it.
-                rt.dtu_sn = generate_inverter_serial_number(real.device_serial_number)
+                # would normally set it. device_serial_number is already a
+                # string in the protobuf schema.
+                rt.dtu_sn = real.device_serial_number
 
             dtu_state, inverters = build_state_payload(real)
 
