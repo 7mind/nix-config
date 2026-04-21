@@ -102,6 +102,8 @@
 
         music-meta-fix = pkgs.callPackage "${cfg-meta.paths.pkg}/music-meta-fix/default.nix" { };
 
+        saic-mqtt-gateway = pkgs.callPackage "${cfg-meta.paths.pkg}/saic-mqtt-gateway/default.nix" { };
+
         mqtt-controller-frontend =
           let
             craneLib = (inputs.crane.mkLib pkgs).overrideToolchain (p:

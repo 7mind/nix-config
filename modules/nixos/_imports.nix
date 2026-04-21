@@ -56,6 +56,7 @@
   ./power-refresh-rate.nix
   ./power-suspend-quirks.nix
   ./qendercore.nix
+  ./saic-mqtt.nix
   ./spc-mqtt.nix
   ./qmk-keyboard.nix
   ./rocm.nix
