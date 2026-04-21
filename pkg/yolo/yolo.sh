@@ -60,11 +60,24 @@ if [[ -n "${YOLO_PODMAN_SOCKET_PATH:-}" && -n "${YOLO_PODMAN_SOCKET_URI:-}" ]]; 
   fi
 fi
 
+# If we're inside tmux, bind its socket directory into the sandbox. Without
+# this, tools like claude-code detect $TMUX and try `tmux load-buffer -` to
+# copy, which fails because /tmp is tmpfs'd inside the sandbox and tmux
+# can't reach its socket. The parent dir is typically /tmp/tmux-<uid>/.
+TMUX_BIND_ARGS=()
+if [[ -n "${TMUX:-}" ]]; then
+  _tmux_sock="${TMUX%%,*}"
+  if [[ -S "$_tmux_sock" ]]; then
+    TMUX_BIND_ARGS+=(--rw "$(dirname "$_tmux_sock")")
+  fi
+fi
+
 BASE_ARGS=(
   --rw "${PWD}"
   --rw "${HOME}/.cache"
   --rw "${HOME}/.ivy2"
   "${SOCKET_ARGS[@]}"
+  "${TMUX_BIND_ARGS[@]}"
   --ro "${HOME}/.config/git"
   --ro "${HOME}/.config/direnv"
   --ro "${HOME}/.local/share/direnv"
