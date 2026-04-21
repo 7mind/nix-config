@@ -186,7 +186,13 @@
       };
       devShells.default = pkgs.mkShell {
         packages = with pkgs; [
-          agenix-rekey
+          # Plain `agenix` can't see host pubkeys from our `private/` git
+          # submodule without `--extra-flake-params '?submodules=1'`; without
+          # it, recipients resolve to junk and rage fails with
+          # "Invalid recipient 'age'". Wrap it so the flag is implicit.
+          (writeShellScriptBin "agenix" ''
+            exec ${agenix-rekey}/bin/agenix --extra-flake-params '?submodules=1' "$@"
+          '')
           age-plugin-tpm
           nixfmt
           qrencode
