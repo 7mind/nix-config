@@ -92,8 +92,11 @@ PORT_SENSORS: tuple[SensorSpec, ...] = (
     SensorSpec("voltage", "DC Voltage", "V", "voltage", "measurement", 0.1),
     SensorSpec("current", "DC Current", "A", "current", "measurement", 0.01),
     SensorSpec("power", "DC Power", "W", "power", "measurement", 0.1),
-    SensorSpec("energy_total", "Total Energy", "Wh", "energy", "total_increasing"),
-    SensorSpec("energy_daily", "Daily Energy", "Wh", "energy", "total_increasing"),
+    # Protobuf reports energies as integer Wh; we publish as kWh so HA
+    # charts/cards read naturally and the recorder stays precise enough
+    # (the 0.001 factor + round-to-4 in _scale() preserves 0.1 Wh resolution).
+    SensorSpec("energy_total", "Total Energy", "kWh", "energy", "total_increasing", 0.001),
+    SensorSpec("energy_daily", "Daily Energy", "kWh", "energy", "total_increasing", 0.001),
     SensorSpec("error_code", "Error Code", None, None, "measurement"),
 )
 
@@ -103,8 +106,8 @@ PORT_SENSORS: tuple[SensorSpec, ...] = (
 # floats by the time they land in the MQTT payload, so factor=1.0 here.
 DTU_SENSORS: tuple[SensorSpec, ...] = (
     SensorSpec("dtu_power", "Total Power", "W", "power", "measurement"),
-    SensorSpec("dtu_daily_energy", "Total Daily Energy", "Wh", "energy", "total_increasing"),
-    SensorSpec("dtu_total_energy", "Total Lifetime Energy", "Wh", "energy", "total_increasing"),
+    SensorSpec("dtu_daily_energy", "Total Daily Energy", "kWh", "energy", "total_increasing"),
+    SensorSpec("dtu_total_energy", "Total Lifetime Energy", "kWh", "energy", "total_increasing"),
     # Raw vendor value; scale varies with firmware (0-99 on WiFi, dBm-ish on
     # SIM). Left unit-less — HA will graph it as a plain number.
     SensorSpec("signal_strength", "Signal Strength", None, None, "measurement"),
@@ -114,8 +117,8 @@ DTU_SENSORS: tuple[SensorSpec, ...] = (
 # every DTU/inverter/port the bridge knows about.
 INSTALLATION_SENSORS: tuple[SensorSpec, ...] = (
     SensorSpec("current_power", "Total Power", "W", "power", "measurement"),
-    SensorSpec("daily_energy", "Total Daily Energy", "Wh", "energy", "total_increasing"),
-    SensorSpec("total_energy", "Total Lifetime Energy", "Wh", "energy", "total_increasing"),
+    SensorSpec("daily_energy", "Total Daily Energy", "kWh", "energy", "total_increasing"),
+    SensorSpec("total_energy", "Total Lifetime Energy", "kWh", "energy", "total_increasing"),
 )
 INSTALLATION_DEVICE_ID = "hoymiles_installation"
 
@@ -347,15 +350,19 @@ def _compute_dtu_totals(real: Any, inverters: dict[str, dict[str, Any]]
         any(k.startswith("port_") for k in inv) for inv in inverters.values()
     )
     if has_ports:
+        # Ports already publish kWh (factor 0.001); sum preserves that unit.
+        # 3-decimal rounding keeps ~1 Wh resolution and avoids drift-induced
+        # TOTAL_INCREASING resets in HA.
         return {
             "dtu_power": round(_sum_port_field(inverters, "power"), 2),
-            "dtu_daily_energy": round(_sum_port_field(inverters, "energy_daily"), 2),
-            "dtu_total_energy": round(_sum_port_field(inverters, "energy_total"), 2),
+            "dtu_daily_energy": round(_sum_port_field(inverters, "energy_daily"), 3),
+            "dtu_total_energy": round(_sum_port_field(inverters, "energy_total"), 3),
         }
-    # Fallback: trust the DTU. dtu_power is scaled (factor 0.1), energies raw.
+    # Fallback: trust the DTU. dtu_power is scaled (factor 0.1), energies
+    # are raw Wh from protobuf — divide by 1000 to match our kWh unit.
     return {
         "dtu_power": round(real.dtu_power * 0.1, 2),
-        "dtu_daily_energy": int(real.dtu_daily_energy),
+        "dtu_daily_energy": round(real.dtu_daily_energy / 1000.0, 3),
         "dtu_total_energy": 0,
     }
 
@@ -376,8 +383,8 @@ def compute_installation_state(runtimes: list["DtuRuntime"]) -> dict[str, Any]:
         total_energy += _sum_port_field(rt.last_known_inverters, "energy_total")
     return {
         "current_power": round(current_power, 2),
-        "daily_energy": round(daily_energy, 2),
-        "total_energy": round(total_energy, 2),
+        "daily_energy": round(daily_energy, 3),
+        "total_energy": round(total_energy, 3),
     }
 
 
