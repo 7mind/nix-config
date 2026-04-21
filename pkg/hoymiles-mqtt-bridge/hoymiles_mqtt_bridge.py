@@ -252,6 +252,11 @@ class DtuRuntime:
     # We re-publish discovery whenever a new pair appears so late-waking
     # inverters / ports get registered without a bridge restart.
     published_entities: set[tuple[str, int | None]] = dataclasses.field(default_factory=set)
+    # Last per-inverter state dict (flat shape from build_state_payload's
+    # second return value). Read cross-task by compute_installation_state, so
+    # it MUST default to {} — sibling DTUs that haven't finished their first
+    # poll yet would otherwise have no attribute to sum.
+    last_known_inverters: dict[str, dict[str, Any]] = dataclasses.field(default_factory=dict)
     dtu_discovery_published: bool = False
     response_shape_logged: bool = False
 
@@ -449,7 +454,12 @@ def discovery_messages(rt: DtuRuntime, inverters: dict[str, dict[str, Any]],
                 spec=spec,
                 device=inv_dev,
             )))
-        # Binary derivatives of the same numeric state topic.
+        # Binary derivative of link_status. We deliberately do NOT expose a
+        # "problem" binary based on `warning_number` — empirically it's a
+        # cumulative warning counter, not a currently-active-problem flag, so
+        # once the inverter ever hiccups the sensor sticks ON forever.
+        # Upstream ha-hoymiles-wifi exposes warning_number as a plain numeric
+        # sensor for the same reason.
         link_uid = f"hoymiles_{inv_sn}_connected"
         inv_msgs.append((
             f"{discovery_prefix}/binary_sensor/{link_uid}/config",
@@ -461,21 +471,6 @@ def discovery_messages(rt: DtuRuntime, inverters: dict[str, dict[str, Any]],
                 value_template=("{{ 'ON' if (value_json.link_status | int(0)) "
                                 "> 0 else 'OFF' }}"),
                 device_class="connectivity",
-                device=inv_dev,
-                diagnostic=True,
-            ),
-        ))
-        problem_uid = f"hoymiles_{inv_sn}_problem"
-        inv_msgs.append((
-            f"{discovery_prefix}/binary_sensor/{problem_uid}/config",
-            _binary_sensor_payload(
-                unique_id=problem_uid,
-                name="Problem",
-                state_topic=inv_state_topic,
-                availability_topic=dtu_avail,
-                value_template=("{{ 'ON' if (value_json.warning_number | int(0)) "
-                                "> 0 else 'OFF' }}"),
-                device_class="problem",
                 device=inv_dev,
                 diagnostic=True,
             ),
