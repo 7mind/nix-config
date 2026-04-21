@@ -1,60 +1,99 @@
 {
   lib,
   stdenv,
-  buildNpmPackage,
+  stdenvNoCC,
   fetchzip,
+  makeWrapper,
   versionCheckHook,
   writableTmpDirAsHomeHook,
   bubblewrap,
   procps,
   socat,
 }:
-buildNpmPackage (finalAttrs: {
-  pname = "claude-code";
-  version = "2.1.112";
+let
+  version = "2.1.116";
 
-  src = fetchzip {
-    url = "https://registry.npmjs.org/@anthropic-ai/claude-code/-/claude-code-${finalAttrs.version}.tgz";
-    hash = "sha256-SJJqU7XHbu9IRGPMJNUg6oaMZiQUKqJhI2wm7BnR1gs=";
+  # Upstream now ships native binaries per platform via @anthropic-ai/claude-code-<platform>.
+  # The umbrella @anthropic-ai/claude-code package is just a stub + postinstall that copies
+  # the matching native binary into place. We skip the stub and fetch the native pkg directly.
+  sources = {
+    "x86_64-linux" = {
+      pkg = "claude-code-linux-x64";
+      hash = "sha256-QEjJ4CRk35TubDNW02Dzcu+EMRLLndJUXJeP3BFT3b8=";
+    };
+    "aarch64-linux" = {
+      pkg = "claude-code-linux-arm64";
+      hash = "sha256-/Hqp8GQx8Hub8K4w0Fnx/AksksY61vRC44XxrJVwF5w=";
+    };
+    "x86_64-darwin" = {
+      pkg = "claude-code-darwin-x64";
+      hash = "sha256-O3J/ew2fWbUQePs6tHEhK0Q9E3Mx/BDSL7b7NL3FRc8=";
+    };
+    "aarch64-darwin" = {
+      pkg = "claude-code-darwin-arm64";
+      hash = "sha256-O41sf7b05SJfXVjszMeTp838mja+PgZ+aEKykLsHeNo=";
+    };
   };
 
-  npmDepsHash = "sha256-bdkej9Z41GLew9wi1zdNX+Asauki3nT1+SHmBmaUIBU=";
+  source =
+    sources.${stdenvNoCC.hostPlatform.system}
+      or (throw "claude-code: unsupported system ${stdenvNoCC.hostPlatform.system}");
 
-  strictDeps = true;
+  isLinux = stdenvNoCC.hostPlatform.isLinux;
+in
+stdenvNoCC.mkDerivation (finalAttrs: {
+  pname = "claude-code";
+  inherit version;
 
-  postPatch = ''
-    cp ${./package-lock.json} package-lock.json
+  src = fetchzip {
+    url = "https://registry.npmjs.org/@anthropic-ai/${source.pkg}/-/${source.pkg}-${version}.tgz";
+    hash = source.hash;
+  };
 
-    # https://github.com/anthropics/claude-code/issues/15195
-    substituteInPlace cli.js \
-          --replace-fail '#!/bin/sh' '#!/usr/bin/env sh'
+  nativeBuildInputs = [ makeWrapper ];
+
+  dontConfigure = true;
+  dontBuild = true;
+
+  # The `claude` binary is a Bun single-file executable: bun runtime + appended embedded
+  # script payload. patchelf would shift the file size and break Bun's payload-offset
+  # detection (it falls back to acting as plain `bun` instead of running the bundled app).
+  # So we install the binary verbatim and invoke it via the dynamic loader at runtime.
+  installPhase = ''
+    runHook preInstall
+    install -Dm755 claude $out/libexec/claude-code/claude
+    runHook postInstall
   '';
 
-  dontNpmBuild = true;
-
-  env.AUTHORIZED = "1";
-
-  # `claude-code` tries to auto-update by default, this disables that functionality.
+  # `claude` tries to auto-update by default, this disables that functionality.
   # https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview#environment-variables
-  # The DEV=true env var causes claude to crash with `TypeError: window.WebSocket is not a constructor`
-  postInstall = ''
-    wrapProgram $out/bin/claude \
-      --set DISABLE_AUTOUPDATER 1 \
-      --set-default FORCE_AUTOUPDATE_PLUGINS 1 \
-      --set DISABLE_INSTALLATION_CHECKS 1 \
-      --unset DEV \
-      --prefix PATH : ${
-        lib.makeBinPath (
-          [
-            procps
-          ]
-          ++ lib.optionals stdenv.hostPlatform.isLinux [
-            bubblewrap
-            socat
-          ]
-        )
-      }
-  '';
+  postFixup =
+    let
+      runtimePath = lib.makeBinPath (
+        [ procps ] ++ lib.optionals isLinux [ bubblewrap socat ]
+      );
+    in
+    if isLinux then
+      ''
+        mkdir -p $out/bin
+        makeWrapper ${stdenv.cc.bintools.dynamicLinker} $out/bin/claude \
+          --add-flags "--library-path ${lib.makeLibraryPath [ stdenv.cc.libc ]} $out/libexec/claude-code/claude" \
+          --set DISABLE_AUTOUPDATER 1 \
+          --set-default FORCE_AUTOUPDATE_PLUGINS 1 \
+          --set DISABLE_INSTALLATION_CHECKS 1 \
+          --unset DEV \
+          --prefix PATH : ${runtimePath}
+      ''
+    else
+      ''
+        mkdir -p $out/bin
+        makeWrapper $out/libexec/claude-code/claude $out/bin/claude \
+          --set DISABLE_AUTOUPDATER 1 \
+          --set-default FORCE_AUTOUPDATE_PLUGINS 1 \
+          --set DISABLE_INSTALLATION_CHECKS 1 \
+          --unset DEV \
+          --prefix PATH : ${runtimePath}
+      '';
 
   doInstallCheck = true;
   nativeInstallCheckInputs = [
@@ -69,5 +108,7 @@ buildNpmPackage (finalAttrs: {
     downloadPage = "https://www.npmjs.com/package/@anthropic-ai/claude-code";
     license = lib.licenses.unfree;
     mainProgram = "claude";
+    platforms = lib.attrNames sources;
+    sourceProvenance = [ lib.sourceTypes.binaryNativeCode ];
   };
 })
