@@ -34,6 +34,7 @@ DO_CACHE_PUSH=true
 DO_LIST=false
 DO_ALLOW_SHORT_HOST=false
 DO_OFFLINE=false
+DO_RESOCK=true
 MESSAGE=""
 VERBOSE=false
 
@@ -60,6 +61,7 @@ Options:
   --allow-short-host
                     Allow using short host name for remote switch when FQDN is missing
   --offline         Pass --offline to nix build (no network fetches)
+  -nrs, --no-resock Skip SSH_AUTH_SOCK probing (keep whatever the shell set)
   -v, --verbose     Enable verbose output (set -x)
   -h, --help        Show this help message
 
@@ -246,6 +248,10 @@ parse_args() {
                 DO_OFFLINE=true
                 shift
                 ;;
+            -nrs|--no-resock)
+                DO_RESOCK=false
+                shift
+                ;;
             -v|--verbose)
                 VERBOSE=true
                 shift
@@ -314,7 +320,33 @@ do_refresh() {
 # never fails the build — nix copy / git push over ssh will just fall back
 # to whatever SSH_AUTH_SOCK was already set to.
 do_resock() {
+    if [[ "$DO_RESOCK" != "true" ]]; then
+        return 0
+    fi
     [[ -n "${SSH_CONNECTION:-}" || -n "${TMUX:-}" ]] || return 0
+
+    local old_sock="${SSH_AUTH_SOCK:-}"
+
+    _resock_probe() {
+        # returns 0 iff the agent at $1 responds to `ssh-add -l`
+        # (either has keys -> rc 0, or is empty -> rc 1; both are "alive";
+        # rc 2 means "cannot connect").
+        local s="$1" rc
+        [[ -S "$s" ]] || return 1
+        SSH_AUTH_SOCK="$s" timeout 1 ssh-add -l >/dev/null 2>&1
+        rc=$?
+        (( rc != 2 ))
+    }
+
+    # First: if the current socket is already working, keep it. This is the
+    # common case — the shell already has a good SSH_AUTH_SOCK (forwarded or
+    # local) and we must not clobber it. Otherwise we've had setup silently
+    # swap a working socket for e.g. gcr's, which has a different key set.
+    if [[ -n "$old_sock" ]] && _resock_probe "$old_sock"; then
+        echo "==> resock: keeping current SSH_AUTH_SOCK -> $old_sock"
+        unset -f _resock_probe
+        return 0
+    fi
 
     local runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
     local -a candidates=()
@@ -330,13 +362,15 @@ do_resock() {
     done
 
     for sock in "${candidates[@]}"; do
-        if SSH_AUTH_SOCK="$sock" timeout 1 ssh-add -l >/dev/null 2>&1; then
+        if _resock_probe "$sock"; then
             export SSH_AUTH_SOCK="$sock"
-            echo "==> resock: SSH_AUTH_SOCK -> $sock"
+            echo "==> resock: SSH_AUTH_SOCK ${old_sock:-<unset>} -> $sock"
+            unset -f _resock_probe
             return 0
         fi
     done
-    echo "    resock: no working ssh-agent found (non-fatal)" >&2
+    echo "    resock: no working ssh-agent found (was ${old_sock:-<unset>}, non-fatal)" >&2
+    unset -f _resock_probe
     return 0
 }
 

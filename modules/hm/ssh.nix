@@ -39,6 +39,7 @@
         local -a forwarded=( /tmp/ssh-*/agent.*(=om) $HOME/.ssh/agent/*(=om) )
         local runtime_dir="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
         local -a locals=( "$runtime_dir/gcr/ssh" "$runtime_dir/ssh-agent" )
+        local old_sock="''${SSH_AUTH_SOCK:-<unset>}"
         local sock rc
 
         _resock_try() {
@@ -47,6 +48,19 @@
           rc=$?
           (( rc != 2 ))
         }
+
+        # If the current socket is alive, don't clobber it. This avoids the
+        # common footgun where an already-working forwarded (or local) socket
+        # gets silently swapped for e.g. gcr's, which responds to ssh-add -l
+        # but carries a different key set.
+        if [[ -n "''${SSH_AUTH_SOCK:-}" && -S "''${SSH_AUTH_SOCK}" ]] \
+             && _resock_try "''${SSH_AUTH_SOCK}"; then
+          print "resock: keeping current SSH_AUTH_SOCK -> $old_sock"
+          unfunction _resock_try
+          return 0
+        fi
+
+        print "resock: old SSH_AUTH_SOCK was $old_sock"
 
         if (( ''${#forwarded} == 0 )); then
           print "resock: no forwarded sockets found"
@@ -57,7 +71,7 @@
             if _resock_try "$sock"; then
               print "alive"
               export SSH_AUTH_SOCK="$sock"
-              print "resock: SSH_AUTH_SOCK -> $sock"
+              print "resock: SSH_AUTH_SOCK $old_sock -> $sock"
               unfunction _resock_try
               return 0
             fi
@@ -76,7 +90,7 @@
           if _resock_try "$sock"; then
             print "alive"
             export SSH_AUTH_SOCK="$sock"
-            print "resock: SSH_AUTH_SOCK -> $sock"
+            print "resock: SSH_AUTH_SOCK $old_sock -> $sock"
             unfunction _resock_try
             return 0
           fi
@@ -84,7 +98,7 @@
         done
 
         unfunction _resock_try
-        print -u2 "resock: no working agent found"
+        print -u2 "resock: no working agent found (was $old_sock)"
         return 1
       }
     '';
