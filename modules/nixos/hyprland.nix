@@ -50,7 +50,10 @@
     smind.security.keyring = {
       enable = true;
       backend = "gnome-keyring";
-      sshAgent = "gcr";
+      # mkDefault so hosts that run Hyprland only for occasional maintenance
+      # (but serve primarily as SSH targets) can opt out of gcr-ssh, which
+      # doesn't work headless.
+      sshAgent = lib.mkDefault "gcr";
       displayManagers = [ "login" "greetd" "gdm" "gdm-password" "gdm-fingerprint" "gdm-autologin" ];
     };
 

@@ -40,7 +40,8 @@
     smind.security.keyring = {
       enable = true;
       backend = "gnome-keyring";
-      sshAgent = "gcr";
+      # mkDefault so maintenance-only Sway hosts can opt out of gcr-ssh.
+      sshAgent = lib.mkDefault "gcr";
       displayManagers = [ "login" "greetd" "gdm" "gdm-password" "gdm-fingerprint" "gdm-autologin" ];
     };
 

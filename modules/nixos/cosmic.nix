@@ -60,7 +60,8 @@
     smind.security.keyring = {
       enable = true;
       backend = "gnome-keyring";
-      sshAgent = "gcr";
+      # mkDefault so maintenance-only COSMIC hosts can opt out of gcr-ssh.
+      sshAgent = lib.mkDefault "gcr";
       displayManagers = [ "login" "cosmic-greeter" "greetd" "gdm" "gdm-password" "gdm-fingerprint" "gdm-autologin" ];
     };
 
