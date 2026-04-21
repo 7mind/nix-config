@@ -626,18 +626,23 @@ async def run() -> None:
 def main() -> None:
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    stop = loop.create_future()
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, lambda: stop.cancel() if not stop.done() else None)
 
     task = loop.create_task(run())
+
+    def _shutdown() -> None:
+        # Cancelling the top-level task propagates through the aiomqtt context
+        # manager and TaskGroup so child poll tasks exit cleanly.
+        if not task.done():
+            task.cancel()
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, _shutdown)
+
     try:
         loop.run_until_complete(task)
     except (KeyboardInterrupt, asyncio.CancelledError):
         pass
     finally:
-        task.cancel()
-        loop.run_until_complete(asyncio.gather(task, return_exceptions=True))
         loop.close()
 
 
