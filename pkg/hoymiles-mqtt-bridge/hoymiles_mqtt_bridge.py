@@ -96,11 +96,24 @@ PORT_SENSORS: tuple[SensorSpec, ...] = (
     SensorSpec("error_code", "Error Code", None, None, "measurement"),
 )
 
-# DTU-aggregate sensors.
+# DTU-aggregate sensors. We compute these from per-port sums (the embedded
+# DTU on HMS-W inverters returns zero for its own dtu_power / dtu_daily_energy
+# fields — only standalone DTU sticks aggregate). All values are pre-scaled
+# floats by the time they land in the MQTT payload, so factor=1.0 here.
 DTU_SENSORS: tuple[SensorSpec, ...] = (
-    SensorSpec("dtu_power", "Total Power", "W", "power", "measurement", 0.1),
+    SensorSpec("dtu_power", "Total Power", "W", "power", "measurement"),
     SensorSpec("dtu_daily_energy", "Total Daily Energy", "Wh", "energy", "total_increasing"),
+    SensorSpec("dtu_total_energy", "Total Lifetime Energy", "Wh", "energy", "total_increasing"),
 )
+
+# Cross-DTU "installation" device: same shape as DTU sensors but summed across
+# every DTU/inverter/port the bridge knows about.
+INSTALLATION_SENSORS: tuple[SensorSpec, ...] = (
+    SensorSpec("current_power", "Total Power", "W", "power", "measurement"),
+    SensorSpec("daily_energy", "Total Daily Energy", "Wh", "energy", "total_increasing"),
+    SensorSpec("total_energy", "Total Lifetime Energy", "Wh", "energy", "total_increasing"),
+)
+INSTALLATION_DEVICE_ID = "hoymiles_installation"
 
 
 def setup_logging(level: str) -> None:
@@ -231,11 +244,11 @@ def build_state_payload(real: Any) -> tuple[dict[str, Any], dict[str, dict[str, 
 
     Each inverter_state is a flat JSON object with fields matching the keys in
     `INVERTER_SENSORS` plus `port_<n>_<key>` for each port from PORT_SENSORS.
+
+    DTU totals are computed from per-port sums (more reliable than the DTU's
+    own `dtu_power`/`dtu_daily_energy`, which the embedded DTU on HMS-W
+    inverters leaves at zero).
     """
-    dtu_state = {
-        "dtu_power": _scale(DTU_SENSORS[0], real.dtu_power),
-        "dtu_daily_energy": _scale(DTU_SENSORS[1], real.dtu_daily_energy),
-    }
     inverters: dict[str, dict[str, Any]] = {}
     for sgs in real.sgs_data:
         sn = generate_inverter_serial_number(sgs.serial_number)
@@ -258,7 +271,59 @@ def build_state_payload(real: Any) -> tuple[dict[str, Any], dict[str, dict[str, 
                 spec, getattr(pv, spec.key)
             )
 
+    dtu_state = _compute_dtu_totals(real, inverters)
     return dtu_state, inverters
+
+
+def _sum_port_field(inverters: dict[str, dict[str, Any]], suffix: str) -> float:
+    total = 0.0
+    for inv in inverters.values():
+        for k, v in inv.items():
+            if k.startswith("port_") and k.endswith(f"_{suffix}"):
+                total += float(v)
+    return total
+
+
+def _compute_dtu_totals(real: Any, inverters: dict[str, dict[str, Any]]
+                        ) -> dict[str, Any]:
+    """Compute DTU-level aggregates from port sums, with DTU-reported values
+    as fallback when no port data is available."""
+    has_ports = any(
+        any(k.startswith("port_") for k in inv) for inv in inverters.values()
+    )
+    if has_ports:
+        return {
+            "dtu_power": round(_sum_port_field(inverters, "power"), 2),
+            "dtu_daily_energy": round(_sum_port_field(inverters, "energy_daily"), 2),
+            "dtu_total_energy": round(_sum_port_field(inverters, "energy_total"), 2),
+        }
+    # Fallback: trust the DTU. dtu_power is scaled (factor 0.1), energies raw.
+    return {
+        "dtu_power": round(real.dtu_power * 0.1, 2),
+        "dtu_daily_energy": int(real.dtu_daily_energy),
+        "dtu_total_energy": 0,
+    }
+
+
+def compute_installation_state(runtimes: list["DtuRuntime"]) -> dict[str, Any]:
+    """Sum power/energy across every DTU's last-known per-port data.
+
+    We use last-known (rather than current-only) so a transient DTU dropout
+    doesn't make the total dip — important because daily/lifetime energies are
+    declared TOTAL_INCREASING and HA treats a drop as a counter reset.
+    """
+    current_power = 0.0
+    daily_energy = 0.0
+    total_energy = 0.0
+    for rt in runtimes:
+        current_power += _sum_port_field(rt.last_known_inverters, "power")
+        daily_energy += _sum_port_field(rt.last_known_inverters, "energy_daily")
+        total_energy += _sum_port_field(rt.last_known_inverters, "energy_total")
+    return {
+        "current_power": round(current_power, 2),
+        "daily_energy": round(daily_energy, 2),
+        "total_energy": round(total_energy, 2),
+    }
 
 
 def discovery_messages(rt: DtuRuntime, inverters: dict[str, dict[str, Any]],
@@ -356,6 +421,34 @@ def discovery_messages(rt: DtuRuntime, inverters: dict[str, dict[str, Any]],
 # --- DTU task ----------------------------------------------------------------
 
 
+def installation_discovery_messages(*, base_topic: str, discovery_prefix: str
+                                    ) -> list[tuple[str, dict[str, Any]]]:
+    state_topic = f"{base_topic}/installation/state"
+    avail_topic = f"{base_topic}/bridge/availability"
+    device = _device_block(
+        identifiers=INSTALLATION_DEVICE_ID,
+        name="Hoymiles Installation",
+        model=None,
+        sw_version=None,
+    )
+    out: list[tuple[str, dict[str, Any]]] = []
+    for spec in INSTALLATION_SENSORS:
+        uid = f"{INSTALLATION_DEVICE_ID}_{spec.key}"
+        out.append((
+            f"{discovery_prefix}/sensor/{uid}/config",
+            _discovery_payload(
+                unique_id=uid,
+                name=spec.name,
+                state_topic=state_topic,
+                availability_topic=avail_topic,
+                value_template=f"{{{{ value_json.{spec.key} }}}}",
+                spec=spec,
+                device=device,
+            ),
+        ))
+    return out
+
+
 async def publish(client: aiomqtt.Client, topic: str, payload: Any, *, retain: bool = False) -> None:
     if isinstance(payload, (dict, list)):
         body = json.dumps(payload, separators=(",", ":"))
@@ -365,6 +458,8 @@ async def publish(client: aiomqtt.Client, topic: str, payload: Any, *, retain: b
 
 
 async def poll_dtu(rt: DtuRuntime, client: aiomqtt.Client, *,
+                   all_runtimes: list[DtuRuntime],
+                   installation_lock: asyncio.Lock,
                    discovery_prefix: str, base_topic: str,
                    interval: float) -> None:
     """Long-running per-DTU polling loop."""
@@ -432,6 +527,14 @@ async def poll_dtu(rt: DtuRuntime, client: aiomqtt.Client, *,
                 )
             rt.last_known_inverters = inverters
 
+            # Cross-DTU aggregation. Lock so two DTU tasks don't race on the
+            # publish — the read of last_known_inverters from sibling tasks is
+            # otherwise lock-free (single-line dict assignment above).
+            async with installation_lock:
+                inst_state = compute_installation_state(all_runtimes)
+                await publish(client, f"{base_topic}/installation/state",
+                              inst_state, retain=True)
+
         except aiomqtt.MqttError:
             # Bubble up so the outer reconnect loop reconnects MQTT.
             raise
@@ -491,14 +594,23 @@ async def run() -> None:
                 await publish(client, f"{base_topic}/bridge/availability",
                               "online", retain=True)
 
+                # Installation discovery is independent of any single DTU.
+                for topic, payload in installation_discovery_messages(
+                    base_topic=base_topic, discovery_prefix=discovery_prefix,
+                ):
+                    await publish(client, topic, payload, retain=True)
+
                 # Force discovery republish on each broker reconnect.
                 for rt in runtimes:
                     rt.published_entities.clear()
 
+                installation_lock = asyncio.Lock()
                 async with asyncio.TaskGroup() as tg:
                     for rt in runtimes:
                         tg.create_task(poll_dtu(
                             rt, client,
+                            all_runtimes=runtimes,
+                            installation_lock=installation_lock,
                             discovery_prefix=discovery_prefix,
                             base_topic=base_topic,
                             interval=poll_interval,
