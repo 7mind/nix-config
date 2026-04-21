@@ -325,52 +325,18 @@ do_resock() {
     fi
     [[ -n "${SSH_CONNECTION:-}" || -n "${TMUX:-}" ]] || return 0
 
-    local old_sock="${SSH_AUTH_SOCK:-}"
-
-    _resock_probe() {
-        # returns 0 iff the agent at $1 responds to `ssh-add -l`
-        # (either has keys -> rc 0, or is empty -> rc 1; both are "alive";
-        # rc 2 means "cannot connect").
-        local s="$1" rc
-        [[ -S "$s" ]] || return 1
-        SSH_AUTH_SOCK="$s" timeout 1 ssh-add -l >/dev/null 2>&1
-        rc=$?
-        (( rc != 2 ))
-    }
-
-    # First: if the current socket is already working, keep it. This is the
-    # common case — the shell already has a good SSH_AUTH_SOCK (forwarded or
-    # local) and we must not clobber it. Otherwise we've had setup silently
-    # swap a working socket for e.g. gcr's, which has a different key set.
-    if [[ -n "$old_sock" ]] && _resock_probe "$old_sock"; then
-        echo "==> resock: keeping current SSH_AUTH_SOCK -> $old_sock"
-        unset -f _resock_probe
+    # Source-tree copy of the resock script; canonical implementation lives
+    # in pkg/resock. Running it here avoids depending on the nix-packaged
+    # binary being on PATH (which it only is from inside the devShell).
+    local resock_sh="$SCRIPT_DIR/pkg/resock/resock.sh"
+    if [[ ! -x "$resock_sh" ]]; then
+        echo "    resock: $resock_sh missing or not executable (non-fatal)" >&2
         return 0
     fi
-
-    local runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-    local -a candidates=()
-
-    # Forwarded sockets from ssh -A, newest first
-    while IFS= read -r sock; do
-        [[ -S "$sock" ]] && candidates+=("$sock")
-    done < <(ls -t /tmp/ssh-*/agent.* "$HOME"/.ssh/agent/* 2>/dev/null)
-
-    # Local agents (gcr from gnome-keyring / standalone ssh-agent)
-    for sock in "$runtime_dir/gcr/ssh" "$runtime_dir/ssh-agent"; do
-        [[ -S "$sock" ]] && candidates+=("$sock")
-    done
-
-    for sock in "${candidates[@]}"; do
-        if _resock_probe "$sock"; then
-            export SSH_AUTH_SOCK="$sock"
-            echo "==> resock: SSH_AUTH_SOCK ${old_sock:-<unset>} -> $sock"
-            unset -f _resock_probe
-            return 0
-        fi
-    done
-    echo "    resock: no working ssh-agent found (was ${old_sock:-<unset>}, non-fatal)" >&2
-    unset -f _resock_probe
+    local export_line
+    if export_line="$("$resock_sh")"; then
+        eval "$export_line"
+    fi
     return 0
 }
 

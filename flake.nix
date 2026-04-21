@@ -193,6 +193,7 @@
           (writeShellScriptBin "agenix" ''
             exec ${agenix-rekey}/bin/agenix --extra-flake-params '?submodules=1' "$@"
           '')
+          (callPackage ./pkg/resock/default.nix { })
           age-plugin-tpm
           nixfmt
           qrencode

@@ -1,4 +1,4 @@
-{ config, cfg-meta, lib, ... }:
+{ config, cfg-meta, lib, pkgs, ... }:
 
 {
   options = {
@@ -6,6 +6,9 @@
   };
 
   config = lib.mkIf config.smind.hm.ssh.enable {
+    # The `resock` zsh function below shells out to this binary.
+    home.packages = lib.mkIf cfg-meta.isLinux [ pkgs.resock ];
+
     # there is programs.ssh.startAgent = true, but it conflicts with gnome keychain and ssh forwarding
     programs.ssh = {
       enable = true;
@@ -25,81 +28,18 @@
       fi
     '';
 
-    # `resock`: manually re-point SSH_AUTH_SOCK at a live agent.
-    # Probes forwarded sockets first, deletes dead ones, falls back to the
-    # local agent. Intended for use after SSH reconnects into a persisted
-    # tmux/screen session where existing shells hold a stale SSH_AUTH_SOCK.
+    # `resock`: manually re-point SSH_AUTH_SOCK at a live agent. The probe
+    # logic lives in `pkg/resock/resock.sh` (packaged as the `resock`
+    # binary); this shell function is only the `eval` glue that applies the
+    # child's `export SSH_AUTH_SOCK=...` output to the current shell.
+    # Interactive quirk: `command resock` bypasses function recursion.
     programs.zsh.initContent = lib.mkIf cfg-meta.isLinux ''
       resock() {
         emulate -L zsh
-        setopt local_options null_glob
-
-        # Forwarded-socket locations: OpenSSH default is /tmp/ssh-*/agent.*;
-        # some setups expose them under ~/.ssh/agent/.
-        local -a forwarded=( /tmp/ssh-*/agent.*(=om) $HOME/.ssh/agent/*(=om) )
-        local runtime_dir="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-        local -a locals=( "$runtime_dir/gcr/ssh" "$runtime_dir/ssh-agent" )
-        local old_sock="''${SSH_AUTH_SOCK:-<unset>}"
-        local sock rc
-
-        _resock_try() {
-          # returns 0 if agent responded (has keys or empty), 2 if unreachable
-          SSH_AUTH_SOCK="$1" command timeout 1 ssh-add -l >/dev/null 2>&1
-          rc=$?
-          (( rc != 2 ))
-        }
-
-        # If the current socket is alive, don't clobber it. This avoids the
-        # common footgun where an already-working forwarded (or local) socket
-        # gets silently swapped for e.g. gcr's, which responds to ssh-add -l
-        # but carries a different key set.
-        if [[ -n "''${SSH_AUTH_SOCK:-}" && -S "''${SSH_AUTH_SOCK}" ]] \
-             && _resock_try "''${SSH_AUTH_SOCK}"; then
-          print "resock: keeping current SSH_AUTH_SOCK -> $old_sock"
-          unfunction _resock_try
-          return 0
+        local out
+        if out=$(command resock "$@"); then
+          eval "$out"
         fi
-
-        print "resock: old SSH_AUTH_SOCK was $old_sock"
-
-        if (( ''${#forwarded} == 0 )); then
-          print "resock: no forwarded sockets found"
-        else
-          print "resock: probing ''${#forwarded} forwarded socket(s)"
-          for sock in $forwarded; do
-            printf '  %s ... ' "$sock"
-            if _resock_try "$sock"; then
-              print "alive"
-              export SSH_AUTH_SOCK="$sock"
-              print "resock: SSH_AUTH_SOCK $old_sock -> $sock"
-              unfunction _resock_try
-              return 0
-            fi
-            print "dead (removing)"
-            rm -f -- "$sock"
-          done
-        fi
-
-        print "resock: falling back to local agent"
-        for sock in $locals; do
-          printf '  %s ... ' "$sock"
-          if [[ ! -S "$sock" ]]; then
-            print "missing"
-            continue
-          fi
-          if _resock_try "$sock"; then
-            print "alive"
-            export SSH_AUTH_SOCK="$sock"
-            print "resock: SSH_AUTH_SOCK $old_sock -> $sock"
-            unfunction _resock_try
-            return 0
-          fi
-          print "unresponsive"
-        done
-
-        unfunction _resock_try
-        print -u2 "resock: no working agent found (was $old_sock)"
-        return 1
       }
     '';
   };
