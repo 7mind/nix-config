@@ -55,6 +55,7 @@
   ./power-profiles.nix
   ./power-refresh-rate.nix
   ./power-suspend-quirks.nix
+  ./hoymiles-mqtt.nix
   ./qendercore.nix
   ./saic-mqtt.nix
   ./spc-mqtt.nix

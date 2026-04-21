@@ -104,6 +104,8 @@
 
         saic-mqtt-gateway = pkgs.callPackage "${cfg-meta.paths.pkg}/saic-mqtt-gateway/default.nix" { };
 
+        hoymiles-mqtt-bridge = pkgs.callPackage "${cfg-meta.paths.pkg}/hoymiles-mqtt-bridge/default.nix" { };
+
         mqtt-controller-frontend =
           let
             craneLib = (inputs.crane.mkLib pkgs).overrideToolchain (p:
