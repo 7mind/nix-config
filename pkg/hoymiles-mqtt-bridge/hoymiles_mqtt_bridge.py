@@ -188,8 +188,13 @@ class DtuRuntime:
     dtu_model: str | None = None
     dtu_sw: str | None = None
     poll_count: int = 0
-    discovery_published: bool = False
-    last_known_inverters: dict[str, dict[str, Any]] = dataclasses.field(default_factory=dict)
+    # Set of (inverter_sn, port_number-or-None) pairs we've already emitted
+    # HA-discovery messages for. None means "the inverter itself, not a port".
+    # We re-publish discovery whenever a new pair appears so late-waking
+    # inverters / ports get registered without a bridge restart.
+    published_entities: set[tuple[str, int | None]] = dataclasses.field(default_factory=set)
+    dtu_discovery_published: bool = False
+    response_shape_logged: bool = False
 
 
 async def refresh_encryption(rt: DtuRuntime) -> None:
@@ -257,8 +262,13 @@ def build_state_payload(real: Any) -> tuple[dict[str, Any], dict[str, dict[str, 
 
 
 def discovery_messages(rt: DtuRuntime, inverters: dict[str, dict[str, Any]],
-                       discovery_prefix: str, base_topic: str) -> list[tuple[str, dict[str, Any]]]:
-    """Produce all HA-discovery topic/payload pairs for this DTU + inverters."""
+                       discovery_prefix: str, base_topic: str
+                       ) -> dict[tuple[str, int | None], list[tuple[str, dict[str, Any]]]]:
+    """Group HA-discovery messages by entity key (inverter_sn, port-or-None).
+
+    The DTU itself is keyed under (rt.dtu_sn, -1) so it's distinct from any
+    inverter+port pair (port numbers from the DTU are >=1).
+    """
     assert rt.dtu_sn is not None, "discovery requires DTU SN"
     dtu_avail = f"{base_topic}/{rt.dtu_sn}/availability"
     dtu_state_topic = f"{base_topic}/{rt.dtu_sn}/state"
@@ -269,11 +279,13 @@ def discovery_messages(rt: DtuRuntime, inverters: dict[str, dict[str, Any]],
         sw_version=rt.dtu_sw,
     )
 
-    out: list[tuple[str, dict[str, Any]]] = []
+    grouped: dict[tuple[str, int | None], list[tuple[str, dict[str, Any]]]] = {}
+
+    dtu_msgs: list[tuple[str, dict[str, Any]]] = []
     for spec in DTU_SENSORS:
         uid = f"hoymiles_{rt.dtu_sn}_{spec.key}"
         topic = f"{discovery_prefix}/sensor/{uid}/config"
-        out.append((topic, _discovery_payload(
+        dtu_msgs.append((topic, _discovery_payload(
             unique_id=uid,
             name=spec.name,
             state_topic=dtu_state_topic,
@@ -282,6 +294,7 @@ def discovery_messages(rt: DtuRuntime, inverters: dict[str, dict[str, Any]],
             spec=spec,
             device=dtu_dev,
         )))
+    grouped[(rt.dtu_sn, -1)] = dtu_msgs
 
     for inv_sn, inv_state in inverters.items():
         inv_dev = _device_block(
@@ -292,11 +305,12 @@ def discovery_messages(rt: DtuRuntime, inverters: dict[str, dict[str, Any]],
             via_device=f"hoymiles_dtu_{rt.dtu_sn}",
         )
         inv_state_topic = f"{base_topic}/{rt.dtu_sn}/inverter/{inv_sn}/state"
+        inv_msgs: list[tuple[str, dict[str, Any]]] = []
 
         for spec in INVERTER_SENSORS:
             uid = f"hoymiles_{inv_sn}_{spec.key}"
             topic = f"{discovery_prefix}/sensor/{uid}/config"
-            out.append((topic, _discovery_payload(
+            inv_msgs.append((topic, _discovery_payload(
                 unique_id=uid,
                 name=spec.name,
                 state_topic=inv_state_topic,
@@ -305,6 +319,7 @@ def discovery_messages(rt: DtuRuntime, inverters: dict[str, dict[str, Any]],
                 spec=spec,
                 device=inv_dev,
             )))
+        grouped[(inv_sn, None)] = inv_msgs
 
         # Port sensors: one device per port keeps the HA UI clean and lets
         # users disable individual ports if they're not populated.
@@ -317,13 +332,14 @@ def discovery_messages(rt: DtuRuntime, inverters: dict[str, dict[str, Any]],
                 sw_version=None,
                 via_device=f"hoymiles_inv_{inv_sn}",
             )
+            port_msgs: list[tuple[str, dict[str, Any]]] = []
             for spec in PORT_SENSORS:
                 field = f"port_{port}_{spec.key}"
                 if field not in inv_state:
                     continue
                 uid = f"hoymiles_{inv_sn}_port_{port}_{spec.key}"
                 topic = f"{discovery_prefix}/sensor/{uid}/config"
-                out.append((topic, _discovery_payload(
+                port_msgs.append((topic, _discovery_payload(
                     unique_id=uid,
                     name=spec.name,
                     state_topic=inv_state_topic,
@@ -332,8 +348,9 @@ def discovery_messages(rt: DtuRuntime, inverters: dict[str, dict[str, Any]],
                     spec=spec,
                     device=port_dev,
                 )))
+            grouped[(inv_sn, port)] = port_msgs
 
-    return out
+    return grouped
 
 
 # --- DTU task ----------------------------------------------------------------
@@ -376,16 +393,31 @@ async def poll_dtu(rt: DtuRuntime, client: aiomqtt.Client, *,
                 # string in the protobuf schema.
                 rt.dtu_sn = real.device_serial_number
 
+            if not rt.response_shape_logged:
+                LOG.info(
+                    "[%s] first response: sgs=%d tgs=%d pv=%d meter=%d rsd=%d "
+                    "dtu_power=%d dtu_daily_energy=%d",
+                    rt.endpoint.name,
+                    len(real.sgs_data), len(real.tgs_data), len(real.pv_data),
+                    len(real.meter_data), len(real.rsd_data),
+                    real.dtu_power, real.dtu_daily_energy,
+                )
+                rt.response_shape_logged = True
+
             dtu_state, inverters = build_state_payload(real)
 
-            if not rt.discovery_published:
-                for topic, payload in discovery_messages(
-                    rt, inverters, discovery_prefix, base_topic
-                ):
+            grouped = discovery_messages(
+                rt, inverters, discovery_prefix, base_topic
+            )
+            new_keys = [k for k in grouped if k not in rt.published_entities]
+            for key in new_keys:
+                for topic, payload in grouped[key]:
                     await publish(client, topic, payload, retain=True)
-                rt.discovery_published = True
-                LOG.info("[%s] published discovery for DTU=%s, %d inverter(s)",
-                         rt.endpoint.name, rt.dtu_sn, len(inverters))
+                rt.published_entities.add(key)
+            if new_keys:
+                LOG.info("[%s] published discovery for %d new entity-group(s) "
+                         "(DTU=%s, total inverters=%d)",
+                         rt.endpoint.name, len(new_keys), rt.dtu_sn, len(inverters))
 
             await publish(client, f"{base_topic}/{rt.dtu_sn}/availability",
                           "online", retain=True)
@@ -461,7 +493,7 @@ async def run() -> None:
 
                 # Force discovery republish on each broker reconnect.
                 for rt in runtimes:
-                    rt.discovery_published = False
+                    rt.published_entities.clear()
 
                 async with asyncio.TaskGroup() as tg:
                     for rt in runtimes:
