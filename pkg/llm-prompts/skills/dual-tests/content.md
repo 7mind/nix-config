@@ -1,16 +1,30 @@
 # Dual Tests
 
-A concrete pattern that makes business logic testable in isolation from
-external systems (databases, HTTP APIs, message queues, filesystems, clocks)
-*without* giving up the ability to verify the real integration. A single
-abstract test suite is written against an interface and then executed against
-**two** implementations: the production adapter and a hand-written in-memory
-dummy.
+A concrete pattern for testing code that touches external systems
+(databases, HTTP APIs, message queues, filesystems, clocks). Every test that
+depends on an integration point is written against the *interface*, not a
+specific implementation, and is executed against **two** implementations:
+the production adapter and a hand-written in-memory dummy. This applies
+both to the interface's own contract tests and to the business-logic tests
+that consume the interface.
 
-This is the mechanism that lets most of the suite sit in the cheap
+The two-run discipline is the heart of the pattern. It gives a fast
+feedback signal (dummy) plus a realistic full-verification signal
+(production adapter), and — crucially — **forces the dummy to stay honest**:
+any behavioral drift between dummy and adapter surfaces as a test
+divergence rather than as a silent production bug.
+
+The distinction between the two is **cadence, not venue.** Both runs work
+anywhere the environment permits — a developer machine with a local
+database, a CI job, a pre-push hook. When a developer is iterating on
+business logic, dummy-only runs give the short feedback loop; the full
+two-run suite is invoked less often (before pushing, when finishing a
+task, or as part of CI).
+
+This is the mechanism that lets most fast-feedback runs sit in the cheap
 **BA / BG** region — Behavioral-Active-Blackbox-Atomic/Group (see
-`constructive-test-taxonomy`) — while still keeping a small, explicit set
-of slow Communication-tier tests.
+`constructive-test-taxonomy`) — while still exercising the production
+adapter on the same tests whenever full verification is wanted.
 
 ## Problem
 
@@ -38,11 +52,17 @@ integration test. Typical bad outcomes:
 4. **Run the abstract suite against both implementations**: the production
    adapter and the dummy.
    - When the external system is unavailable (no DB running, offline
-     developer, CI tier skipped), the production run is *skipped*, not
-     faked. Dummy runs always execute.
-5. **Use the dummy everywhere else.** Business-logic tests that need the
-   interface instantiate the dummy directly — fast, deterministic, no
-   external dependencies.
+     developer, environment not provisioned), the production run is
+     *skipped* with an explicit marker, not faked. Dummy runs always execute.
+5. **Parameterize business-logic tests over the interface too.** A test
+   that drives a service using `UserRepository` takes the repository as a
+   parameter and runs against both the dummy and the production adapter,
+   same as the abstract interface suite. Dummy-backed runs are the fast
+   feedback path invoked frequently while iterating; production-backed
+   runs validate the actual composition — run them locally when the
+   environment is set up, and always at CI time. The two-run regime is
+   what keeps the dummy honest: drift shows up as a divergence between
+   the runs, not as a production surprise.
 
 The abstract suite is the contract. Both implementations must satisfy it.
 If the dummy passes but the production adapter fails, the production adapter
@@ -114,10 +134,13 @@ ordering guarantees, timing, and concurrency — the exact places where real
 systems are most interesting. This is a real cost, not a bug you can design
 out. Accept it and place it correctly:
 
-- **For business-logic tests, rough equivalence suffices.** Most logic only
-  cares that writes are durable, reads see prior writes, and constraint
-  violations surface as errors. A dummy can provide that cheaply, and 95%
-  of the suite runs against it with a short feedback loop.
+- **For business-logic tests, rough equivalence suffices for the fast
+  feedback loop.** Most logic only cares that writes are durable, reads
+  see prior writes, and constraint violations surface as errors. A dummy
+  can provide that cheaply, and iterative work runs exclusively against
+  it. The same business-logic tests also run against the production
+  adapter — locally when the environment is set up, and at CI — catching
+  any place where rough equivalence stops being enough.
 - **For behavior that depends on exact semantics** (lock contention,
   isolation levels, retry-on-conflict, partial-batch failures), write
   **targeted Good-Communication tests** against the real adapter. Do not
@@ -139,44 +162,54 @@ the dummy grow a full simulation.
 Dual tests and ephemeral real instances (testcontainers, local Postgres,
 embedded Redis, LocalStack) are not alternatives — they compose:
 
-- **Dummy**: unit-speed feedback for the bulk of business logic. Runs on
-  every save, every keystroke of TDD, every pre-push hook.
-- **Testcontainer / real adapter**: verifies the production adapter
-  actually satisfies the abstract suite, plus the small targeted tests for
-  exact-semantics behavior. Runs in CI, possibly pre-merge, possibly only
-  on nightly depending on cost.
+- **Dummy**: unit-speed feedback for both the interface contract suite
+  and the business-logic tests that use the interface. Invoked frequently —
+  on every save, every keystroke of TDD, every pre-push hook — because it
+  is fast.
+- **Testcontainer / real adapter**: runs the *same* interface contract
+  suite and the *same* business-logic tests against the production
+  adapter, plus any targeted exact-semantics tests. Invoked less
+  frequently — locally when a developer wants full verification (before
+  pushing, when finishing a task), and on every CI run.
 
-Use dummies when feedback-loop length dominates. Use testcontainers when
-you genuinely need to verify the adapter or exact-semantics behavior. The
-two tiers reinforce each other: the container validates what the dummy
-approximates, and the dummy keeps the inner dev loop fast.
+The two tiers reinforce each other. The container run validates what the
+dummy approximates; the dummy keeps iteration fast. Running business
+logic against both is what keeps the dummy honest: if the dummy-backed
+runs pass but the production-backed runs fail, the dummy has drifted and
+must be fixed (or the abstract contract must be extended to pin the
+missing behavior).
 
 ## Skipping vs. Failing
 
-When the production adapter cannot run (no DB available, offline, etc.) the
-production leg of the abstract suite is **skipped with an explicit marker**,
-not silently turned off. Two properties follow:
+When the production adapter cannot run (no DB available, offline, etc.)
+the production-backed runs — of both the interface contract suite and the
+business-logic tests — are **skipped with an explicit marker**, not
+silently turned off. Two properties follow:
 
-- Local dev and PR-time CI can run the full logic suite using dummies only.
-- A higher CI tier (nightly, pre-release, or integration lane) runs the
-  production leg and fails loudly if it is skipped when it shouldn't be.
+- A developer without the environment set up, or iterating fast on BL,
+  can run the full logic suite using dummies only.
+- A full-verification run (on any machine with the environment, or in CI)
+  executes the production leg and fails loudly if it is skipped when it
+  shouldn't be.
 
 Never delete production tests to make CI green; never replace them with
 mock-based pseudo-integration tests.
 
 ## Avoiding Configuration Explosion
 
-If you multiply N integration points × M configurations, the combinatorial
-count of real-adapter tests explodes. The dual-tests discipline contains
+Running every test against every adapter against every business-logic
+scenario would explode combinatorially. The dual-tests discipline contains
 this:
 
 - Integration points are **few and explicit** — one interface per external
   concern, not one per call site.
-- Production-leg tests exercise **the adapter in isolation**, not the
-  adapter × the business logic. Business logic is exercised with dummies
-  only.
-- Cross-cutting scenarios (end-to-end) are a separate, small,
-  deliberately-maintained suite — not a product of Cartesian multiplication.
+- Each test depends on **only the integration points it actually uses**
+  and runs against the two implementations of *those* points only. A
+  business-logic test that needs `UserRepository` runs twice (dummy +
+  production), not 2^N times across every integration point in the system.
+- Cross-cutting end-to-end scenarios are a separate, small, deliberately
+  maintained suite — not a product of Cartesian multiplication over every
+  integration point.
 
 ## Minimal Sketch
 
@@ -208,11 +241,23 @@ fn in_memory_repo_satisfies_contract() {
     abstract_repo_tests(|| InMemoryUserRepository::default());
 }
 
-// Business-logic tests use the dummy directly.
-#[test]
-fn signup_flow_rejects_duplicate_email() {
-    let repo = InMemoryUserRepository::default();
+// Business-logic tests are parameterized over the implementation, same
+// as the interface contract suite. Both runs work anywhere the
+// environment permits; developers invoke the dummy run frequently for
+// speed and the production run for full verification.
+fn abstract_signup_flow_tests<R: UserRepository>(mut make: impl FnMut() -> R) {
+    let mut repo = make();
     // ... drive SignupService with `repo`, assert behavior
+}
+
+#[test]
+fn signup_flow_against_dummy() {
+    abstract_signup_flow_tests(|| InMemoryUserRepository::default());
+}
+
+#[test] #[requires_db]
+fn signup_flow_against_postgres() {
+    abstract_signup_flow_tests(|| PostgresUserRepository::connect(&test_db_url()));
 }
 ```
 
@@ -225,19 +270,27 @@ In `constructive-test-taxonomy` terms:
 - Running it against the **dummy** yields `Atomic` or `Group` tests — cheap,
   deterministic, run on every change.
 - Running it against the **production adapter** yields
-  `GoodCommunication` tests — more expensive, run on a separate tier, never
-  skipped silently.
-- **Business-logic tests** that consume the interface via the dummy stay
-  `BA` / `BG` (Behavioral-Active-Blackbox-Atomic/Group) — the cheapest
-  cell, where most of the suite should live.
+  `GoodCommunication` tests — more expensive, invoked less frequently
+  (locally for full verification, always in CI), never skipped silently.
+- **Business-logic tests** are parameterized over the interface and
+  produce two labels depending on which implementation backs them: against
+  the dummy they are `BA` / `BG` — the cheapest cell, where most fast-loop
+  runs happen; against the production adapter they are
+  `GoodCommunication` tests, invoked whenever full verification is
+  wanted.
 
 ## Summary
 
 - One interface per external concern.
-- One abstract test suite written against the interface.
+- Tests that depend on the interface — both the contract suite and the
+  business-logic tests — are parameterized over the implementation.
 - Two implementations: production adapter + hand-written dummy.
-- Run the suite against both; skip production explicitly when unavailable.
+- Run every such test against both; skip the production leg explicitly
+  when the environment is unavailable.
+- Running business logic against both is the forcing function that keeps
+  dummies honest.
 - Prefer dummies over auto-mocks.
-- Business logic is tested against the dummy only.
-- This keeps the bulk of the suite in the cheap Blackbox-Atomic/Group cell
-  while preserving a small, honest set of real-integration tests.
+- The distinction between dummy and production runs is **cadence, not
+  venue**: both work anywhere the environment permits. Dummy-backed runs
+  are invoked frequently for fast feedback; production-backed runs are
+  invoked for full verification (locally when set up, always in CI).
