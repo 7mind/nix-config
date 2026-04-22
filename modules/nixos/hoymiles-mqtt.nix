@@ -25,6 +25,18 @@ let
           drops WiFi at night).
         '';
       };
+      holdDailyEnergy = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          When true, each port's `energy_daily` is clamped to its running
+          per-day maximum. The held table resets at local midnight, so a
+          legitimate fresh 0 at the start of the next day flows through.
+          Intended for DTUs that stay online but zero their daily counter
+          after sundown (e.g. DTU-WLite-S stick), which HA would otherwise
+          interpret as a total_increasing counter reset.
+        '';
+      };
     };
   };
 in
@@ -120,6 +132,8 @@ in
           (e: "${e.name}=${e.host}") cfg.endpoints;
         HOYMILES_STALE_ENDPOINTS = lib.concatMapStringsSep ","
           (e: e.name) (lib.filter (e: e.staleMode) cfg.endpoints);
+        HOYMILES_HOLD_DAILY_ENERGY_ENDPOINTS = lib.concatMapStringsSep ","
+          (e: e.name) (lib.filter (e: e.holdDailyEnergy) cfg.endpoints);
         HOYMILES_STALE_THRESHOLD = toString cfg.staleThreshold;
         HOYMILES_POLL_INTERVAL = toString cfg.pollInterval;
         MQTT_HOST = cfg.mqttHost;

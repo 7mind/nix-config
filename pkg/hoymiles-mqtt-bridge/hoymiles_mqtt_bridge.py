@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import dataclasses
+import datetime
 import json
 import logging
 import os
@@ -61,6 +62,11 @@ class Endpoint:
     # than marking its sensors Unavailable. Useful for DTUs that power down
     # with the inverter (e.g. HMS-800W-2T's embedded DTU drops WiFi at night).
     stale_mode: bool = False
+    # When True, per-port `energy_daily` is clamped to its running per-day max
+    # so a mid-day drop to 0 (seen on DTU-WLite-S after sundown) doesn't look
+    # like a counter reset to HA's total_increasing state_class. The held max
+    # resets at local midnight, after which the DTU's fresh 0 is accepted.
+    hold_daily_energy: bool = False
 
 
 # Sensor stale-mode behavior. See STALE_BEHAVIOR_* constants.
@@ -164,7 +170,8 @@ def env(key: str, default: str | None = None, *, required: bool = False) -> str 
     return value
 
 
-def parse_endpoints(spec: str, stale_names: set[str]) -> list[Endpoint]:
+def parse_endpoints(spec: str, stale_names: set[str],
+                    hold_daily_names: set[str]) -> list[Endpoint]:
     """`HOYMILES_ENDPOINTS` is `name=host[,name=host...]`."""
     out: list[Endpoint] = []
     for entry in spec.split(","):
@@ -176,13 +183,19 @@ def parse_endpoints(spec: str, stale_names: set[str]) -> list[Endpoint]:
         name, host = entry.split("=", 1)
         name = name.strip()
         out.append(Endpoint(name=name, host=host.strip(),
-                            stale_mode=name in stale_names))
+                            stale_mode=name in stale_names,
+                            hold_daily_energy=name in hold_daily_names))
     if not out:
         sys.exit("HOYMILES_ENDPOINTS produced no endpoints")
-    unknown = stale_names - {e.name for e in out}
+    known = {e.name for e in out}
+    unknown = stale_names - known
     if unknown:
         sys.exit(f"HOYMILES_STALE_ENDPOINTS references unknown endpoint(s): "
                  f"{sorted(unknown)}")
+    unknown = hold_daily_names - known
+    if unknown:
+        sys.exit(f"HOYMILES_HOLD_DAILY_ENERGY_ENDPOINTS references unknown "
+                 f"endpoint(s): {sorted(unknown)}")
     return out
 
 
@@ -319,6 +332,15 @@ class DtuRuntime:
     # offline during the current outage. Prevents re-publishing the retained
     # offline message every poll while the DTU stays down.
     offline_published: bool = False
+    # Per-(inverter_sn, port) running max of `energy_daily` within the current
+    # local day. Populated only when `endpoint.hold_daily_energy` is set.
+    held_daily_energy: dict[tuple[str, int], float] = dataclasses.field(default_factory=dict)
+    # Local-date stamp (YYYY-MM-DD) pinning `held_daily_energy`. Crossing into
+    # a new day clears the table and lets the DTU's fresh 0 flow through.
+    held_day: str | None = None
+    # True after a hold override has been applied at least once today. Used to
+    # log the transition into the hold window once per day.
+    hold_active_today: bool = False
 
 
 async def refresh_encryption(rt: DtuRuntime) -> None:
@@ -431,6 +453,45 @@ def _compute_dtu_totals(real: Any, inverters: dict[str, dict[str, Any]]
 # Classification tables for stale-mode projection: {sensor_key: behavior}.
 _INVERTER_STALE_BEHAVIOR = {s.key: s.stale_behavior for s in INVERTER_SENSORS}
 _PORT_STALE_BEHAVIOR = {s.key: s.stale_behavior for s in PORT_SENSORS}
+
+
+def _apply_daily_energy_hold(rt: DtuRuntime,
+                             inverters: dict[str, dict[str, Any]]) -> None:
+    """Clamp per-port `energy_daily` to its running per-day max.
+
+    The DTU-WLite-S stick reports accurate daily energy during daylight but
+    zeroes the counter after sundown while staying online. HA's
+    total_increasing state_class treats that drop as a counter reset, losing
+    the day's accumulated total. We pin each port's published value to the
+    max we've seen since local midnight; at day rollover the table clears and
+    the DTU's fresh 0 is accepted as the start of a new day.
+    """
+    today = datetime.date.today().isoformat()
+    if rt.held_day != today:
+        rt.held_day = today
+        rt.held_daily_energy.clear()
+        rt.hold_active_today = False
+
+    override_this_poll = False
+    for inv_sn, inv_state in inverters.items():
+        for key, value in list(inv_state.items()):
+            if not (key.startswith("port_") and key.endswith("_energy_daily")):
+                continue
+            # Port key format is `port_<n>_energy_daily`.
+            port_num = int(key.split("_")[1])
+            slot = (inv_sn, port_num)
+            current = float(value)
+            held = rt.held_daily_energy.get(slot)
+            if held is None or current >= held:
+                rt.held_daily_energy[slot] = current
+            else:
+                inv_state[key] = held
+                override_this_poll = True
+
+    if override_this_poll and not rt.hold_active_today:
+        rt.hold_active_today = True
+        LOG.info("[%s] daily-energy hold engaged for %s (DTU reset detected)",
+                 rt.endpoint.name, today)
 
 
 def _staleify_inverter_state(state: dict[str, Any]) -> dict[str, Any]:
@@ -735,6 +796,17 @@ async def poll_dtu(rt: DtuRuntime, client: aiomqtt.Client, *,
                 rt.response_shape_logged = True
 
             dtu_state, inverters = build_state_payload(real)
+            if rt.endpoint.hold_daily_energy:
+                _apply_daily_energy_hold(rt, inverters)
+                # Recompute DTU totals from the (possibly-corrected) port
+                # sums so dtu_daily_energy and the installation aggregate
+                # follow the same held value.
+                has_ports = any(
+                    any(k.startswith("port_") for k in inv)
+                    for inv in inverters.values()
+                )
+                if has_ports:
+                    dtu_state.update(_dtu_totals_from_ports(inverters))
             dtu_state["stale"] = False
             for inv_state in inverters.values():
                 inv_state["stale"] = False
@@ -887,11 +959,12 @@ async def run() -> None:
     setup_logging(args.log_level)
 
     stale_names = parse_name_list(env("HOYMILES_STALE_ENDPOINTS"))
+    hold_daily_names = parse_name_list(env("HOYMILES_HOLD_DAILY_ENERGY_ENDPOINTS"))
     stale_threshold = int(env("HOYMILES_STALE_THRESHOLD", "3"))
     if stale_threshold < 1:
         sys.exit("HOYMILES_STALE_THRESHOLD must be >= 1")
     endpoints = parse_endpoints(env("HOYMILES_ENDPOINTS", required=True),
-                                stale_names)
+                                stale_names, hold_daily_names)
     poll_interval = float(env("HOYMILES_POLL_INTERVAL", "30"))
     base_topic = env("MQTT_BASE_TOPIC", "hoymiles")
     discovery_prefix = env("HA_DISCOVERY_PREFIX", "homeassistant")
