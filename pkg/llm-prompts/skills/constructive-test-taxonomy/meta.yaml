@@ -1,0 +1,8 @@
+name: constructive-test-taxonomy
+description: >-
+  Multi-axis classification of tests (Intention × Encapsulation × Isolation) for
+  evaluating test quality and steering test-writing decisions. Replaces fuzzy
+  Unit/Integration/E2E vocabulary with precise tags and a maintenance-cost
+  heuristic. TRIGGER when: writing new tests, reviewing a test suite, deciding
+  what to test or at what level, discussing mocks vs. real dependencies,
+  classifying tests, or arguing about test coverage or test-strategy tradeoffs.

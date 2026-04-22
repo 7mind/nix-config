@@ -9,6 +9,7 @@
 - **Edit over rewrite**: Prefer editing over rewriting whole files.
 - **No re-reads**: Don't re-read files you have already read.
 - **Test before done**: Test your code before declaring it done.
+- **Reproduce before fixing**: For any suspected bug, produce a failing reproduction *first* — ideally a test, otherwise a minimal script or documented repro steps with captured output. Confirm it fails for the *expected* reason before touching the fix. No repro, no fix.
 - **No fluff**: No sycophantic openers or closing fluff.
 - **Persistence**: Don't bail out partway through a task. If stuck, investigate, try a different angle, or ask — half-finished work is worse than none.
 - **Fail fast**: Use assertions, throw errors early — no graceful fallbacks for internal logic. Validate at system boundaries (user input, external APIs, network) but never swallow errors silently.
@@ -33,6 +34,7 @@ Before implementing:
 - If multiple interpretations exist, present them - don't pick silently.
 - If a simpler approach exists, say so. Push back when warranted.
 - If something is unclear, stop. Name what's confusing. Ask.
+- If the task is a bug fix, the first deliverable is the reproduction, not the fix.
 
 ## 4. Simplicity First
 
@@ -68,7 +70,7 @@ The test: Every changed line should trace directly to the user's request.
 
 Transform tasks into verifiable goals:
 - "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Fix the bug" → (a) write a test (or minimal repro script) that fails because of the bug, (b) verify it fails for the *right* reason — not an unrelated error, (c) implement the fix, (d) verify the same test now passes, (e) verify no other tests regressed. Skipping (a)–(b) is the single most common cause of "fixes" that don't fix anything.
 - "Refactor X" → "Ensure tests pass before and after"
 
 For multi-step tasks, state a brief plan:
@@ -79,6 +81,17 @@ For multi-step tasks, state a brief plan:
 ```
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+## 6a. Reproduction Discipline
+
+A "suspected" bug is a hypothesis. A reproduced bug is a fact. Don't ship fixes for hypotheses.
+
+- **Surface the hypothesis**: State in one sentence what you believe is broken and why.
+- **Fail first**: The reproduction must fail *before* your fix exists. If you write the fix and the repro together, you don't know which one "worked".
+- **Fail for the right reason**: Read the failure message. A test that fails with `ImportError` is not reproducing your `NullPointerException`.
+- **When a test is impractical** (race conditions, hardware, external services): write a documented repro — exact commands, inputs, and observed vs expected output. Attach logs. Then propose instrumentation or a narrower test harness before patching blind.
+- **If you cannot reproduce**: stop and say so. Ask for more information (logs, repro steps, environment). Do not guess-patch.
+- **After the fix**: the repro must now pass, and you must explain *why* the fix addresses the reproduced failure — not just that the test turned green.
 
 ## 7. Code Style
 

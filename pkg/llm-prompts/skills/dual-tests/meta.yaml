@@ -1,0 +1,10 @@
+name: dual-tests
+description: >-
+  Pattern for testing code that touches external systems: write one abstract
+  test suite against an interface, then run it against both the production
+  adapter (real DB/API/FS) and a hand-written in-memory dummy. Prefers manual
+  dummies over auto-generated mocks. TRIGGER when: designing code that depends
+  on a database, HTTP API, message queue, filesystem, or other external system;
+  choosing between mocks, fakes, or dummies; adding integration points; setting
+  up test infrastructure; or when the `constructive-test-taxonomy` skill calls
+  for moving Communication-tier tests toward Blackbox-Atomic.
