@@ -12,6 +12,19 @@ let
         type = lib.types.str;
         description = "IP address or hostname of the DTU / HMS-W inverter.";
       };
+      staleMode = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          When true, N consecutive failed polls (see `staleThreshold`) flip
+          this DTU into "stale mode" instead of marking its sensors
+          Unavailable. Active-power sensors are forced to 0 and energy totals
+          keep their last-known value; everything else goes Unavailable. A
+          per-inverter `Stale` binary_sensor reflects the mode. Intended for
+          DTUs that sleep with the inverter (e.g. HMS-800W-2T's embedded DTU
+          drops WiFi at night).
+        '';
+      };
     };
   };
 in
@@ -40,6 +53,16 @@ in
           Seconds between polls of each DTU. Hoymiles DTU firmware caps the
           useful polling rate at ~30 s; lower values just waste CPU and the
           DTU will return repeated values.
+        '';
+      };
+
+      staleThreshold = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 3;
+        description = ''
+          Number of consecutive failed polls required before a stale-mode DTU
+          transitions into stale mode. Only applies to endpoints with
+          `staleMode = true`.
         '';
       };
 
@@ -95,6 +118,9 @@ in
       environment = {
         HOYMILES_ENDPOINTS = lib.concatMapStringsSep ","
           (e: "${e.name}=${e.host}") cfg.endpoints;
+        HOYMILES_STALE_ENDPOINTS = lib.concatMapStringsSep ","
+          (e: e.name) (lib.filter (e: e.staleMode) cfg.endpoints);
+        HOYMILES_STALE_THRESHOLD = toString cfg.staleThreshold;
         HOYMILES_POLL_INTERVAL = toString cfg.pollInterval;
         MQTT_HOST = cfg.mqttHost;
         MQTT_PORT = toString cfg.mqttPort;

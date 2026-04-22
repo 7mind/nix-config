@@ -17,6 +17,23 @@ use crate::topology::Topology;
 /// unrecognized action). The whole controller/runtime tolerates `None`
 /// — we never panic on bad input from the broker.
 pub(super) fn parse_event(topology: &Topology, p: &Publish, clock: &dyn Clock) -> Option<Event> {
+    // QoS 1 redeliveries arrive with DUP=1 whenever the broker didn't
+    // observe our PUBACK. The MQTT spec allows the same payload to be
+    // delivered more than once, so client-side dedup is the standard
+    // way to make downstream handling idempotent. Filtering at parse
+    // time means every consumer (motion, button, plug, heating) gets
+    // the guarantee for free — no per-handler content hashing needed.
+    //
+    // A duplicate button action would fire its binding twice (e.g.
+    // a cycleOnDoubleTap press becoming two scene_toggles); a
+    // duplicate occupancy publish would look like a fresh false→true
+    // edge if the sensor's prior state had been cleared. The motion
+    // handler has its own same-state dedup as defence-in-depth, but
+    // button handling does not — hence the parse-time filter.
+    if p.dup {
+        return None;
+    }
+
     let now = clock.now();
     let topic = p.topic.as_str();
 

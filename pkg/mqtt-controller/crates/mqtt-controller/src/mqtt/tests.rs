@@ -455,3 +455,65 @@ fn zwave_unrelated_topic_returns_none() {
     );
     assert!(parse_event(&topo, &p, &clock()).is_none());
 }
+
+// ---- Duplicate-delivery filter --------------------------------------------
+//
+// MQTT QoS 1 ("at least once") permits the broker to redeliver a publish
+// whose PUBACK it didn't observe. Redeliveries arrive with the DUP flag
+// set. Without filtering, a duplicate button action would dispatch the
+// binding twice (e.g. a `cycleOnDoubleTap` press resulting in two
+// scene_toggles, or a dimmer OFF turning off the room and then
+// re-racing the motion-on heartbeat path); a duplicate occupancy
+// publish would look like a fresh event (though the motion dispatcher
+// has its own same-state dedup as a second line of defence).
+//
+// These are latent-hazard tests — no in-the-wild log evidence today,
+// but the fix is one field check and gives us a clean answer to "does
+// the controller replay MQTT-duplicated events?".
+
+#[test]
+fn duplicate_button_action_is_skipped_at_parse() {
+    let topo = small_topology();
+    let mut p = publish("zigbee2mqtt/hue-s-study/action", "on_press_release");
+    p.dup = true;
+    assert!(
+        parse_event(&topo, &p, &clock()).is_none(),
+        "MQTT-redelivered button action (DUP=1) must not become a second ButtonPress event",
+    );
+}
+
+#[test]
+fn duplicate_occupancy_is_skipped_at_parse() {
+    let topo = small_topology();
+    let mut p = publish(
+        "zigbee2mqtt/hue-ms-study",
+        r#"{"occupancy":true,"illuminance":12}"#,
+    );
+    p.dup = true;
+    assert!(
+        parse_event(&topo, &p, &clock()).is_none(),
+        "MQTT-redelivered occupancy publish must not become a second Occupancy event",
+    );
+}
+
+#[test]
+fn duplicate_group_state_is_skipped_at_parse() {
+    let topo = small_topology();
+    let mut p = publish("zigbee2mqtt/hue-lz-study", r#"{"state":"ON"}"#);
+    p.dup = true;
+    assert!(
+        parse_event(&topo, &p, &clock()).is_none(),
+        "MQTT-redelivered group state must not become a second GroupState event",
+    );
+}
+
+#[test]
+fn non_duplicate_publish_still_parses() {
+    // Guard against an over-broad filter: dup=false must still parse.
+    let topo = small_topology();
+    let p = publish("zigbee2mqtt/hue-s-study/action", "on_press_release");
+    assert!(
+        parse_event(&topo, &p, &clock()).is_some(),
+        "dup=false publishes must parse normally"
+    );
+}

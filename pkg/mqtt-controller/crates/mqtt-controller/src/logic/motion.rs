@@ -170,6 +170,40 @@ impl EventProcessor {
             return;
         }
 
+        // Symmetric dedup for `occupied=true`. Hue sensors latch
+        // occupancy for `occupancyTimeoutSeconds` (180 s in our
+        // catalog) and re-publish their state on every illuminance
+        // heartbeat (~10 s). Each republish arrives with the same
+        // occupancy value as the previous one — no false→true edge.
+        //
+        // Without this, a republish after a manual OFF (or any event
+        // that drops the room's illuminance back below the luminance
+        // gate) lets motion-on re-fire scene_recall, so the user
+        // presses OFF and the next heartbeat (~10 s later) turns the
+        // lights straight back on. See ms-log-full.txt at 00:49:57 →
+        // 00:50:07 and 00:50:34 → 00:50:37 for two live instances.
+        //
+        // Freshness-aware: we dedup only when the sensor's prior
+        // reading was `Fresh + occupied` (i.e. `prev_sensor_was_occupied`).
+        // A sensor that dropped off the network and aged to Stale loses
+        // that flag, so a subsequent `occupied=true` crosses the
+        // Stale→Fresh boundary and is correctly treated as a new
+        // session (handled by `release_zombie_off_only_claim_if_gate_suppressed`
+        // and the ownership-healing path below). Using the raw
+        // `prev_occupied` value here would silently suppress that new
+        // session.
+        //
+        // The sensor's `actual` was already updated above so
+        // multi-sensor OR-gates and the stale-sweep timer still see
+        // the fresh reading; only the dispatch side effects (scene
+        // recall, ownership writes, descendant propagation) are
+        // skipped. Button-press handling, group-state echoes, and the
+        // Hue sensor's eventual `occupied=false` publish all remain
+        // capable of changing state.
+        if occupied && prev_sensor_was_occupied {
+            return;
+        }
+
         if occupied {
             self.dispatch_motion_on(
                 room_idx,

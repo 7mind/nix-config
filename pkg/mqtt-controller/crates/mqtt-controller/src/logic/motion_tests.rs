@@ -1552,3 +1552,464 @@ fn off_only_motion_off_releases_claim_when_actual_confirmed_off() {
     let zone = p.world.light_zones.get("room").unwrap();
     assert!(!zone.is_motion_owned());
 }
+
+// ----- occupancy-repeat replay (regression for ensuite "lights pop back on") --
+
+/// Regression for the ensuite log (ms-log-full.txt @ 00:49:57 → 00:50:07 and
+/// 00:50:34 → 00:50:37): user presses the wall switch OFF, lights go off,
+/// and within one Hue sensor heartbeat (~10 s) the controller turns them
+/// back on because the sensor republishes `occupancy=true` (the Hue
+/// sensor latches occupancy for 180 s after last real motion). The
+/// republish is NOT a new motion event — the sensor's occupancy state
+/// hasn't transitioned — but the motion dispatcher currently treats
+/// every `occupied=true` publish as a fresh motion-on.
+///
+/// The existing `prev_occupied == Some(false) && !occupied` dedup only
+/// handles the false→false case. A symmetric `prev_occupied == Some(true)
+/// && occupied` dedup would make the dispatcher idempotent under
+/// same-state publishes, which is the behavior the user's config
+/// documents ("leaving the room doesn't immediately re-trigger the
+/// lights").
+#[test]
+fn manual_off_then_sensor_heartbeat_does_not_replay_motion_on() {
+    let mut p = make_processor_with(MotionMode::OnOff, Some(30), 30);
+    let t0 = Instant::now();
+
+    // Room starts off.
+    let _ = p.handle_event(Event::GroupState {
+        group: "hue-lz-room".into(),
+        on: false,
+        ts: t0,
+    });
+
+    // User walks in. Sensor fires occupied=true with low lux; motion
+    // turns lights on.
+    let effects = p.handle_event(occupancy_lux("hue-ms-room", true, 1, t0 + Duration::from_secs(1)));
+    expect_scene_recall(&effects, 1);
+
+    // Group echo: lights confirmed on.
+    let _ = p.handle_event(Event::GroupState {
+        group: "hue-lz-room".into(),
+        on: true,
+        ts: t0 + Duration::from_millis(1_500),
+    });
+
+    // Sensor heartbeat while user is still in the room: occupied=true
+    // with high lux (lights are on so room is bright). Suppressed by
+    // the luminance gate.
+    let effects = p.handle_event(occupancy_lux(
+        "hue-ms-room",
+        true,
+        80,
+        t0 + Duration::from_secs(10),
+    ));
+    assert!(
+        effects.is_empty(),
+        "luminance gate should suppress mid-session heartbeat: {effects:?}"
+    );
+
+    // User presses the off button (SceneToggle → state OFF since on).
+    let effects = p.handle_event(button_press(
+        "hue-s-room",
+        "on",
+        t0 + Duration::from_secs(11),
+    ));
+    expect_state_off(&effects);
+
+    // Group echo: lights confirmed off. Motion ownership clears to
+    // System (default on-off behaviour).
+    let _ = p.handle_event(Event::GroupState {
+        group: "hue-lz-room".into(),
+        on: false,
+        ts: t0 + Duration::from_millis(11_200),
+    });
+    assert_eq!(
+        p.world.light_zones.get("room").unwrap().target.owner(),
+        Some(Owner::System),
+        "sanity: off echo clears motion ownership",
+    );
+    assert!(!p.world.light_zones.get("room").unwrap().is_on());
+
+    // Sensor heartbeat 8 seconds after the button press: still
+    // `occupied=true` (Hue sensor's 180s latch), but illuminance now
+    // reads low because the lights are physically off.
+    //
+    // This is NOT a new motion-on edge — the sensor's occupancy value
+    // has not transitioned. The dispatcher must treat it as a no-op.
+    let effects = p.handle_event(occupancy_lux(
+        "hue-ms-room",
+        true,
+        1,
+        t0 + Duration::from_secs(19),
+    ));
+    assert!(
+        effects.is_empty(),
+        "repeated occupied=true heartbeat after manual off must not re-trigger scene_recall; got {effects:?}"
+    );
+
+    // And the zone must stay off.
+    let zone = p.world.light_zones.get("room").unwrap();
+    assert!(!zone.is_on(), "lights must stay off after manual-off + heartbeat");
+}
+
+/// Minimal core case: a bare `occupied=true → occupied=true` transition
+/// (same sensor, same value) must be a no-op. Symmetric to the existing
+/// `!occupied && prev_occupied == Some(false)` dedup at motion.rs:169.
+///
+/// Today the dispatcher re-runs the full motion-on path (luminance gate,
+/// cooldown gate, ownership healing, scene_recall) on every repeat.
+/// Most repeats are suppressed by some gate, but that's defence-in-depth,
+/// not correctness: any window where a gate relaxes between repeats
+/// (e.g. lux drops below threshold because we just commanded off) lets
+/// a repeat "replay" the original motion event.
+#[test]
+fn repeat_occupied_true_without_state_change_is_noop() {
+    let mut p = make_processor_with(MotionMode::OnOff, None, 0);
+    let t0 = Instant::now();
+
+    // First occupancy: fires scene_recall.
+    let effects = p.handle_event(occupancy("hue-ms-room", true, t0));
+    expect_scene_recall(&effects, 1);
+
+    // Simulate an external OFF (e.g. user wall switch) — wipe the target
+    // state so the next motion-on wouldn't be short-circuited by
+    // `zone.is_on()`. This isolates the dedup question from the
+    // lights-already-on gate.
+    let _ = p.handle_event(Event::GroupState {
+        group: "hue-lz-room".into(),
+        on: false,
+        ts: t0 + Duration::from_secs(1),
+    });
+
+    // Repeat occupied=true with the same value. No state transition.
+    // Must be treated as a heartbeat, not a new motion event.
+    let effects = p.handle_event(occupancy(
+        "hue-ms-room",
+        true,
+        t0 + Duration::from_secs(2),
+    ));
+    assert!(
+        effects.is_empty(),
+        "repeated occupied=true without intervening false must not re-fire scene_recall; got {effects:?}"
+    );
+}
+
+/// After a proper `false` transition, the next `occupied=true` is a
+/// legitimate new session (not a heartbeat) and MUST fire motion-on.
+/// This guards against the dedup accidentally swallowing the edge
+/// that follows a clean vacancy.
+#[test]
+fn occupied_true_after_false_transition_is_not_deduped() {
+    let mut p = make_processor_with(MotionMode::OnOff, None, 0);
+    let t0 = Instant::now();
+
+    let _ = p.handle_event(occupancy("hue-ms-room", true, t0));
+    let _ = p.handle_event(Event::GroupState {
+        group: "hue-lz-room".into(),
+        on: true,
+        ts: t0 + Duration::from_millis(200),
+    });
+
+    // Real vacancy.
+    let _ = p.handle_event(occupancy("hue-ms-room", false, t0 + Duration::from_secs(60)));
+    let _ = p.handle_event(Event::GroupState {
+        group: "hue-lz-room".into(),
+        on: false,
+        ts: t0 + Duration::from_secs(60) + Duration::from_millis(200),
+    });
+
+    // User returns → fresh false→true edge.
+    let effects = p.handle_event(occupancy(
+        "hue-ms-room",
+        true,
+        t0 + Duration::from_secs(120),
+    ));
+    expect_scene_recall(&effects, 1);
+}
+
+/// Sensor aged to Stale without ever sending `false` (network hiccup).
+/// When it recovers with `occupied=true`, the state machine's fresh
+/// reading resumes — this is a new session, not a republish of the
+/// previously fresh true. The dedup must be freshness-aware so this
+/// event still dispatches.
+#[test]
+fn stale_to_fresh_occupied_true_is_treated_as_new_session() {
+    let mut p = make_processor_with(MotionMode::OnOff, None, 0);
+    let t0 = Instant::now();
+
+    let _ = p.handle_event(occupancy("hue-ms-room", true, t0));
+    let _ = p.handle_event(Event::GroupState {
+        group: "hue-lz-room".into(),
+        on: true,
+        ts: t0 + Duration::from_millis(200),
+    });
+    let _ = p.handle_event(Event::GroupState {
+        group: "hue-lz-room".into(),
+        on: false,
+        ts: t0 + Duration::from_secs(60),
+    });
+
+    // Sensor drops off — mark stale. Value remains Some(true) but
+    // is_occupied() returns false.
+    p.world.motion_sensor("hue-ms-room").actual.mark_stale();
+    assert!(
+        !p.world.motion_sensors.get("hue-ms-room").unwrap().is_occupied(),
+        "sanity: stale sensor is not considered occupied",
+    );
+
+    // Sensor returns with the same value — should count as a new
+    // session because the previous state was not fresh+occupied.
+    let effects = p.handle_event(occupancy(
+        "hue-ms-room",
+        true,
+        t0 + Duration::from_secs(600),
+    ));
+    expect_scene_recall(&effects, 1);
+}
+
+/// Multi-sensor room: each bound sensor must be deduped independently.
+/// Sensor A heartbeats should not block sensor B from starting a new
+/// session on its first transition. The freshness check uses
+/// `prev_sensor_was_occupied` captured before the per-room iteration,
+/// so both sensors' states stay consistent.
+#[test]
+fn multi_sensor_room_dedups_per_sensor_not_per_room() {
+    // Build a room with two sensors.
+    let cfg = Config {
+        name_by_address: BTreeMap::new(),
+        devices: BTreeMap::from([
+            ("hue-l-a".into(), light("0xa")),
+            ("hue-ms-a".into(), motion_sensor("0xc")),
+            ("hue-ms-b".into(), motion_sensor("0xd")),
+        ]),
+        switch_models: BTreeMap::new(),
+        rooms: vec![Room {
+            name: "room".into(),
+            group_name: "hue-lz-room".into(),
+            id: 1,
+            members: vec!["hue-l-a/11".into()],
+            parent: None,
+            motion_sensors: vec!["hue-ms-a".into(), "hue-ms-b".into()],
+            scenes: day_scenes(),
+            off_transition_seconds: 0.8,
+            motion_off_cooldown_seconds: 0,
+            motion_mode: MotionMode::OnOff,
+        }],
+        bindings: vec![],
+        defaults: Defaults::default(),
+        heating: None,
+        location: None,
+    };
+    let topology = Arc::new(Topology::build(&cfg).expect("build topology"));
+    let mut p =
+        EventProcessor::new(topology, Arc::new(FakeClock::new(12)), Defaults::default(), None);
+    let t0 = Instant::now();
+
+    // Sensor A fires first.
+    let effects = p.handle_event(occupancy("hue-ms-a", true, t0));
+    expect_scene_recall(&effects, 1);
+    let _ = p.handle_event(Event::GroupState {
+        group: "hue-lz-room".into(),
+        on: true,
+        ts: t0 + Duration::from_millis(200),
+    });
+
+    // Sensor A heartbeats — dedup kicks in for A.
+    let effects = p.handle_event(occupancy(
+        "hue-ms-a",
+        true,
+        t0 + Duration::from_secs(10),
+    ));
+    assert!(
+        effects.is_empty(),
+        "A heartbeat should be deduped: {effects:?}",
+    );
+
+    // Sensor B fires for the first time — its own `prev_sensor_was_occupied`
+    // is false, so the dedup does not fire. The room-level
+    // `lights already physically on` check short-circuits scene_recall,
+    // but the path still runs. Verify via a direct check that B is now
+    // marked occupied and the zone remains motion-owned.
+    let _ = p.handle_event(occupancy("hue-ms-b", true, t0 + Duration::from_secs(11)));
+    assert!(
+        p.world.motion_sensors.get("hue-ms-b").unwrap().is_occupied(),
+        "B's first occupancy must be recorded as fresh+occupied"
+    );
+    let zone = p.world.light_zones.get("room").unwrap();
+    assert!(zone.is_motion_owned());
+
+    // Later: A goes away. B is still occupied — motion-off must NOT fire.
+    let effects = p.handle_event(occupancy(
+        "hue-ms-a",
+        false,
+        t0 + Duration::from_secs(60),
+    ));
+    assert!(
+        effects.is_empty(),
+        "A's vacancy must not turn lights off while B reports occupied: {effects:?}"
+    );
+
+    // B finally vacates: motion-off fires (OR-gate now satisfied).
+    let effects = p.handle_event(occupancy(
+        "hue-ms-b",
+        false,
+        t0 + Duration::from_secs(120),
+    ));
+    expect_state_off(&effects);
+}
+
+/// Same scenario as `manual_off_then_sensor_heartbeat_does_not_replay_motion_on`
+/// but via two distinct button presses spaced over the Hue sensor's
+/// 180s latch, to simulate the back-to-back user frustration pattern
+/// visible in ms-log-full.txt at 00:49:57 → 00:50:34 → 00:50:51.
+///
+/// The user shouldn't have to hit OFF three times in a row just
+/// because the sensor is still latched and each button-off unblocks
+/// a replay.
+#[test]
+fn repeated_manual_off_sequence_does_not_play_ping_pong_with_motion() {
+    let mut p = make_processor_with(MotionMode::OnOff, Some(30), 30);
+    let t0 = Instant::now();
+
+    // Motion turns lights on.
+    let _ = p.handle_event(occupancy_lux("hue-ms-room", true, 1, t0));
+    let _ = p.handle_event(Event::GroupState {
+        group: "hue-lz-room".into(),
+        on: true,
+        ts: t0 + Duration::from_millis(200),
+    });
+
+    // First OFF press.
+    let _ = p.handle_event(button_press("hue-s-room", "on", t0 + Duration::from_secs(1)));
+    let _ = p.handle_event(Event::GroupState {
+        group: "hue-lz-room".into(),
+        on: false,
+        ts: t0 + Duration::from_secs(1) + Duration::from_millis(200),
+    });
+
+    // Sensor heartbeat — no effect.
+    let e1 = p.handle_event(occupancy_lux(
+        "hue-ms-room",
+        true,
+        1,
+        t0 + Duration::from_secs(10),
+    ));
+    assert!(e1.is_empty(), "heartbeat 1 leaked: {e1:?}");
+
+    // Sensor heartbeat — still no effect.
+    let e2 = p.handle_event(occupancy_lux(
+        "hue-ms-room",
+        true,
+        1,
+        t0 + Duration::from_secs(20),
+    ));
+    assert!(e2.is_empty(), "heartbeat 2 leaked: {e2:?}");
+
+    // Sensor heartbeat much later — still no effect, sensor still
+    // within its 180 s latch window.
+    let e3 = p.handle_event(occupancy_lux(
+        "hue-ms-room",
+        true,
+        1,
+        t0 + Duration::from_secs(90),
+    ));
+    assert!(e3.is_empty(), "heartbeat 3 leaked: {e3:?}");
+
+    let zone = p.world.light_zones.get("room").unwrap();
+    assert!(!zone.is_on(), "lights must stay off across the heartbeat storm");
+}
+
+/// Off-only replay: a user takes over (press ON) during an
+/// off-only session; the sensor continues to heartbeat `occupied=true`.
+/// The heartbeat must not re-enter `dispatch_motion_on` and trash any
+/// state the user's press established. This is subtler than the on-off
+/// case because off-only intentionally doesn't publish effects on
+/// motion-on, so "no effects emitted" was already true — the replay
+/// risk is silent state drift (owner re-handover thrashing `since`).
+///
+/// Assertion: zone state after the heartbeat is byte-for-byte equal
+/// to the state before it (nothing was written).
+#[test]
+fn off_only_heartbeat_during_user_takeover_is_fully_idempotent() {
+    let mut p = make_processor(MotionMode::OffOnly);
+    let t0 = Instant::now();
+
+    // Clean session start.
+    let _ = p.handle_event(Event::GroupState {
+        group: "hue-lz-room".into(),
+        on: false,
+        ts: t0,
+    });
+    let _ = p.handle_event(occupancy("hue-ms-room", true, t0));
+    let _ = p.handle_event(button_press("hue-s-room", "on", t0 + Duration::from_secs(1)));
+    let _ = p.handle_event(Event::GroupState {
+        group: "hue-lz-room".into(),
+        on: true,
+        ts: t0 + Duration::from_secs(1) + Duration::from_millis(200),
+    });
+
+    // Snapshot.
+    let before_owner = p.world.light_zones.get("room").unwrap().target.owner();
+    let before_since = p.world.light_zones.get("room").unwrap().target.since();
+    let before_value = p.world.light_zones.get("room").unwrap().target.value().cloned();
+
+    // Heartbeat at t0 + 10 s — sensor re-publishes the same state.
+    let effects = p.handle_event(occupancy(
+        "hue-ms-room",
+        true,
+        t0 + Duration::from_secs(10),
+    ));
+    assert!(effects.is_empty());
+
+    let zone = p.world.light_zones.get("room").unwrap();
+    assert_eq!(zone.target.owner(), before_owner);
+    assert_eq!(zone.target.since(), before_since);
+    assert_eq!(zone.target.value().cloned(), before_value);
+}
+
+/// Regression for the luminance-gate-suppressed case. Sensor publishes
+/// `occupied=true` with high lux (luminance gate fires). Same sensor
+/// heartbeats again with still-high lux. The dedup should skip before
+/// reaching the gate at all. This is a cheap-path test: prior to the
+/// dedup the motion dispatcher logs "motion-on suppressed: room is
+/// bright enough" every ~10 s for hours on end (see the bulk of
+/// ms-log-full.txt), which is noise, not behavior.
+#[test]
+fn high_lux_heartbeats_do_not_re_evaluate_luminance_gate() {
+    let mut p = make_processor_with(MotionMode::OnOff, Some(30), 0);
+    let t0 = Instant::now();
+
+    // First high-lux publish triggers the gate's suppression path once.
+    let _ = p.handle_event(occupancy_lux("hue-ms-room", true, 80, t0));
+    assert!(
+        p.world.motion_sensors.get("hue-ms-room").unwrap().is_occupied(),
+        "sensor should be marked fresh+occupied despite gate suppression",
+    );
+
+    // Subsequent high-lux heartbeats must short-circuit at the dedup.
+    // We can't easily observe "no tracing log emitted", but we can
+    // assert that `actual.since` was updated (heartbeat acknowledged,
+    // freshness timer resets). That's the contract: state reads, no
+    // re-dispatch.
+    let since_0 = p.world.motion_sensors.get("hue-ms-room").unwrap().actual.since();
+    let _ = p.handle_event(occupancy_lux(
+        "hue-ms-room",
+        true,
+        82,
+        t0 + Duration::from_secs(10),
+    ));
+    let since_1 = p.world.motion_sensors.get("hue-ms-room").unwrap().actual.since();
+    assert_ne!(
+        since_0, since_1,
+        "heartbeat must still update the sensor freshness clock"
+    );
+    let _ = p.handle_event(occupancy_lux(
+        "hue-ms-room",
+        true,
+        78,
+        t0 + Duration::from_secs(20),
+    ));
+    let since_2 = p.world.motion_sensors.get("hue-ms-room").unwrap().actual.since();
+    assert_ne!(since_1, since_2);
+}
+

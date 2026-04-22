@@ -57,6 +57,22 @@ ENCRYPTION_RECHECK_EVERY = 30
 class Endpoint:
     name: str
     host: str
+    # When True, a run of failed polls flips the DTU into "stale mode" rather
+    # than marking its sensors Unavailable. Useful for DTUs that power down
+    # with the inverter (e.g. HMS-800W-2T's embedded DTU drops WiFi at night).
+    stale_mode: bool = False
+
+
+# Sensor stale-mode behavior. See STALE_BEHAVIOR_* constants.
+# - "unavailable": sensor uses the primary DTU availability topic and goes
+#   Unavailable in HA while the DTU is stale.
+# - "zero":        sensor uses the persistent availability topic, stays
+#   online, and gets force-zeroed on entry to stale mode.
+# - "preserve":    sensor uses the persistent availability topic, stays
+#   online, and keeps its last-known value through the stale window.
+STALE_BEHAVIOR_UNAVAILABLE = "unavailable"
+STALE_BEHAVIOR_ZERO = "zero"
+STALE_BEHAVIOR_PRESERVE = "preserve"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -70,12 +86,14 @@ class SensorSpec:
     state_class: str | None
     factor: float = 1.0
     icon: str | None = None
+    stale_behavior: str = STALE_BEHAVIOR_UNAVAILABLE
 
 
 # Per-inverter (single-phase grid section). HMS-800W-2T and HMS-2000-4T both
 # present sgs_data, not tgs_data — they are single-phase microinverters.
 INVERTER_SENSORS: tuple[SensorSpec, ...] = (
-    SensorSpec("active_power", "Active Power", "W", "power", "measurement", 0.1),
+    SensorSpec("active_power", "Active Power", "W", "power", "measurement", 0.1,
+               stale_behavior=STALE_BEHAVIOR_ZERO),
     SensorSpec("reactive_power", "Reactive Power", "var", "reactive_power", "measurement", 0.1),
     SensorSpec("voltage", "Grid Voltage", "V", "voltage", "measurement", 0.1),
     SensorSpec("current", "Grid Current", "A", "current", "measurement", 0.01),
@@ -91,12 +109,15 @@ INVERTER_SENSORS: tuple[SensorSpec, ...] = (
 PORT_SENSORS: tuple[SensorSpec, ...] = (
     SensorSpec("voltage", "DC Voltage", "V", "voltage", "measurement", 0.1),
     SensorSpec("current", "DC Current", "A", "current", "measurement", 0.01),
-    SensorSpec("power", "DC Power", "W", "power", "measurement", 0.1),
+    SensorSpec("power", "DC Power", "W", "power", "measurement", 0.1,
+               stale_behavior=STALE_BEHAVIOR_ZERO),
     # Protobuf reports energies as integer Wh; we publish as kWh so HA
     # charts/cards read naturally and the recorder stays precise enough
     # (the 0.001 factor + round-to-4 in _scale() preserves 0.1 Wh resolution).
-    SensorSpec("energy_total", "Total Energy", "kWh", "energy", "total_increasing", 0.001),
-    SensorSpec("energy_daily", "Daily Energy", "kWh", "energy", "total_increasing", 0.001),
+    SensorSpec("energy_total", "Total Energy", "kWh", "energy", "total_increasing", 0.001,
+               stale_behavior=STALE_BEHAVIOR_PRESERVE),
+    SensorSpec("energy_daily", "Daily Energy", "kWh", "energy", "total_increasing", 0.001,
+               stale_behavior=STALE_BEHAVIOR_PRESERVE),
     SensorSpec("error_code", "Error Code", None, None, "measurement"),
 )
 
@@ -105,9 +126,12 @@ PORT_SENSORS: tuple[SensorSpec, ...] = (
 # fields — only standalone DTU sticks aggregate). All values are pre-scaled
 # floats by the time they land in the MQTT payload, so factor=1.0 here.
 DTU_SENSORS: tuple[SensorSpec, ...] = (
-    SensorSpec("dtu_power", "Total Power", "W", "power", "measurement"),
-    SensorSpec("dtu_daily_energy", "Total Daily Energy", "kWh", "energy", "total_increasing"),
-    SensorSpec("dtu_total_energy", "Total Lifetime Energy", "kWh", "energy", "total_increasing"),
+    SensorSpec("dtu_power", "Total Power", "W", "power", "measurement",
+               stale_behavior=STALE_BEHAVIOR_ZERO),
+    SensorSpec("dtu_daily_energy", "Total Daily Energy", "kWh", "energy", "total_increasing",
+               stale_behavior=STALE_BEHAVIOR_PRESERVE),
+    SensorSpec("dtu_total_energy", "Total Lifetime Energy", "kWh", "energy", "total_increasing",
+               stale_behavior=STALE_BEHAVIOR_PRESERVE),
     # Raw vendor value; scale varies with firmware (0-99 on WiFi, dBm-ish on
     # SIM). Left unit-less — HA will graph it as a plain number.
     SensorSpec("signal_strength", "Signal Strength", None, None, "measurement"),
@@ -116,9 +140,12 @@ DTU_SENSORS: tuple[SensorSpec, ...] = (
 # Cross-DTU "installation" device: same shape as DTU sensors but summed across
 # every DTU/inverter/port the bridge knows about.
 INSTALLATION_SENSORS: tuple[SensorSpec, ...] = (
-    SensorSpec("current_power", "Total Power", "W", "power", "measurement"),
-    SensorSpec("daily_energy", "Total Daily Energy", "kWh", "energy", "total_increasing"),
-    SensorSpec("total_energy", "Total Lifetime Energy", "kWh", "energy", "total_increasing"),
+    SensorSpec("current_power", "Total Power", "W", "power", "measurement",
+               stale_behavior=STALE_BEHAVIOR_ZERO),
+    SensorSpec("daily_energy", "Total Daily Energy", "kWh", "energy", "total_increasing",
+               stale_behavior=STALE_BEHAVIOR_PRESERVE),
+    SensorSpec("total_energy", "Total Lifetime Energy", "kWh", "energy", "total_increasing",
+               stale_behavior=STALE_BEHAVIOR_PRESERVE),
 )
 INSTALLATION_DEVICE_ID = "hoymiles_installation"
 
@@ -137,7 +164,7 @@ def env(key: str, default: str | None = None, *, required: bool = False) -> str 
     return value
 
 
-def parse_endpoints(spec: str) -> list[Endpoint]:
+def parse_endpoints(spec: str, stale_names: set[str]) -> list[Endpoint]:
     """`HOYMILES_ENDPOINTS` is `name=host[,name=host...]`."""
     out: list[Endpoint] = []
     for entry in spec.split(","):
@@ -147,10 +174,22 @@ def parse_endpoints(spec: str) -> list[Endpoint]:
         if "=" not in entry:
             sys.exit(f"invalid endpoint spec {entry!r}: expected name=host")
         name, host = entry.split("=", 1)
-        out.append(Endpoint(name=name.strip(), host=host.strip()))
+        name = name.strip()
+        out.append(Endpoint(name=name, host=host.strip(),
+                            stale_mode=name in stale_names))
     if not out:
         sys.exit("HOYMILES_ENDPOINTS produced no endpoints")
+    unknown = stale_names - {e.name for e in out}
+    if unknown:
+        sys.exit(f"HOYMILES_STALE_ENDPOINTS references unknown endpoint(s): "
+                 f"{sorted(unknown)}")
     return out
+
+
+def parse_name_list(spec: str | None) -> set[str]:
+    if not spec:
+        return set()
+    return {s.strip() for s in spec.split(",") if s.strip()}
 
 
 # --- HA discovery payload helpers --------------------------------------------
@@ -214,6 +253,14 @@ def _button_payload(*, unique_id: str, name: str, command_topic: str,
     return payload
 
 
+def _availability_topic_for(spec: SensorSpec, dtu_avail: str,
+                            dtu_avail_persistent: str) -> str:
+    """Map a sensor's stale_behavior to the correct availability topic."""
+    if spec.stale_behavior == STALE_BEHAVIOR_UNAVAILABLE:
+        return dtu_avail
+    return dtu_avail_persistent
+
+
 def _discovery_payload(*, unique_id: str, name: str, state_topic: str,
                        availability_topic: str, value_template: str,
                        spec: SensorSpec, device: dict[str, Any]) -> dict[str, Any]:
@@ -262,6 +309,16 @@ class DtuRuntime:
     last_known_inverters: dict[str, dict[str, Any]] = dataclasses.field(default_factory=dict)
     dtu_discovery_published: bool = False
     response_shape_logged: bool = False
+    # Count of consecutive failed polls since the last success. Drives the
+    # stale-mode transition when `endpoint.stale_mode` is enabled.
+    consecutive_failures: int = 0
+    # True while the DTU is in stale mode (failures >= threshold). Cleared on
+    # the next successful poll.
+    is_stale: bool = False
+    # Set when a non-stale-mode DTU has already had its availability flipped
+    # offline during the current outage. Prevents re-publishing the retained
+    # offline message every poll while the DTU stays down.
+    offline_published: bool = False
 
 
 async def refresh_encryption(rt: DtuRuntime) -> None:
@@ -342,6 +399,17 @@ def _sum_port_field(inverters: dict[str, dict[str, Any]], suffix: str) -> float:
     return total
 
 
+def _dtu_totals_from_ports(inverters: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    # Ports already publish kWh (factor 0.001); sum preserves that unit.
+    # 3-decimal rounding keeps ~1 Wh resolution and avoids drift-induced
+    # TOTAL_INCREASING resets in HA.
+    return {
+        "dtu_power": round(_sum_port_field(inverters, "power"), 2),
+        "dtu_daily_energy": round(_sum_port_field(inverters, "energy_daily"), 3),
+        "dtu_total_energy": round(_sum_port_field(inverters, "energy_total"), 3),
+    }
+
+
 def _compute_dtu_totals(real: Any, inverters: dict[str, dict[str, Any]]
                         ) -> dict[str, Any]:
     """Compute DTU-level aggregates from port sums, with DTU-reported values
@@ -350,14 +418,7 @@ def _compute_dtu_totals(real: Any, inverters: dict[str, dict[str, Any]]
         any(k.startswith("port_") for k in inv) for inv in inverters.values()
     )
     if has_ports:
-        # Ports already publish kWh (factor 0.001); sum preserves that unit.
-        # 3-decimal rounding keeps ~1 Wh resolution and avoids drift-induced
-        # TOTAL_INCREASING resets in HA.
-        return {
-            "dtu_power": round(_sum_port_field(inverters, "power"), 2),
-            "dtu_daily_energy": round(_sum_port_field(inverters, "energy_daily"), 3),
-            "dtu_total_energy": round(_sum_port_field(inverters, "energy_total"), 3),
-        }
+        return _dtu_totals_from_ports(inverters)
     # Fallback: trust the DTU. dtu_power is scaled (factor 0.1), energies
     # are raw Wh from protobuf — divide by 1000 to match our kWh unit.
     return {
@@ -365,6 +426,34 @@ def _compute_dtu_totals(real: Any, inverters: dict[str, dict[str, Any]]
         "dtu_daily_energy": round(real.dtu_daily_energy / 1000.0, 3),
         "dtu_total_energy": 0,
     }
+
+
+# Classification tables for stale-mode projection: {sensor_key: behavior}.
+_INVERTER_STALE_BEHAVIOR = {s.key: s.stale_behavior for s in INVERTER_SENSORS}
+_PORT_STALE_BEHAVIOR = {s.key: s.stale_behavior for s in PORT_SENSORS}
+
+
+def _staleify_inverter_state(state: dict[str, Any]) -> dict[str, Any]:
+    """Project the last-known inverter state to the "stale" form.
+
+    `zero`-behavior fields become 0; `preserve`-behavior fields keep their
+    last-known value; `unavailable`-behavior fields are kept as-is in the JSON
+    (HA hides them via the offline availability topic).
+    """
+    out: dict[str, Any] = {}
+    for key, value in state.items():
+        if key.startswith("port_"):
+            # port_<n>_<sensor_key>
+            _, _, sensor_key = key.partition("_")
+            _, _, sensor_key = sensor_key.partition("_")
+            behavior = _PORT_STALE_BEHAVIOR.get(sensor_key)
+        else:
+            behavior = _INVERTER_STALE_BEHAVIOR.get(key)
+        if behavior == STALE_BEHAVIOR_ZERO:
+            out[key] = 0
+        else:
+            out[key] = value
+    return out
 
 
 def compute_installation_state(runtimes: list["DtuRuntime"]) -> dict[str, Any]:
@@ -398,6 +487,7 @@ def discovery_messages(rt: DtuRuntime, inverters: dict[str, dict[str, Any]],
     """
     assert rt.dtu_sn is not None, "discovery requires DTU SN"
     dtu_avail = f"{base_topic}/{rt.dtu_sn}/availability"
+    dtu_avail_persistent = f"{base_topic}/{rt.dtu_sn}/availability_persistent"
     dtu_state_topic = f"{base_topic}/{rt.dtu_sn}/state"
     dtu_dev = _device_block(
         identifiers=f"hoymiles_dtu_{rt.dtu_sn}",
@@ -416,7 +506,7 @@ def discovery_messages(rt: DtuRuntime, inverters: dict[str, dict[str, Any]],
             unique_id=uid,
             name=spec.name,
             state_topic=dtu_state_topic,
-            availability_topic=dtu_avail,
+            availability_topic=_availability_topic_for(spec, dtu_avail, dtu_avail_persistent),
             value_template=f"{{{{ value_json.{spec.key} }}}}",
             spec=spec,
             device=dtu_dev,
@@ -456,7 +546,7 @@ def discovery_messages(rt: DtuRuntime, inverters: dict[str, dict[str, Any]],
                 unique_id=uid,
                 name=spec.name,
                 state_topic=inv_state_topic,
-                availability_topic=dtu_avail,
+                availability_topic=_availability_topic_for(spec, dtu_avail, dtu_avail_persistent),
                 value_template=f"{{{{ value_json.{spec.key} }}}}",
                 spec=spec,
                 device=inv_dev,
@@ -478,6 +568,22 @@ def discovery_messages(rt: DtuRuntime, inverters: dict[str, dict[str, Any]],
                 value_template=("{{ 'ON' if (value_json.link_status | int(0)) "
                                 "> 0 else 'OFF' }}"),
                 device_class="connectivity",
+                device=inv_dev,
+                diagnostic=True,
+            ),
+        ))
+        # Stale indicator. Uses the persistent availability topic so it can
+        # report "ON" (stale) while the DTU is unreachable — the whole point.
+        stale_uid = f"hoymiles_{inv_sn}_stale"
+        inv_msgs.append((
+            f"{discovery_prefix}/binary_sensor/{stale_uid}/config",
+            _binary_sensor_payload(
+                unique_id=stale_uid,
+                name="Stale",
+                state_topic=inv_state_topic,
+                availability_topic=dtu_avail_persistent,
+                value_template="{{ 'ON' if value_json.stale else 'OFF' }}",
+                device_class="problem",
                 device=inv_dev,
                 diagnostic=True,
             ),
@@ -506,7 +612,7 @@ def discovery_messages(rt: DtuRuntime, inverters: dict[str, dict[str, Any]],
                     unique_id=uid,
                     name=spec.name,
                     state_topic=inv_state_topic,
-                    availability_topic=dtu_avail,
+                    availability_topic=_availability_topic_for(spec, dtu_avail, dtu_avail_persistent),
                     value_template=f"{{{{ value_json.{field} }}}}",
                     spec=spec,
                     device=port_dev,
@@ -588,10 +694,8 @@ async def poll_dtu(rt: DtuRuntime, client: aiomqtt.Client, *,
                    all_runtimes: list[DtuRuntime],
                    installation_lock: asyncio.Lock,
                    discovery_prefix: str, base_topic: str,
-                   interval: float) -> None:
+                   interval: float, stale_threshold: int) -> None:
     """Long-running per-DTU polling loop."""
-    dtu_offline_published = False
-
     while True:
         try:
             if rt.poll_count % ENCRYPTION_RECHECK_EVERY == 0:
@@ -601,13 +705,17 @@ async def poll_dtu(rt: DtuRuntime, client: aiomqtt.Client, *,
             rt.poll_count += 1
 
             if real is None:
-                if not dtu_offline_published and rt.dtu_sn:
-                    await publish(client, f"{base_topic}/{rt.dtu_sn}/availability",
-                                  "offline", retain=True)
-                    dtu_offline_published = True
-                LOG.warning("[%s] no data (DTU offline?)", rt.endpoint.name)
+                rt.consecutive_failures += 1
+                await _handle_failed_poll(
+                    rt, client, base_topic=base_topic,
+                    all_runtimes=all_runtimes,
+                    installation_lock=installation_lock,
+                    stale_threshold=stale_threshold,
+                )
                 await asyncio.sleep(interval)
                 continue
+
+            rt.consecutive_failures = 0
 
             if rt.dtu_sn is None:
                 # Fall back to the SN the data carries; refresh_encryption
@@ -627,6 +735,9 @@ async def poll_dtu(rt: DtuRuntime, client: aiomqtt.Client, *,
                 rt.response_shape_logged = True
 
             dtu_state, inverters = build_state_payload(real)
+            dtu_state["stale"] = False
+            for inv_state in inverters.values():
+                inv_state["stale"] = False
             if rt.signal_strength is not None:
                 dtu_state["signal_strength"] = rt.signal_strength
 
@@ -645,7 +756,12 @@ async def poll_dtu(rt: DtuRuntime, client: aiomqtt.Client, *,
 
             await publish(client, f"{base_topic}/{rt.dtu_sn}/availability",
                           "online", retain=True)
-            dtu_offline_published = False
+            await publish(client, f"{base_topic}/{rt.dtu_sn}/availability_persistent",
+                          "online", retain=True)
+            if rt.is_stale:
+                LOG.info("[%s] DTU recovered from stale mode", rt.endpoint.name)
+                rt.is_stale = False
+            rt.offline_published = False
 
             await publish(client, f"{base_topic}/{rt.dtu_sn}/state", dtu_state, retain=True)
             for inv_sn, inv_state in inverters.items():
@@ -675,6 +791,92 @@ async def poll_dtu(rt: DtuRuntime, client: aiomqtt.Client, *,
         await asyncio.sleep(interval)
 
 
+async def _handle_failed_poll(rt: DtuRuntime, client: aiomqtt.Client, *,
+                              base_topic: str,
+                              all_runtimes: list[DtuRuntime],
+                              installation_lock: asyncio.Lock,
+                              stale_threshold: int) -> None:
+    """One failed poll. Decide between hard-offline and stale-mode behavior."""
+    LOG.warning("[%s] no data (DTU offline?); consecutive failures=%d",
+                rt.endpoint.name, rt.consecutive_failures)
+    if rt.dtu_sn is None:
+        # We've never seen a successful poll for this DTU; no SN means no
+        # state/availability topics to publish to.
+        return
+
+    if rt.endpoint.stale_mode:
+        if rt.consecutive_failures >= stale_threshold and not rt.is_stale:
+            await _enter_stale_mode(
+                rt, client, base_topic=base_topic,
+                all_runtimes=all_runtimes,
+                installation_lock=installation_lock,
+            )
+        # Below threshold or already stale: do nothing. Retained MQTT messages
+        # keep HA on the last state; stale binary_sensor reflects reality.
+        return
+
+    # Non-stale DTU: current behavior — both availabilities flip offline on
+    # the first failure of an outage. Subsequent failures short-circuit.
+    if rt.offline_published:
+        return
+    await publish(client, f"{base_topic}/{rt.dtu_sn}/availability",
+                  "offline", retain=True)
+    await publish(client, f"{base_topic}/{rt.dtu_sn}/availability_persistent",
+                  "offline", retain=True)
+    rt.offline_published = True
+
+
+async def _enter_stale_mode(rt: DtuRuntime, client: aiomqtt.Client, *,
+                            base_topic: str,
+                            all_runtimes: list[DtuRuntime],
+                            installation_lock: asyncio.Lock) -> None:
+    """Transition this DTU's entities into stale mode.
+
+    Instantaneous fields (active_power, port power, dtu_power) are zeroed;
+    energies are kept at their last-known values; everything else is hidden by
+    flipping the primary availability topic to offline while the persistent
+    availability topic stays online.
+    """
+    assert rt.dtu_sn is not None
+    LOG.warning("[%s] entering stale mode after %d failed polls",
+                rt.endpoint.name, rt.consecutive_failures)
+    rt.is_stale = True
+
+    stale_inverters = {
+        sn: _staleify_inverter_state(state)
+        for sn, state in rt.last_known_inverters.items()
+    }
+    for inv_state in stale_inverters.values():
+        inv_state["stale"] = True
+
+    stale_dtu_state: dict[str, Any] = _dtu_totals_from_ports(stale_inverters)
+    if rt.signal_strength is not None:
+        stale_dtu_state["signal_strength"] = rt.signal_strength
+    stale_dtu_state["stale"] = True
+
+    await publish(client, f"{base_topic}/{rt.dtu_sn}/availability",
+                  "offline", retain=True)
+    await publish(client, f"{base_topic}/{rt.dtu_sn}/availability_persistent",
+                  "online", retain=True)
+
+    await publish(client, f"{base_topic}/{rt.dtu_sn}/state",
+                  stale_dtu_state, retain=True)
+    for inv_sn, inv_state in stale_inverters.items():
+        await publish(
+            client,
+            f"{base_topic}/{rt.dtu_sn}/inverter/{inv_sn}/state",
+            inv_state, retain=True,
+        )
+    # Update our last-known so cross-DTU aggregation uses the stale projection
+    # (zero power, preserved energies).
+    rt.last_known_inverters = stale_inverters
+
+    async with installation_lock:
+        inst_state = compute_installation_state(all_runtimes)
+        await publish(client, f"{base_topic}/installation/state",
+                      inst_state, retain=True)
+
+
 # --- Top-level orchestration -------------------------------------------------
 
 
@@ -684,7 +886,12 @@ async def run() -> None:
     args = parser.parse_args()
     setup_logging(args.log_level)
 
-    endpoints = parse_endpoints(env("HOYMILES_ENDPOINTS", required=True))
+    stale_names = parse_name_list(env("HOYMILES_STALE_ENDPOINTS"))
+    stale_threshold = int(env("HOYMILES_STALE_THRESHOLD", "3"))
+    if stale_threshold < 1:
+        sys.exit("HOYMILES_STALE_THRESHOLD must be >= 1")
+    endpoints = parse_endpoints(env("HOYMILES_ENDPOINTS", required=True),
+                                stale_names)
     poll_interval = float(env("HOYMILES_POLL_INTERVAL", "30"))
     base_topic = env("MQTT_BASE_TOPIC", "hoymiles")
     discovery_prefix = env("HA_DISCOVERY_PREFIX", "homeassistant")
@@ -729,9 +936,15 @@ async def run() -> None:
                 ):
                     await publish(client, topic, payload, retain=True)
 
-                # Force discovery republish on each broker reconnect.
+                # Force discovery republish on each broker reconnect. Also
+                # clear stale/offline latches so availability topics get
+                # republished with their correct current value on the next
+                # poll cycle (retained messages on the broker may have been
+                # wiped).
                 for rt in runtimes:
                     rt.published_entities.clear()
+                    rt.is_stale = False
+                    rt.offline_published = False
 
                 installation_lock = asyncio.Lock()
                 async with asyncio.TaskGroup() as tg:
@@ -746,6 +959,7 @@ async def run() -> None:
                             discovery_prefix=discovery_prefix,
                             base_topic=base_topic,
                             interval=poll_interval,
+                            stale_threshold=stale_threshold,
                         ))
             backoff = 1.0
         except* aiomqtt.MqttError as eg:
