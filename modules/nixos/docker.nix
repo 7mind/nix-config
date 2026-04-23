@@ -22,7 +22,7 @@ in
     enable = lib.mkEnableOption "Podman with Docker compatibility";
     rootless.enable = lib.mkOption {
       type = lib.types.bool;
-      default = config.smind.isDesktop;
+      default = true;
       description = "Enable rootless Podman and mask the rootful system socket";
     };
     rootless.llmServiceUser = lib.mkOption {
