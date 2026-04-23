@@ -1,0 +1,7 @@
+name: resilient-ws-ui
+description: >-
+  Guidelines for building applications that maintain reliable WebSocket
+  connections to a backend and surface connection health clearly to the user.
+  Invoke ONLY when the user explicitly references this skill by name (e.g.
+  "/resilient-ws-ui", "use the resilient-ws-ui skill"). Do NOT auto-invoke
+  based on topic match.
