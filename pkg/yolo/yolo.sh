@@ -133,8 +133,6 @@ case "$SUBCMD" in
         --bind "${HOME}/.config/claude-work,${HOME}/.config/claude"
         --ro-bind "${HOME}/.claude/skills,${HOME}/.claude/skills"
         --ro-bind "${HOME}/.claude/plugins,${HOME}/.claude/plugins"
-        --ro-bind "${HOME}/.claude/CLAUDE.md,${HOME}/.claude/CLAUDE.md"
-        --ro-bind "${HOME}/.claude/settings.json,${HOME}/.claude/settings.json"
       )
     else
       EXTRA_ARGS+=(
@@ -191,7 +189,11 @@ case "$SUBCMD" in
 
   gemini)
     if [[ $WORK_MODE -eq 1 ]]; then
-      EXTRA_ARGS+=(--bind "${HOME}/.gemini-work,${HOME}/.gemini")
+      EXTRA_ARGS+=(
+        --bind "${HOME}/.gemini-work,${HOME}/.gemini"
+        --ro-bind "${HOME}/.gemini/extensions,${HOME}/.gemini/extensions"
+        --ro-bind "${HOME}/.gemini/skills,${HOME}/.gemini/skills"
+      )
     else
       EXTRA_ARGS+=(--rw "${HOME}/.gemini")
     fi
