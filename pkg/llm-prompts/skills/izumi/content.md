@@ -39,6 +39,129 @@ object AppModule extends ModuleDef {
 
 **Failure it prevents:** manual `new Impl(a, b)` binding fails to compile next time `Impl` gains a parameter, but silently compiles and wires wrong when you bind `.from[Impl]` incorrectly — distage's constructor macro only accepts the single *primary* ctor, so adding a second constructor breaks the build early instead of hiding behind a manual lambda.
 
+### 1.1a Never restate the constructor in the binding
+
+The single most common failure mode in hand-written distage modules is a
+**lambda that just re-lists the constructor arguments**:
+
+```scala
+// ANTI-PATTERN — do not write this
+make[ProgramService].from {
+  (
+    cfg:         QuidConfig,
+    clock:       Clock,
+    businesses:  BusinessRepo,
+    memberships: MembershipRepo,
+    subs:        SubscriptionRepo,
+    programs:    ProgramRepo,
+    tiers:       RewardTierRepo,
+    items:       ItemRepo,
+    links:       ProgramItemLinkRepo,
+    svg:         SvgSanitiser,
+    blobs:       BlobStore,
+  ) =>
+    new ProgramServiceImpl(
+      clock         = clock,
+      maxTiers      = cfg.programs.maxTiers,
+      maxSvgBytes   = cfg.programs.maxSvgBytes,
+      businesses    = businesses,
+      memberships   = memberships,
+      subscriptions = subs,
+      programs      = programs,
+      rewardTiers   = tiers,
+      items         = items,
+      links         = links,
+      svgSanitiser  = svg,
+      blobStore     = blobs,
+    )
+}
+```
+
+This is **always** wrong. The planner already derives constructor parameters.
+Every hand-listed argument is a place for drift (add a field → forget to
+thread it → runtime `MissingInstanceException`; rename a type → silent
+rebind to the wrong key).
+
+The correct forms — pick the first one that fits:
+
+```scala
+// 1. Auto-wire — the default. Works whenever the impl's ctor parameters are
+//    themselves graph components.
+make[ProgramService].from[ProgramServiceImpl]
+
+// 2. Same, bound as itself (no trait):
+make[ProgramServiceImpl]
+
+// 3. Same, but lifecycle-managed:
+make[ProgramService].fromResource[ProgramServiceImpl.Resource[F]]
+```
+
+**None** of these require you to list arguments. If you caught yourself
+typing `(a: A, b: B, c: C) => new Impl(a, b, c)`, delete the lambda and
+write `make[Iface].from[Impl]`.
+
+#### When a ctor parameter is *not* a graph component
+
+The anti-pattern above usually starts from a real need: one or two args
+are derived (a config field, a unit literal, a `Clock` zone). Don't
+restate the whole ctor for that — pull the derived value into its own
+binding and let auto-wire resume:
+
+```scala
+// Hoist derived values to their own DIKeys, then auto-wire.
+make[ProgramService.MaxTiers].from { (c: QuidConfig) => ProgramService.MaxTiers(c.programs.maxTiers) }
+make[ProgramService.MaxSvgBytes].from { (c: QuidConfig) => ProgramService.MaxSvgBytes(c.programs.maxSvgBytes) }
+make[ProgramService].from[ProgramServiceImpl]
+
+// And on the consumer side, use named/newtype keys — not raw Int:
+final class ProgramServiceImpl(
+  maxTiers:    ProgramService.MaxTiers,
+  maxSvgBytes: ProgramService.MaxSvgBytes,
+  clock:       Clock,
+  businesses:  BusinessRepo,
+  ...
+)
+```
+
+The wrappers (`MaxTiers`, `MaxSvgBytes`) can be `AnyVal`/`opaque`/`case
+class` — they exist only so the planner has a stable key. Now adding or
+reordering ctor params is a one-line edit and the lambda is gone.
+
+#### Three escape hatches, in order of preference
+
+When you really do need custom transformation logic at the binding site:
+
+1. **Split the config and inject the sub-record.** Bind
+   `make[ProgramsCfg].from { (c: QuidConfig) => c.programs }` once, then let
+   `ProgramServiceImpl(programsCfg: ProgramsCfg, ...)` auto-wire. The impl
+   doesn't see the whole `QuidConfig`, tests don't need a full one either.
+   This is almost always the right answer when the complaint is "too many
+   config fields".
+
+2. **Inject the whole config.** If the impl genuinely needs many unrelated
+   fields, depend on `QuidConfig` directly and read fields inside. Ugly but
+   still auto-wired — no lambda.
+
+3. **`@Id`-tagged bindings for disambiguation** (see §1.2). When two
+   same-typed inputs need to differ (`@Id("read") db: Transactor` vs
+   `@Id("write") db: Transactor`), tag both bindings and both ctor params.
+   Still auto-wire — no lambda.
+
+4. **Functoid with `_`-placeholders**, only if steps 1–3 don't apply:
+   ```scala
+   make[Foo].from { (cfg: Cfg, dep: Dep) => new Foo(dep, cfg.window.toSeconds.toInt) }
+   ```
+   Keep the functoid as **small as possible** — one or two parameters that
+   are genuinely transformed, never a re-list of the full ctor. If the
+   functoid grows past ~3 parameters, go back to step 1.
+
+#### Heuristic
+
+If a `.from { ... }` lambda body contains `new Impl(` followed by
+name-equals-name pairs, you lost. The block should either not exist
+(auto-wire) or contain a real expression (a `.toSeconds`, a `.copy`, an
+`Option#getOrElse`), never a forwarding constructor call.
+
 ### 1.2 Named disambiguation
 
 ```scala
@@ -699,6 +822,7 @@ edit six files is a sign you are bypassing the tag/activation mechanism.
 
 **distage core**
 - Manual `new Impl(dep1, dep2)` bindings instead of `make[Iface].from[Impl]`. Silent drift when `Impl` gains deps.
+- `.from { (a, b, c, ...) => new Impl(a, b, c, ...) }` — a lambda that just re-lists the constructor. Always wrong; see §1.1a. Fix: `make[Iface].from[Impl]`. If a couple of args need transformation, hoist them to their own DIKeys (wrapper types) or split the config; never restate the whole ctor.
 - Constructing global singletons outside the graph. Breaks activation-based swaps; dummy version never gets used.
 - Mutable ambient state (`object Cache extends ...`). Identical defect; also poisons parallel tests.
 - Missing `: TagK` / `: TagKK` on polymorphic modules. `MissingInstanceException` at runtime with unhelpful HK-type name.
@@ -767,6 +891,10 @@ Izumi docs (in this repo): `doc/microsite/src/main/tut/{distage,logstage,bio}/*.
 | Situation | Do this |
 |-----------|---------|
 | New external dependency | Interface + Prod adapter + Dummy; tag with `Repo`; dual-tests |
+| Binding an impl whose ctor args are all graph deps | `make[Iface].from[Impl]` — never `.from { (a, b, ...) => new Impl(a, b, ...) }` |
+| One or two ctor args are derived (config field, unit) | Hoist each to its own DIKey (newtype wrapper) and auto-wire; see §1.1a |
+| Impl needs many fields from one config | Bind a sub-config (`make[ProgramsCfg].from(_.programs)`) and inject that, not the whole config |
+| Two same-typed deps must differ | `@Id("...")` on both the binding and the ctor param; still auto-wire, no lambda |
 | Infrastructure we may or may not spawn | Tag `Scene.Managed` vs `Scene.Provided`; docker plugin under Managed |
 | Need cleanup | `Lifecycle.fromResource` / `Lifecycle.LiftF`, never finalizers |
 | Sharing one Postgres across the whole test suite | Put a transitive dep into `memoizationRoots` |
