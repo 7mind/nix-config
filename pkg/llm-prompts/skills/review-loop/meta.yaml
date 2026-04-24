@@ -1,0 +1,9 @@
+name: review-loop
+description: >-
+  Plan-execute-review loop for complex multi-step tasks. Delegates planning,
+  execution, and adversarial review to subagents; maintains ./tasks.md and
+  ./defects.md ledgers; iterates until the reviewer is satisfied; logs the
+  session to ./docs/logs/. TRIGGER when: the user assigns a complex, multi-step
+  task that warrants rigorous planning, adversarial review, and iteration, or
+  explicitly asks to use the review loop / adversarial loop / plan-review
+  workflow.
