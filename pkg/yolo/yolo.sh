@@ -131,6 +131,10 @@ case "$SUBCMD" in
         --bind "${HOME}/.claude-work,${HOME}/.claude"
         --bind "${HOME}/.claude-work-home/.claude.json,${HOME}/.claude.json"
         --bind "${HOME}/.config/claude-work,${HOME}/.config/claude"
+        --ro-bind "${HOME}/.claude/skills,${HOME}/.claude/skills"
+        --ro-bind "${HOME}/.claude/plugins,${HOME}/.claude/plugins"
+        --ro-bind "${HOME}/.claude/CLAUDE.md,${HOME}/.claude/CLAUDE.md"
+        --ro-bind "${HOME}/.claude/settings.json,${HOME}/.claude/settings.json"
       )
     else
       EXTRA_ARGS+=(
