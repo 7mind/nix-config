@@ -7,7 +7,8 @@
 
 let
   rootlessPodmanEnabled =
-    cfg-meta.isLinux && (outerConfig.smind.containers.docker.rootless.enable or false);
+    cfg-meta.isLinux && (outerConfig.smind.containers.docker.enable or false) 
+      && (outerConfig.smind.containers.docker.rootless.enable or false);
   llmSocketUriValue = outerConfig.smind.containers.docker.rootless.llmSocketUri or null;
   # Must match the NixOS-level wiring so we fail fast if the invariant breaks.
   llmSocketUri =

@@ -17,7 +17,9 @@ let
     hash = "sha256-4kqtfdHlcg3YXWX1og9b5JuLgnB/3Nj5dFMe4Ryt7No=";
   };
   rootlessPodmanEnabled =
-    cfg-meta.isLinux && (outerConfig.smind.containers.docker.rootless.enable or false);
+    cfg-meta.isLinux
+    && (outerConfig.smind.containers.docker.enable or false)
+    && (outerConfig.smind.containers.docker.rootless.enable or false);
   rootlessPodmanSocketPathValue = outerConfig.smind.containers.docker.rootless.llmSocketPath or null;
   rootlessPodmanSocketUriValue = outerConfig.smind.containers.docker.rootless.llmSocketUri or null;
   rootlessPodmanSocketPath =
