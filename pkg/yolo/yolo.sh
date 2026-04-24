@@ -150,12 +150,27 @@ case "$SUBCMD" in
 
   codex)
     if [[ $WORK_MODE -eq 1 ]]; then
-      echo "Error: --work is not supported for codex" >&2; exit 1
+      mkdir -p "${HOME}/.codex-work"
+      # Mirror shared config files into the work dir by symlinking to their
+      # resolved nix-store targets (stable inside sandbox via the /nix/store
+      # ro-bind). skills/ is a regular dir, so ro-bind it directly.
+      for item in config.toml AGENTS.md; do
+        src="${HOME}/.codex/$item"
+        if [[ -e "$src" ]]; then
+          ln -sfn "$(readlink -f "$src")" "${HOME}/.codex-work/$item"
+        fi
+      done
+      EXTRA_ARGS+=(
+        --rw "${HOME}/.codex-work"
+        --ro-bind "${HOME}/.codex/skills,${HOME}/.codex-work/skills"
+        --env "CODEX_HOME=${HOME}/.codex-work"
+      )
+    else
+      EXTRA_ARGS+=(
+        --rw "${HOME}/.codex"
+        --rw "${HOME}/.config/codex"
+      )
     fi
-    EXTRA_ARGS+=(
-      --rw "${HOME}/.codex"
-      --rw "${HOME}/.config/codex"
-    )
     EXEC_CMD=(codex --dangerously-bypass-approvals-and-sandbox --search "${CMD_ARGS[@]}")
     ;;
 

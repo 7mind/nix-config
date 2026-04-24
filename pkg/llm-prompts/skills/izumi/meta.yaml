@@ -1,0 +1,17 @@
+name: izumi
+description: >-
+  Best-practice playbook for the izumi Scala ecosystem — distage (DI),
+  distage-framework (roles/RoleAppMain), distage-testkit (test harness with
+  memoization), distage-framework-docker (test containers), logstage
+  (structured logging), and BIO (bifunctor effect typeclasses). Covers
+  idiomatic bindings, Activation/Axis switching, Lifecycle discipline,
+  plugin layout, and how to apply the `dual-tests` pattern inside distage
+  so one test body runs against both a dummy and a real-DB adapter.
+  TRIGGER when: writing or reviewing Scala code that imports
+  `izumi.distage.*`, `izumi.logstage.*`, `izumi.functional.bio.*`,
+  `distage.*`, `logstage.*`; designing a new distage plugin or Role;
+  wiring a testkit `SpecZIO`/`Spec2`/`Spec1`; configuring
+  `ContainerDef`/`DockerSupportModule`; choosing between `StandardAxis.Repo`
+  or `Scene` tags; or implementing the dual-tests pattern in a distage
+  project. The canonical reference project is
+  https://github.com/7mind/distage-example.
