@@ -249,7 +249,7 @@ class MatterMqttBridge:
                             continue
                         try:
                             await mqtt_client.publish(
-                                topic, json.dumps(payload, default=str).encode()
+                                topic, json.dumps(payload, default=str).encode(), retain=True
                             )
                         except Exception as exc:
                             LOG.warning("MQTT publish failed: %s (re-queueing)", exc)
@@ -270,7 +270,7 @@ class MatterMqttBridge:
         while not self.mqtt_queue.empty():
             topic, payload = self.mqtt_queue.get_nowait()
             try:
-                await client.publish(topic, json.dumps(payload, default=str).encode())
+                await client.publish(topic, json.dumps(payload, default=str).encode(), retain=True)
             except Exception as exc:
                 LOG.warning("MQTT drain failed: %s (re-queueing)", exc)
                 self._mqtt_requeue(topic, payload)

@@ -43,9 +43,10 @@ def _install_stubs() -> None:
             del exc
             del tb
 
-        async def publish(self, topic: str, payload: bytes) -> None:
+        async def publish(self, topic: str, payload: bytes, retain: bool = False) -> None:
             del topic
             del payload
+            del retain
 
     aiomqtt.Client = _Client
     sys.modules["aiomqtt"] = aiomqtt
@@ -145,9 +146,10 @@ class MatterMqttBridgeTests(unittest.TestCase):
                     del exc
                     del tb
 
-                async def publish(self, topic: str, payload: bytes) -> None:
+                async def publish(self, topic: str, payload: bytes, retain: bool = False) -> None:
                     del topic
                     del payload
+                    del retain
 
             original_client = self.module.aiomqtt.Client
             original_backoff_iter = self.module._backoff_iter
@@ -169,6 +171,44 @@ class MatterMqttBridgeTests(unittest.TestCase):
     async def _set_shutdown_later(self, bridge: Any, delay: float) -> None:
         await asyncio.sleep(delay)
         bridge.shutdown_event.set()
+
+    def test_mqtt_loop_publishes_retained_state_updates(self) -> None:
+        async def run() -> None:
+            bridge = self._bridge()
+            published: list[tuple[str, bytes, bool]] = []
+
+            class FakeClient:
+                def __init__(self, *args: Any, **kwargs: Any) -> None:
+                    del args
+                    del kwargs
+
+                async def __aenter__(self) -> "FakeClient":
+                    return self
+
+                async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+                    del exc_type
+                    del exc
+                    del tb
+
+                async def publish(self, topic: str, payload: bytes, retain: bool = False) -> None:
+                    published.append((topic, payload, retain))
+                    bridge.shutdown_event.set()
+
+            original_client = self.module.aiomqtt.Client
+            self.module.aiomqtt.Client = FakeClient
+            bridge._enqueue("matter/1/all", {"temperature": 21})
+
+            try:
+                await bridge._mqtt_loop()
+            finally:
+                self.module.aiomqtt.Client = original_client
+
+            self.assertEqual(
+                published,
+                [("matter/1/all", b'{"temperature": 21}', True)],
+            )
+
+        asyncio.run(run())
 
     def test_run_flushes_offline_messages_before_stopping_mqtt(self) -> None:
         async def run() -> None:
