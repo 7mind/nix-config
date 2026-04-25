@@ -259,27 +259,6 @@ in
           # };
           plugin = [ "opencode-gemini-auth@latest" ];
           provider = {
-            google = {
-              models = {
-                "gemini-3-pro-preview" = {
-                  options = {
-                    thinkingConfig = {
-                      thinkingLevel = "xhigh";
-                      includeThoughts = true;
-                    };
-                  };
-                };
-              };
-            };
-            openai = {
-              models = {
-                "gpt-5.4" = {
-                  options = {
-                    reasoningEffort = "xhigh";
-                  };
-                };
-              };
-            };
             ollama = {
               npm = "@ai-sdk/openai-compatible";
               options = {
@@ -294,6 +273,33 @@ in
                 };
               };
             };
+
+            google = {
+              models = {
+                "gemini-3.1-pro-preview" = {
+                  options = {
+                    thinkingConfig = {
+                      thinkingLevel = "high";
+                      includeThoughts = true;
+                    };
+                  };
+                };
+              };
+            };
+            openai = {
+              models = {
+                "gpt-5.4" = {
+                  options = {
+                    reasoningEffort = "xhigh";
+                  };
+                };
+                "gpt-5.5" = {
+                  options = {
+                    reasoningEffort = "xhigh";
+                  };
+                };
+              };
+            };
             ollama-cloud = {
               npm = "@ai-sdk/openai-compatible";
               name = "Ollama Cloud";
@@ -301,9 +307,36 @@ in
                 baseURL = "https://ollama.com/v1";
               };
               models = {
-                "minimax-m2.7" = { };
-                "kimi-k2:1t" = { };
-                "kimi-k2.5" = { };
+                # Reasoning for Ollama Cloud models is controlled by the remote registry.
+                # reasoning=true enables OpenCode thinking UI; reasoningEffort is passed
+                # through the OpenAI-compatible API and may be ignored by the remote.
+                "minimax-m2.7" = {
+                  reasoning = true;
+                  options = {
+                    reasoningEffort = "high";
+                  };
+                };
+                "kimi-k2:1t" = {
+                  reasoning = false;
+                };
+                "kimi-k2.6" = {
+                  reasoning = true;
+                  options = {
+                    reasoningEffort = "high";
+                  };
+                };
+                "glm-5.1" = {
+                  reasoning = true;
+                  options = {
+                    reasoningEffort = "high";
+                  };
+                };
+                "nemotron-3-super" = {
+                  reasoning = true;
+                  options = {
+                    reasoningEffort = "high";
+                  };
+                };
               };
             };
           };

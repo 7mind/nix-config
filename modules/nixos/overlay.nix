@@ -106,6 +106,8 @@
 
         hoymiles-mqtt-bridge = pkgs.callPackage "${cfg-meta.paths.pkg}/hoymiles-mqtt-bridge/default.nix" { };
 
+        matter-mqtt-bridge = pkgs.callPackage "${cfg-meta.paths.pkg}/matter-mqtt-bridge/default.nix" { };
+
         resock = pkgs.callPackage "${cfg-meta.paths.pkg}/resock/default.nix" { };
 
         mqtt-controller-frontend =

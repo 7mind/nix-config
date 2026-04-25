@@ -38,6 +38,7 @@
   ./locale-ie.nix
   ./metrics.nix
   ./matter-server.nix
+  ./matter-mqtt-bridge.nix
   ./mosquitto.nix
   ./mqtt-controller.nix
   ./mouse.nix
