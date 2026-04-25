@@ -1,3 +1,22 @@
+# Updating to a new version:
+#
+#   1. Look up the latest version on npm:
+#        curl -s https://registry.npmjs.org/@anthropic-ai/claude-code/latest \
+#          | jq -r .version
+#
+#   2. Fetch SRI hashes for each platform tarball and bump `version` + `hash`
+#      fields below. The umbrella `@anthropic-ai/claude-code` package is just a
+#      stub that postinstalls the matching `claude-code-<platform>` native pkg,
+#      so we hash those directly:
+#
+#        v=2.1.120; for pkg in claude-code-{linux-x64,linux-arm64,darwin-x64,darwin-arm64}; do
+#          url="https://registry.npmjs.org/@anthropic-ai/${pkg}/-/${pkg}-${v}.tgz"
+#          sha=$(nix-prefetch-url --type sha256 --unpack "$url" 2>/dev/null)
+#          sri=$(nix hash convert --hash-algo sha256 --to sri "$sha")
+#          printf '%-30s %s\n' "$pkg" "$sri"
+#        done
+#
+#   3. Verify the build:  ./verify-configs --verbose "$HOSTNAME"
 {
   lib,
   stdenv,
@@ -11,7 +30,7 @@
   socat,
 }:
 let
-  version = "2.1.116";
+  version = "2.1.120";
 
   # Upstream now ships native binaries per platform via @anthropic-ai/claude-code-<platform>.
   # The umbrella @anthropic-ai/claude-code package is just a stub + postinstall that copies
@@ -19,19 +38,19 @@ let
   sources = {
     "x86_64-linux" = {
       pkg = "claude-code-linux-x64";
-      hash = "sha256-QEjJ4CRk35TubDNW02Dzcu+EMRLLndJUXJeP3BFT3b8=";
+      hash = "sha256-dJagBzrOko9g54cK2kwL+noGSSlvfr2roj8jvqlOmhU=";
     };
     "aarch64-linux" = {
       pkg = "claude-code-linux-arm64";
-      hash = "sha256-/Hqp8GQx8Hub8K4w0Fnx/AksksY61vRC44XxrJVwF5w=";
+      hash = "sha256-f+gPyVaqZrphVptjGF69tKniM5YCOhewm8aH3fccZM0=";
     };
     "x86_64-darwin" = {
       pkg = "claude-code-darwin-x64";
-      hash = "sha256-O3J/ew2fWbUQePs6tHEhK0Q9E3Mx/BDSL7b7NL3FRc8=";
+      hash = "sha256-g6JsCF05PSjmYWQHYr2pAEtcpP6Cv+n1Sl6iI8ru20E=";
     };
     "aarch64-darwin" = {
       pkg = "claude-code-darwin-arm64";
-      hash = "sha256-O41sf7b05SJfXVjszMeTp838mja+PgZ+aEKykLsHeNo=";
+      hash = "sha256-Bf2W9m8gRR5LM8nJsHTCQizFy2jsM7JScaML4L/E8cs=";
     };
   };
 
