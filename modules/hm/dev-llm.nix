@@ -245,8 +245,19 @@ in
 
         extraPackages = with pkgs; [
           rust-analyzer
+          rustfmt
           nixd
+          nixpkgs-fmt
           pyright
+          bash-language-server
+          shfmt
+          ruff
+          yaml-language-server
+          metals
+          jdt-language-server
+          jdk21_headless
+          omnisharp-roslyn
+          dotnet-sdk_9
         ];
 
         settings = {
@@ -258,6 +269,22 @@ in
           #   enable = true;
           # };
           plugin = [ "opencode-gemini-auth@latest" ];
+          formatter = {
+            nixfmt = {
+              command = [ "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt" "$FILE" ];
+              extensions = [ ".nix" ];
+            };
+          };
+          lsp = {
+            metals = {
+              command = [ "${pkgs.metals}/bin/metals" ];
+              extensions = [
+                ".scala"
+                ".sc"
+                ".sbt"
+              ];
+            };
+          };
           provider = {
             ollama = {
               npm = "@ai-sdk/openai-compatible";

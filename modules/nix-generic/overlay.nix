@@ -14,33 +14,82 @@
       #   };
       # });
 
-      # Update codex: 0.92.0 -> 0.114.0
-      # Uses importCargoLock instead of fetchCargoVendor because a git
-      # dependency (rules_rust) contains Cargo.toml files with unstable
-      # features that break fetchCargoVendor's cargo metadata invocation.
-      # codex = prev.codex.overrideAttrs (old: rec {
-      #   version = "0.114.0";
-      #   nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ prev.pkg-config ];
-      #   buildInputs = (old.buildInputs or [ ]) ++ (if cfg-meta.isLinux then [ prev.libcap ] else [ ]);
-      #   src = prev.fetchFromGitHub {
-      #     owner = "openai";
-      #     repo = "codex";
-      #     tag = "rust-v${version}";
-      #     hash = "sha256-7t+mVwP4+YrG1ciI+OLqsK7TUM9SrDbPsJNrt26iy9c=";
-      #   };
-      #   sourceRoot = "${src.name}/codex-rs";
-      #   cargoDeps = prev.rustPlatform.importCargoLock {
-      #     lockFile = "${src}/codex-rs/Cargo.lock";
-      #     outputHashes = {
-      #       "crossterm-0.28.1" = "sha256-6qCtfSMuXACKFb9ATID39XyFDIEMFDmbx6SSmNe+728=";
-      #       "nucleo-0.5.0" = "sha256-Hm4SxtTSBrcWpXrtSqeO0TACbUxq3gizg1zD/6Yw/sI=";
-      #       "ratatui-0.29.0" = "sha256-HBvT5c8GsiCxMffNjJGLmHnvG77A6cqEL+1ARurBXho=";
-      #       "runfiles-0.1.0" = "sha256-uJpVLcQh8wWZA3GPv9D8Nt43EOirajfDJ7eq/FB+tek=";
-      #       "tokio-tungstenite-0.28.0" = "sha256-hJAkvWxDjB9A9GqansahWhTmj/ekcelslLUTtwqI7lw=";
-      #       "tungstenite-0.27.0" = "sha256-AN5wql2X2yJnQ7lnDxpljNw0Jua40GtmT+w3wjER010=";
-      #     };
-      #   };
-      # });
+      codex =
+        let
+          version = "0.126.0-alpha.3";
+          binaryAssets = {
+            aarch64-darwin = {
+              asset = "codex-aarch64-apple-darwin.tar.gz";
+              hash = "sha256-8lUS1OsGc+uBFsiFpRNTHqunFpDwvS24GwOJwnnrGGg=";
+            };
+            aarch64-linux = {
+              asset = "codex-aarch64-unknown-linux-musl.tar.gz";
+              hash = "sha256-DzghkSOuGk7Qh9l7QDYgdjcCWCw72yGTygXoo5UZ9C0=";
+            };
+            x86_64-darwin = {
+              asset = "codex-x86_64-apple-darwin.tar.gz";
+              hash = "sha256-zxpNcsOd3WGXrb8qkrwidI+kJpEZzuZCwJIUVn5SzBQ=";
+            };
+            x86_64-linux = {
+              asset = "codex-x86_64-unknown-linux-musl.tar.gz";
+              hash = "sha256-1Zik0ukwfyZprt+i+WiBZF4P5bHv+igT+svrUxyspLM=";
+            };
+          };
+          system = prev.stdenv.hostPlatform.system;
+        in
+        if prev.lib.hasAttr system binaryAssets then
+          let
+            binaryAsset = binaryAssets.${system};
+          in
+          prev.stdenvNoCC.mkDerivation {
+            pname = "codex";
+            inherit version;
+
+            src = prev.fetchurl {
+              url = "https://github.com/openai/codex/releases/download/rust-v${version}/${binaryAsset.asset}";
+              hash = binaryAsset.hash;
+            };
+
+            nativeBuildInputs = [
+              prev.installShellFiles
+              prev.makeBinaryWrapper
+            ];
+
+            dontUnpack = true;
+            dontConfigure = true;
+            dontBuild = true;
+
+            installPhase = ''
+              runHook preInstall
+              tar -xzf "$src"
+              install -Dm755 codex-* "$out/bin/codex"
+              runHook postInstall
+            '';
+
+            postInstall = prev.lib.optionalString (prev.stdenv.buildPlatform.canExecute prev.stdenv.hostPlatform) ''
+              installShellCompletion --cmd codex \
+                --bash <($out/bin/codex completion bash) \
+                --fish <($out/bin/codex completion fish) \
+                --zsh <($out/bin/codex completion zsh)
+            '';
+
+            postFixup = ''
+              wrapProgram "$out/bin/codex" --prefix PATH : ${
+                prev.lib.makeBinPath ([ prev.ripgrep ] ++ prev.lib.optionals prev.stdenv.hostPlatform.isLinux [ prev.bubblewrap ])
+              }
+            '';
+
+            doInstallCheck = prev.stdenv.buildPlatform.canExecute prev.stdenv.hostPlatform;
+            nativeInstallCheckInputs = [ prev.versionCheckHook ];
+
+            meta = prev.codex.meta // {
+              mainProgram = "codex";
+            };
+
+            passthru = prev.codex.passthru or { };
+          }
+        else
+          prev.codex;
 
       mistral-vibe = prev.mistral-vibe.overrideAttrs (old: {
         nativeBuildInputs =
