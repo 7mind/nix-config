@@ -46,7 +46,7 @@ let
   ++ lib.optional extCfg.dash-to-dock.enable pkgs.gnomeExtensions.dash-to-dock
   ++ lib.optional extCfg.dash2dock-lite.enable pkgs.gnomeExtensions.dash2dock-lite
   ++ lib.optional extCfg.no-overview.enable pkgs.gnomeExtensions.no-overview
-  ++ lib.optional extCfg.touchpad-gesture-customization.enable pkgs.gnomeExtensions.touchpad-gesture-customization
+  ++ lib.optional extCfg.touchpad-gesture-customization.enable pkgs.gnome-shell-extension-touchpad-gesture-customization-app-expose
   ++ lib.optional hibernateCfg.enable hibernateExtensionPatched
   ++ lib.optional config.smind.desktop.gnome.sticky-keys.enable gnomeExtensions.keyboard-modifiers-status
   ++ lib.optional hasKanataSwitcher config.services.kanata-switcher.gnomeExtension.package;

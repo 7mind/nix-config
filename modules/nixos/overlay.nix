@@ -90,6 +90,10 @@
           pkgs.callPackage "${cfg-meta.paths.pkg}/gnome-shortcut-inhibitor/default.nix"
             { };
 
+        gnome-shell-extension-touchpad-gesture-customization-app-expose =
+          pkgs.callPackage "${cfg-meta.paths.pkg}/touchpad-gesture-customization-app-expose/default.nix"
+            { };
+
         menlo = pkgs.callPackage "${cfg-meta.paths.pkg}/menlo/menlo.nix" { };
 
         extract-initrd = pkgs.callPackage "${cfg-meta.paths.pkg}/extract-initrd/default.nix" { };
