@@ -116,10 +116,27 @@ in
 
       programs.claude-code = {
         enable = true;
+        # Bake DISABLE_AUTOUPDATER into the wrapper so it survives any
+        # downstream wrappers (yolo, bubblewrap, fresh-env exec) and
+        # prevents Claude Code from self-updating past the nix pin.
+        package = pkgs.symlinkJoin {
+          name = "claude-code-no-autoupdate";
+          paths = [ pkgs.claude-code ];
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          postBuild = ''
+            wrapProgram $out/bin/claude --set-default DISABLE_AUTOUPDATER 1
+          '';
+        };
         plugins = [ "${codexPluginCc}/plugins/codex" ];
         settings = {
           alwaysThinkingEnabled = true;
           theme = "dark";
+          # Workaround for Claude Code 2.1.83+ regression where sandbox
+          # detection fails even when bubblewrap/socat are on PATH (the
+          # error reads "sandbox required but unavailable: ${j$}").
+          sandbox = {
+            failIfUnavailable = false;
+          };
           tui = lib.mkIf config.smind.hm.dev.llm.fullscreenTui.enable "fullscreen";
           permissions = {
             allow = [ "Edit(/tmp/**)" ];

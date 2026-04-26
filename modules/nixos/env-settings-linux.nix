@@ -11,6 +11,10 @@
   };
 
   config = lib.mkMerge [
+    {
+      environment.systemPackages = [ pkgs.lsscsi ];
+    }
+
     (lib.mkIf config.smind.environment.linux.sane-defaults.enable {
       boot = {
         tmp.useTmpfs = true;

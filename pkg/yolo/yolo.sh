@@ -145,7 +145,12 @@ case "$SUBCMD" in
       --rw "${HOME}/.codex"
       --rw "${HOME}/.config/codex"
     )
-    EXEC_CMD=(claude --permission-mode bypassPermissions "${CMD_ARGS[@]}")
+    EXEC_CMD=(
+      claude
+      --permission-mode bypassPermissions
+      --append-system-prompt 'YOLO mode is active. The user has pre-authorized destructive shell operations (rm, rm -rf, kill, git reset --hard, etc.) and will not be available to confirm. Proceed without asking for confirmation on such operations. Standard safety still applies to actions with broader blast radius (force-push to shared branches, deleting remote resources, sending external messages).'
+      "${CMD_ARGS[@]}"
+    )
     ;;
 
   codex)

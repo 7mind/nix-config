@@ -1,0 +1,55 @@
+------------Debug log started ini=0 level=3-----
+Sun Apr 26 19:12:00.565 2026 : CtMain::main processing for command=show 
+Sun Apr 26 19:12:00.567 2026 : CpControllerMgmt::process Entering version=008.0011.0000.0014 Sep 26, 2024
+Sun Apr 26 19:12:00.567 2026 : CpControllerMgmt::process API version 1:65
+Sun Apr 26 19:12:00.567 2026 : CpControllerMgmt::process - Checking the type of command for special processing...
+Sun Apr 26 19:12:00.567 2026 : CpControllerMgmt::checkCommand Entering
+Sun Apr 26 19:12:00.567 2026 : CpControllerMgmt::process - allowCpRegistration:0
+Sun Apr 26 19:12:00.569 2026 : ShowSystemCp::process Entering
+Sun Apr 26 19:12:00.569 2026 : CpControllerMgmt::getAllCpControllers Entering
+Sun Apr 26 19:12:00.569 2026 : CpControllerMgmt::getAllCpControllers - Calling getControllerIdList...
+Sun Apr 26 19:12:00.569 2026 : TriModeControllerExplorer::explore - Entering
+Sun Apr 26 19:12:00.569 2026 : TriModeControllerExplorer::initLibrary - Entering
+Sun Apr 26 19:12:00.577 2026 : TriModeControllerExplorer::initLibrary - Exiting with retCode:0
+Sun Apr 26 19:12:00.577 2026 : CpControllerMgmt::getAllCpControllers - controllerIdListPtr_ is NULL.
+Sun Apr 26 19:12:00.577 2026 : ShowSystemCp::ShowSystemSummary Entering
+Sun Apr 26 19:12:00.577 2026 : StoreLIBFacade::readFlashComponentVersionInfo Entering
+Sun Apr 26 19:12:00.577 2026 : CLI8 : StoreLIBFacade::issueStorelibCmd Entering
+
+Sun Apr 26 19:12:00.577 2026 : CLI8 : StoreLIBFacade::fireStorelibCommand Entering
+
+Sun Apr 26 19:12:00.577 2026 : CLI8 : StoreLIBFacade::fireStorelibCommand Exiting with retCode:0x0
+
+Sun Apr 26 19:12:00.577 2026 : ResponseHandler::checkSl8Response ENTER
+Sun Apr 26 19:12:00.577 2026 : ResponseHandler::clearSl8ResponseData Enter
+Sun Apr 26 19:12:00.577 2026 : clear resp data
+Sun Apr 26 19:12:00.577 2026 : ResponseHandler::clearSl8ResponseData Exit
+Sun Apr 26 19:12:00.577 2026 : ResponseParser::CreateInstance Enter
+Sun Apr 26 19:12:00.577 2026 : ResponseParser::CreateInstance Exit
+Sun Apr 26 19:12:00.577 2026 : FirmwareFailuresParser::GetErrorStrings Enter SLExtStat=0
+Sun Apr 26 19:12:00.577 2026 : FirmwareFailuresParser::IgnoreStatusParser Enter
+Sun Apr 26 19:12:00.577 2026 : FirmwareFailuresParser::IgnoreStatusParser Exit
+Sun Apr 26 19:12:00.577 2026 : FirmwareFailuresParser::GetErrorStrings Exit
+Sun Apr 26 19:12:00.577 2026 : ResponseHandler::checkSl8Response .message string Ignore extented status
+Sun Apr 26 19:12:00.577 2026 : ResponseHandler::checkSl8Response EXIT with return code 0x0
+Sun Apr 26 19:12:00.577 2026 : ResponseHandler::handleMR8BufferStatus Entering
+Sun Apr 26 19:12:00.577 2026 : ResponseHandler::handleMR8BufferStatus dataBufElements:3 cmdType:1 cmd:265
+Sun Apr 26 19:12:00.577 2026 : ResponseHandler::handleMR8BufferStatus Exiting
+Sun Apr 26 19:12:00.577 2026 : CLI8 : StoreLIBFacade::issueStorelibCmd Exiting with retCode:0 cmdExtStatus =0
+
+Sun Apr 26 19:12:00.578 2026 : TriModeControllerExplorer::linkLibrary - cleanUp
+Sun Apr 26 19:12:00.579 2026 : CtMain::main command completed with retcode=0
+
+------------Debug log started ini=0 level=3-----
+Sun Apr 26 19:12:09.896 2026 : CtMain::main processing for command= / c0 show all 
+Sun Apr 26 19:12:09.897 2026 : CpControllerMgmt::process Entering version=008.0011.0000.0014 Sep 26, 2024
+Sun Apr 26 19:12:09.897 2026 : CpControllerMgmt::process API version 1:65
+Sun Apr 26 19:12:09.897 2026 : CpControllerMgmt::process - Checking the type of command for special processing...
+Sun Apr 26 19:12:09.897 2026 : CpControllerMgmt::checkCommand Entering
+Sun Apr 26 19:12:09.897 2026 : CpControllerMgmt::process - allowCpRegistration:0
+Sun Apr 26 19:12:09.897 2026 : TriModeControllerExplorer::explore - Entering
+Sun Apr 26 19:12:09.897 2026 : TriModeControllerExplorer::initLibrary - Entering
+Sun Apr 26 19:12:09.904 2026 : TriModeControllerExplorer::initLibrary - Exiting with retCode:0
+Sun Apr 26 19:12:09.904 2026 : TriModeControllerExplorer::linkLibrary - cleanUp
+Sun Apr 26 19:12:09.905 2026 : CtMain::main command completed with retcode=-1
+

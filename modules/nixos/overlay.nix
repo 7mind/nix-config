@@ -52,19 +52,19 @@
     (
       self: super:
       let
-        ollamaVersion = "0.20.0";
-        mkPinnedOllama =
-          pkg:
-          pkg.overrideAttrs (_: {
-            version = ollamaVersion;
-            src = super.fetchFromGitHub {
-              owner = "ollama";
-              repo = "ollama";
-              tag = "v${ollamaVersion}";
-              hash = "sha256-QQKPXdXlsT+uMGGIyqkVZqk6OTa7VHrwDVmgDdgdKOY=";
-            };
-            vendorHash = "sha256-Lc1Ktdqtv2VhJQssk8K1UOimeEjVNvDWePE9WkamCos=";
-          });
+        # ollamaVersion = "0.20.0";
+        # mkPinnedOllama =
+        #   pkg:
+        #   pkg.overrideAttrs (_: {
+        #     version = ollamaVersion;
+        #     src = super.fetchFromGitHub {
+        #       owner = "ollama";
+        #       repo = "ollama";
+        #       tag = "v${ollamaVersion}";
+        #       hash = "sha256-QQKPXdXlsT+uMGGIyqkVZqk6OTa7VHrwDVmgDdgdKOY=";
+        #     };
+        #     vendorHash = "sha256-Lc1Ktdqtv2VhJQssk8K1UOimeEjVNvDWePE9WkamCos=";
+        #   });
 
         mqtt-controller-src = pkgs.lib.cleanSourceWith {
           src = "${cfg-meta.paths.pkg}/mqtt-controller";
@@ -74,11 +74,11 @@
         };
       in
       {
-        ollama = mkPinnedOllama super.ollama;
-        ollama-cpu = mkPinnedOllama super.ollama-cpu;
-        ollama-vulkan = mkPinnedOllama super.ollama-vulkan;
-        ollama-rocm = mkPinnedOllama super.ollama-rocm;
-        ollama-cuda = mkPinnedOllama super.ollama-cuda;
+        # ollama = mkPinnedOllama super.ollama;
+        # ollama-cpu = mkPinnedOllama super.ollama-cpu;
+        # ollama-vulkan = mkPinnedOllama super.ollama-vulkan;
+        # ollama-rocm = mkPinnedOllama super.ollama-rocm;
+        # ollama-cuda = mkPinnedOllama super.ollama-cuda;
 
         ip-update = pkgs.callPackage "${cfg-meta.paths.pkg}/ip-update/ip-update.nix" { };
 

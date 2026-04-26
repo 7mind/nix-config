@@ -24,7 +24,7 @@ in
     ] ++ lib.optionals cfg.analyze [
       urh
       inspectrum
-      gnuradio
+      # gnuradio  # disabled: pyqtgraph 0.14.0 SVG exporter tests fail (upstream bug)
     ];
 
     # Add user to 'plugdev' group if they want to use rtl-sdr without root
