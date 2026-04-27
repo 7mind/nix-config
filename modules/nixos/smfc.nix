@@ -218,6 +218,9 @@ in
           "-o ${toString logOutputs.${cfg.logOutput}}"
           "-c /etc/smfc/smfc.conf"
         ];
+        # smfc's atexit handler hard-codes Full mode on shutdown. Switch the BMC
+        # back to Optimal so fans don't stay at 100% while the daemon is stopped.
+        ExecStopPost = "${pkgs.ipmitool}/bin/ipmitool raw 0x30 0x45 0x01 0x02";
         Restart = "on-failure";
         RestartSec = 10;
       };

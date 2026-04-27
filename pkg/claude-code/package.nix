@@ -9,7 +9,7 @@
 #      stub that postinstalls the matching `claude-code-<platform>` native pkg,
 #      so we hash those directly:
 #
-#        v=2.1.120; for pkg in claude-code-{linux-x64,linux-arm64,darwin-x64,darwin-arm64}; do
+#        v=2.1.119; for pkg in claude-code-{linux-x64,linux-arm64,darwin-x64,darwin-arm64}; do
 #          url="https://registry.npmjs.org/@anthropic-ai/${pkg}/-/${pkg}-${v}.tgz"
 #          sha=$(nix-prefetch-url --type sha256 --unpack "$url" 2>/dev/null)
 #          sri=$(nix hash convert --hash-algo sha256 --to sri "$sha")
@@ -30,7 +30,7 @@
   socat,
 }:
 let
-  version = "2.1.120";
+  version = "2.1.119";
 
   # Upstream now ships native binaries per platform via @anthropic-ai/claude-code-<platform>.
   # The umbrella @anthropic-ai/claude-code package is just a stub + postinstall that copies
@@ -38,19 +38,19 @@ let
   sources = {
     "x86_64-linux" = {
       pkg = "claude-code-linux-x64";
-      hash = "sha256-dJagBzrOko9g54cK2kwL+noGSSlvfr2roj8jvqlOmhU=";
+      hash = "sha256-fVe3LUhRbfqbTeutDKOGzhj1XTQu6pONYXE8RS+AkDM=";
     };
     "aarch64-linux" = {
       pkg = "claude-code-linux-arm64";
-      hash = "sha256-f+gPyVaqZrphVptjGF69tKniM5YCOhewm8aH3fccZM0=";
+      hash = "sha256-RkKTMRFpNnveae1VqkmPxzB5XGSXu4aveGjpNt23L+4=";
     };
     "x86_64-darwin" = {
       pkg = "claude-code-darwin-x64";
-      hash = "sha256-g6JsCF05PSjmYWQHYr2pAEtcpP6Cv+n1Sl6iI8ru20E=";
+      hash = "sha256-x38Q7to9tmLjj1i2L8HZf3QB/njfmnmtXBoUnqBi44M=";
     };
     "aarch64-darwin" = {
       pkg = "claude-code-darwin-arm64";
-      hash = "sha256-Bf2W9m8gRR5LM8nJsHTCQizFy2jsM7JScaML4L/E8cs=";
+      hash = "sha256-faK1JsyiXNnDY3BbtP70Dyk8EirUbR14uK66tIXDG6Y=";
     };
   };
 
