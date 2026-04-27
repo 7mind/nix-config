@@ -27,7 +27,7 @@ TOML
     [[ -f ${inhibitFile} ]] && exit 0
     (
       ${atticConfigSnippet}
-      OUTPUT=$(${pkgs.attic-client}/bin/attic push nas:${cfg.cache-name} $OUT_PATHS 2>&1) || ${log} -p user.warning "push failed for $OUT_PATHS: $OUTPUT"
+      OUTPUT=$(${pkgs.attic-client}/bin/attic push -j 16 nas:${cfg.cache-name} $OUT_PATHS 2>&1) || ${log} -p user.warning "push failed for $OUT_PATHS: $OUTPUT"
       ${log} -p user.info "$OUTPUT"
     ) &
     disown
@@ -42,7 +42,7 @@ TOML
     fi
     ${atticConfigSnippet}
     ${log} -p user.info "bulk push: $*"
-    ${pkgs.attic-client}/bin/attic push nas:${cfg.cache-name} "$@" 2>&1 | while IFS= read -r line; do
+    ${pkgs.attic-client}/bin/attic push -j 16 nas:${cfg.cache-name} "$@" 2>&1 | while IFS= read -r line; do
       echo "$line"
       ${log} -p user.info "$line"
     done
