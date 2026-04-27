@@ -326,6 +326,45 @@ Those push synthesis onto the subagent. You have the context; transfer it.
 Send parallel subagents in a single message with multiple tool calls; that
 is what makes them actually run concurrently.
 
+## Model selection per phase
+
+Quality of the loop is dominated by the quality of **planning** and
+**review** — those are the phases where a weaker model silently produces a
+plan that misses a milestone, or a review that fails to spot a defect. A
+weaker executor wastes a round; a weaker reviewer ships a bug. Spend the
+budget where the asymmetry hurts.
+
+Default model assignment, **always overridable when a task obviously
+warrants it**:
+
+- **Planning subagents (O1):** the strongest available reasoning model
+  with the largest available context — currently Opus-class with the 1M
+  context window. Plans need to hold the full spec, the existing ledger,
+  and cross-cutting decisions in mind simultaneously.
+- **Review subagents (I2):** same — strongest available model, large
+  context. The reviewer's job is adversarial pattern-matching against
+  the entire diff plus surrounding code; this is exactly where a
+  weaker model regresses to surface-level checks.
+- **Execution subagents (I1) and fix subagents (I4):** Sonnet-class is
+  the default. Most fixes are mechanical once the defect entry names the
+  file, the line, and the change. Use the stronger model for executors
+  only when the task itself is a non-trivial design decision masquerading
+  as "just implement it" — flag this in the brief rather than escalating
+  silently.
+- **Ledger maintenance, commits, session log:** orchestrator (you), no
+  subagent.
+
+Two non-negotiable rules:
+
+- **Never downgrade reviewers to save cost.** A missed defect compounds
+  across rounds and into Completed entries that future subagents trust.
+  The cost of one extra review-round on the strongest model is trivial
+  next to that.
+- **Name the model in the subagent brief** when it differs from the
+  parent's model. Weaker subagents should know they were chosen for a
+  mechanical task and should escalate (return without coding, with a
+  written-up question) if the task turns out to need design judgement.
+
 ## What lives where
 
 - `./tasks.md` — persistent task ledger (checked in).
