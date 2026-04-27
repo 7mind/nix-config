@@ -51,7 +51,7 @@ let
     banner = "never";
     experimental = true;
     include_coauthor = config.smind.hm.dev.llm.coAuthored.enable;
-    model = "gpt-5.4";
+    model = "gpt-5.5";
     theme = "dark";
     trusted_folders = [ ];
   };
@@ -180,10 +180,11 @@ in
         skills = llmPrompts.skills;
         context = claudeMemoryText;
         settings = {
-          model = "gpt-5.4";
+          model = "gpt-5.5";
           model_reasoning_effort = "xhigh";
           project_doc_fallback_filenames = [ "CLAUDE.md" ];
           features.multi_agent = true;
+          features.fast_mode = false;
           features.steer = true;
         };
       };
