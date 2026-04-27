@@ -1,6 +1,7 @@
 [
   ./alien-filesystems.nix
   ./amnezia-vpn.nix
+  ./attic-cache-tmpfiles.nix
   ./audio.nix
   ./btrfs-snapshots.nix
   ./bluetooth.nix

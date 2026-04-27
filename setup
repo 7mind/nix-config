@@ -449,7 +449,7 @@ do_rekey() {
 }
 
 attic_inhibit_start() {
-    ATTIC_INHIBIT="/tmp/attic-push-inhibit"
+    ATTIC_INHIBIT="/run/attic-push/inhibit"
     touch "$ATTIC_INHIBIT"
     trap 'rm -f "$ATTIC_INHIBIT"' EXIT
 }

@@ -17,6 +17,11 @@
   # Recommended by nixos-raspberrypi for new RPi 5 installs
   boot.loader.raspberry-pi.bootloader = "kernel";
 
+  # The rpi-bcm2712 kernel caps ARCH_MMAP_RND_BITS_MAX at 30 (16K pages),
+  # below the nixpkgs default of 33. Without this, systemd-sysctl fails on
+  # activation with EINVAL when writing vm.mmap_rnd_bits.
+  boot.kernel.sysctl."vm.mmap_rnd_bits" = lib.mkForce 30;
+
   # Enable PCIe Gen3 for NVMe (default is Gen2)
   hardware.raspberry-pi.config.all.base-dt-params.pciex1_gen = {
     enable = true;

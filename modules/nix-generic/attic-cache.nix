@@ -5,7 +5,8 @@ let
 
   log = "${pkgs.util-linux}/bin/logger -t attic-push";
 
-  inhibitFile = "/tmp/attic-push-inhibit";
+  inhibitDir = "/run/attic-push";
+  inhibitFile = "${inhibitDir}/inhibit";
 
   atticConfigSnippet = ''
     TOKEN=$(cat ${cfg.push.tokenFile}) || { ${log} -p user.err "failed to read token"; exit 1; }
