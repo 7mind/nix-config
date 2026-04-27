@@ -54,7 +54,7 @@ in
 
     server-url = lib.mkOption {
       type = lib.types.str;
-      default = "http://nas.home.7mind.io:8080";
+      default = "http://attic.home.7mind.io:8080";
       description = "Base URL of the attic server";
     };
 
