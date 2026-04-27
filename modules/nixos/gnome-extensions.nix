@@ -130,10 +130,6 @@ in
               vertical-swipe-3-fingers-gesture = "NONE";
               horizontal-swipe-3-fingers-gesture = "NONE";
               pinch-3-finger-gesture = "NONE";
-              vertical-swipe-4-fingers-gesture = "OVERVIEW_NAVIGATION";
-              horizontal-swipe-4-fingers-gesture = "WORKSPACE_SWITCHING";
-              pinch-4-finger-gesture = "NONE";
-              overview-navigation-states = "GNOME";
             };
           } ++ lib.optional (extCfg.dash-to-dock.enable && extCfg.dash-to-dock.unity-like-config.enable) {
             "org/gnome/shell/extensions/dash-to-dock" = {

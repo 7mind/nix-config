@@ -1,3 +1,13 @@
+# Updating this package:
+# 1. Find the latest upstream commit:
+#    git ls-remote https://github.com/7mind/touchpad-gesture-customization-app-expose.git HEAD
+# 2. Update `version` to 0-unstable-YYYY-MM-DD using that commit's date and set `rev`.
+# 3. Temporarily set `hash = lib.fakeHash;`, build the package, and copy the reported source hash.
+# 4. Temporarily set `npmDepsHash = lib.fakeHash;`, build the package, and copy the reported npm hash.
+# 5. Verify with:
+#    nix build --impure --option substituters https://cache.nixos.org --expr 'let flake = builtins.getFlake "git+file:///home/kai/src/nix-config?submodules=1"; in flake.pkgs.${builtins.currentSystem}.callPackage ./pkg/touchpad-gesture-customization-app-expose/default.nix { }'
+#    ./verify-configs --verbose
+
 { lib
 , buildNpmPackage
 , fetchFromGitHub
@@ -7,15 +17,15 @@
 
 buildNpmPackage rec {
   pname = "gnome-shell-extension-touchpad-gesture-customization-app-expose";
-  version = "0-unstable-2026-04-26";
+  version = "0-unstable-2026-04-27";
 
   uuid = "touchpad-gesture-customization@coooolapps.com";
 
   src = fetchFromGitHub {
     owner = "7mind";
     repo = "touchpad-gesture-customization-app-expose";
-    rev = "3c2d4d1b962587dae0c7a8c85ab96fa4bffe6c2b";
-    hash = "sha256-WvfSmg9svMgTeAedXJwKENmDfm5rx0BfStrmfWlfdqU=";
+    rev = "4c1779ff57c92e450789d823595f6a51fbb34b19";
+    hash = "sha256-Q+kQeJqeg6G1XQPyJI/WaL0Hl4v4+tTF93nZlgsjRhs=";
   };
 
   npmDepsHash = "sha256-vYX1P4A8QePeKqKsg6IyKCC4ujEHt0Kru0k9gWAEOj0=";
