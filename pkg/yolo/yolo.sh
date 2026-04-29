@@ -11,6 +11,8 @@
 # Optional env vars:
 #   YOLO_PODMAN_SOCKET_PATH - rootless podman socket path (enables container forwarding)
 #   YOLO_PODMAN_SOCKET_URI  - rootless podman socket URI
+#   YOLO_HW_NVIDIA_ENABLE   - "1" if smind.hw.nvidia.enable is set on the host (gates --gpu)
+#   YOLO_HW_AMD_GPU_ENABLE  - "1" if smind.hw.amd.gpu.enable is set on the host (gates --gpu)
 
 : "${YOLO_LLM_SANDBOX:?must be set}"
 : "${YOLO_NIX_LD:?must be set}"
@@ -20,11 +22,13 @@
 
 WORK_MODE=0
 MOBILE_MODE=0
+GPU_MODE=0
 ENV_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --work|-w) WORK_MODE=1; shift ;;
     --mobile) MOBILE_MODE=1; shift ;;
+    --gpu) GPU_MODE=1; shift ;;
     --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
     -*) echo "Unknown flag: $1" >&2; exit 1 ;;
     *) break ;;
@@ -41,7 +45,7 @@ if [[ $MOBILE_MODE -eq 1 ]]; then
 fi
 
 if [[ $# -eq 0 ]]; then
-  echo "Usage: yolo [--work] [--mobile] [--env KEY=VAL]... <claude|codex|copilot|gemini|vibe|opencode> [args...]" >&2
+  echo "Usage: yolo [--work] [--mobile] [--gpu] [--env KEY=VAL]... <claude|codex|copilot|gemini|vibe|opencode> [args...]" >&2
   exit 1
 fi
 
@@ -72,12 +76,49 @@ if [[ -n "${TMUX:-}" ]]; then
   fi
 fi
 
+GPU_ARGS=()
+if [[ $GPU_MODE -eq 1 ]]; then
+  if [[ "${YOLO_HW_NVIDIA_ENABLE:-0}" != "1" && "${YOLO_HW_AMD_GPU_ENABLE:-0}" != "1" ]]; then
+    echo "warning: --gpu requested but neither smind.hw.nvidia.enable nor smind.hw.amd.gpu.enable is set on this host; ignoring" >&2
+  else
+    # /run/opengl-driver carries NixOS-managed GPU userspace libs (libcuda,
+    # libamdhip64, mesa drivers, vulkan ICDs). Required for both NVIDIA and AMD.
+    if [[ -e /run/opengl-driver ]]; then
+      GPU_ARGS+=(--ro /run/opengl-driver)
+    fi
+    # /sys is needed for GPU enumeration — ROCm reads /sys/class/kfd/kfd/topology
+    # to discover devices, NVIDIA tools probe /sys/class/drm and /sys/bus/pci.
+    GPU_ARGS+=(--ro /sys)
+    # /dev/dri is shared by AMD (render/card nodes) and NVIDIA (PRIME offload, Vulkan).
+    if [[ -d /dev/dri ]]; then
+      for dev in /dev/dri/*; do
+        [[ -e "$dev" ]] && GPU_ARGS+=(--dev-bind "$dev,$dev")
+      done
+    fi
+    if [[ "${YOLO_HW_NVIDIA_ENABLE:-0}" == "1" ]]; then
+      for dev in /dev/nvidiactl /dev/nvidia-modeset /dev/nvidia-uvm /dev/nvidia-uvm-tools \
+                 /dev/nvidia0 /dev/nvidia1 /dev/nvidia2 /dev/nvidia3; do
+        [[ -e "$dev" ]] && GPU_ARGS+=(--dev-bind "$dev,$dev")
+      done
+      if [[ -d /dev/nvidia-caps ]]; then
+        for dev in /dev/nvidia-caps/*; do
+          [[ -e "$dev" ]] && GPU_ARGS+=(--dev-bind "$dev,$dev")
+        done
+      fi
+    fi
+    if [[ "${YOLO_HW_AMD_GPU_ENABLE:-0}" == "1" ]]; then
+      [[ -e /dev/kfd ]] && GPU_ARGS+=(--dev-bind "/dev/kfd,/dev/kfd")
+    fi
+  fi
+fi
+
 BASE_ARGS=(
   --rw "${PWD}"
   --rw "${HOME}/.cache"
   --rw "${HOME}/.ivy2"
   "${SOCKET_ARGS[@]}"
   "${TMUX_BIND_ARGS[@]}"
+  "${GPU_ARGS[@]}"
   --ro "${HOME}/.config/git"
   --ro "${HOME}/.config/direnv"
   --ro "${HOME}/.local/share/direnv"

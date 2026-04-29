@@ -5,6 +5,7 @@ RW_PATHS=()
 RO_PATHS=()
 BINDS=()
 RO_BINDS=()
+DEV_BINDS=()
 ENVS=()
 
 show_help() {
@@ -18,6 +19,7 @@ Options:
   --ro PATH        Add read-only path (only if exists)
   --bind SRC,DST      Bind mount SRC to DST inside sandbox (read-write)
   --ro-bind SRC,DST   Bind mount SRC to DST inside sandbox (read-only)
+  --dev-bind SRC,DST  Bind mount SRC to DST inside sandbox, allowing device access
   --env VAR=VALUE     Set environment variable inside sandbox
   --help           Show this help
 
@@ -43,6 +45,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --ro-bind)
       RO_BINDS+=("$2")
+      shift 2
+      ;;
+    --dev-bind)
+      DEV_BINDS+=("$2")
       shift 2
       ;;
     --env)
@@ -140,6 +146,13 @@ for bind in "${RO_BINDS[@]}"; do
   IFS=',' read -r src dst <<< "$bind"
   if [[ -e "$src" ]]; then
     BWRAP_ARGS+=(--ro-bind "$src" "$dst")
+  fi
+done
+
+for bind in "${DEV_BINDS[@]}"; do
+  IFS=',' read -r src dst <<< "$bind"
+  if [[ -e "$src" ]]; then
+    BWRAP_ARGS+=(--dev-bind "$src" "$dst")
   fi
 done
 

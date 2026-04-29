@@ -10,6 +10,8 @@
   copilotReasoningEffort ? "xhigh",
   podmanSocketPath ? null,
   podmanSocketUri ? null,
+  hwNvidiaEnable ? false,
+  hwAmdGpuEnable ? false,
 }:
 
 let
@@ -27,6 +29,8 @@ pkgs.writeShellScriptBin "yolo" ''
   export YOLO_COPILOT_BIN="${github-copilot-cli}/bin/copilot"
   export YOLO_COPILOT_MODEL=${lib.escapeShellArg copilotModel}
   export YOLO_COPILOT_REASONING_EFFORT=${lib.escapeShellArg copilotReasoningEffort}
+  export YOLO_HW_NVIDIA_ENABLE=${if hwNvidiaEnable then "1" else "0"}
+  export YOLO_HW_AMD_GPU_ENABLE=${if hwAmdGpuEnable then "1" else "0"}
   ${podmanExports}
   exec bash ${yoloScript} "$@"
 ''

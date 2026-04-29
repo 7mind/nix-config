@@ -431,6 +431,8 @@ in
           inherit copilotConfig;
           podmanSocketPath = if rootlessPodmanEnabled then rootlessPodmanSocketPath else null;
           podmanSocketUri = if rootlessPodmanEnabled then rootlessPodmanSocketUri else null;
+          hwNvidiaEnable = outerConfig.smind.hw.nvidia.enable or false;
+          hwAmdGpuEnable = outerConfig.smind.hw.amd.gpu.enable or false;
         })
       ];
     })

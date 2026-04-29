@@ -59,6 +59,7 @@
   ./power-refresh-rate.nix
   ./power-suspend-quirks.nix
   ./hoymiles-mqtt.nix
+  ./intel-gpu.nix
   ./qendercore.nix
   ./saic-mqtt.nix
   ./spc-mqtt.nix
