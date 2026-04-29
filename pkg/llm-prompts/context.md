@@ -122,3 +122,4 @@ A "suspected" bug is a hypothesis. A reproduced bug is a fact. Don't ship fixes 
 - **Debuggers**: Use the debugger appropriate for the language at hand.
 - **Parallelism**: Use `nproc` to determine available parallel processes.
 - **Unattended mode**: Always run tools in batch mode, especially tools like SBT which expect user input by default.
+- **Worktrees for parallel edits**: When dispatching two or more subagents that will edit the working tree concurrently, give each subagent its own `git worktree` (e.g. `git worktree add ../wt-<task> <branch>`). Two agents writing into the same checkout will clobber each other's edits, corrupt staged changes, and produce a diff that nobody asked for. One worktree per concurrent editor; merge back into the main checkout when each subagent returns. Read-only subagents (review, exploration) can share the main checkout safely. Remove the worktree (`git worktree remove`) once its branch is merged or discarded.

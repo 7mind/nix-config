@@ -326,6 +326,38 @@ Those push synthesis onto the subagent. You have the context; transfer it.
 Send parallel subagents in a single message with multiple tool calls; that
 is what makes them actually run concurrently.
 
+### Worktrees for parallel editors
+
+Any time you spawn two or more subagents that will **edit** the tree
+concurrently — parallel executors in I1, parallel fix subagents in I4,
+or any other case — give each one its own `git worktree`. Two agents
+writing into the same checkout will clobber each other's edits, corrupt
+the index, and produce a diff that mixes unrelated changes; the loop
+cannot recover from that cleanly.
+
+Discipline:
+
+- **One worktree per concurrent editor.** Create with
+  `git worktree add ../wt-<pr-or-defect-id> <branch>` (or a detached
+  HEAD off the current commit if no branch is wanted yet). Pass the
+  worktree path to the subagent in its brief, and tell it to operate
+  *only* inside that path.
+- **Read-only subagents share the main checkout.** Reviewers (I2),
+  planners (O1), and exploration subagents do not need a worktree —
+  they only read.
+- **Merge back deterministically.** When each editor returns, you (the
+  orchestrator) merge or cherry-pick its commits back into the main
+  branch in a defined order. Resolve conflicts at merge time, not at
+  edit time. Never let two subagents race for the same file.
+- **Tear down.** After merging (or discarding) a worktree, run
+  `git worktree remove <path>` so the next round starts clean. Stale
+  worktrees confuse later subagents that scan the repo.
+- **Serial when it doesn't partition.** If two sub-tasks touch the same
+  file or build on each other's output, do not parallelise them across
+  worktrees — run them serially in the main checkout. Worktrees are a
+  tool for *independent* work, not a way to dodge a sequencing
+  requirement.
+
 ## Model selection per phase
 
 Quality of the loop is dominated by the quality of **planning** and
