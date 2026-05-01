@@ -117,9 +117,16 @@ pub async fn open(path: &Path) -> Result<Database, AuditError> {
 /// Apply per-connection PRAGMAs. Must be called on every connection
 /// where `foreign_keys` enforcement matters (i.e. anywhere we delete
 /// from `decision_log` and rely on cascades).
+///
+/// Uses `query()` rather than `execute()` because some PRAGMAs return
+/// rows even when used as setters (notably `PRAGMA journal_mode = WAL`
+/// which echoes back the resulting mode); `execute()` errors with
+/// "unexpected row during execution" when that happens. We drain and
+/// drop the rows.
 pub async fn apply_pragmas(conn: &Connection) -> Result<(), AuditError> {
     for stmt in schema::PRAGMAS {
-        conn.execute(stmt, ()).await?;
+        let mut rows = conn.query(*stmt, ()).await?;
+        while rows.next().await?.is_some() {}
     }
     Ok(())
 }

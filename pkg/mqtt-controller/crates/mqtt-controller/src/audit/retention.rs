@@ -113,8 +113,15 @@ async fn sweep(conn: &Connection, config: &AuditConfig) -> Result<(), AuditError
 
     // Reclaim freed pages. Best-effort — failure here only means the
     // file is slightly larger than ideal until the next sweep.
-    if let Err(e) = conn.execute("PRAGMA incremental_vacuum", ()).await {
-        tracing::debug!(error = %e, "audit retention: incremental_vacuum failed");
+    // `incremental_vacuum` yields one row per page returned to the OS,
+    // which `execute()` rejects; drain via `query()`.
+    match conn.query("PRAGMA incremental_vacuum", ()).await {
+        Ok(mut rows) => {
+            while let Ok(Some(_)) = rows.next().await {}
+        }
+        Err(e) => {
+            tracing::debug!(error = %e, "audit retention: incremental_vacuum failed");
+        }
     }
 
     Ok(())
