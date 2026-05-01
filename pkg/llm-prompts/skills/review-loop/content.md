@@ -330,28 +330,43 @@ is what makes them actually run concurrently.
 
 Any time you spawn two or more subagents that will **edit** the tree
 concurrently — parallel executors in I1, parallel fix subagents in I4,
-or any other case — give each one its own `git worktree`. Two agents
+or any other case — each one needs its own `git worktree`. Two agents
 writing into the same checkout will clobber each other's edits, corrupt
 the index, and produce a diff that mixes unrelated changes; the loop
 cannot recover from that cleanly.
 
 Discipline:
 
-- **One worktree per concurrent editor.** Create with
-  `git worktree add ../wt-<pr-or-defect-id> <branch>` (or a detached
-  HEAD off the current commit if no branch is wanted yet). Pass the
-  worktree path to the subagent in its brief, and tell it to operate
-  *only* inside that path.
+- **Use the Agent tool's built-in `isolation: "worktree"` parameter.**
+  Pass `isolation: "worktree"` when spawning each concurrent editor.
+  The runtime creates a temporary worktree, runs the subagent inside
+  it, and tears it down automatically (auto-cleans if the agent made
+  no changes; otherwise returns the worktree path and branch name in
+  the agent's result for merge-back). This is the *only* sanctioned
+  way to create worktrees in this loop.
+- **Never script worktree lifecycle by hand.** Do not run
+  `git worktree add`, `git worktree remove`, `rm -rf wt-*`, or any
+  equivalent — neither in the orchestrator nor in subagent briefs.
+  Manual worktree management causes permission prompts, clobbers the
+  runtime's bookkeeping, and is the failure mode that motivated this
+  rule. If `isolation: "worktree"` cannot express what you need,
+  serialise the work instead.
+- **Subagent briefs must not mention worktree management.** Tell the
+  executor what to change and where (relative paths within its
+  working tree); do not tell it to `cd`, create, remove, or inspect
+  worktrees, and do not pass `git -C <path>` style commands. The
+  runtime drops the subagent inside its worktree already, so its CWD
+  is correct. A defensive line like "operate only in your current
+  working directory; do not invoke `git worktree`, `rm`, or any
+  path-cleanup command" belongs in every parallel-editor brief.
 - **Read-only subagents share the main checkout.** Reviewers (I2),
-  planners (O1), and exploration subagents do not need a worktree —
-  they only read.
+  planners (O1), and exploration subagents do not need
+  `isolation: "worktree"` — they only read.
 - **Merge back deterministically.** When each editor returns, you (the
   orchestrator) merge or cherry-pick its commits back into the main
-  branch in a defined order. Resolve conflicts at merge time, not at
-  edit time. Never let two subagents race for the same file.
-- **Tear down.** After merging (or discarding) a worktree, run
-  `git worktree remove <path>` so the next round starts clean. Stale
-  worktrees confuse later subagents that scan the repo.
+  branch in a defined order, using the path/branch the runtime
+  reported in the agent's result. Resolve conflicts at merge time,
+  not at edit time. Never let two subagents race for the same file.
 - **Serial when it doesn't partition.** If two sub-tasks touch the same
   file or build on each other's output, do not parallelise them across
   worktrees — run them serially in the main checkout. Worktrees are a
