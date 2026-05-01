@@ -1,0 +1,12 @@
+name: question-batch
+description: >-
+  Batched clarification questions. When you need to ask the user any
+  non-trivial question, or more than three questions of any kind (even trivial
+  ones), do not interrogate them inline — write the questions to a draft file
+  the user can answer at their own pace. TRIGGER when: you are about to ask the
+  user any non-trivial clarification question (one that requires judgment,
+  context, or a design decision), or you are about to ask four or more
+  questions of any kind in a single turn, or you have accumulated four or more
+  open questions across an exploration/planning phase, or the user requests a
+  written question list, or requirements are ambiguous on multiple independent
+  axes.
