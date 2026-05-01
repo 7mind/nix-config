@@ -37,10 +37,15 @@ pub const MIGRATIONS: &[&str] = &[
 /// durability with batched fsyncs, suitable for an audit log; foreign keys
 /// must be enabled per-connection for ON DELETE CASCADE on the entity
 /// index to fire during retention sweeps.
+///
+/// `auto_vacuum` is intentionally omitted: Turso 0.5 rejects it without
+/// the `--experimental-autovacuum` flag, which we don't pass. Without
+/// it the file does not shrink after retention deletes — freed pages
+/// remain in the file as reusable free space, so steady-state size is
+/// bounded but not minimal. Acceptable for an audit log.
 pub const PRAGMAS: &[&str] = &[
     "PRAGMA journal_mode = WAL",
     "PRAGMA synchronous = NORMAL",
     "PRAGMA foreign_keys = ON",
     "PRAGMA temp_store = MEMORY",
-    "PRAGMA auto_vacuum = INCREMENTAL",
 ];

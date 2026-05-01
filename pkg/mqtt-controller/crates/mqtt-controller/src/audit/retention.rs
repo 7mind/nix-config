@@ -111,18 +111,11 @@ async fn sweep(conn: &Connection, config: &AuditConfig) -> Result<(), AuditError
         );
     }
 
-    // Reclaim freed pages. Best-effort — failure here only means the
-    // file is slightly larger than ideal until the next sweep.
-    // `incremental_vacuum` yields one row per page returned to the OS,
-    // which `execute()` rejects; drain via `query()`.
-    match conn.query("PRAGMA incremental_vacuum", ()).await {
-        Ok(mut rows) => {
-            while let Ok(Some(_)) = rows.next().await {}
-        }
-        Err(e) => {
-            tracing::debug!(error = %e, "audit retention: incremental_vacuum failed");
-        }
-    }
+    // Skipping `PRAGMA incremental_vacuum` — Turso 0.5 only honors it
+    // when auto_vacuum is enabled (requires `--experimental-autovacuum`),
+    // which we don't pass. File size grows monotonically up to the
+    // configured retention bounds and stays there; pages freed by
+    // DELETE remain in the file as reusable free space.
 
     Ok(())
 }
