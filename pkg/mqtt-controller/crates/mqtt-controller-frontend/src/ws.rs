@@ -18,7 +18,7 @@ use web_sys::{CloseEvent, ErrorEvent, MessageEvent, WebSocket};
 
 use mqtt_controller_wire::{
     ClientMessage, DecisionLogEntry, EntityUpdate, FullStateSnapshot, HeatingZoneSnapshot,
-    LightSnapshot, PlugSnapshot, RoomSnapshot, ServerMessage, TopologyInfo,
+    LightSnapshot, LogEntryDto, PlugSnapshot, RoomSnapshot, ServerMessage, TopologyInfo,
 };
 
 const MAX_LOG_ENTRIES: usize = 200;
@@ -31,6 +31,25 @@ const TICK_INTERVAL_MS: u32 = 1000;
 pub struct JsonPopup {
     pub title: String,
     pub json: String,
+}
+
+/// Per-entity persisted decision-log page. Built up as paginated
+/// responses arrive from the server; the popup reads it reactively.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct EntityLogPage {
+    /// Entries in most-recent-first order. Each new page request with
+    /// a `before_ts_ms` cursor appends older entries.
+    pub entries: Vec<LogEntryDto>,
+    /// True while there is a pagination cursor that has not been
+    /// consumed (i.e. the server returned a full page on the last
+    /// request).
+    pub has_more: bool,
+    /// True while a `GetEntityLog` request is in flight. Used by the
+    /// popup to render a spinner and to suppress duplicate requests.
+    pub loading: bool,
+    /// True after at least one response has arrived. Lets the popup
+    /// distinguish "loading first page" from "loaded, empty history".
+    pub loaded: bool,
 }
 
 /// Held WebSocket resources. We keep the `Closure` handles alive so that
@@ -91,6 +110,10 @@ pub struct WsState {
     /// Global JSON popup. `None` = hidden.
     pub json_popup: RwSignal<Option<JsonPopup>>,
 
+    /// Currently-open per-entity log popup, by entity name.
+    /// `None` = hidden.
+    pub log_popup_entity: RwSignal<Option<String>>,
+
     /// Monotonic counter ticking once per second. Components that
     /// display countdowns subscribe to this so they re-render as
     /// time progresses, without any server round-trip.
@@ -101,6 +124,9 @@ pub struct WsState {
     plugs: EntityMap<PlugSnapshot>,
     heating: EntityMap<HeatingZoneSnapshot>,
     lights: EntityMap<LightSnapshot>,
+    /// Per-entity persisted log pages. Lazily populated when the popup
+    /// requests history for an entity.
+    entity_logs: StoredValue<BTreeMap<String, RwSignal<EntityLogPage>>, LocalStorage>,
     ws_inner: StoredValue<WsInner, LocalStorage>,
     set_connected: WriteSignal<bool>,
     set_topology: WriteSignal<Option<TopologyInfo>>,
@@ -126,11 +152,13 @@ impl WsState {
             filter_entities,
             set_filter_entities,
             json_popup: RwSignal::new(None),
+            log_popup_entity: RwSignal::new(None),
             tick_seq,
             rooms: StoredValue::new_local(BTreeMap::new()),
             plugs: StoredValue::new_local(BTreeMap::new()),
             heating: StoredValue::new_local(BTreeMap::new()),
             lights: StoredValue::new_local(BTreeMap::new()),
+            entity_logs: StoredValue::new_local(BTreeMap::new()),
             ws_inner: StoredValue::new_local(WsInner::new()),
             set_connected,
             set_topology,
@@ -197,6 +225,67 @@ impl WsState {
         self.json_popup.set(None);
     }
 
+    /// Reactive signal for one entity's persisted log page. Created on
+    /// first access; subsequent calls return the same handle so the
+    /// popup component can subscribe before the response arrives.
+    pub fn entity_log_signal(&self, entity: &str) -> RwSignal<EntityLogPage> {
+        if let Some(sig) = self.entity_logs.with_value(|m| m.get(entity).copied()) {
+            return sig;
+        }
+        let sig = RwSignal::new(EntityLogPage::default());
+        self.entity_logs.update_value(|m| {
+            m.entry(entity.to_string()).or_insert(sig);
+        });
+        sig
+    }
+
+    /// Open the per-entity log popup. Initialises the signal in the
+    /// loading state and issues the initial `GetEntityLog` request.
+    pub fn open_log_popup(&self, entity: String) {
+        let sig = self.entity_log_signal(&entity);
+        sig.update(|page| {
+            *page = EntityLogPage {
+                entries: Vec::new(),
+                has_more: false,
+                loading: true,
+                loaded: false,
+            };
+        });
+        self.send(&ClientMessage::GetEntityLog {
+            entity: entity.clone(),
+            before_ts_ms: None,
+            limit: None,
+        });
+        self.log_popup_entity.set(Some(entity));
+    }
+
+    /// Hide the per-entity log popup. Does not clear stored entries —
+    /// reopening the same entity reuses them and refreshes from the
+    /// server.
+    pub fn close_log_popup(&self) {
+        self.log_popup_entity.set(None);
+    }
+
+    /// Request the next older page for an entity, using the oldest
+    /// entry already loaded as the cursor. No-op when there is no
+    /// cursor or a request is already in flight.
+    pub fn load_more_log(&self, entity: &str) {
+        let sig = self.entity_log_signal(entity);
+        let cursor = sig.with_untracked(|page| {
+            if page.loading || !page.has_more {
+                return None;
+            }
+            page.entries.last().map(|e| e.timestamp_epoch_ms)
+        });
+        let Some(before) = cursor else { return };
+        sig.update(|page| page.loading = true);
+        self.send(&ClientMessage::GetEntityLog {
+            entity: entity.to_string(),
+            before_ts_ms: Some(before),
+            limit: None,
+        });
+    }
+
     fn start_tick(&self, set_tick: WriteSignal<u64>) {
         let tick = gloo_timers::callback::Interval::new(TICK_INTERVAL_MS, move || {
             set_tick.update(|n| *n = n.wrapping_add(1));
@@ -228,6 +317,7 @@ impl WsState {
         let plug_names = self.plug_names;
         let heating_names = self.heating_names;
         let light_names = self.light_names;
+        let entity_logs = self.entity_logs;
 
         // On open: mark connected, request snapshot + topology.
         let ws_for_open = ws.clone();
@@ -288,6 +378,13 @@ impl WsState {
                         upsert_entity(lights, light_names, light.device.clone(), light);
                     }
                 },
+                ServerMessage::EntityLog {
+                    entity,
+                    entries,
+                    has_more,
+                } => {
+                    apply_entity_log(entity_logs, &entity, entries, has_more);
+                }
             }
         });
         ws.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
@@ -336,6 +433,38 @@ impl WsState {
             b.reconnect = Some(timeout);
         });
     }
+}
+
+/// Merge a `ServerMessage::EntityLog` response into the per-entity
+/// signal map. Decides between "first page" (replace) and "next older
+/// page" (append) by comparing timestamps with what is already loaded.
+fn apply_entity_log(
+    entity_logs: StoredValue<BTreeMap<String, RwSignal<EntityLogPage>>, LocalStorage>,
+    entity: &str,
+    incoming: Vec<LogEntryDto>,
+    has_more: bool,
+) {
+    let sig = entity_logs.with_value(|m| m.get(entity).copied());
+    let Some(sig) = sig else {
+        // Response arrived for an entity nobody is observing; drop.
+        return;
+    };
+    sig.update(|page| {
+        let oldest_existing = page.entries.last().map(|e| e.timestamp_epoch_ms);
+        let newest_incoming = incoming.first().map(|e| e.timestamp_epoch_ms);
+        let is_older_page = matches!(
+            (oldest_existing, newest_incoming),
+            (Some(o), Some(n)) if n < o
+        );
+        if is_older_page {
+            page.entries.extend(incoming);
+        } else {
+            page.entries = incoming;
+        }
+        page.has_more = has_more;
+        page.loading = false;
+        page.loaded = true;
+    });
 }
 
 fn apply_full_snapshot(

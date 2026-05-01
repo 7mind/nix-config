@@ -137,6 +137,7 @@ pub fn kitchen_config() -> Config {
         defaults: Defaults::default(),
         heating: None,
         location: None,
+        audit_log: None,
     }
 }
 
@@ -192,6 +193,7 @@ pub fn kitchen_with_sonoff_config() -> Config {
         defaults: Defaults::default(),
         heating: None,
         location: None,
+        audit_log: None,
     }
 }
 

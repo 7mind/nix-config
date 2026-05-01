@@ -126,6 +126,7 @@ fn make_config(
             },
         }),
         location: None,
+        audit_log: None,
     }
 }
 

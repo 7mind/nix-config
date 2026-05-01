@@ -640,6 +640,101 @@ header h1 {
     flex: 1;
 }
 
+/* Per-entity decision log modal. Wider than the JSON modal because
+   entries carry more horizontal data; scrollable list interior. */
+.modal-log {
+    width: min(900px, 100%);
+}
+
+.modal-log-body {
+    font-family: inherit;
+    color: var(--text);
+    white-space: normal;
+    padding: 0;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0.5rem 0.75rem;
+    border-top: 1px solid var(--border);
+    gap: 0.5rem;
+}
+
+.log-empty {
+    padding: 1rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.log-entries {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.log-entry {
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.log-entry:last-child {
+    border-bottom: none;
+}
+
+.log-entry-header {
+    display: flex;
+    gap: 0.6rem;
+    align-items: baseline;
+    margin-bottom: 0.25rem;
+}
+
+.log-entry-ts {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.log-entry-summary {
+    font-size: 0.85rem;
+    flex: 1;
+}
+
+.log-entry-decisions,
+.log-entry-actions {
+    list-style: none;
+    margin: 0.25rem 0 0 1.25rem;
+    padding: 0;
+    font-size: 0.75rem;
+}
+
+.log-entry-decisions li {
+    color: var(--text-muted);
+    padding: 0.1rem 0;
+}
+
+.log-entry-actions li {
+    display: flex;
+    gap: 0.4rem;
+    padding: 0.1rem 0;
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+}
+
+.log-action-kind {
+    color: var(--text-muted);
+    min-width: 4rem;
+}
+
+.log-action-target {
+    color: var(--text);
+    font-weight: 500;
+}
+
+.log-action-payload {
+    color: var(--text-muted);
+    word-break: break-all;
+}
+
 /* Event log */
 .event-log h2 {
     font-size: 1rem;

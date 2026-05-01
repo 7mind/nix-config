@@ -127,6 +127,7 @@ fn make_processor_with(
         defaults: Defaults::default(),
         heating: None,
         location: None,
+        audit_log: None,
     };
     let topology = Arc::new(Topology::build(&cfg).expect("build topology"));
     EventProcessor::new(topology, Arc::new(FakeClock::new(12)), Defaults::default(), None)
@@ -180,6 +181,7 @@ fn make_processor_with_bedtime(mode: MotionMode) -> EventProcessor {
         defaults: Defaults::default(),
         heating: None,
         location: None,
+        audit_log: None,
     };
     let topology = Arc::new(Topology::build(&cfg).expect("build topology"));
     EventProcessor::new(topology, Arc::new(FakeClock::new(12)), Defaults::default(), None)
@@ -676,6 +678,7 @@ fn propagation_preserves_off_only_child_motion_claim() {
         defaults: Defaults::default(),
         heating: None,
         location: None,
+        audit_log: None,
     };
     let topology = Arc::new(Topology::build(&cfg).expect("build topology"));
     let mut p =
@@ -759,6 +762,7 @@ fn shared_motion_sensor_fans_vacancy_to_all_rooms() {
         defaults: Defaults::default(),
         heating: None,
         location: None,
+        audit_log: None,
     };
     let topology = Arc::new(Topology::build(&cfg).expect("build topology"));
     let mut p =
@@ -1799,6 +1803,7 @@ fn multi_sensor_room_dedups_per_sensor_not_per_room() {
         defaults: Defaults::default(),
         heating: None,
         location: None,
+        audit_log: None,
     };
     let topology = Arc::new(Topology::build(&cfg).expect("build topology"));
     let mut p =

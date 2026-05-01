@@ -6,7 +6,7 @@ use crate::components::event_log::EventLog;
 use crate::components::heating_card::HeatingCards;
 use crate::components::plug_card::PlugCards;
 use crate::components::room_card::RoomCards;
-use crate::components::shared::JsonModal;
+use crate::components::shared::{JsonModal, LogModal};
 use crate::ws::WsState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -122,6 +122,7 @@ pub fn App() -> impl IntoView {
                 </section>
             </div>
             <JsonModal />
+            <LogModal />
         </div>
     }
 }

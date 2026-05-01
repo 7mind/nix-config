@@ -10,7 +10,7 @@ use leptos::prelude::*;
 use mqtt_controller_wire::{ClientMessage, LightSnapshot, RoomSnapshot};
 
 use crate::components::shared::{
-    format_ago_ms, tass_state_row, EntityFilterCheckbox, JsonButton, SwitchChip,
+    format_ago_ms, tass_state_row, EntityFilterCheckbox, JsonButton, LogButton, SwitchChip,
 };
 use crate::ws::WsState;
 
@@ -57,6 +57,7 @@ fn RoomCard(name: String) -> impl IntoView {
                         serde_json::to_string_pretty(&signal.get()).unwrap_or_default()
                     }
                 />
+                <LogButton entity=name.clone() />
             </div>
 
             <RoomMeta signal=signal />

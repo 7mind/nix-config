@@ -449,6 +449,25 @@ pub struct ActionDto {
     pub payload_json: String,
 }
 
+/// One persisted decision-log row, returned by [`ClientMessage::GetEntityLog`].
+/// Mirrors [`DecisionLogEntry`] except the in-process broadcast `seq` is
+/// replaced by the durable database row id.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LogEntryDto {
+    /// Database row id. Stable across daemon restarts, monotonic per
+    /// row insertion. Use as the pagination cursor key when ordering
+    /// by timestamp.
+    pub id: i64,
+    /// Wall-clock timestamp (Unix epoch ms).
+    pub timestamp_epoch_ms: i64,
+    /// Human-readable summary of the triggering event.
+    pub event_summary: String,
+    /// Tracing messages captured during `handle_event`.
+    pub decisions: Vec<String>,
+    /// Actions the controller decided to publish.
+    pub actions_emitted: Vec<ActionDto>,
+}
+
 // ---------------------------------------------------------------------------
 // Topology info (server → client, on connect)
 // ---------------------------------------------------------------------------
@@ -510,6 +529,22 @@ pub enum ClientMessage {
     SetRoomOff { room: String },
     /// Toggle a smart plug on/off.
     TogglePlug { device: String },
+    /// Request the persisted decision-log history for one entity
+    /// (room name, group name, device, or heating zone). Backs the
+    /// per-entity log popup. Pagination cursor: pass the timestamp of
+    /// the oldest entry already shown as `before_ts_ms` to fetch the
+    /// next older page.
+    GetEntityLog {
+        /// Entity name to filter by.
+        entity: String,
+        /// Cursor: return rows older than this timestamp. `None` =
+        /// most recent page.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        before_ts_ms: Option<i64>,
+        /// Page size.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        limit: Option<u32>,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -530,6 +565,17 @@ pub enum ServerMessage {
     /// Incremental update for any single entity kind. Replaces the
     /// former `RoomUpdate`/`PlugUpdate`/`HeatingZoneUpdate` trio.
     Entity(EntityUpdate),
+    /// Response to [`ClientMessage::GetEntityLog`]. `entity` echoes the
+    /// request so the frontend can route the response to the right
+    /// popup when multiple are open. `entries` is in
+    /// most-recent-first order. `has_more` is true when the page is
+    /// full — the frontend can fetch the next page using the oldest
+    /// entry's `timestamp_epoch_ms` as the new cursor.
+    EntityLog {
+        entity: String,
+        entries: Vec<LogEntryDto>,
+        has_more: bool,
+    },
 }
 
 /// One entity update, tagged by kind. Carries a fresh snapshot of the

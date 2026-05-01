@@ -174,6 +174,7 @@ fn small_topology() -> Arc<Topology> {
         defaults: Defaults::default(),
         heating: None,
         location: None,
+        audit_log: None,
     };
     Arc::new(Topology::build(&cfg).unwrap())
 }

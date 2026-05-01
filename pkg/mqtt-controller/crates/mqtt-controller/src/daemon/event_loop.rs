@@ -38,9 +38,9 @@ pub(super) async fn run_event_loop(
     // handle_event call right after startup.
     tick.tick().await;
 
-    let (mut ws_cmd_rx, broadcast_tx) = match web {
-        Some(wh) => (Some(wh.ws_cmd_rx), Some(wh.broadcast_tx)),
-        None => (None, None),
+    let (mut ws_cmd_rx, broadcast_tx, audit_writer) = match web {
+        Some(wh) => (Some(wh.ws_cmd_rx), Some(wh.broadcast_tx), wh.audit_writer),
+        None => (None, None, None),
     };
     let has_web = broadcast_tx.is_some();
     let mut event_seq: u64 = 0;
@@ -187,6 +187,9 @@ pub(super) async fn run_event_loop(
                         actions_emitted: visible_effects,
                         involved_entities,
                     };
+                    if let Some(audit) = &audit_writer {
+                        audit.try_send(entry.clone());
+                    }
                     let _ = tx.send(mqtt_controller_wire::ServerMessage::EventLog(entry));
                 }
             }

@@ -14,6 +14,7 @@
 //! (see [`config::Config`]). One binary, two subcommands wired up in
 //! [`main`](../bin/mqtt-controller/main.rs).
 
+pub mod audit;
 pub mod config;
 pub mod daemon;
 pub mod domain;

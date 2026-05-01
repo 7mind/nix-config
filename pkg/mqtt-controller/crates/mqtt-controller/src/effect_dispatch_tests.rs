@@ -221,6 +221,7 @@ fn make_topology_simple() -> Arc<Topology> {
             },
         }),
         location: None,
+        audit_log: None,
     };
     Arc::new(Topology::build(&cfg).expect("build topology"))
 }

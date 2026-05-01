@@ -207,6 +207,7 @@ fn config_with_bindings(
         defaults: Default::default(),
         heating: None,
         location: None,
+        audit_log: None,
     }
 }
 
@@ -904,6 +905,7 @@ fn negative_double_tap_suppression_rejected() {
         },
         heating: None,
         location: None,
+        audit_log: None,
     };
     assert_eq!(
         Topology::build(&cfg).unwrap_err(),
@@ -1005,6 +1007,7 @@ fn hw_double_tap_is_per_button() {
         defaults: Defaults::default(),
         heating: None,
         location: None,
+        audit_log: None,
     };
     let topo = Topology::build(&cfg).unwrap();
     let switch_idx = topo.device_idx("sw-partial").unwrap();
@@ -1051,6 +1054,7 @@ fn unknown_switch_model_rejected() {
         defaults: Default::default(),
         heating: None,
         location: None,
+        audit_log: None,
     };
     let err = Topology::build(&cfg).unwrap_err();
     assert!(matches!(err, TopologyError::UnknownSwitchModel { .. }));

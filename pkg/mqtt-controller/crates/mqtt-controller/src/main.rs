@@ -290,6 +290,37 @@ async fn run_daemon(args: DaemonArgs) -> Result<()> {
         let (ws_cmd_tx, ws_cmd_rx) = tokio::sync::mpsc::channel(64);
         let (broadcast_tx, _) = tokio::sync::broadcast::channel(256);
 
+        // Audit log is opt-in via the `audit_log` config block. Only
+        // enabled alongside the web subsystem because the persisted
+        // history is consumed by the per-entity popup; without web
+        // there is no consumer.
+        let (audit_writer, audit_db) = match config.audit_log.as_ref() {
+            Some(audit_cfg) => match mqtt_controller::audit::open(&audit_cfg.path).await {
+                Ok(db) => {
+                    let (writer, _writer_handle) =
+                        mqtt_controller::audit::spawn_writer(db.clone(), audit_cfg.clone());
+                    let _retention_handle =
+                        mqtt_controller::audit::spawn_retention(db.clone(), audit_cfg.clone());
+                    tracing::info!(
+                        path = %audit_cfg.path.display(),
+                        retention_days = audit_cfg.retention_days,
+                        per_entity_max_rows = audit_cfg.per_entity_max_rows,
+                        "audit log enabled"
+                    );
+                    (Some(writer), Some(db))
+                }
+                Err(e) => {
+                    tracing::error!(
+                        error = %e,
+                        path = %audit_cfg.path.display(),
+                        "failed to open audit log; continuing without persistence"
+                    );
+                    (None, None)
+                }
+            },
+            None => (None, None),
+        };
+
         let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
         let (_bound_addr, _server_handle) =
             mqtt_controller::web::bind_and_start_web_server(
@@ -297,6 +328,7 @@ async fn run_daemon(args: DaemonArgs) -> Result<()> {
                 ws_cmd_tx,
                 broadcast_tx.clone(),
                 assets_dir,
+                audit_db,
             )
             .await
             .with_context(|| format!("binding web server on {addr}"))?;
@@ -304,6 +336,7 @@ async fn run_daemon(args: DaemonArgs) -> Result<()> {
         Some(mqtt_controller::web::WebHandle {
             ws_cmd_rx,
             broadcast_tx,
+            audit_writer,
         })
     } else {
         None

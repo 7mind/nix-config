@@ -4,7 +4,7 @@ use leptos::prelude::*;
 
 use mqtt_controller_wire::HeatingZoneSnapshot;
 
-use crate::components::shared::{tass_state_row, EntityFilterCheckbox, JsonButton};
+use crate::components::shared::{tass_state_row, EntityFilterCheckbox, JsonButton, LogButton};
 use crate::ws::WsState;
 
 #[component]
@@ -45,6 +45,7 @@ fn HeatingZoneCard(name: String) -> impl IntoView {
                     title=format!("Heating: {}", json_name)
                     build_json=move || serde_json::to_string_pretty(&signal.get()).unwrap_or_default()
                 />
+                <LogButton entity=name.clone() />
             </div>
 
             <HeatingMeta signal=signal />

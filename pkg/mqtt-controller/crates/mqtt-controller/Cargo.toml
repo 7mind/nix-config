@@ -70,6 +70,12 @@ futures-util = "0.3"
 # WebSocket client for z2m's frontend API (bulk device state fetch).
 tokio-tungstenite = { version = "0.26", features = ["connect"] }
 
+# Persistent audit log of decision-log entries. Pure-Rust SQLite rewrite,
+# wire-compatible with SQLite's on-disk format. Default features pull in
+# mimalloc (C) and FTS — disabled here to keep the closure pure-Rust.
+# See src/audit/.
+turso = { version = "0.5", default-features = false }
+
 [dev-dependencies]
 # Embedded MQTT broker for end-to-end tests. Lets us run the full daemon
 # against a real broker without spawning mosquitto from a child process.

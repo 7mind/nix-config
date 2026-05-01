@@ -121,6 +121,13 @@ pub struct Config {
     /// when any scene schedule uses sun-relative time expressions.
     #[serde(default)]
     pub location: Option<crate::sun::Location>,
+
+    /// Optional persistent audit log of decision-log entries. When
+    /// present and the daemon's web subsystem is enabled, every
+    /// processed event with visible effects or captured decisions is
+    /// written to the configured database file.
+    #[serde(default)]
+    pub audit_log: Option<crate::audit::AuditConfig>,
 }
 
 #[derive(Debug, Error)]

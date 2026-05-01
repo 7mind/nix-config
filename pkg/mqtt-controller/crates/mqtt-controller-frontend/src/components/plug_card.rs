@@ -5,7 +5,7 @@ use leptos::prelude::*;
 use mqtt_controller_wire::{ClientMessage, PlugSnapshot};
 
 use crate::components::shared::{
-    format_ago_ms, tass_state_row, EntityFilterCheckbox, JsonButton, SwitchChip,
+    format_ago_ms, tass_state_row, EntityFilterCheckbox, JsonButton, LogButton, SwitchChip,
 };
 use crate::ws::WsState;
 
@@ -49,6 +49,7 @@ fn PlugCard(device: String) -> impl IntoView {
                     title=format!("Plug: {}", json_device)
                     build_json=move || serde_json::to_string_pretty(&signal.get()).unwrap_or_default()
                 />
+                <LogButton entity=device.clone() />
             </div>
 
             <PlugMeta signal=signal />

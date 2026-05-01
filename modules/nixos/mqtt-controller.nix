@@ -177,6 +177,62 @@ in
         description = "Whether to open the web dashboard port in the firewall.";
       };
     };
+
+    auditLog = {
+      enable = lib.mkEnableOption ''
+        Persistent audit log of decision-log entries. When enabled, the
+        daemon records every processed event that produced visible
+        effects or captured decision traces to a Turso (pure-Rust
+        SQLite) database. The web dashboard reads it to render the
+        per-entity log popup. Requires `web.enable = true` to be useful
+        — without the dashboard there is no consumer.
+      '';
+
+      path = lib.mkOption {
+        type = lib.types.str;
+        default = "/var/lib/mqtt-controller/audit.db";
+        description = ''
+          Filesystem path of the audit-log database file. The default
+          places it inside the daemon's `StateDirectory`, which is
+          owned by the dynamic systemd user.
+        '';
+      };
+
+      retentionDays = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 30;
+        description = "Rows older than this many days are deleted by the retention sweep.";
+      };
+
+      perEntityMaxRows = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 2000;
+        description = ''
+          Per-entity row cap. The retention sweep keeps at most this
+          many rows per entity, even if some fall outside the time
+          window. Guards against a noisy entity pushing out a quiet
+          entity's history.
+        '';
+      };
+
+      flushIntervalMs = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 5000;
+        description = "Writer flush interval in milliseconds.";
+      };
+
+      flushMaxRows = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 100;
+        description = "Writer flush cap: commit fires once this many rows are buffered.";
+      };
+
+      sweepIntervalSecs = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 3600;
+        description = "Retention sweep interval in seconds.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable (
@@ -184,7 +240,17 @@ in
       locationAttr = lib.optionalAttrs
         (cfg.location.latitude != null && cfg.location.longitude != null)
         { location = { inherit (cfg.location) latitude longitude; }; };
-      mergedConfig = cfg.config // locationAttr;
+      auditLogAttr = lib.optionalAttrs cfg.auditLog.enable {
+        audit_log = {
+          path = cfg.auditLog.path;
+          retention_days = cfg.auditLog.retentionDays;
+          per_entity_max_rows = cfg.auditLog.perEntityMaxRows;
+          flush_interval_ms = cfg.auditLog.flushIntervalMs;
+          flush_max_rows = cfg.auditLog.flushMaxRows;
+          sweep_interval_secs = cfg.auditLog.sweepIntervalSecs;
+        };
+      };
+      mergedConfig = cfg.config // locationAttr // auditLogAttr;
       configFile = yaml.generate "mqtt-controller.json" mergedConfig;
 
       # The `--verbose` flag is the global one (clap `global = true`), so it
@@ -309,6 +375,12 @@ in
           RestartSec = 5;
           LoadCredential = "mqtt-password:${cfg.mqtt.passwordFile}";
           DynamicUser = true;
+          # The audit log lives under /var/lib/mqtt-controller; systemd
+          # creates and chowns this dir to the dynamic user. Always
+          # set, regardless of `auditLog.enable`, so toggling the
+          # option later does not require a service-config change.
+          StateDirectory = "mqtt-controller";
+          StateDirectoryMode = "0750";
         };
       };
     }

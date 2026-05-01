@@ -2,6 +2,7 @@
 //! TASS state pill strip.
 
 use leptos::prelude::*;
+use wasm_bindgen::JsValue;
 
 use mqtt_controller_wire::{SwitchInfo, TassActualInfo, TassTargetInfo};
 
@@ -145,6 +146,26 @@ where
     }
 }
 
+/// Per-entity log popup trigger. Opens the global [`LogModal`] for the
+/// given entity name; the modal handles loading state, paging, and
+/// rendering. Use the same entity name the controller publishes for
+/// the entity (room name, plug device name, heating zone name).
+#[component]
+pub fn LogButton(entity: String) -> impl IntoView {
+    let ws = expect_context::<WsState>();
+    view! {
+        <button
+            class="btn detail-btn"
+            title="Show decision log"
+            on:click=move |_| {
+                ws.open_log_popup(entity.clone());
+            }
+        >
+            "Log"
+        </button>
+    }
+}
+
 /// One switch chip with a hover-activated popup listing the actions
 /// bound to each button on the device.
 #[component]
@@ -235,6 +256,142 @@ pub fn JsonModal() -> impl IntoView {
             }.into_any()
         }}
     }
+}
+
+/// Per-entity decision-log modal. Rendered once at the root; reads
+/// [`WsState::log_popup_entity`] to decide visibility, then subscribes
+/// to the per-entity log signal for the open entity.
+#[component]
+pub fn LogModal() -> impl IntoView {
+    let ws = expect_context::<WsState>();
+    let popup_entity = ws.log_popup_entity;
+
+    view! {
+        {move || {
+            let Some(entity) = popup_entity.get() else { return ().into_any(); };
+            let entity_for_signal = entity.clone();
+            let entity_for_more = entity.clone();
+            let entity_for_title = entity.clone();
+            let page_signal = ws.entity_log_signal(&entity_for_signal);
+            let ws_close = ws.clone();
+            let ws_close_backdrop = ws.clone();
+            let ws_more = ws.clone();
+            view! {
+                <div class="modal-backdrop" on:click=move |_| ws_close_backdrop.close_log_popup()>
+                    <div class="modal-panel modal-log" on:click=|e| e.stop_propagation()>
+                        <div class="modal-header">
+                            <span class="modal-title">{format!("Log: {entity_for_title}")}</span>
+                            <button
+                                class="btn"
+                                on:click=move |_| ws_close.close_log_popup()
+                            >
+                                "Close"
+                            </button>
+                        </div>
+                        <div class="modal-body modal-log-body">
+                            {move || {
+                                let page = page_signal.get();
+                                if page.loading && !page.loaded {
+                                    return view! {
+                                        <div class="log-empty">"Loading…"</div>
+                                    }.into_any();
+                                }
+                                if page.entries.is_empty() {
+                                    return view! {
+                                        <div class="log-empty">"No history for this entity."</div>
+                                    }.into_any();
+                                }
+                                let entries = page.entries.clone();
+                                view! {
+                                    <ul class="log-entries">
+                                        {entries.into_iter().map(|entry| view! {
+                                            <LogRow entry=entry />
+                                        }).collect::<Vec<_>>()}
+                                    </ul>
+                                }.into_any()
+                            }}
+                        </div>
+                        <div class="modal-footer">
+                            {move || {
+                                let page = page_signal.get();
+                                if !page.has_more && page.loaded {
+                                    return ().into_any();
+                                }
+                                let label = if page.loading { "Loading…" } else { "Load older" };
+                                let disabled = page.loading || !page.has_more;
+                                let entity = entity_for_more.clone();
+                                let ws_more = ws_more.clone();
+                                view! {
+                                    <button
+                                        class="btn"
+                                        prop:disabled=disabled
+                                        on:click=move |_| ws_more.load_more_log(&entity)
+                                    >
+                                        {label}
+                                    </button>
+                                }.into_any()
+                            }}
+                        </div>
+                    </div>
+                </div>
+            }.into_any()
+        }}
+    }
+}
+
+/// One row inside [`LogModal`]: timestamp, event summary, the captured
+/// reasoning trace, and the emitted actions.
+#[component]
+fn LogRow(entry: mqtt_controller_wire::LogEntryDto) -> impl IntoView {
+    let ts = format_timestamp(entry.timestamp_epoch_ms);
+    let summary = entry.event_summary.clone();
+    let decisions = entry.decisions.clone();
+    let actions = entry.actions_emitted.clone();
+    view! {
+        <li class="log-entry">
+            <div class="log-entry-header">
+                <span class="log-entry-ts mono">{ts}</span>
+                <span class="log-entry-summary">{summary}</span>
+            </div>
+            {(!decisions.is_empty()).then(|| view! {
+                <ul class="log-entry-decisions">
+                    {decisions.into_iter().map(|d| view! {
+                        <li>{d}</li>
+                    }).collect::<Vec<_>>()}
+                </ul>
+            })}
+            {(!actions.is_empty()).then(|| view! {
+                <ul class="log-entry-actions">
+                    {actions.into_iter().map(|a| {
+                        let target = a.target.clone();
+                        let kind = a.target_kind.clone();
+                        let payload = a.payload_json.clone();
+                        view! {
+                            <li class="mono">
+                                <span class="log-action-kind">{kind}</span>
+                                <span class="log-action-target">{target}</span>
+                                <span class="log-action-payload">{payload}</span>
+                            </li>
+                        }
+                    }).collect::<Vec<_>>()}
+                </ul>
+            })}
+        </li>
+    }
+}
+
+/// Format a Unix-epoch-ms timestamp as an `HH:MM:SS YYYY-MM-DD` string
+/// in the browser's local time. Uses the JS `Date` rather than a Rust
+/// time crate to avoid pulling chrono into the wasm bundle.
+fn format_timestamp(epoch_ms: i64) -> String {
+    let date = js_sys::Date::new(&JsValue::from_f64(epoch_ms as f64));
+    let h = date.get_hours();
+    let m = date.get_minutes();
+    let s = date.get_seconds();
+    let y = date.get_full_year();
+    let mo = date.get_month() + 1;
+    let d = date.get_date();
+    format!("{h:02}:{m:02}:{s:02} {y}-{mo:02}-{d:02}")
 }
 
 /// Render a TASS state row with typed target/actual values. Generic

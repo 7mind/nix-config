@@ -14,8 +14,11 @@ use axum::routing::get;
 use axum::Router;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tower_http::services::ServeDir;
+use turso::Database;
 
 use mqtt_controller_wire::{ClientMessage, FullStateSnapshot, ServerMessage, TopologyInfo};
+
+use crate::audit::AuditWriterHandle;
 
 /// Command sent from a WebSocket handler to the daemon event loop.
 pub enum WsCommand {
@@ -41,12 +44,22 @@ pub enum WsCommand {
 pub struct WebHandle {
     pub ws_cmd_rx: mpsc::Receiver<WsCommand>,
     pub broadcast_tx: broadcast::Sender<ServerMessage>,
+    /// Optional audit-log writer. When present, the event loop persists
+    /// each broadcast `DecisionLogEntry` to disk so the per-entity
+    /// popup history survives daemon restarts.
+    pub audit_writer: Option<AuditWriterHandle>,
 }
 
 /// Shared state available to all axum handlers.
 struct AppState {
     ws_cmd_tx: mpsc::Sender<WsCommand>,
     broadcast_tx: broadcast::Sender<ServerMessage>,
+    /// Optional audit-log read handle. When present, the WebSocket
+    /// handler answers `ClientMessage::GetEntityLog` queries directly
+    /// against the database without round-tripping through the event
+    /// loop (queries are read-only and do not need to be serialized
+    /// against state writes).
+    audit_db: Option<Database>,
 }
 
 /// Bind the TCP listener synchronously and spawn the web server.
@@ -60,10 +73,12 @@ pub async fn bind_and_start_web_server(
     ws_cmd_tx: mpsc::Sender<WsCommand>,
     broadcast_tx: broadcast::Sender<ServerMessage>,
     assets_dir: PathBuf,
+    audit_db: Option<Database>,
 ) -> anyhow::Result<(SocketAddr, tokio::task::JoinHandle<anyhow::Result<()>>)> {
     let state = Arc::new(AppState {
         ws_cmd_tx,
         broadcast_tx,
+        audit_db,
     });
 
     let app = Router::new()
@@ -189,6 +204,50 @@ async fn handle_client_message(
                 .ws_cmd_tx
                 .send(WsCommand::TogglePlug { device })
                 .await;
+        }
+        ClientMessage::GetEntityLog {
+            entity,
+            before_ts_ms,
+            limit,
+        } => {
+            let Some(db) = state.audit_db.as_ref() else {
+                // Audit log disabled: return an empty response so the
+                // popup gracefully shows "no history" instead of
+                // hanging on a request that nobody will answer.
+                let _ = direct_tx
+                    .send(ServerMessage::EntityLog {
+                        entity,
+                        entries: Vec::new(),
+                        has_more: false,
+                    })
+                    .await;
+                return;
+            };
+            let requested_limit = limit
+                .unwrap_or(crate::audit::DEFAULT_LIMIT)
+                .clamp(1, crate::audit::MAX_LIMIT);
+            match crate::audit::fetch(db, &entity, before_ts_ms, Some(requested_limit)).await {
+                Ok(entries) => {
+                    let has_more = entries.len() as u32 == requested_limit;
+                    let _ = direct_tx
+                        .send(ServerMessage::EntityLog {
+                            entity,
+                            entries,
+                            has_more,
+                        })
+                        .await;
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, %entity, "audit log query failed");
+                    let _ = direct_tx
+                        .send(ServerMessage::EntityLog {
+                            entity,
+                            entries: Vec::new(),
+                            has_more: false,
+                        })
+                        .await;
+                }
+            }
         }
     }
 }
