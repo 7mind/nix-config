@@ -59,9 +59,9 @@ have no persistent TASS state.
 ### Transitions
 
 - `Unset → Pending`: User, automation rule, or schedule sets a target value.
-- `Pending → Commanded`: The effect executor emits the command. In fire-and-forget
-  systems (MQTT QoS 0), this transition is immediate. In request-response systems,
-  it may await an acknowledgment.
+- `Pending → Commanded`: The runtime emits the command (after a core returns
+  it as an effect). In fire-and-forget systems (MQTT QoS 0), this transition
+  is immediate. In request-response systems, it may await an acknowledgment.
 - `Commanded → Confirmed`: An actual state reading arrives that matches the target
   value (within tolerance for analog values).
 - `Confirmed → Pending`: A new target value is set, invalidating the previous
@@ -72,16 +72,40 @@ have no persistent TASS state.
 ### Collapsing Pending and Commanded
 
 In fire-and-forget systems where command emission is synchronous with effect
-processing (e.g., the business logic returns effects that are immediately
-published), `Pending` and `Commanded` can be collapsed. The business logic sets
-the target **and** emits the command in one step, transitioning directly to
-`Commanded`. This is the common case for MQTT controllers.
+processing (e.g., a core returns effects that are immediately published),
+`Pending` and `Commanded` can be collapsed. The core sets the target **and**
+emits the command in one step, transitioning directly to `Commanded`. This is
+the common case for MQTT controllers.
 
 ### Phase Never Returns to Unset
 
 Once a target is set, the entity stays in the target lifecycle. There is no
 "un-targeting." To stop controlling an entity, set the target to a neutral value
 (e.g., Off) rather than returning to Unset.
+
+### Command Retries
+
+When a command is emitted (`Pending → Commanded`) but the matching actual
+reading never arrives, the entity stays in `Commanded`. The system does not
+silently give up — it retries.
+
+Each actuator type defines its own **retry policy**:
+
+- **Backoff**: constant, exponential, or decorrelated jitter
+- **Max attempts**: usually unbounded — keep retrying until confirmed or until
+  a new target supersedes the current one
+- **Per-attempt deadline**: how long to wait before re-emitting
+
+Retries are the rule, not the exception. Devices drop messages, networks have
+transient failures, gateways reboot mid-transaction. The default assumption is
+that any single command may not take effect, so a working TASS controller
+almost always defines a non-trivial retry policy per actuator type.
+
+Crucially, retry detection uses the **same sensor path** as confirmation.
+There is no separate channel for "did the command land?" — if a command's
+effect is not observable via the entity's actual state, the system has no way
+to confirm or retry it. Design actuators so that all consequential effects are
+visible through sensors.
 
 ## Actual Freshness State Machine
 
@@ -146,28 +170,105 @@ The owner enables owner-aware logic. For example:
 - Cooldown after off only applies when owner is `User` or `Motion`.
 - Kill switch can override any owner.
 
-## Event Processing Model
+## Knobs
 
-The core computation is a **pure function**:
+A typical TASS program exposes a set of **knobs** — dynamically modifiable
+parameters that affect decisions. Examples:
+
+- Motion timeout duration
+- Temperature setpoints and offsets
+- Schedule enable/disable
+- Holdoff and cooldown durations
+- Threshold levels (lux, power, temperature)
+- Mode selectors (Away, Sleep, Vacation)
+
+Knobs are read by the decision logic at every tick. They are typically:
+
+- Settable by the user via a control interface (WebUI, MQTT topic, API)
+- Persisted across restarts in their own store
+- Treated as inputs to cores, alongside sensor data and ledger entries
+
+Knobs are runtime state, not static configuration: changing a knob takes
+immediate effect on subsequent decisions, without code changes or restarts.
+
+**Knobs are distinct from the ledger.** The ledger holds the system's
+internal state — what the controller has observed, decided, and remembered.
+Knobs are external inputs that the user (or another system) writes; the
+controller only reads them. Conflating the two would let the controller
+mutate user intent, or let user writes corrupt internal bookkeeping. Keep
+the stores separate.
+
+## Ledger
+
+The controller's internal state persists between ticks in a key-value
+storage called the **ledger**. The ledger is **not user-modifiable** — it is
+written exclusively by the controller's own decision logic. User-facing
+inputs go through Knobs; the ledger records what the system observed and
+decided.
+
+Ledger entries fall into two categories:
+
+| Type        | Description                                                   |
+|-------------|---------------------------------------------------------------|
+| **Primary** | Authoritative, stored values: TASS quadruples, latest sensor  |
+|             | readings, owners, timestamps, retry counters, history records.|
+| **Derived** | Mechanically computed from primary entries (and knob values): |
+|             | aggregates ("any motion in zone"), pressure-group verdicts,   |
+|             | freshness classifications, cross-entity rollups.              |
+
+Primary entries form the minimal authoritative state. Derived entries are
+pure functions of primary state (plus knobs and clock) — they may be cached
+for performance but must always be reproducible from primaries alone.
+
+This split has two practical consequences:
+
+1. **Recovery**: after a restart, only primary entries need to be reloaded.
+   All derived state is recomputed from them.
+2. **Auditability**: any derived value can be re-derived from a snapshot of
+   primaries, making "why did the system decide this?" answerable from the
+   ledger and knob values alone.
+
+The `world_state` parameter passed to cores (see below) is precisely the
+ledger's primary entries, possibly with derived entries materialized on demand.
+
+## Cores
+
+The unit of computation in a TASS system is a **core** — a pure function
+that consumes inputs and returns effects and ledger updates:
 
 ```
-process(event, world_state, clock, topology) → (effects, world_state')
+core(event, world_state, knobs, clock, topology) → (effects, world_state')
 ```
 
-- **event**: A typed, parsed event from the outside world (button press, sensor
-  reading, MQTT message, timer tick, WebSocket command).
-- **world_state**: The complete collection of all TASS entities.
+- **event**: A typed, parsed event from the outside world (button press,
+  sensor reading, MQTT message, timer tick, WebSocket command).
+- **world_state**: The slice of the ledger this core reads — TASS quadruples
+  for the entities it owns, plus upstream core outputs and history it
+  depends on.
+- **knobs**: Current values of the user-modifiable parameters this core
+  depends on. Read-only from the core's perspective.
 - **clock**: Abstracted time source (injectable for testing).
 - **topology**: Immutable structural metadata (rooms, bindings, schedules).
 - **effects**: Commands to emit, messages to broadcast, timers to schedule.
-- **world_state'**: The updated entity state.
+- **world_state'**: The updated ledger entries this core writes.
 
-No I/O happens inside the processing function. Effects are **returned**, not
-**executed**. The caller (daemon event loop) executes them.
+No I/O happens inside a core. Effects are **returned**, not **executed**;
+ledger writes are **returned**, not applied. The runtime applies ledger
+updates and dispatches effects after the core returns.
+
+Each core owns a coherent slice of behavior — for example:
+
+- "kitchen lighting"
+- "heating pressure groups"
+- "kill-switch logic"
+- "schedule evaluator"
+
+A small TASS program may consist of a single core covering all entities.
+Larger programs decompose into many.
 
 ### Effect Types
 
-Effects are the outputs of the processing function:
+Effects are the outputs of a core:
 
 | Effect                | Description                                         |
 |-----------------------|-----------------------------------------------------|
@@ -178,9 +279,9 @@ Effects are the outputs of the processing function:
 | **ScheduleTimer**     | Schedule a deferred callback (e.g., holdoff expiry) |
 | **CancelTimer**       | Cancel a previously scheduled timer                 |
 
-## Cross-Entity Logic
+### Cross-Entity Logic
 
-Business logic may read **multiple entities** to compute effects:
+A single core typically reads **multiple entities** to compute effects:
 
 ```
 fn evaluate_motion(
@@ -194,20 +295,76 @@ fn evaluate_motion(
 This is critical for:
 - **Multi-sensor OR-gate**: Motion-off waits for ALL sensors in a room to be
   vacant.
-- **Pressure groups**: When any heating zone needs heat, force-open all TRVs in
-  the group.
-- **Kill switch**: Reads plug power, sets plug target to Off when conditions met.
+- **Pressure groups**: When any heating zone needs heat, force-open all TRVs
+  in the group.
+- **Kill switch**: Reads plug power, sets plug target to Off when conditions
+  met.
 - **Parent-child rooms**: Parent zone off propagates to child zones.
 
-### Important: Target May Change in Response to Actual
+### Target May Change in Response to Actual
 
-The business logic may change a target in response to an actual state reading:
+A core may change a target in response to an actual state reading:
+
 - A physical button press (actual event) sets a light zone's target.
 - A motion sensor's actual state change triggers a light zone target change.
-- A plug's actual power reading (below threshold) triggers a target change (off).
+- A plug's actual power reading (below threshold) triggers a target change
+  (off).
 
 This is not a violation of the pattern — it's how the pattern connects the
 physical world to the control logic.
+
+### Execution DAG
+
+When a TASS program has multiple cores, they may depend on one another's
+outputs. These dependencies form a **directed acyclic graph (DAG)** that
+defines execution order within a tick:
+
+- Independent cores can run in any order (or in parallel).
+- A dependent core runs only after its predecessors have written their
+  outputs to the ledger.
+
+Core outputs are stored in the ledger — either as primary entries (decisions
+made: target updates, scheduled actions, retry counters) or as derived
+entries (computed views, aggregates). Downstream cores read these like any
+other ledger data, with no direct coupling to the producer's internals.
+
+This decomposition enables:
+
+- **Independent testing**: each core is a pure function of
+  (event, sensors, knobs, ledger slice) → (effects, ledger updates).
+- **Local reasoning**: a core's behavior is determined by its inputs from
+  sensors, knobs, and the ledger, not by hidden cross-module state.
+- **Modular extension**: a new core can subscribe to existing ledger entries
+  without modifying upstream producers.
+
+## Typical Tick Loop
+
+A complete TASS program runs as a tick loop. Each tick proceeds in four
+phases:
+
+1. **Ingest sensor data**: Collect observations from all sources (MQTT
+   messages, periodic polls, button presses, timer firings, WebSocket
+   commands). Update actual state, freshness, and sensor readings in the
+   ledger.
+
+2. **Compute decisions**: Run the core DAG. For each core, derive new
+   targets and effects from:
+   - sensor data (just-updated actual state)
+   - knob values (current dynamic parameters)
+   - ledger data (previous primary state, history, upstream core outputs)
+
+3. **Issue commands**: Emit effects for any entities whose target advanced
+   to `Commanded`. Persist target updates and core outputs to the ledger.
+
+4. **Validate and retry**: In subsequent ticks, step (1) supplies
+   confirmation through normal sensor readings. Entities still in
+   `Commanded` past their actuator's retry deadline have their commands
+   re-emitted — through the **same code path** as new commands.
+
+The new-command path and the retry path share infrastructure: there is no
+separate "did the command land?" check and no separate retry queue. Both
+are driven by the discrepancy between target and actual, observed through
+sensors.
 
 ## Timestamps
 
@@ -244,15 +401,18 @@ actual freshness. Everything is visible.
 
 ## Testing Strategy
 
-Because the processing function is pure, tests are straightforward:
+Because cores are pure functions, tests are straightforward:
 
 ```
 // Arrange
 let mut world = test_world();
+let knobs = test_knobs();
 assert_eq!(world.light_zone("kitchen").target_phase(), Unset);
 
 // Act: button press
-let effects = process(button_press("switch", "1", Press), &mut world, &clock);
+let effects = lighting_core(
+    button_press("switch", "1", Press), &mut world, &knobs, &clock,
+);
 
 // Assert: target set, command emitted
 assert_eq!(world.light_zone("kitchen").target_value(), On(scene=1));
@@ -260,16 +420,19 @@ assert_eq!(world.light_zone("kitchen").target_phase(), Commanded);
 assert_eq!(effects, [Command("hue-lz-kitchen", scene_recall(1))]);
 
 // Act: z2m confirms group is on
-let effects = process(group_state("hue-lz-kitchen", true), &mut world, &clock);
+let effects = lighting_core(
+    group_state("hue-lz-kitchen", true), &mut world, &knobs, &clock,
+);
 
 // Assert: target confirmed
 assert_eq!(world.light_zone("kitchen").target_phase(), Confirmed);
 assert_eq!(world.light_zone("kitchen").actual_freshness(), Fresh);
 ```
 
-No mocking of MQTT. No sequencing of boolean flags. Every state is explicit and
-inspectable. Property-based testing becomes natural: generate random event
-sequences and assert invariants hold (e.g., "target phase never skips Commanded").
+No mocking of MQTT. No sequencing of boolean flags. Every state is explicit
+and inspectable. Property-based testing becomes natural: generate random
+event sequences and assert invariants hold (e.g., "target phase never skips
+Commanded").
 
 ## Summary
 
@@ -278,7 +441,13 @@ TASS provides:
 1. **Clarity**: "What we want" and "what we know" are always separate.
 2. **Discipline**: State machines define all valid states and transitions.
 3. **Resilience**: Actual state naturally fades (Fresh → Stale). Communication
-   failures are visible, not hidden.
-4. **Testability**: Pure function processing with inspectable state.
-5. **Debuggability**: Every entity's complete state is visible and timestamped.
-6. **Composability**: Cross-entity logic reads multiple entities cleanly.
+   failures are visible, not hidden. Unconfirmed commands are retried
+   automatically through the same sensor path.
+4. **Runtime configurability**: Knobs expose decision parameters that take
+   effect immediately, without code changes or restarts.
+5. **Persistent, inspectable state**: The ledger holds primary state and
+   derived views, fully recoverable after restart from primary entries alone.
+6. **Composability**: Cores form a DAG; cross-entity logic reads multiple
+   entities cleanly.
+7. **Testability**: Cores are pure functions with inspectable state.
+8. **Debuggability**: Every entity's complete state is visible and timestamped.
