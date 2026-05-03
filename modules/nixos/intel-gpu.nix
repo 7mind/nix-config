@@ -164,6 +164,15 @@ in
         enable32Bit = true;
         extraPackages = lib.optionals cfg.compute.enable (with pkgs; [
           intel-compute-runtime
+          # The `drivers` output is a separate split in nixpkgs
+          # (intel-compute-runtime/package.nix:47-60 moves
+          # libze_intel*.so out of $out/lib into $drivers/lib). Without
+          # adding it here, /run/opengl-driver/lib/ is missing the
+          # Level Zero driver and `zeInitDrivers` reports "0 Drivers
+          # Discovered" — SYCL's L0 v2 adapter then segvs trying to
+          # initialise an empty driver list (observed on B70 with
+          # intel-llvm@unstable-2025-11-14).
+          intel-compute-runtime.drivers
           level-zero
           ocl-icd
         ]) ++ lib.optionals cfg.media.enable (with pkgs; [

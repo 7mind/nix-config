@@ -62,7 +62,7 @@ in
     };
 
     smind.net.vlans = lib.mkOption {
-      type = lib.types.attrsOf (lib.types.submodule {
+      type = lib.types.attrsOf (lib.types.submodule ({ name, ... }: {
         options = {
           id = lib.mkOption {
             type = lib.types.int;
@@ -76,10 +76,26 @@ in
           dhcp = lib.mkOption {
             type = lib.types.bool;
             default = true;
-            description = "Whether to use DHCP on this VLAN interface";
+            description = "Whether to use DHCP on this VLAN interface (or on its bridge if bridge.enable = true)";
+          };
+          bridge.enable = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = ''
+              When true, wrap the VLAN sub-interface in a Linux bridge so that
+              nixos-containers (or other L2 consumers) can attach to the VLAN.
+              The VLAN interface becomes a bridge slave (no L3); DHCP, if
+              enabled, runs on the bridge.
+            '';
+          };
+          bridge.name = lib.mkOption {
+            type = lib.types.str;
+            default = "br-${name}";
+            defaultText = lib.literalExpression ''"br-''${vlanKey}"'';
+            description = "Bridge interface name when bridge.enable = true.";
           };
         };
-      });
+      }));
       default = { };
       description = ''
         Additional VLANs to create on the primary network interface.
@@ -89,7 +105,7 @@ in
       example = lib.literalExpression ''
         {
           iot-wifi  = { id = 13; };
-          iot-wired = { id = 14; };
+          iot-wired = { id = 14; bridge.enable = true; };
         }
       '';
     };
@@ -200,9 +216,44 @@ in
             }
           ) cfg.vlans;
 
+          vlanBridgeNetdevs = lib.mapAttrs' (name: vlan:
+            lib.nameValuePair "31-${vlan.bridge.name}" {
+              netdevConfig = {
+                Kind = "bridge";
+                Name = vlan.bridge.name;
+              } // lib.optionalAttrs (vlan.macAddress != "") {
+                MACAddress = vlan.macAddress;
+              };
+            }
+          ) (lib.filterAttrs (_: v: v.bridge.enable) cfg.vlans);
+
           vlanNetworks = lib.mapAttrs' (name: vlan:
-            lib.nameValuePair "30-vlan-${name}" {
-              name = "vlan-${name}";
+            lib.nameValuePair "30-vlan-${name}" (
+              if vlan.bridge.enable then {
+                # Bridged VLAN: sub-iface is a port on br-<name>; no L3 here.
+                name = "vlan-${name}";
+                bridge = [ vlan.bridge.name ];
+                linkConfig.RequiredForOnline = "enslaved";
+              } else {
+                name = "vlan-${name}";
+                DHCP = if vlan.dhcp then "yes" else "no";
+                linkConfig.RequiredForOnline = "no";
+                networkConfig = {
+                  IPv6AcceptRA = "yes";
+                  LinkLocalAddressing = "yes";
+                };
+                dhcpV4Config = lib.mkIf vlan.dhcp {
+                  SendHostname = true;
+                  Hostname = hostname;
+                  UseRoutes = false;
+                };
+              }
+            )
+          ) cfg.vlans;
+
+          vlanBridgeNetworks = lib.mapAttrs' (name: vlan:
+            lib.nameValuePair "31-${vlan.bridge.name}" {
+              name = vlan.bridge.name;
               DHCP = if vlan.dhcp then "yes" else "no";
               linkConfig.RequiredForOnline = "no";
               networkConfig = {
@@ -215,7 +266,7 @@ in
                 UseRoutes = false;
               };
             }
-          ) cfg.vlans;
+          ) (lib.filterAttrs (_: v: v.bridge.enable) cfg.vlans);
 
           vlanNames = lib.mapAttrsToList (name: _: "vlan-${name}") cfg.vlans;
 
@@ -258,7 +309,7 @@ in
                 MACAddress = cfg.main-bridge-macaddr;
               };
             };
-          }) // vlanNetdevs;
+          }) // vlanNetdevs // vlanBridgeNetdevs;
 
           networks = (if bridged then {
             # Bridged: main-interface is a bridge slave.
@@ -272,7 +323,7 @@ in
           } else {
             # Bridgeless: DHCP directly on main-interface.
             "10-${iface}" = { name = iface; vlan = vlanNames; } // dhcpNetworkConfig;
-          }) // vlanNetworks;
+          }) // vlanNetworks // vlanBridgeNetworks;
 
           wait-online = {
             enable = false;
