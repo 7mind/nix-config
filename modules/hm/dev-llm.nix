@@ -46,6 +46,27 @@ let
   llmPrompts = pkgs.callPackage "${cfg-meta.paths.pkg}/llm-prompts/default.nix" { };
 
   claudeMemoryText = lib.concatStringsSep "\n\n" config.smind.hm.dev.llm.memorySections;
+
+  # SessionStart hook: surfaces hostname and sandbox state to the agent on
+  # every session boot. Claude Code's harness-injected environment block
+  # lists OS/shell/cwd but not hostname, so without this the model has to
+  # guess (and tends to assume the wrong host). $SMIND_SANDBOXED is set by
+  # the yolo wrapper (pkg/yolo/yolo.sh) but the matching `environment`
+  # skill is passive — declaring sandbox state up-front avoids relying on
+  # the model to probe env vars.
+  claudeSessionStartHook = pkgs.writeShellScript "claude-session-start-context" ''
+    set -eu
+    HOST="''${HOSTNAME:-$(hostname 2>/dev/null || echo unknown)}"
+    if [ "''${SMIND_SANDBOXED:-0}" = "1" ]; then
+      SANDBOX_LINE="Sandbox: ACTIVE (bubblewrap via the 'yolo' wrapper; SMIND_SANDBOXED=1). Writes persist only inside the project directory and /tmp/exchange. For access to \$HOME or system paths, follow the 'environment' skill's exchange-script workflow."
+    else
+      SANDBOX_LINE="Sandbox: NOT ACTIVE (SMIND_SANDBOXED unset). Filesystem writes are unrestricted; the exchange-script workflow is unnecessary."
+    fi
+    printf '%s\n' \
+      'Runtime environment (injected by SessionStart hook):' \
+      "- Hostname: $HOST. Use this exact value where CLAUDE.md or scripts reference the current host; do not rely on \$HOSTNAME (zsh, the user's login shell, does not export it)." \
+      "- $SANDBOX_LINE"
+  '';
   copilotConfig = jsonFormat.generate "copilot-config.json" {
     alt_screen = false;
     banner = "never";
@@ -147,6 +168,21 @@ in
           spinnerVerbs = {
             mode = "replace";
             verbs = [ "Working" ];
+          };
+          hooks = {
+            # Inject hostname + sandbox state into every session. See
+            # claudeSessionStartHook above for rationale.
+            SessionStart = [
+              {
+                matcher = "*";
+                hooks = [
+                  {
+                    type = "command";
+                    command = "${claudeSessionStartHook}";
+                  }
+                ];
+              }
+            ];
           };
           statusLine = {
             "type" = "command";
