@@ -95,6 +95,38 @@ in
         '';
       };
     };
+
+    aspm.forceEnable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Pass `pcie_aspm=force` to the kernel — overrides FADT/BIOS that
+        marks PCIe ASPM as unsupported, *and* short-circuits per-link
+        capability negotiation: ASPM is enabled even on links whose
+        endpoints didn't advertise it. The latter is what Linus' note
+        warns about ("dangerous and may cause hardware to misbehave");
+        Battlemage Arc Pro B70 was observed parking in unrecoverable
+        D3cold under `=force`, which then broke xe probe with -EPROTO.
+        Prefer enabling ASPM in the motherboard BIOS instead and
+        leaving this off; only set true when ACPI/FADT actively masks
+        ASPM and the BIOS offers no toggle.
+      '';
+    };
+
+    aspm.policy = lib.mkOption {
+      type = lib.types.nullOr (lib.types.enum [ "default" "performance" "powersave" "powersupersave" ]);
+      default = null;
+      description = ''
+        Override `pcie_aspm.policy=` on the kernel command line. null
+        leaves the kernel default (typically "default" / BIOS-driven).
+        "powersupersave" picks the deepest substate each link
+        negotiates — yields the largest idle-power saving, but only the
+        substates the link actually advertises are entered, so it's
+        safe to combine with forceEnable=false. On the Arc Pro B70
+        with BIOS-enabled ASPM and forceEnable=false this drops idle
+        by ~25W with no observed driver-bind regression.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
@@ -118,16 +150,9 @@ in
             "xe.force_probe=!*"
             "i915.force_probe=*"
           ]
-        ) ++ [
-          # Battlemage idles at ~40W instead of ~10-15W unless PCIe ASPM L1
-          # substates are active. Server-board FADTs commonly mark ASPM as
-          # unsupported, which makes the kernel disable the whole subsystem
-          # before any policy applies — `pcie_aspm=force` overrides that and
-          # `policy=powersupersave` then opts every link into the deepest
-          # supported substate (kernel falls back per-link as needed).
-          "pcie_aspm=force"
-          "pcie_aspm.policy=powersupersave"
-        ] ++ lib.optionals cfg.sriov.enable [
+        ) ++ lib.optional cfg.aspm.forceEnable "pcie_aspm=force"
+          ++ lib.optional (cfg.aspm.policy != null) "pcie_aspm.policy=${cfg.aspm.policy}"
+          ++ lib.optionals cfg.sriov.enable [
           "intel_iommu=on"
           "iommu=pt"
         ];
