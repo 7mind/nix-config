@@ -118,7 +118,14 @@ in
             "xe.force_probe=!*"
             "i915.force_probe=*"
           ]
-        ) ++ lib.optionals cfg.sriov.enable [
+        ) ++ [
+          # Battlemage idles at ~40W instead of ~10-15W unless PCIe ASPM L1
+          # substates are active. Default kernel policy follows BIOS, which
+          # commonly leaves ASPM disabled on server boards. powersupersave
+          # opts every link into the deepest supported substate; the kernel
+          # silently falls back per-link when a device doesn't support it.
+          "pcie_aspm.policy=powersupersave"
+        ] ++ lib.optionals cfg.sriov.enable [
           "intel_iommu=on"
           "iommu=pt"
         ];
