@@ -120,10 +120,12 @@ in
           ]
         ) ++ [
           # Battlemage idles at ~40W instead of ~10-15W unless PCIe ASPM L1
-          # substates are active. Default kernel policy follows BIOS, which
-          # commonly leaves ASPM disabled on server boards. powersupersave
-          # opts every link into the deepest supported substate; the kernel
-          # silently falls back per-link when a device doesn't support it.
+          # substates are active. Server-board FADTs commonly mark ASPM as
+          # unsupported, which makes the kernel disable the whole subsystem
+          # before any policy applies — `pcie_aspm=force` overrides that and
+          # `policy=powersupersave` then opts every link into the deepest
+          # supported substate (kernel falls back per-link as needed).
+          "pcie_aspm=force"
           "pcie_aspm.policy=powersupersave"
         ] ++ lib.optionals cfg.sriov.enable [
           "intel_iommu=on"
