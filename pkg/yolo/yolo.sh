@@ -11,8 +11,9 @@
 # Optional env vars:
 #   YOLO_PODMAN_SOCKET_PATH - rootless podman socket path (enables container forwarding)
 #   YOLO_PODMAN_SOCKET_URI  - rootless podman socket URI
-#   YOLO_HW_NVIDIA_ENABLE   - "1" if smind.hw.nvidia.enable is set on the host (gates --gpu)
-#   YOLO_HW_AMD_GPU_ENABLE  - "1" if smind.hw.amd.gpu.enable is set on the host (gates --gpu)
+#   YOLO_HW_NVIDIA_ENABLE    - "1" if smind.hw.nvidia.enable is set on the host (gates --gpu)
+#   YOLO_HW_AMD_GPU_ENABLE   - "1" if smind.hw.amd.gpu.enable is set on the host (gates --gpu)
+#   YOLO_HW_INTEL_GPU_ENABLE - "1" if smind.hw.intel.gpu.enable is set on the host (gates --gpu)
 
 : "${YOLO_LLM_SANDBOX:?must be set}"
 : "${YOLO_NIX_LD:?must be set}"
@@ -78,18 +79,23 @@ fi
 
 GPU_ARGS=()
 if [[ $GPU_MODE -eq 1 ]]; then
-  if [[ "${YOLO_HW_NVIDIA_ENABLE:-0}" != "1" && "${YOLO_HW_AMD_GPU_ENABLE:-0}" != "1" ]]; then
-    echo "warning: --gpu requested but neither smind.hw.nvidia.enable nor smind.hw.amd.gpu.enable is set on this host; ignoring" >&2
+  if [[ "${YOLO_HW_NVIDIA_ENABLE:-0}" != "1" \
+     && "${YOLO_HW_AMD_GPU_ENABLE:-0}" != "1" \
+     && "${YOLO_HW_INTEL_GPU_ENABLE:-0}" != "1" ]]; then
+    echo "warning: --gpu requested but none of smind.hw.{nvidia,amd.gpu,intel.gpu}.enable is set on this host; ignoring" >&2
   else
     # /run/opengl-driver carries NixOS-managed GPU userspace libs (libcuda,
-    # libamdhip64, mesa drivers, vulkan ICDs). Required for both NVIDIA and AMD.
+    # libamdhip64, intel-compute-runtime, level-zero, mesa drivers, vulkan ICDs).
+    # Required for NVIDIA, AMD and Intel.
     if [[ -e /run/opengl-driver ]]; then
       GPU_ARGS+=(--ro /run/opengl-driver)
     fi
-    # /sys is needed for GPU enumeration — ROCm reads /sys/class/kfd/kfd/topology
-    # to discover devices, NVIDIA tools probe /sys/class/drm and /sys/bus/pci.
+    # /sys is needed for GPU enumeration — ROCm reads /sys/class/kfd/kfd/topology,
+    # NVIDIA tools probe /sys/class/drm and /sys/bus/pci, Intel Level Zero / xe
+    # walks /sys/class/drm and /sys/bus/pci to discover devices and SR-IOV VFs.
     GPU_ARGS+=(--ro /sys)
-    # /dev/dri is shared by AMD (render/card nodes) and NVIDIA (PRIME offload, Vulkan).
+    # /dev/dri is shared by AMD, NVIDIA (PRIME offload, Vulkan), and Intel
+    # (render nodes are the primary compute path for Level Zero / OpenCL on xe/i915).
     if [[ -d /dev/dri ]]; then
       for dev in /dev/dri/*; do
         [[ -e "$dev" ]] && GPU_ARGS+=(--dev-bind "$dev,$dev")
@@ -109,6 +115,9 @@ if [[ $GPU_MODE -eq 1 ]]; then
     if [[ "${YOLO_HW_AMD_GPU_ENABLE:-0}" == "1" ]]; then
       [[ -e /dev/kfd ]] && GPU_ARGS+=(--dev-bind "/dev/kfd,/dev/kfd")
     fi
+    # Intel discrete GPUs (Arc / Arc Pro Battlemage) need no extra char devices
+    # beyond /dev/dri/render*; xe/i915 expose all compute and media surfaces
+    # through DRM render nodes.
   fi
 fi
 

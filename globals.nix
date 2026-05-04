@@ -111,6 +111,44 @@ rec {
                 inputs.rust-overlay.overlays.default
                 (final: prev: {
                   claude-code = final.callPackage ./pkg/claude-code/package.nix { };
+                  # The upstream nixpkgs `intel-llvm` (PR #470035, merged
+                  # April 2026) has a packaging bug: its top-level merged
+                  # output is built via symlinkJoin + __structuredAttrs = true,
+                  # which silently produces an empty $out (the lndir loop
+                  # references $pathsPath that structuredAttrs doesn't
+                  # populate the legacy way). Override to disable
+                  # structuredAttrs on the merge step so $paths becomes a
+                  # plain shell variable again. Verified by running
+                  # `ls $(nix eval --raw nixpkgs#intel-llvm.outPath)/bin`
+                  # before/after — should list clang/clang++/clang-22 etc.
+                  intel-llvm = prev.intel-llvm.overrideAttrs (old: {
+                    __structuredAttrs = false;
+                    paths = builtins.toString old.paths;
+                    # The buildCommand still references `$pathsPath` (it
+                    # `cat`s it inside the lndir loop), so `paths` must be
+                    # in passAsFile alongside buildCommand.
+                    passAsFile = [ "buildCommand" "paths" ];
+                  });
+                  # Intel oneMKL 2025.3.1 — newer than nixpkgs `mkl@2023.1.0`
+                  # and ABI-matched to intel-llvm@unstable-2025-11-14
+                  # (libsycl.so.8). Sister-package, not an override of
+                  # `mkl`, so the rest of nixpkgs (numpy/scipy/octave)
+                  # keeps using 2023.1.
+                  mkl-sycl = final.callPackage ./pkg/mkl-sycl/default.nix { };
+
+                  # llama.cpp built with the SYCL backend, pinned to the same
+                  # upstream commit ollama 0.21 vendors. Linux-only — needs
+                  # intel-llvm + intel-compute-runtime + level-zero, none of
+                  # which exist on Darwin.
+                  llama-cpp-sycl = final.callPackage ./pkg/llama-cpp-sycl/default.nix {
+                    mkl = final.mkl-sycl;
+                  };
+
+                  # ollama 0.21 with the GGML SYCL backend grafted in for
+                  # the Intel Arc Pro B70. Inherits nixpkgs `ollama` and
+                  # vendors `ggml-sycl/` from the same upstream commit
+                  # ollama already pins.
+                  ollama-sycl = final.callPackage ./pkg/ollama-sycl/default.nix { };
                   vscode-marketplace = prev.vscode-marketplace // {
                     anthropic = prev.vscode-marketplace.anthropic // {
                       claude-code = prev.vscode-marketplace.anthropic.claude-code.overrideAttrs (old: {

@@ -12,6 +12,7 @@
   podmanSocketUri ? null,
   hwNvidiaEnable ? false,
   hwAmdGpuEnable ? false,
+  hwIntelGpuEnable ? false,
 }:
 
 let
@@ -31,6 +32,7 @@ pkgs.writeShellScriptBin "yolo" ''
   export YOLO_COPILOT_REASONING_EFFORT=${lib.escapeShellArg copilotReasoningEffort}
   export YOLO_HW_NVIDIA_ENABLE=${if hwNvidiaEnable then "1" else "0"}
   export YOLO_HW_AMD_GPU_ENABLE=${if hwAmdGpuEnable then "1" else "0"}
+  export YOLO_HW_INTEL_GPU_ENABLE=${if hwIntelGpuEnable then "1" else "0"}
   ${podmanExports}
   exec bash ${yoloScript} "$@"
 ''
