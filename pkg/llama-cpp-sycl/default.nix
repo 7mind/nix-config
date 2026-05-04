@@ -70,25 +70,31 @@ stdenv.mkDerivation (finalAttrs: {
     export PATH=$TMPDIR/intel-shim/bin:$PATH
   '';
 
-  # Force the ggml-sycl target to link the *full* SYCL device library
-  # set, not the default `libc + libm-fp32` subset. ggml-sycl's
-  # `set_rows_sycl<…, bfloat16>` template instantiation calls
-  # `__imf_float2bfloat16_rn` from Intel's IMF (Intel Math Function)
-  # bf16 library; without the bf16 fallback bitcode the kernel JIT
-  # fails at first dispatch on any model containing bf16 tensors
-  # (qwen3.6, gemma3-27b-bf16, ...) with:
+  # bf16 conversion bypass for `set_rows`. Upstream uses
+  #   sycl::vec<TIn, 1>(src_val).convert<bfloat16, automatic>()
+  # which intel-llvm lowers to `__imf_float2bfloat16_rn` from the
+  # IMF (Intel Math Function) bitcode library — and that bitcode is
+  # NOT auto-linked by intel-llvm@unstable-2025-11-14 (the snapshot
+  # has no `-fsycl-device-lib` driver flag at all, verified via
+  # `clang++ --help-hidden`). On any model with bf16 tensors
+  # (qwen3.6, gemma3-bf16) the device JIT fails at first dispatch:
   #   error : unresolved external symbol __imf_float2bfloat16_rn
   #     ... aka kernel : set_rows_sycl<…, bfloat16> ...
-  #   Exception caught at ggml-sycl.cpp:3957, Error OP SET_ROWS
-  # Apply target-scoped (not global) so other ggml backends keep their
-  # smaller compile-flag set. Required on BOTH compile + link sides
-  # because device-library selection is folded into the device image
-  # at link time.
+  #   Exception caught at ggml-sycl.cpp:NNNN, Error OP SET_ROWS
+  # Specialize on bfloat16 to use the standard
+  # `sycl::ext::oneapi::bfloat16(float)` constructor — IGC has native
+  # SPIR-V intrinsics for that path that don't need IMF bitcode.
   postPatch = ''
-    cat >> ggml/src/ggml-sycl/CMakeLists.txt <<'EOF'
-target_compile_options(ggml-sycl PRIVATE "-fsycl-device-lib=all")
-target_link_options(ggml-sycl PRIVATE "-fsycl-device-lib=all")
-EOF
+    substituteInPlace ggml/src/ggml-sycl/set_rows.cpp \
+      --replace-fail \
+        'auto dst_val = sycl::vec<TIn, 1>(src_val).template convert<TOut, sycl::rounding_mode::automatic>()[0];
+   *reinterpret_cast<TOut*>(dst) = dst_val;' \
+        'if constexpr (std::is_same_v<TOut, sycl::ext::oneapi::bfloat16>) {
+        *reinterpret_cast<TOut*>(dst) = sycl::ext::oneapi::bfloat16(static_cast<float>(src_val));
+    } else {
+        auto dst_val = sycl::vec<TIn, 1>(src_val).template convert<TOut, sycl::rounding_mode::automatic>()[0];
+        *reinterpret_cast<TOut*>(dst) = dst_val;
+    }'
   '';
 
   # MKLConfig.cmake locates everything relative to MKLROOT. Our

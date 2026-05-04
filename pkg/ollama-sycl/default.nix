@@ -137,21 +137,10 @@ if(GGML_SYCL_BUILD AND NOT APPLE)
     add_subdirectory(''${CMAKE_CURRENT_SOURCE_DIR}/ml/backend/ggml/ggml/src/ggml-sycl)
     target_include_directories(ggml-sycl PRIVATE ''${GGML_INCLUDE_DIRS})
 
-    # Link the *full* SYCL device library set, not the default subset
-    # (libc + libm-fp32). ggml-sycl's `set_rows_sycl<…, bfloat16>`
-    # template instantiation calls `__imf_float2bfloat16_rn` from
-    # Intel's IMF (Intel Math Function) bf16 library; without
-    # `-fsycl-device-lib=all` the IMF bf16 fallback bitcode isn't
-    # linked into the device image, so the kernel JIT fails at first
-    # use with:
-    #   error : unresolved external symbol __imf_float2bfloat16_rn
-    #     ... aka kernel : set_rows_sycl<…, bfloat16> ...
-    #   Exception caught at ggml-sycl.cpp:3957, Error OP SET_ROWS
-    # which manifests on any model containing bf16 tensors (e.g.
-    # qwen3.6, gemma3 27B bf16). Apply on both compile + link sides
-    # because the device-library selection has to be visible to both.
-    target_compile_options(ggml-sycl PRIVATE "-fsycl-device-lib=all")
-    target_link_options(ggml-sycl PRIVATE "-fsycl-device-lib=all")
+    # (See postPatch below — bf16 IMF bypass is patched into
+    # ggml-sycl's set_rows.cpp at source level, since
+    # intel-llvm@unstable-2025-11-14 has no `-fsycl-device-lib` flag
+    # to opt into the IMF bf16 bitcode at link time.)
 
     install(TARGETS ggml-sycl
         RUNTIME_DEPENDENCIES
@@ -210,6 +199,33 @@ CMAKE_SYCL_EOF
       --replace-fail \
         'static ggml_status ggml_backend_sycl_graph_compute(ggml_backend_t backend, ggml_cgraph * cgraph) {' \
         'static ggml_status ggml_backend_sycl_graph_compute(ggml_backend_t backend, ggml_cgraph * cgraph, int /*batch_size*/) {'
+
+    # 7. bf16 conversion bypass for `set_rows`. Original code uses
+    #    `sycl::vec<TIn, 1>(src_val).convert<bfloat16, automatic>()`,
+    #    which intel-llvm lowers to a call to `__imf_float2bfloat16_rn`
+    #    from the IMF (Intel Math Function) bitcode library. That
+    #    library is NOT auto-linked by intel-llvm@unstable-2025-11-14
+    #    (the snapshot has no `-fsycl-device-lib` driver flag), so the
+    #    device JIT fails at first dispatch on any model with bf16
+    #    tensors (qwen3.6, gemma3-bf16) with:
+    #      error : unresolved external symbol __imf_float2bfloat16_rn
+    #        ... aka kernel : set_rows_sycl<…, bfloat16> ...
+    #      Exception caught at ggml-sycl.cpp:NNNN, Error OP SET_ROWS
+    #    Specialize the `convert<>` template on `bfloat16` outputs to
+    #    use the standard `sycl::ext::oneapi::bfloat16(float)`
+    #    constructor instead — IGC has native SPIR-V intrinsics for
+    #    that path that don't need the IMF bitcode at all. Drop this
+    #    patch once intel-llvm exposes a way to inject IMF device libs.
+    substituteInPlace ml/backend/ggml/ggml/src/ggml-sycl/set_rows.cpp \
+      --replace-fail \
+        'auto dst_val = sycl::vec<TIn, 1>(src_val).template convert<TOut, sycl::rounding_mode::automatic>()[0];
+   *reinterpret_cast<TOut*>(dst) = dst_val;' \
+        'if constexpr (std::is_same_v<TOut, sycl::ext::oneapi::bfloat16>) {
+        *reinterpret_cast<TOut*>(dst) = sycl::ext::oneapi::bfloat16(static_cast<float>(src_val));
+    } else {
+        auto dst_val = sycl::vec<TIn, 1>(src_val).template convert<TOut, sycl::rounding_mode::automatic>()[0];
+        *reinterpret_cast<TOut*>(dst) = dst_val;
+    }'
   '';
 
   hardeningDisable = (oldAttrs.hardeningDisable or [ ]) ++ [ "fortify" "fortify3" ];
