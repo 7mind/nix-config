@@ -26,6 +26,7 @@
   mkl,        # Intel Math Kernel Library — ggml-sycl hard-requires it for BLAS
   oneDNN,     # Intel Deep Neural Network Library — soft optional, used if present
   tbb,        # Threading Building Blocks — MKL's default threading backend
+  perl,       # multi-line postPatch substitution (substituteInPlace can't)
 }:
 
 # Use the plain stdenv (not intel-llvm.stdenv): intel-llvm's stdenv
@@ -48,7 +49,7 @@ stdenv.mkDerivation (finalAttrs: {
 
   # intel-llvm in nativeBuildInputs so its bin/clang(++) is on $PATH and
   # the (now-fixed) merged output is in the build closure.
-  nativeBuildInputs = [ cmake pkg-config makeWrapper intel-llvm ];
+  nativeBuildInputs = [ cmake pkg-config makeWrapper intel-llvm perl ];
 
   # Override CC/CXX explicitly. Two layers here:
   # 1. nixpkgs cmake setup-hook reads $CC/$CXX and passes them as
@@ -84,17 +85,22 @@ stdenv.mkDerivation (finalAttrs: {
   # Specialize on bfloat16 to use the standard
   # `sycl::ext::oneapi::bfloat16(float)` constructor — IGC has native
   # SPIR-V intrinsics for that path that don't need IMF bitcode.
+  #
+  # perl -0777 (slurp mode) handles the multi-line pattern cleanly;
+  # `substituteInPlace` would need exact-byte indentation and Nix
+  # indented-string whitespace stripping makes that fragile.
   postPatch = ''
-    substituteInPlace ggml/src/ggml-sycl/set_rows.cpp \
-      --replace-fail \
-        'auto dst_val = sycl::vec<TIn, 1>(src_val).template convert<TOut, sycl::rounding_mode::automatic>()[0];
-   *reinterpret_cast<TOut*>(dst) = dst_val;' \
-        'if constexpr (std::is_same_v<TOut, sycl::ext::oneapi::bfloat16>) {
+    perl -i -0777 -pe '
+      s{auto dst_val = sycl::vec<TIn, 1>\(src_val\)\.template convert<TOut, sycl::rounding_mode::automatic>\(\)\[0\];\n\s+\*reinterpret_cast<TOut\*>\(dst\) = dst_val;}
+       {if constexpr (std::is_same_v<TOut, sycl::ext::oneapi::bfloat16>) {
         *reinterpret_cast<TOut*>(dst) = sycl::ext::oneapi::bfloat16(static_cast<float>(src_val));
     } else {
         auto dst_val = sycl::vec<TIn, 1>(src_val).template convert<TOut, sycl::rounding_mode::automatic>()[0];
         *reinterpret_cast<TOut*>(dst) = dst_val;
-    }'
+    }}s
+    ' ggml/src/ggml-sycl/set_rows.cpp
+    grep -q 'is_same_v<TOut, sycl::ext::oneapi::bfloat16>' ggml/src/ggml-sycl/set_rows.cpp \
+      || (echo "bf16 IMF-bypass perl substitution did not apply to set_rows.cpp"; exit 1)
   '';
 
   # MKLConfig.cmake locates everything relative to MKLROOT. Our

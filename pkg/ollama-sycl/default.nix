@@ -48,6 +48,7 @@
   cmake,
   pkg-config,
   makeWrapper,
+  perl,    # multi-line postPatch substitution (substituteInPlace can't)
 }:
 
 let
@@ -78,6 +79,7 @@ ollama.overrideAttrs (oldAttrs: {
     cmake
     pkg-config
     makeWrapper
+    perl
   ];
 
   # intel-llvm goes in *buildInputs*, not nativeBuildInputs. Its
@@ -200,32 +202,52 @@ CMAKE_SYCL_EOF
         'static ggml_status ggml_backend_sycl_graph_compute(ggml_backend_t backend, ggml_cgraph * cgraph) {' \
         'static ggml_status ggml_backend_sycl_graph_compute(ggml_backend_t backend, ggml_cgraph * cgraph, int /*batch_size*/) {'
 
-    # 7. bf16 conversion bypass for `set_rows`. Original code uses
-    #    `sycl::vec<TIn, 1>(src_val).convert<bfloat16, automatic>()`,
-    #    which intel-llvm lowers to a call to `__imf_float2bfloat16_rn`
-    #    from the IMF (Intel Math Function) bitcode library. That
-    #    library is NOT auto-linked by intel-llvm@unstable-2025-11-14
-    #    (the snapshot has no `-fsycl-device-lib` driver flag), so the
-    #    device JIT fails at first dispatch on any model with bf16
-    #    tensors (qwen3.6, gemma3-bf16) with:
-    #      error : unresolved external symbol __imf_float2bfloat16_rn
-    #        ... aka kernel : set_rows_sycl<…, bfloat16> ...
-    #      Exception caught at ggml-sycl.cpp:NNNN, Error OP SET_ROWS
-    #    Specialize the `convert<>` template on `bfloat16` outputs to
-    #    use the standard `sycl::ext::oneapi::bfloat16(float)`
-    #    constructor instead — IGC has native SPIR-V intrinsics for
-    #    that path that don't need the IMF bitcode at all. Drop this
-    #    patch once intel-llvm exposes a way to inject IMF device libs.
-    substituteInPlace ml/backend/ggml/ggml/src/ggml-sycl/set_rows.cpp \
-      --replace-fail \
-        'auto dst_val = sycl::vec<TIn, 1>(src_val).template convert<TOut, sycl::rounding_mode::automatic>()[0];
-   *reinterpret_cast<TOut*>(dst) = dst_val;' \
-        'if constexpr (std::is_same_v<TOut, sycl::ext::oneapi::bfloat16>) {
+    # 7a. Force standard-transformer Qwen3 family back onto the legacy
+    #     llama.cpp runner. ollama 0.21+ routes any architecture in
+    #     `fs/ggml/ggml.go:OllamaEngineRequired()` through the
+    #     Go-native "ollama-engine" instead of the legacy runner —
+    #     and the new engine has a SYCL-side bug that NULL-derefs in
+    #     `ggml_backend_sched_graph_compute_async` on first prompt
+    #     (silent SIGSEGV). Verified empirically: same architecture
+    #     models load + serve correctly via llama-cli (which uses the
+    #     same ggml-sycl shared lib), so the legacy ollama runner
+    #     should work too. Strip just the classic-transformer arches
+    #     (qwen3, qwen3moe, qwen35, qwen35moe); leave qwen3next,
+    #     qwen3vl, qwen3vlmoe on the new engine since they need its
+    #     Mamba-SSM / vision support that llama.cpp lacks anyway.
+    #     Drop this patch when the ollama-engine SYCL dispatch bug
+    #     is fixed upstream.
+    # The two qwen3-family lines appear in 4 separate slice literals in
+    # this file (and one in server/sched.go) — substituteInPlace
+    # replaces all occurrences and corrupts the unrelated ones. Anchor
+    # to the unique multi-line block inside OllamaEngineRequired by
+    # matching `"qwen25vl",\n\t\t"qwen3", "qwen3moe",\n\t\t"qwen35", "qwen35moe",`
+    # — that exact sequence only appears once in the file. Replace
+    # the qwen3* lines with empty strings (Go treats two adjacent
+    # commas in a slice literal as a syntax error, so we keep the
+    # `qwen25vl,` and just drop the qwen3* element lines entirely).
+    perl -i -0777 -pe '
+      s{"qwen25vl",\n\t\t"qwen3", "qwen3moe",\n\t\t"qwen35", "qwen35moe",\n}
+       {"qwen25vl",\n\t\t// "qwen3", "qwen3moe", "qwen35", "qwen35moe" — forced to legacy runner via ollama-sycl postPatch (new engine SYCL bug)\n}s
+    ' fs/ggml/ggml.go
+    grep -q 'forced to legacy runner via ollama-sycl postPatch' fs/ggml/ggml.go \
+      || (echo "qwen3 routing patch did not apply to fs/ggml/ggml.go"; exit 1)
+
+    # 7b. bf16 conversion bypass for `set_rows` — see pkg/llama-cpp-sycl/
+    #     for the full rationale. perl -0777 multi-line substitution
+    #     (substituteInPlace can't reliably match across lines under
+    #     Nix indented-string whitespace stripping).
+    perl -i -0777 -pe '
+      s{auto dst_val = sycl::vec<TIn, 1>\(src_val\)\.template convert<TOut, sycl::rounding_mode::automatic>\(\)\[0\];\n\s+\*reinterpret_cast<TOut\*>\(dst\) = dst_val;}
+       {if constexpr (std::is_same_v<TOut, sycl::ext::oneapi::bfloat16>) {
         *reinterpret_cast<TOut*>(dst) = sycl::ext::oneapi::bfloat16(static_cast<float>(src_val));
     } else {
         auto dst_val = sycl::vec<TIn, 1>(src_val).template convert<TOut, sycl::rounding_mode::automatic>()[0];
         *reinterpret_cast<TOut*>(dst) = dst_val;
-    }'
+    }}s
+    ' ml/backend/ggml/ggml/src/ggml-sycl/set_rows.cpp
+    grep -q 'is_same_v<TOut, sycl::ext::oneapi::bfloat16>' ml/backend/ggml/ggml/src/ggml-sycl/set_rows.cpp \
+      || (echo "bf16 IMF-bypass perl substitution did not apply to set_rows.cpp"; exit 1)
   '';
 
   hardeningDisable = (oldAttrs.hardeningDisable or [ ]) ++ [ "fortify" "fortify3" ];
