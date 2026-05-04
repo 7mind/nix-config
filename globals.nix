@@ -144,11 +144,39 @@ rec {
                     mkl = final.mkl-sycl;
                   };
 
-                  # ollama 0.21 with the GGML SYCL backend grafted in for
-                  # the Intel Arc Pro B70. Inherits nixpkgs `ollama` and
-                  # vendors `ggml-sycl/` from the same upstream commit
-                  # ollama already pins.
+                  # ollama with the GGML SYCL backend grafted in for the
+                  # Intel Arc Pro B70. Inherits the (overridden, see
+                  # below) `ollama` and vendors `ggml-sycl/` from the
+                  # same upstream commit ollama pins.
                   ollama-sycl = final.callPackage ./pkg/ollama-sycl/default.nix { };
+
+                  # Bump every flavor of stock nixpkgs ollama from the
+                  # currently-pinned 0.21.0 to 0.23.0 — nixpkgs hasn't
+                  # bumped yet but upstream is on 0.23.0 since 2026-05-03.
+                  # We need this so:
+                  #   - The host-side `ollama` CLI on `vm` matches the
+                  #     in-container `ollama-sycl` server (no
+                  #     "client version is 0.21.0" warning).
+                  #   - Other hosts (pavel-am5/pavel-fw using
+                  #     ollama-vulkan, kai-am5 using ollama-rocm,
+                  #     kai-fw using ollama-vulkan) all get the same
+                  #     fixes ollama-sycl gets.
+                  # All four variants come from the same package.nix
+                  # called with different `acceleration` arguments
+                  # (cpu/cuda/rocm/vulkan), so a single overrideAttrs
+                  # via `ollama` propagates to all of them.
+                  # vendorHash unchanged — go.mod/go.sum stable across
+                  # the 39 commits between 0.21.0 and 0.23.0
+                  # (or proxyVendor=true makes it invariant).
+                  ollama = prev.ollama.overrideAttrs (_: {
+                    version = "0.23.0";
+                    src = prev.fetchFromGitHub {
+                      owner = "ollama";
+                      repo = "ollama";
+                      tag = "v0.23.0";
+                      hash = "sha256-VYaFCSqhIlJPJv1SUiNDgSzLqySK3NTfucdWA7IZaAk=";
+                    };
+                  });
                   vscode-marketplace = prev.vscode-marketplace // {
                     anthropic = prev.vscode-marketplace.anthropic // {
                       claude-code = prev.vscode-marketplace.anthropic.claude-code.overrideAttrs (old: {

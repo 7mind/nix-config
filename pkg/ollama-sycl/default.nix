@@ -65,29 +65,14 @@ let
     hash = "sha256-0O7dtGrIK7wG2DE4fEDcdWkAa5tdYnMJDBxCczgEZgs=";
   };
 
-  # Bump from nixpkgs's pinned ollama (currently 0.21.0) to v0.23.0.
-  # Why bump: 39 commits, zero touch SYCL, llama.cpp vendor SHA
-  # (ec98e2002) unchanged → our ggml-sycl source + postPatch all stay
-  # binary-compatible. patch 0018-ggml-Add-batch-size-hint.patch (the
-  # one our `graph_compute` substituteInPlace targets) is unchanged.
-  ollamaVersion = "0.23.0";
-
 in
 ollama.overrideAttrs (oldAttrs: {
   pname = "ollama-sycl";
-  version = ollamaVersion;
 
-  src = fetchFromGitHub {
-    owner = "ollama";
-    repo = "ollama";
-    tag = "v${ollamaVersion}";
-    hash = "sha256-VYaFCSqhIlJPJv1SUiNDgSzLqySK3NTfucdWA7IZaAk=";
-  };
-
-  # Go modules vendoring hash. Same as upstream 0.21.0 — go.mod/go.sum
-  # didn't change across the 0.21.0 → 0.23.0 commits (or proxyVendor
-  # makes it invariant to small go.sum churn). Verified empirically.
-  vendorHash = "sha256-Lc1Ktdqtv2VhJQssk8K1UOimeEjVNvDWePE9WkamCos=";
+  # Inherits version + src + vendorHash from `ollama` — globals.nix's
+  # overlay bumps the base nixpkgs `ollama` to 0.23.0, and overrideAttrs
+  # carries that through to ollama-sycl unchanged. If you ever bump
+  # ollama-sycl ahead of the rest, set version + src + vendorHash here.
 
   nativeBuildInputs = (oldAttrs.nativeBuildInputs or [ ]) ++ [
     cmake
