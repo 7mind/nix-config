@@ -52,18 +52,31 @@
 }:
 
 let
-  # The exact upstream llama.cpp commit ollama 0.21 vendors. Matching
-  # the SHA is non-negotiable — ggml's internal types/structs/headers
-  # change frequently and a different commit produces silent ABI drift
-  # against the rest of the already-vendored ggml backends.
-  ggmlSyclCommit = "ec98e20021f7611db3bbcf6bb6629fed6e1ce4f0";
+  # The upstream llama.cpp commit we surgically lift `ggml-sycl/` from.
+  # ollama vendors ec98e2002 (Dec 2025) for the rest of ggml; we keep
+  # that commit for ggml core/CPU/CUDA/Vulkan (so ollama's 36 patches
+  # apply cleanly) but replace ONLY ggml-sycl/ with this newer commit.
+  # Pattern lifted from eleiton/ollama-intel-arc which proved this
+  # surgical-bump approach works in practice.
+  #
+  # Why bump just ggml-sycl: between ec98e2002 and recent master, the
+  # SYCL backend got fixes we directly need:
+  #   - b1be68e8ca [SYCL] Fix Q8_0 reorder: garbage on 2nd prompt + crash on full VRAM
+  #   - 225088ea76 sycl: Improve mul_mat_id memory efficiency + BF16 fast path
+  #     (replaces our manual IMF-bypass postPatch)
+  #   - 60b68a6279 sycl: fused MoE mul_mat_vec_q for TG (qwen3.5moe etc)
+  #   - 4ead6fd957 [SYCL] Update oneapi 2025.3.3
+  #   - eddd7a13a5 [SYCL] Optimize Q4_0 mul_mat for Arc770
+  #
+  # eleiton pinned at 15bff84 (Jan 8 2026, +241 commits past ec98e2002)
+  # — the safe-distance baseline. Try that first; bump further if our
+  # symptoms persist.
+  ggmlSyclCommit = "15bff84bf56651d6f991f166a2bf0f362996f7f9";
   llamaCppSrc = fetchFromGitHub {
     owner = "ggml-org";
     repo = "llama.cpp";
     rev = ggmlSyclCommit;
-    # Same hash as pkg/llama-cpp-sycl/default.nix — content-addressed,
-    # nix dedupes the fetch.
-    hash = "sha256-0O7dtGrIK7wG2DE4fEDcdWkAa5tdYnMJDBxCczgEZgs=";
+    hash = "sha256-sxkRgGdUFN0iKnjvogw+sxCe8g36LHh55FeX0kKwF/k=";
   };
 
 in
