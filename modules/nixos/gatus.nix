@@ -11,16 +11,17 @@ let
     description = "service degraded";
   }];
 
-  mkHttp = { name, group, url, status ? "< 400", interval ? "60s", maxResponseMs ? 2000 }: {
+  # status: a gatus condition fragment for the [STATUS] variable, e.g.
+  #   "< 400"             — anything non-error
+  #   "== 200"            — strict success
+  #   "in (200, 401)"     — auth-protected service that returns 401 unauthenticated
+  # maxResponseMs: pass `null` to skip the response-time check entirely
+  # (e.g. for heavy dashboards that legitimately take seconds to render).
+  mkHttp = { name, group, url, status ? "< 400", interval ? "60s", maxResponseMs ? 5000 }: {
     inherit name group url interval;
-    conditions = [ "[STATUS] ${status}" "[RESPONSE_TIME] < ${toString maxResponseMs}" ];
-    alerts = mkAlerts;
-  };
-
-  mkTcp = { name, group, host, port, interval ? "60s" }: {
-    inherit name group interval;
-    url = "tcp://${host}:${toString port}";
-    conditions = [ "[CONNECTED] == true" ];
+    conditions =
+      [ "[STATUS] ${status}" ]
+      ++ lib.optional (maxResponseMs != null) "[RESPONSE_TIME] < ${toString maxResponseMs}";
     alerts = mkAlerts;
   };
 
@@ -41,8 +42,9 @@ let
     (mkHttp { name = "Atuin";          group = "vm-services"; url = "http://atuin.home.7mind.io/"; })
     (mkHttp { name = "Syncplay UI";    group = "vm-services"; url = "http://syncp.home.7mind.io/"; })
     (mkHttp { name = "BentoPDF";       group = "vm-services"; url = "http://bentopdf.web.7mind.io/"; })
-    (mkHttp { name = "Transmission 1"; group = "vm-services"; url = "http://transmission1.pgtr.7mind.io/"; })
-    (mkHttp { name = "Transmission 2"; group = "vm-services"; url = "http://transmission2.pgtr.7mind.io/"; })
+    # Transmission RPC requires auth — 401 unauthenticated is the healthy state.
+    (mkHttp { name = "Transmission 1"; group = "vm-services"; url = "http://transmission1.pgtr.7mind.io/"; status = "in (200, 401)"; })
+    (mkHttp { name = "Transmission 2"; group = "vm-services"; url = "http://transmission2.pgtr.7mind.io/"; status = "in (200, 401)"; })
 
     # Internal services on raspi5m
     (mkHttp { name = "Glance dashboard"; group = "raspi5m"; url = "http://glance.home.7mind.io/"; })
@@ -52,13 +54,12 @@ let
     # IoT / collar device
     (mkHttp { name = "Collars web UI"; group = "iot"; url = "http://collars.iot-lan.7mind.io/"; })
 
-    # Tor relay reachability (TCP probes)
-    (mkTcp { name = "Tor ORPort v4"; group = "tor"; host = "tor.direct.7mind.io";       port = 9001; })
+    # No tor probe — its traffic is isolated from the host network, so a TCP
+    # probe from gatus would only show false negatives. Tor's own self-test
+    # (logged via the tor relay) is the right monitor for that.
 
-    # AmneziaWG VPN — TCP can't probe UDP; we at least confirm the container's
-    # eth0 is reachable on the LAN (port 9100 etc would be better if exposed).
-    # Skip explicit probe; tor v4 above already validates that the VXLAN overlay
-    # is forwarding into raspi5l's bridge.
+    # No AmneziaWG probe — UDP-only, and gatus can't usefully probe an
+    # encrypted-handshake-required port from outside the VPN.
   ];
 in
 {
