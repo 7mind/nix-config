@@ -12,9 +12,9 @@ let
   }];
 
   # status: a gatus condition fragment for the [STATUS] variable, e.g.
-  #   "< 400"             — anything non-error
-  #   "== 200"            — strict success
-  #   "in (200, 401)"     — auth-protected service that returns 401 unauthenticated
+  #   "< 400"                  — anything non-error
+  #   "== 200"                 — strict success
+  #   "== any(200, 401)"       — auth-protected service that returns 401 unauthenticated
   # maxResponseMs: pass `null` to skip the response-time check entirely
   # (e.g. for heavy dashboards that legitimately take seconds to render).
   mkHttp = { name, group, url, status ? "< 400", interval ? "60s", maxResponseMs ? 5000 }: {
@@ -43,8 +43,8 @@ let
     (mkHttp { name = "Syncplay UI";    group = "vm-services"; url = "http://syncp.home.7mind.io/"; })
     (mkHttp { name = "BentoPDF";       group = "vm-services"; url = "http://bentopdf.web.7mind.io/"; })
     # Transmission RPC requires auth — 401 unauthenticated is the healthy state.
-    (mkHttp { name = "Transmission 1"; group = "vm-services"; url = "http://transmission1.pgtr.7mind.io/"; status = "in (200, 401)"; })
-    (mkHttp { name = "Transmission 2"; group = "vm-services"; url = "http://transmission2.pgtr.7mind.io/"; status = "in (200, 401)"; })
+    (mkHttp { name = "Transmission 1"; group = "vm-services"; url = "http://transmission1.pgtr.7mind.io/"; status = "== any(200, 401)"; })
+    (mkHttp { name = "Transmission 2"; group = "vm-services"; url = "http://transmission2.pgtr.7mind.io/"; status = "== any(200, 401)"; })
 
     # Internal services on raspi5m
     (mkHttp { name = "Glance dashboard"; group = "raspi5m"; url = "http://glance.home.7mind.io/"; })
