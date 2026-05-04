@@ -14,6 +14,11 @@
   mtuBytes ? null,            # null → kernel default (1500); set to 1450 over VXLAN
   requestBroadcast ? false,   # true → forces broadcast OFFER (RouterOS workaround)
   clientIdentifier ? null,    # "mac" → stable Client-ID across ephemeral recreates
+  # Source-NAT VPN client traffic out of eth0. Default true preserves existing
+  # behavior. Set to false when upstream routes the awg subnet directly to this
+  # container's eth0 IP — that exposes per-peer source addresses to the rest of
+  # the network (useful when downstream services need to distinguish peers).
+  masquerade ? true,
 }:
 
 let
@@ -116,8 +121,8 @@ in
           PrivateKey = $(cat /var/lib/awg/server.key)
           Address = ${awgAddress}
           ListenPort = ${toString awgPort}
-          PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-          PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
+          PostUp = iptables -A FORWARD -i %i -j ACCEPT${lib.optionalString masquerade "; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE"}
+          PostDown = iptables -D FORWARD -i %i -j ACCEPT${lib.optionalString masquerade "; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE"}
           Jc = ${toString awgParams.Jc}
           Jmin = ${toString awgParams.Jmin}
           Jmax = ${toString awgParams.Jmax}
