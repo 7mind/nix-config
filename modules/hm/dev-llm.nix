@@ -130,7 +130,6 @@ in
     }
     (lib.mkIf config.smind.hm.dev.llm.enable {
       home.sessionVariables = {
-        OLLAMA_API_BASE = "http://127.0.0.1:11434";
         OPENCODE_ENABLE_EXA = "1";
         # AIDER_DARK_MODE = "true";
       };
