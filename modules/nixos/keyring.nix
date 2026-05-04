@@ -172,6 +172,17 @@ in
         default = config.smind.security.keyring.tpmUnlock.enable;
         description = "TPM2 stack required for keyring-related TPM operations";
       };
+
+      tpm.users = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = lib.optional (config.smind.host.owner != null) config.smind.host.owner;
+        description = ''
+          Users to add to the `tss` group. Membership grants direct access
+          to /dev/tpmrm0 (and the rest of the TPM2 device files) so they can
+          run age-plugin-tpm and similar tools without sudo. Defaults to the
+          host owner; multi-user hosts should override with the explicit list.
+        '';
+      };
     };
   };
 
@@ -245,6 +256,9 @@ in
         pkcs11.enable = true;
         tctiEnvironment.enable = true;
       };
+
+      # Grant configured users access to /dev/tpmrm0 via the tss group.
+      users.users = lib.genAttrs cfg.tpm.users (_: { extraGroups = [ "tss" ]; });
     })
 
     # TPM-based keyring unlock (for fingerprint login)

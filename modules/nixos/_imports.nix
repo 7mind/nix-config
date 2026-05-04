@@ -18,6 +18,7 @@
   ./dev-wireshark.nix
   ./email.nix
   ./fingerprint.nix
+  ./gatus.nix
   ./framework-laptop.nix
   ./cups.nix
   ./docker.nix
