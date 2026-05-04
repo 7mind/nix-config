@@ -230,18 +230,24 @@ CMAKE_SYCL_EOF
     #     Mamba-SSM / vision support that llama.cpp lacks anyway.
     #     Drop this patch when the ollama-engine SYCL dispatch bug
     #     is fixed upstream.
-    # The two qwen3-family lines appear in 4 separate slice literals in
-    # this file (and one in server/sched.go) — substituteInPlace
-    # replaces all occurrences and corrupts the unrelated ones. Anchor
-    # to the unique multi-line block inside OllamaEngineRequired by
-    # matching `"qwen25vl",\n\t\t"qwen3", "qwen3moe",\n\t\t"qwen35", "qwen35moe",`
-    # — that exact sequence only appears once in the file. Replace
-    # the qwen3* lines with empty strings (Go treats two adjacent
-    # commas in a slice literal as a syntax error, so we keep the
-    # `qwen25vl,` and just drop the qwen3* element lines entirely).
+    # Strip ONLY `qwen3, qwen3moe` from OllamaEngineRequired — those
+    # have full classic-transformer support in the legacy llama.cpp
+    # runner (proven via llama-cli + ollama). Leave `qwen35, qwen35moe`
+    # on the new-engine path because the legacy llama.cpp@ec98e2002
+    # arch loader doesn't know `qwen35moe` and fails with
+    # "unknown model architecture: 'qwen35moe'". The new engine has
+    # its own Go-native arch handler that DOES know qwen35* and
+    # dispatches to ggml-sycl — which we bumped above to a newer SYCL
+    # source that includes Q8_0 reorder + bf16 fast-path + MoE
+    # mul_mat_vec_q fixes that may resolve the original new-engine
+    # SIGSEGV.
+    #
+    # If qwen35* still crashes after this bump, the next step is to
+    # bump ggml-sycl further (master has 1000+ commits past 15bff84
+    # with even more SYCL fixes) before considering Go-side patches.
     perl -i -0777 -pe '
-      s{"qwen25vl",\n\t\t"qwen3", "qwen3moe",\n\t\t"qwen35", "qwen35moe",\n}
-       {"qwen25vl",\n\t\t// "qwen3", "qwen3moe", "qwen35", "qwen35moe" — forced to legacy runner via ollama-sycl postPatch (new engine SYCL bug)\n}s
+      s{"qwen25vl",\n\t\t"qwen3", "qwen3moe",\n}
+       {"qwen25vl",\n\t\t// "qwen3", "qwen3moe" — forced to legacy runner via ollama-sycl postPatch\n}s
     ' fs/ggml/ggml.go
     grep -q 'forced to legacy runner via ollama-sycl postPatch' fs/ggml/ggml.go \
       || (echo "qwen3 routing patch did not apply to fs/ggml/ggml.go"; exit 1)
