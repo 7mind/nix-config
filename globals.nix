@@ -109,7 +109,31 @@ rec {
             { nixpkgs.overlays = [
                 inputs.nix-vscode-extensions.overlays.default
                 inputs.rust-overlay.overlays.default
-                (final: prev: {
+                (final: prev:
+                let
+                  # Shared override attrs for the ollama 0.21.0 → 0.23.0
+                  # bump (referenced four times below for each
+                  # accelerated variant: stock + cuda + rocm + vulkan).
+                  ollamaBumpAttrs = {
+                    version = "0.23.0";
+                    src = prev.fetchFromGitHub {
+                      owner = "ollama";
+                      repo = "ollama";
+                      tag = "v0.23.0";
+                      hash = "sha256-VYaFCSqhIlJPJv1SUiNDgSzLqySK3NTfucdWA7IZaAk=";
+                    };
+                    # 0.23.0 added a `cmd/launch` test that npm-installs
+                    # `@ollama/pi-web-search` — fails in the nix
+                    # sandbox (no network). nixpkgs upstream's checkFlags
+                    # only `-skip`s the 0.21.0-era tests by name.
+                    # Disable Go-side checks entirely; the
+                    # `versionCheckHook` (run via doInstallCheck=true,
+                    # inherited from upstream) still verifies the
+                    # built binary actually runs and reports its
+                    # version.
+                    doCheck = false;
+                  };
+                in {
                   claude-code = final.callPackage ./pkg/claude-code/package.nix { };
                   # The upstream nixpkgs `intel-llvm` (PR #470035, merged
                   # April 2026) has a packaging bug: its top-level merged
@@ -161,22 +185,20 @@ rec {
                   #     ollama-vulkan, kai-am5 using ollama-rocm,
                   #     kai-fw using ollama-vulkan) all get the same
                   #     fixes ollama-sycl gets.
-                  # All four variants come from the same package.nix
-                  # called with different `acceleration` arguments
-                  # (cpu/cuda/rocm/vulkan), so a single overrideAttrs
-                  # via `ollama` propagates to all of them.
+                  # NOTE: `ollama`, `ollama-cuda`, `ollama-rocm`,
+                  # `ollama-vulkan` are *separate* callPackage
+                  # instantiations of the same package.nix with
+                  # different `acceleration` arguments — overriding
+                  # `ollama` does NOT propagate to the accelerated
+                  # variants (each variant gets its own fixed-output
+                  # derivation). Override every variant inline.
                   # vendorHash unchanged — go.mod/go.sum stable across
                   # the 39 commits between 0.21.0 and 0.23.0
                   # (or proxyVendor=true makes it invariant).
-                  ollama = prev.ollama.overrideAttrs (_: {
-                    version = "0.23.0";
-                    src = prev.fetchFromGitHub {
-                      owner = "ollama";
-                      repo = "ollama";
-                      tag = "v0.23.0";
-                      hash = "sha256-VYaFCSqhIlJPJv1SUiNDgSzLqySK3NTfucdWA7IZaAk=";
-                    };
-                  });
+                  ollama         = prev.ollama.overrideAttrs         (_: ollamaBumpAttrs);
+                  ollama-cuda    = prev.ollama-cuda.overrideAttrs    (_: ollamaBumpAttrs);
+                  ollama-rocm    = prev.ollama-rocm.overrideAttrs    (_: ollamaBumpAttrs);
+                  ollama-vulkan  = prev.ollama-vulkan.overrideAttrs  (_: ollamaBumpAttrs);
                   vscode-marketplace = prev.vscode-marketplace // {
                     anthropic = prev.vscode-marketplace.anthropic // {
                       claude-code = prev.vscode-marketplace.anthropic.claude-code.overrideAttrs (old: {

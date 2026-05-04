@@ -70,6 +70,27 @@ stdenv.mkDerivation (finalAttrs: {
     export PATH=$TMPDIR/intel-shim/bin:$PATH
   '';
 
+  # Force the ggml-sycl target to link the *full* SYCL device library
+  # set, not the default `libc + libm-fp32` subset. ggml-sycl's
+  # `set_rows_sycl<…, bfloat16>` template instantiation calls
+  # `__imf_float2bfloat16_rn` from Intel's IMF (Intel Math Function)
+  # bf16 library; without the bf16 fallback bitcode the kernel JIT
+  # fails at first dispatch on any model containing bf16 tensors
+  # (qwen3.6, gemma3-27b-bf16, ...) with:
+  #   error : unresolved external symbol __imf_float2bfloat16_rn
+  #     ... aka kernel : set_rows_sycl<…, bfloat16> ...
+  #   Exception caught at ggml-sycl.cpp:3957, Error OP SET_ROWS
+  # Apply target-scoped (not global) so other ggml backends keep their
+  # smaller compile-flag set. Required on BOTH compile + link sides
+  # because device-library selection is folded into the device image
+  # at link time.
+  postPatch = ''
+    cat >> ggml/src/ggml-sycl/CMakeLists.txt <<'EOF'
+target_compile_options(ggml-sycl PRIVATE "-fsycl-device-lib=all")
+target_link_options(ggml-sycl PRIVATE "-fsycl-device-lib=all")
+EOF
+  '';
+
   # MKLConfig.cmake locates everything relative to MKLROOT. Our
   # `mkl-sycl` derivation flattens lib/include into $out, so MKLROOT is
   # just the package out path. (Required because the cmake config's

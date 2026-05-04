@@ -136,6 +136,23 @@ if(GGML_SYCL_BUILD AND NOT APPLE)
 
     add_subdirectory(''${CMAKE_CURRENT_SOURCE_DIR}/ml/backend/ggml/ggml/src/ggml-sycl)
     target_include_directories(ggml-sycl PRIVATE ''${GGML_INCLUDE_DIRS})
+
+    # Link the *full* SYCL device library set, not the default subset
+    # (libc + libm-fp32). ggml-sycl's `set_rows_sycl<…, bfloat16>`
+    # template instantiation calls `__imf_float2bfloat16_rn` from
+    # Intel's IMF (Intel Math Function) bf16 library; without
+    # `-fsycl-device-lib=all` the IMF bf16 fallback bitcode isn't
+    # linked into the device image, so the kernel JIT fails at first
+    # use with:
+    #   error : unresolved external symbol __imf_float2bfloat16_rn
+    #     ... aka kernel : set_rows_sycl<…, bfloat16> ...
+    #   Exception caught at ggml-sycl.cpp:3957, Error OP SET_ROWS
+    # which manifests on any model containing bf16 tensors (e.g.
+    # qwen3.6, gemma3 27B bf16). Apply on both compile + link sides
+    # because the device-library selection has to be visible to both.
+    target_compile_options(ggml-sycl PRIVATE "-fsycl-device-lib=all")
+    target_link_options(ggml-sycl PRIVATE "-fsycl-device-lib=all")
+
     install(TARGETS ggml-sycl
         RUNTIME_DEPENDENCIES
             PRE_INCLUDE_REGEXES "mkl_sycl|mkl_intel|mkl_core|mkl_tbb|mkl_def|libsycl|libOpenCL|libze|libiomp"
