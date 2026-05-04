@@ -68,9 +68,17 @@ let
   #   - 4ead6fd957 [SYCL] Update oneapi 2025.3.3
   #   - eddd7a13a5 [SYCL] Optimize Q4_0 mul_mat for Arc770
   #
-  # eleiton pinned at 15bff84 (Jan 8 2026, +241 commits past ec98e2002)
-  # — the safe-distance baseline. Try that first; bump further if our
-  # symptoms persist.
+  # eleiton's verified-safe pin (Jan 8 2026, +241 commits past
+  # ec98e2002). Tried bumping to current master (May 4 2026) for the
+  # targeted SYCL fixes (Q8_0 reorder, BF16 fast path, fused MoE
+  # mul_mat_vec_q) but the ggml backend ABI itself was rewritten
+  # between those dates — new callback signatures, new ops
+  # (GGML_OP_GATED_DELTA_NET), new quant types (GGML_TYPE_Q1_0,
+  # block_nvfp4), grown struct layouts. Backporting all those into
+  # ollama's Dec-2025 ggml-base is a multi-evening project (the
+  # original "vendor bump" we estimated). Stay at eleiton's pin until
+  # either upstream ollama bumps its vendor or we commit to the full
+  # bump. qwen3.5moe inference stays broken at this pin.
   ggmlSyclCommit = "15bff84bf56651d6f991f166a2bf0f362996f7f9";
   llamaCppSrc = fetchFromGitHub {
     owner = "ggml-org";
@@ -123,6 +131,10 @@ ollama.overrideAttrs (oldAttrs: {
     # 1. Splice ggml-sycl/ from upstream into the vendored ggml tree.
     cp -r ${llamaCppSrc}/ggml/src/ggml-sycl ml/backend/ggml/ggml/src/
     chmod -R u+w ml/backend/ggml/ggml/src/ggml-sycl
+
+    # (NVFP4 backport not needed at eleiton's pin — that quant type
+    # was added upstream after Jan 8. Leave this comment as a marker
+    # of what to re-add if we ever bump past 5eae9cb1d9, 2026-03-11.)
 
     # 2. Mirror the Vulkan stanza in CMakeLists.txt for SYCL. Gated by
     #    the GGML_SYCL_BUILD option (off by default; the SYCL preset
