@@ -51,8 +51,8 @@ let
     (mkHttp { name = "Grafana";        group = "vm-services"; url = "http://grafana.web.7mind.io/"; })
     (mkHttp { name = "vpn-services (todo)"; group = "vm-services"; url = "http://vpn-services.web.7mind.io/"; })
     (mkHttp { name = "Torrent UI";     group = "vm-services"; url = "http://torrent.home.7mind.io/"; })
-    # Prometheus's UI legitimately takes ~10s to render the landing page on this host.
-    (mkHttp { name = "Prometheus";     group = "vm-services"; url = "http://prometheus-web.web.7mind.io/"; maxResponseMs = 15000; })
+    # Probe the readiness endpoint, not the UI — cheap, doesn't touch TSDB.
+    (mkHttp { name = "Prometheus";     group = "vm-services"; url = "http://prometheus.web.7mind.io/-/ready"; })
     (mkHttp { name = "InfluxDB";       group = "vm-services"; url = "http://influx.home.7mind.io/"; })
     (mkHttp { name = "Atuin";          group = "vm-services"; url = "http://atuin.home.7mind.io/"; })
     (mkHttp { name = "Syncthing P UI"; group = "vm-services"; url = "http://syncp.home.7mind.io/"; })
