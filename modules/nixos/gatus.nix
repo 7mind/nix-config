@@ -3,13 +3,17 @@
 let
   cfg = config.smind.monitoring.gatus;
 
-  mkAlerts = [{
-    type = "email";
+  mkAlertSpec = type: {
+    inherit type;
     failure-threshold = 3;
     success-threshold = 2;
     send-on-resolved = true;
     description = "service degraded";
-  }];
+  };
+
+  mkAlerts =
+    [ (mkAlertSpec "email") ]
+    ++ lib.optional cfg.matrix.enable (mkAlertSpec "matrix");
 
   # status: a gatus condition fragment for the [STATUS] variable, e.g.
   #   "< 400"                  — anything non-error
@@ -120,6 +124,32 @@ in
       default = true;
       description = "Open the firewall for the gatus dashboard.";
     };
+
+    matrix = {
+      enable = lib.mkEnableOption "matrix alerts (in addition to email)";
+
+      serverUrl = lib.mkOption {
+        type = lib.types.str;
+        example = "https://matrix.example.org";
+        description = "Matrix homeserver URL for the bot account.";
+      };
+
+      roomId = lib.mkOption {
+        type = lib.types.str;
+        example = "!abcdef:matrix.example.org";
+        description = "Internal room ID (the !id form, not #alias) where alerts are posted.";
+      };
+
+      tokenSecret = lib.mkOption {
+        type = lib.types.str;
+        default = "gatus-matrix-token";
+        description = ''
+          Name of the agenix secret holding the bot's access token (raw value).
+          The secret must be declared elsewhere via age.secrets.<name> with mode 0444
+          (or readable by gatus's service user).
+        '';
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -137,31 +167,49 @@ in
           address = cfg.bindAddress;
           port = cfg.port;
         };
-        alerting.email = {
-          from = "monitor.${config.networking.hostName}.${config.smind.host.email.sender}";
-          username = "7mind.io";
-          password = "\${SMTP_PASSWORD}";
-          host = "mail.smtp2go.com";
-          port = 587;
-          to = config.smind.host.email.to;
+        alerting = {
+          email = {
+            from = "monitor.${config.networking.hostName}.${config.smind.host.email.sender}";
+            username = "7mind.io";
+            password = "\${SMTP_PASSWORD}";
+            host = "mail.smtp2go.com";
+            port = 587;
+            to = config.smind.host.email.to;
+          };
+        } // lib.optionalAttrs cfg.matrix.enable {
+          matrix = {
+            server-url = cfg.matrix.serverUrl;
+            access-token = "\${MATRIX_TOKEN}";
+            internal-room-id = cfg.matrix.roomId;
+          };
         };
         inherit endpoints;
       };
     };
 
-    # Reuse the existing msmtp-password secret (raw password value) — wrap it
-    # into KEY=VALUE form for gatus's EnvironmentFile each time the service
-    # starts. msmtp-password.age is world-readable (mode 0444), so gatus's
-    # service user — static or DynamicUser — can read it without further
-    # permission grants.
+    age.secrets = lib.mkIf cfg.matrix.enable {
+      ${cfg.matrix.tokenSecret} = {
+        rekeyFile = "${cfg-meta.paths.secrets}/generic/${cfg.matrix.tokenSecret}.age";
+        mode = "444";
+      };
+    };
+
+    # Compose gatus's env file from one or more agenix secrets each service start.
+    # All referenced secrets are world-readable (mode 0444), so gatus's static or
+    # DynamicUser can read them without extra permission grants.
     systemd.services.gatus.serviceConfig = {
       RuntimeDirectory = "gatus";
       RuntimeDirectoryMode = "0750";
-      EnvironmentFile = "-/run/gatus/smtp-env";
-      ExecStartPre = pkgs.writeShellScript "gatus-smtp-env" ''
+      EnvironmentFile = "-/run/gatus/env";
+      ExecStartPre = pkgs.writeShellScript "gatus-env" ''
         set -euo pipefail
         umask 0137
-        printf 'SMTP_PASSWORD=%s\n' "$(cat ${config.age.secrets.msmtp-password.path})" > /run/gatus/smtp-env
+        {
+          printf 'SMTP_PASSWORD=%s\n' "$(cat ${config.age.secrets.msmtp-password.path})"
+          ${lib.optionalString cfg.matrix.enable ''
+            printf 'MATRIX_TOKEN=%s\n' "$(cat ${config.age.secrets.${cfg.matrix.tokenSecret}.path})"
+          ''}
+        } > /run/gatus/env
       '';
     };
 
