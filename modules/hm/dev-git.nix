@@ -3,6 +3,15 @@
 {
   options = {
     smind.hm.dev.git.enable = lib.mkEnableOption "Git with lazygit, tig, and custom config";
+    smind.hm.dev.git.credentialHelper = lib.mkOption {
+      type = lib.types.str;
+      default = "${pkgs.gitFull}/bin/git-credential-libsecret";
+      description = ''
+        Value for git's credential.helper. Defaults to libsecret, which needs a
+        running Secret Service daemon (gnome-keyring, KeePassXC, etc.). Override
+        on hosts without one — e.g. "store" on a server with disk encryption.
+      '';
+    };
   };
 
   config = lib.mkIf config.smind.hm.dev.git.enable {
@@ -23,7 +32,7 @@
             "!gi() { curl -L -s https://www.gitignore.io/api/visualstudiocode,jetbrains+all,java,scala,sbt,maven,metals ;}; gi";
         };
 
-        credential = { helper = "${pkgs.gitFull}/bin/git-credential-libsecret"; };
+        credential = { helper = config.smind.hm.dev.git.credentialHelper; };
 
         core = {
           reloadindex = true;
