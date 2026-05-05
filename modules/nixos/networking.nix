@@ -1,15 +1,21 @@
 { lib, config, cfg-meta, pkgs, ... }:
 let
+  # Settings applied to every host that enables systemd-resolved, regardless
+  # of net.mode. Negative caching is disabled globally so that disappearing-
+  # then-reappearing DHCP hostnames (containers, dynamic peers) resolve on
+  # the next query instead of waiting for the SOA MINIMUM TTL.
+  resolvedGlobalSettings = {
+    Resolve = {
+      Cache = "no-negative";
+      DNSStubListener = "yes";
+      DNSStubListenerExtra = [ "[::1]:53" ];
+      LLMNR = "false";
+    };
+  };
+
   resolvedWithCache = {
     enable = true;
-    settings = {
-      Resolve = {
-        Cache = "no-negative";
-        DNSStubListener = "yes";
-        DNSStubListenerExtra = [ "[::1]:53" ];
-        LLMNR = "false";
-      };
-    };
+    settings = resolvedGlobalSettings;
   };
 in
 {
@@ -113,6 +119,11 @@ in
   };
 
   config = lib.mkMerge [
+    {
+      # Apply Cache=no-negative everywhere systemd-resolved runs, even when
+      # smind.net.mode is "none" and the host hand-rolls its own networking.
+      services.resolved.settings = resolvedGlobalSettings;
+    }
     (lib.mkIf (config.smind.net.mode == "systemd-networkd") {
       assertions =
         [
