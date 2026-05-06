@@ -177,7 +177,11 @@ in
           prime = {
             offload = {
               enable = true;
-              enableOffloadCmd = true;
+              # We provide our own `nvidia-offload` below that pre-warms
+              # the dGPU with `nvidia-smi` before exec'ing the workload.
+              # The upstream-generated script doesn't have a hook for
+              # extra setup, so we disable it and replace by name.
+              enableOffloadCmd = false;
             };
             amdgpuBusId = cfg.amdgpuBusId;
             nvidiaBusId = cfg.nvidiaBusId;
@@ -237,6 +241,29 @@ in
           gpuBindVfio
           gpuBindNvidia
           pkgs.libva-utils
+
+          # Replacement for the upstream-generated `nvidia-offload` (we
+          # disabled enableOffloadCmd above). Same env vars as the
+          # upstream script (nixpkgs/nixos/modules/hardware/video/nvidia.nix
+          # — verbatim copy as of nixpkgs 24.x; sanity-check on bumps),
+          # plus a `nvidia-smi` pre-warm at the top.
+          #
+          # Why pre-warm: under PRIME offload + finegrained PM the dGPU
+          # sits in D3cold when idle. NVENC's capability probe (run
+          # early in OBS startup, also in ffmpeg/blender/etc.) has a
+          # tight timeout and fails on the first launch if the GPU is
+          # still waking up or `nvidia_uvm` hasn't been modprobe'd yet.
+          # The nvidia-smi call lifts the GPU to D0 and forces
+          # nvidia_uvm to load — costs ~300ms, eliminates the "first
+          # OBS launch shows no NVENC" symptom.
+          (pkgs.writeShellScriptBin "nvidia-offload" ''
+            nvidia-smi >/dev/null 2>&1 || true
+            export __NV_PRIME_RENDER_OFFLOAD=1
+            export __NV_PRIME_RENDER_OFFLOAD_PROVIDER=NVIDIA-G0
+            export __GLX_VENDOR_LIBRARY_NAME=nvidia
+            export __VK_LAYER_NV_optimus=NVIDIA_only
+            exec "$@"
+          '')
         ];
 
         # Force session to use AMD iGPU by default

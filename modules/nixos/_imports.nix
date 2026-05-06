@@ -59,6 +59,7 @@
   ./power-profiles.nix
   ./power-refresh-rate.nix
   ./power-suspend-quirks.nix
+  ./enocean-mqtt.nix
   ./hoymiles-mqtt.nix
   ./intel-gpu.nix
   ./qendercore.nix

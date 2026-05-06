@@ -110,6 +110,8 @@
 
         hoymiles-mqtt-bridge = pkgs.callPackage "${cfg-meta.paths.pkg}/hoymiles-mqtt-bridge/default.nix" { };
 
+        enocean-mqtt = pkgs.callPackage "${cfg-meta.paths.pkg}/enocean-mqtt/default.nix" { };
+
         matter-mqtt-bridge = pkgs.callPackage "${cfg-meta.paths.pkg}/matter-mqtt-bridge/default.nix" { };
 
         resock = pkgs.callPackage "${cfg-meta.paths.pkg}/resock/default.nix" { };
