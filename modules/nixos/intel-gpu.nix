@@ -127,6 +127,27 @@ in
         by ~25W with no observed driver-bind regression.
       '';
     };
+
+    aspm.bmgL1ssQuirk = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Apply an out-of-tree patch to drivers/pci/quirks.c that
+        disables ASPM L1.1 / L1.2 substates on the Intel Battlemage
+        discrete GPU's upstream port (PCI ID 0x8086:0xe2ff) via a
+        DECLARE_PCI_FIXUP_FINAL. Required if the host is configured
+        for `aspm.policy = "powersupersave"` and contains a Battlemage
+        card on a root port that exposes ASPM_L1.1 (e.g. AMD Starship
+        / Matisse Ryzen 5xxx) — without this quirk the BMG card cannot
+        wake from L1.1 and bricks at PCI enumeration with `Unable to
+        change power state from D3cold to D0`.
+
+        The patch is staged for upstream review; this option only
+        carries it locally until accepted into a stable kernel.
+        Triggers a kernel rebuild — leave off on hosts that don't need
+        it.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
@@ -158,6 +179,11 @@ in
         ];
 
       boot.kernelModules = [ cfg.driver ];
+
+      boot.kernelPatches = lib.optional cfg.aspm.bmgL1ssQuirk {
+        name = "intel-bmg-disable-l1ss";
+        patch = ./kernel-patches/intel-bmg-disable-l1ss.patch;
+      };
 
       hardware.graphics = {
         enable = true;

@@ -1,0 +1,76 @@
+PCI/ASPM: disable L1.1/L1.2 substates for Intel Battlemage discrete GPU upstream port
+
+Intel Battlemage (BMG-G21 / BMG-G31, e.g. Arc Pro B70) discrete GPU cards
+expose a two-layer on-card PCIe switch:
+
+    AMD/Intel root port  <->  8086:e2ff (BMG card upstream)
+                              8086:e2f0 (BMG card downstream)
+                              8086:e22x (BMG GPU endpoint, e.g. e223 = Arc Pro B70)
+
+The platform-facing link (root port <-> 8086:e2ff) is the only link in the
+chain that advertises L1 PM Substates support on both ends. On AMD
+Starship/Matisse (Ryzen 5xxx) root ports, the intersection is ASPM_L1.1
+only (the AMD port advertises L1.1 but not L1.2). When pcie_aspm.policy=
+powersupersave arms ASPM_L1.1 on this link, the BMG card cannot recover
+from the resulting low-power state on subsequent D3cold->D0 transition,
+leaving the device permanently inaccessible:
+
+    pcieport 0000:02:01.0: Unable to change power state from D3cold to D0, device inaccessible
+    xe 0000:03:00.0: Unable to change power state from D3cold to D0, device inaccessible
+    xe 0000:03:00.0: [drm] Running in SR-IOV VF mode    [misdetected: dead config space]
+    xe 0000:03:00.0: [drm] *ERROR* VF: Tile0: GT0: Failed to reset GuC state (-EPROTO)
+    xe 0000:03:00.0: probe with driver xe failed with error -71
+
+Reproduces deterministically on Linux 7.0.3 with an Arc Pro B70 in an
+AMD Ryzen 9 5950X system. pcie_aspm.policy=powersave (L0s+L1 only, no
+substates) works correctly; pcie_aspm.policy=powersupersave bricks the
+card on every boot. The 6.x-era blanket `no_d3cold` quirk for Battlemage
+was narrowed to ASUS NUC13 only in 7.0, but that change is orthogonal:
+the failure here is link-state, not device-state, and surfaces
+regardless of d3cold_allowed.
+
+Disable both L1SS substates on the BMG card's upstream port via a final
+PCI fixup. Standard ASPM L1 still applies, so the link still benefits
+from the deepest substate that the BMG silicon actually handles
+correctly. The quirk is keyed on the upstream-port device ID 0xe2ff so
+it covers all current Battlemage SKUs (the GPU-endpoint ID varies by
+SKU, but the upstream switch is shared).
+
+Reported-by: Pavel Shirshov <pavel@7mind.io>
+Signed-off-by: <FILL IN BEFORE SUBMITTING UPSTREAM>
+
+--- a/drivers/pci/quirks.c
++++ b/drivers/pci/quirks.c
+@@ -6289,6 +6289,32 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x56b0, aspm_l1_acceptable_latency
+ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x56b1, aspm_l1_acceptable_latency);
+ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x56c0, aspm_l1_acceptable_latency);
+ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x56c1, aspm_l1_acceptable_latency);
++
++/*
++ * Intel Battlemage discrete GPU cards (BMG-G21 / BMG-G31; Arc B580,
++ * Arc Pro B50/B60/B70) expose a two-layer on-card PCIe switch. The
++ * platform-facing link, between the host root port and the card's
++ * upstream switch port (PCI device ID 0xe2ff), is the only link in the
++ * chain advertising L1 PM Substates on both ends. On at least AMD
++ * Starship/Matisse root ports, where the intersection is ASPM_L1.1
++ * only, arming L1.1 leaves the BMG card unable to wake from D3cold:
++ *
++ *   pcieport 0000:02:01.0: Unable to change power state from D3cold
++ *                          to D0, device inaccessible
++ *   xe 0000:03:00.0: probe with driver xe failed with error -71
++ *
++ * Reproduces deterministically with pcie_aspm.policy=powersupersave,
++ * works correctly with policy=powersave (no substates). Disable L1SS
++ * substates on the BMG card upstream port; standard L1 ASPM is
++ * unaffected.
++ */
++static void quirk_intel_bmg_no_l1ss(struct pci_dev *dev)
++{
++	pci_disable_link_state(dev, PCIE_LINK_STATE_L1_2 |
++				    PCIE_LINK_STATE_L1_1);
++	pci_info(dev, "intel-bmg-aspm-quirk: L1.1/L1.2 substates disabled on BMG upstream port\n");
++}
++DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0xe2ff, quirk_intel_bmg_no_l1ss);
+ #endif
+
+ #ifdef CONFIG_PCIE_DPC
