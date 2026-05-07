@@ -42,6 +42,7 @@
   intel-compute-runtime,
   level-zero,
   ocl-icd,
+  opencl-headers,
   mkl-sycl,
   oneDNN,
   tbb,
@@ -118,6 +119,11 @@ ollama.overrideAttrs (oldAttrs: {
     intel-compute-runtime
     level-zero
     ocl-icd
+    # intel-llvm's `sycl/detail/cl.h` does `#include <CL/cl.h>`. ggml-sycl
+    # at the bumped pin (15bff84) reaches that include path; the older
+    # ec98e2002 used by pkg/llama-cpp-sycl/ does not. ocl-icd ships only
+    # `ocl_icd.h`, not the OpenCL headers proper, so add them explicitly.
+    opencl-headers
     mkl-sycl
     oneDNN
     tbb

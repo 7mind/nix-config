@@ -28,22 +28,35 @@
     };
   };
 
-  cfg-packages = { inputs, pkgs, arch }: {
-    jdk-main = pkgs.graalvmPackages.graalvm-ce;
-    # Fix amneziawg kernel module build on Linux >= 6.19 (blake2s API change)
-    # https://github.com/amnezia-vpn/amneziawg-linux-kernel-module/commit/26f5df04ec47
-    linux-kernel = pkgs.linuxKernel.packages.linux_6_19.extend (kfinal: kprev: {
-      amneziawg = kprev.amneziawg.overrideAttrs (old: rec {
-        version = "1.0.20260329";
-        src = pkgs.fetchFromGitHub {
-          owner = "amnezia-vpn";
-          repo = "amneziawg-linux-kernel-module";
-          tag = "v${version}";
-          hash = "sha256-csKb8xFnsOYnIbnoqbpIY/R7X8OqF9O9pKC/JZH42pA=";
-        };
+  cfg-packages = { inputs, pkgs, arch }:
+    let
+      # OpenZFS 2.4.1 + Ubuntu 2.4.1-1ubuntu5's cherry-picks for Linux 7.0.
+      # Upstream 2.4.1 declares Linux-Maximum: 6.19; these 7 patches are the
+      # exact set Canonical ships on 7.0.0-15-generic in Ubuntu 26.04.
+      # Vendored from debian/patches/ rather than fetching upstream commit
+      # diffs — context-line drift on master makes the raw commit patches
+      # fuzz-fail against the 2.4.1 release tree.
+      zfsLinux70Patches = [
+        ./patches/zfs-2.4.1-linux-7.0/0001-Linux-7.0-explicitly-set-setlease-handler-to-kernel-.patch
+        ./patches/zfs-2.4.1-linux-7.0/0002-Linux-7.0-blk_queue_nonrot-renamed-to-blk_queue_rot.patch
+        ./patches/zfs-2.4.1-linux-7.0/0003-Linux-7.0-posix_acl_to_xattr-now-allocates-memory.patch
+        ./patches/zfs-2.4.1-linux-7.0/0004-Linux-7.0-add-shims-for-the-fs_context-based-mount-A.patch
+        ./patches/zfs-2.4.1-linux-7.0/0005-Linux-7.0-also-set-setlease-handler-on-directories-1.patch
+        ./patches/zfs-2.4.1-linux-7.0/0006-Linux-7.0-autoconf-Remove-copy-from-user-inatomic-AP.patch
+        ./patches/zfs-2.4.1-linux-7.0/0007-Linux-7.0-ensure-LSMs-get-to-process-mount-options.patch
+      ];
+      patchZfsFor70 = z: z.overrideAttrs (old: {
+        patches = (old.patches or [ ]) ++ zfsLinux70Patches;
+        configureFlags = (old.configureFlags or [ ]) ++ [ "--enable-linux-experimental" ];
+        meta = old.meta // { broken = false; };
       });
-    });
-  };
+    in
+    {
+      jdk-main = pkgs.graalvmPackages.graalvm-ce;
+      linux-kernel = pkgs.linuxKernel.packages.linux_7_0.extend (kfinal: kprev: {
+        zfs_unstable = patchZfsFor70 kprev.zfs_unstable;
+      });
+    };
 
 
 }

@@ -25,6 +25,7 @@
       initrd = { supportedFilesystems = [ "zfs" ]; };
       zfs.removeLinuxDRM = true;
       zfs.package = pkgs.zfs_unstable;
+      zfs.forceImportRoot = false;
     };
 
     services.zfs = {

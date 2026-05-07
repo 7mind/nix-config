@@ -40,7 +40,7 @@ in
     home.file = lib.mkIf (cfg-meta.isLinux && !config.smind.hm.vscodium.mutableConfig) (
       let
         userDir = "${config.xdg.configHome}/VSCodium/User";
-        vsc = config.programs.vscode;
+        vsc = config.programs.vscodium;
         prof = vsc.profiles.default or { };
       in
       lib.mkMerge [
@@ -58,7 +58,7 @@ in
       ]
     );
 
-    programs.vscode = lib.mkMerge [
+    programs.vscodium = lib.mkMerge [
       {
         enable = true;
         mutableExtensionsDir = config.smind.hm.vscodium.mutableConfig;
