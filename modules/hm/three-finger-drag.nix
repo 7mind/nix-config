@@ -32,7 +32,7 @@ in
 
     responseTime = lib.mkOption {
       type = lib.types.int;
-      default = 50; # increase default 5 10x due to battery drain
+      default = 25; # increase default 5 by 5x due to battery drain
       description = "Event polling interval in milliseconds";
     };
   };

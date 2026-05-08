@@ -316,6 +316,6 @@ in
       };
     };
 
-    home.packages = lib.mkIf cfg-meta.isLinux [ pkgs.ghostty ];
+    home.packages = lib.mkIf cfg-meta.isLinux [ pkgs.ghostty pkgs.xdg-terminal-exec ];
   };
 }
