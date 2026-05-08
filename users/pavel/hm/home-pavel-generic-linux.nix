@@ -1,7 +1,7 @@
 { lib, pkgs, xdg_associate, cfg-meta, config, import_if_exists, import_if_exists_or, ... }:
 
 {
-  programs.vscode.profiles.default.keybindings =
+  programs.vscodium.profiles.default.keybindings =
     if cfg-meta.isLinux then
       (builtins.fromJSON (builtins.readFile "${cfg-meta.paths.users}/pavel/hm/keymap-vscode-linux.json"))
     else
