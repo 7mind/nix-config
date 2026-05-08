@@ -95,13 +95,44 @@ let
   # at `pkg/ollama-sycl/ollama-src/` — needs a separate derivation that
   # uses stdenv.mkDerivation directly with `hardeningDisable` rather
   # than ollama.overrideAttrs.
-  ggmlSyclCommit = "15bff84bf56651d6f991f166a2bf0f362996f7f9";
+  # Bumped 2026-05-08 from 15bff84 (Jan 8 2026) → fc0fe40 (Feb 10 2026,
+  # PR #19468 "models : support qwen3.5 series"). This is the FIRST
+  # llama.cpp commit that adds `LLM_ARCH_QWEN35` / `LLM_ARCH_QWEN35MOE`
+  # to the legacy runner — sits before the upstream ABI breaks at
+  # c5a778891ba0 (GGML_OP_GATED_DELTA_NET op enum, Mar 7) and
+  # f772f6e434cc / d23355afc319 (block_nvfp4, Mar–Apr). The 5 backend
+  # callback "ABI breaks" I diagnosed earlier when trying to bump to
+  # 073bb2c20 are actually OLLAMA's own patches (0011, 0018, 0020,
+  # 0022, 0024 — verified by diffing upstream ggml-backend-impl.h
+  # at five points: identical signatures across ec98e2002, fc0f, etc).
+  # Only `graph_compute` (3-arg form, ollama patch 0018) needs a shim
+  # in our spliced ggml-sycl — see substituteInPlace below.
+  #
+  # The single ggml-base symbol fc0f's ggml-sycl references that
+  # ec98e2002 doesn't have: `GGML_TENSOR_FLAG_COMPUTE = 16` (added
+  # upstream by 365a3e8c319d, Jan 19 PR #18550). Single line addition
+  # to ggml.h enum — handled in postPatch below.
+  ggmlSyclCommit = "fc0fe4004985d6749a7a05e250d161f9dbe41d65";
   llamaCppSrc = fetchFromGitHub {
     owner = "ggml-org";
     repo = "llama.cpp";
     rev = ggmlSyclCommit;
-    hash = "sha256-sxkRgGdUFN0iKnjvogw+sxCe8g36LHh55FeX0kKwF/k=";
+    hash = "sha256-1o1TA8Rv3iNcJ2PStGDNrgBA91bO7WqGfr1LvfXqd4s=";
   };
+
+  # Hal9000AIML's surgical SYCL fixes for Arc Pro B70 — see
+  # `pkg/llama-cpp-sycl/patches/`. We apply 0001-0003 here (cleanly-
+  # applying subset against fc0fe40); the rest fail merge against this
+  # older base (4-7) or are docs only (8). 0001 is BF16 GET_ROWS, 0002
+  # is fused-MoE mul_mat_vec_q TG, 0003 is K-quant subgroup-16 DMMV.
+  # Disabled 2026-05-08: with these applied (0001-0003 cleanly merge
+  # against fc0f), inference produced repetitive garbage tokens
+  # ("力强力强..." for qwen36-27b, "le le le..." for qwen25-3b). The
+  # K-quant subgroup-size patch (0003) is the prime suspect — it
+  # changes warp size assumptions that may not match fc0f's surrounding
+  # K-quant kernel code. Re-introduce one at a time after fc0f baseline
+  # is verified working.
+  hal9000Patches = [ ];
 
 in
 ollama.overrideAttrs (oldAttrs: {
@@ -153,9 +184,31 @@ ollama.overrideAttrs (oldAttrs: {
     cp -r ${llamaCppSrc}/ggml/src/ggml-sycl ml/backend/ggml/ggml/src/
     chmod -R u+w ml/backend/ggml/ggml/src/ggml-sycl
 
-    # (NVFP4 backport not needed at eleiton's pin — that quant type
-    # was added upstream after Jan 8. Leave this comment as a marker
-    # of what to re-add if we ever bump past 5eae9cb1d9, 2026-03-11.)
+    # 1b. Backport `GGML_TENSOR_FLAG_COMPUTE = 16` into ec98e2002's
+    #     ggml.h enum. fc0f's ggml-sycl/ggml-sycl.cpp:4312 references
+    #     this flag (added upstream by 365a3e8c319d, Jan 19, PR #18550)
+    #     which ec98e2002 doesn't have. Single-line additive patch.
+    if ! grep -q 'GGML_TENSOR_FLAG_COMPUTE' ml/backend/ggml/ggml/include/ggml.h; then
+      perl -i -pe 's{(GGML_TENSOR_FLAG_OUTPUT\s*=\s*\d+,)}{\1\n        GGML_TENSOR_FLAG_COMPUTE = 16, // backported from upstream 365a3e8c319d for fc0f ggml-sycl}' \
+        ml/backend/ggml/ggml/include/ggml.h
+      grep -q 'GGML_TENSOR_FLAG_COMPUTE' ml/backend/ggml/ggml/include/ggml.h \
+        || (echo "GGML_TENSOR_FLAG_COMPUTE backport failed"; exit 1)
+    fi
+
+    # 1c. Apply Hal9000 SYCL patches that cleanly merge against fc0f.
+    #     These are the surgical B70 fixes from
+    #     Hal9000AIML/arc-pro-b70-ubuntu-gpu-speedup-bugfixes:
+    #       0001 — BF16 GET_ROWS support
+    #       0002 — fused MoE mul_mat_vec_q for TG (qwen3.5moe slot SEGV fix)
+    #       0003 — native subgroup-size for K-quant DMMV (Xe2 perf)
+    #     Patches 0004-0007 fail merge against fc0f (different surrounding
+    #     code); 0008 is documentation-only. Path strip = -p4 because
+    #     patches reference `a/ggml/src/ggml-sycl/...`, our cwd is the
+    #     ollama tree where ggml-sycl lives at
+    #     `ml/backend/ggml/ggml/src/ggml-sycl/`.
+    ${lib.concatMapStringsSep "\n" (p: ''
+      patch -p4 -d ml/backend/ggml/ggml/src/ggml-sycl < ${p}
+    '') hal9000Patches}
 
     # 2. Mirror the Vulkan stanza in CMakeLists.txt for SYCL. Gated by
     #    the GGML_SYCL_BUILD option (off by default; the SYCL preset

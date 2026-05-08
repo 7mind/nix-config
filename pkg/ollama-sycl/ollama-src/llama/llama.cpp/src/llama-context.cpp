@@ -1549,10 +1549,17 @@ int llama_context::decode(const llama_batch & batch_inp) {
     const int64_t n_vocab = vocab.n_tokens();
     const int64_t n_embd  = hparams.n_embd_inp();
 
-    // when computing embeddings, all tokens are output
-    const bool output_all   = cparams.embeddings;
+    // ollama patch 0021: do NOT mass-mark outputs based on
+    // cparams.embeddings — ollama's Go runner unconditionally sets
+    // params.embeddings=true (llama/llama.go:130), which without this
+    // override would force `output_all=true` for every decode and
+    // trigger a mid-decode `output_reserve()` realloc that invalidates
+    // pointers cached in the SYCL backend's pre-reserved sched/graph.
+    // Auto-merge of patch 0021 silently dropped this hunk during the
+    // whole-tree bump (its context shifted around the new `has_samplers`
+    // line). Re-applied manually 2026-05-08.
+    const bool output_all   = false;
     const bool has_samplers = !sampling.samplers.empty();
-    // when computing embeddings, all tokens are output
 
     const uint32_t n_seq_max = cparams.kv_unified ? LLAMA_MAX_SEQ : cparams.n_seq_max;
 

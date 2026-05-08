@@ -125,6 +125,52 @@ ollama.overrideAttrs (oldAttrs: {
     ' fs/ggml/ggml.go
     grep -q 'forced to legacy runner via ollama-sycl-whole-tree postPatch' fs/ggml/ggml.go \
       || (echo "qwen3+qwen35 routing patch did not apply to fs/ggml/ggml.go"; exit 1)
+
+    # Force device-side `memcpy` calls in `ggml-sycl/dequantize.hpp` to
+    # use `__builtin_memcpy` instead. IGC (Intel Graphics Compiler)
+    # cannot resolve a plain `memcpy` external symbol when JIT-ing
+    # SPIR-V kernels at runtime — the SPV-validation phase fails with
+    # `unresolved external symbol memcpy at offset … in instructions
+    # segment #N (aka kernel : ...dequantize_q5_0...)`. This kills the
+    # ollama legacy runner during eager kernel registration even
+    # though the model is Q4_K_M (the q5_0 / q5_1 / mxfp4 dequant
+    # template instantiations are link-pulled in regardless of the
+    # actual model's quant types). `__builtin_memcpy` gets inlined by
+    # clang at the call site so IGC never sees an external symbol.
+    #
+    # Why not in pkg/llama-cpp-sycl/: the same source builds fine for
+    # `llama-cli`/`llama-server` because those test paths only ever
+    # used Q4_K_M models that never lazy-JIT the q5_*/mxfp4 dequant
+    # kernels. Ollama's legacy runner is more aggressive about
+    # registering all dequantize variants at startup, so it trips this
+    # the moment it starts. Add the same patch to pkg/llama-cpp-sycl
+    # if/when it's tested with q5_* or mxfp4 models.
+    perl -i -pe '
+      s{^(\s*)memcpy\(&qh, x\[ib\]\.qh, sizeof\(qh\)\);}
+       {$1__builtin_memcpy(&qh, x[ib].qh, sizeof(qh));}
+    ' ml/backend/ggml/ggml/src/ggml-sycl/dequantize.hpp
+    grep -q '__builtin_memcpy(&qh, x\[ib\]\.qh' ml/backend/ggml/ggml/src/ggml-sycl/dequantize.hpp \
+      || (echo "device-side memcpy substitution did not apply to dequantize.hpp"; exit 1)
+
+    # Same fix for `ggml_sycl_e8m0_to_fp32` (mxfp4 dequant inner) and
+    # the `cpy_blck_f32_q5_{0,1}` block-quant copy helpers — both
+    # `__dpct_inline__`-class functions called from SYCL kernels, both
+    # use `memcpy(...)` to bit-cast scalar values without breaking
+    # strict aliasing. JIT picks them up through `dequantize_row_mxfp4_sycl`
+    # / GGML_OP_CPY for q5_0 / q5_1 quant types.
+    perl -i -pe '
+      s{^(\s*)memcpy\(&result, &bits, sizeof\(float\)\);}
+       {$1__builtin_memcpy(&result, &bits, sizeof(float));}
+    ' ml/backend/ggml/ggml/src/ggml-sycl/common.hpp
+    grep -q '__builtin_memcpy(&result, &bits, sizeof(float));' ml/backend/ggml/ggml/src/ggml-sycl/common.hpp \
+      || (echo "device-side memcpy substitution did not apply to common.hpp"; exit 1)
+
+    perl -i -pe '
+      s{^(\s*)memcpy\(dsti->qh, &qh, sizeof\(qh\)\);}
+       {$1__builtin_memcpy(dsti->qh, &qh, sizeof(qh));}
+    ' ml/backend/ggml/ggml/src/ggml-sycl/cpy.hpp
+    [ "$(grep -c '__builtin_memcpy(dsti->qh' ml/backend/ggml/ggml/src/ggml-sycl/cpy.hpp)" = "2" ] \
+      || (echo "device-side memcpy substitution in cpy.hpp expected 2 hits"; exit 1)
   '';
 
   # FORTIFY workaround — see default.nix and project_ollama_sycl_fork.md.
