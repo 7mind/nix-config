@@ -78,6 +78,5 @@
        zpool export test
        rm sparse_file
     */
-    })
-  ];
+  };
 }
