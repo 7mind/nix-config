@@ -80,6 +80,21 @@ let
   # original "vendor bump" we estimated). Stay at eleiton's pin until
   # either upstream ollama bumps its vendor or we commit to the full
   # bump. qwen3.5moe inference stays broken at this pin.
+  # Tried bumping ggml-sycl from 15bff84 (Jan 2026) → 073bb2c20 (Apr 2026)
+  # to pull in the SYCL fixes for qwen35 dispatch. ABI break confirmed:
+  # 073bb2c20's ggml-sycl/ references `block_nvfp4` / `QK_NVFP4` (new
+  # quant type), `GGML_OP_GATED_DELTA_NET` (new op), `GGML_TENSOR_FLAG_COMPUTE`
+  # (new flag), AND five backend-interface callbacks with different
+  # signatures (`cpy_tensor`, `synchronize`, `graph_compute`,
+  # `event_record`, `event_wait`). Won't compile against ollama's
+  # ec98e2002 ggml-base. Reverting to 15bff84.
+  #
+  # Real path forward (logged in `project_ollama_sycl_fork.md`): bump
+  # ollama's WHOLE vendored llama.cpp to 073bb2c20 (so ggml-base + ggml-sycl
+  # come from the same commit, no ABI mismatch). Tree already prepared
+  # at `pkg/ollama-sycl/ollama-src/` — needs a separate derivation that
+  # uses stdenv.mkDerivation directly with `hardeningDisable` rather
+  # than ollama.overrideAttrs.
   ggmlSyclCommit = "15bff84bf56651d6f991f166a2bf0f362996f7f9";
   llamaCppSrc = fetchFromGitHub {
     owner = "ggml-org";
