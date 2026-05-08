@@ -230,13 +230,17 @@ ollama.overrideAttrs (oldAttrs: {
     cmake --build build -j $NIX_BUILD_CORES
   '';
 
-  # Same SYCL runtime defaults as default.nix.
+  # Same SYCL runtime defaults as default.nix. SYCL_CACHE_PERSISTENT=0
+  # is load-bearing — see default.nix for the full rationale (NULL-deref
+  # in libsycl.so.8 `getSortedImages` triggered via the persistent
+  # disk-cache lookup path on first kernel JIT). Setting it to 0 bypasses
+  # `getItemFromDisc` entirely.
   postFixup = (oldAttrs.postFixup or "") + ''
     if [ -e $out/bin/ollama ]; then
       wrapProgram $out/bin/ollama \
         --set-default ONEAPI_DEVICE_SELECTOR opencl:gpu \
         --set-default OCL_ICD_VENDORS /run/opengl-driver/etc/OpenCL/vendors \
-        --set-default SYCL_CACHE_PERSISTENT 1 \
+        --set-default SYCL_CACHE_PERSISTENT 0 \
         --set-default ZES_ENABLE_SYSMAN 1
     fi
   '';

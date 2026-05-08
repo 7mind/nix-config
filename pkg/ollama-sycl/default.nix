@@ -381,15 +381,29 @@ CMAKE_SYCL_EOF
   # ONEAPI_DEVICE_SELECTOR=opencl:gpu — intel-compute-runtime 26.09
   # GMM helper aborts during Level Zero init on B70 (revisit when ICR
   # bumps). OpenCL backend bypasses that path; ~5-10% slower, correct.
-  # SYCL_CACHE_PERSISTENT — caches JIT'd kernels across runs
-  # (multi-second cold-start otherwise).
+  # SYCL_CACHE_PERSISTENT=0 — DISABLED. The intel-llvm@unstable-2025-11-14
+  # libsycl.so.8 has a NULL-deref in
+  #   sycl::detail::getSortedImages → __insertion_sort comparator → strcmp
+  # on the in-memory `vector<RTDeviceBinaryImage*>` it sorts inside
+  #   PersistentDeviceCodeCache::getItemFromDisc(...)
+  # called from `getOrCreateURProgram` at first kernel JIT (verified by
+  # libunwind backtrace 2026-05-08, full trace in
+  # `project_ollama_sycl_fork.md`). Reproducer: any SYCL kernel JIT'd via
+  # the persistent-cache path SIGSEGVs at first decode in ollama runner —
+  # NOT in our `pkg/llama-cpp-sycl` `llama-cli` because that path
+  # statically links ggml-sycl into the binary, while ollama loads
+  # libggml-sycl.so dynamically and the resulting RTDeviceBinaryImage
+  # property strings end up NULL on at least one image. Setting
+  # SYCL_CACHE_PERSISTENT=0 bypasses `getItemFromDisc` entirely. Verified
+  # 2026-05-08: qwen25-3b generates real text, qwen36-27b answers
+  # "Paris" at 12.73 t/s.
   # ZES_ENABLE_SYSMAN — accurate VRAM free-memory queries on Battlemage.
   postFixup = (oldAttrs.postFixup or "") + ''
     if [ -e $out/bin/ollama ]; then
       wrapProgram $out/bin/ollama \
         --set-default ONEAPI_DEVICE_SELECTOR opencl:gpu \
         --set-default OCL_ICD_VENDORS /run/opengl-driver/etc/OpenCL/vendors \
-        --set-default SYCL_CACHE_PERSISTENT 1 \
+        --set-default SYCL_CACHE_PERSISTENT 0 \
         --set-default ZES_ENABLE_SYSMAN 1
     fi
   '';
