@@ -1,8 +1,21 @@
 # llama.cpp built with the SYCL backend, using nixpkgs `intel-llvm` as the
-# DPC++ toolchain. Pinned to the exact upstream commit ollama 0.21.0 vendors
-# (`ec98e20021f7611db3bbcf6bb6629fed6e1ce4f0`, 2025-12-16) so the
-# `ggml-sycl/` directory we end up shipping in the ollama fork later is
-# binary-compatible with the rest of ggml ollama already vendored.
+# DPC++ toolchain.
+#
+# Pinned to llama.cpp master `073bb2c20b5b2c919469653214aaa1a9895816a2`
+# (2026-04) — the same base Hal9000AIML's arc-pro-b70-ubuntu kit cherry-
+# picks against. We picked this commit (over the older ec98e20021 that
+# ollama 0.21.0 vendors) for two reasons:
+#   1. It knows the Qwen3.5 / Qwen3.6 model architectures natively
+#      ("unknown model architecture: 'qwen35'" load error went away).
+#   2. The eight Hal9000 SYCL cherry-picks in `patches/` apply cleanly
+#      against this exact base, so we get the BF16 GET_ROWS, MoE
+#      mul_mat_vec_q fusion, K-quant subgroup-16 DMMV, oneMKL small-
+#      matmul route, reorder-OOM safety, RAII temp buffer +
+#      HOST_MEM_FALLBACK, and Q8_0 reorder fixes that B70 (BMG-G31)
+#      specifically needs to not hang on MoE / not crash on Q8_0.
+# When we wire this into an ollama fork later, ollama's vendored ggml
+# will need an equivalent bump; the binary-compat constraint that
+# motivated the old ec98e2002 pin no longer holds.
 #
 # Build: nix build .?submodules=1#llama-cpp-sycl
 # Run  : OCL_ICD_VENDORS=/run/opengl-driver/etc/OpenCL/vendors \
@@ -38,14 +51,30 @@
 # nativeBuildInput and pointing CC/CXX at it explicitly in preConfigure.
 stdenv.mkDerivation (finalAttrs: {
   pname = "llama-cpp-sycl";
-  version = "ec98e2002";
+  version = "073bb2c20";
 
   src = fetchFromGitHub {
     owner = "ggml-org";
     repo = "llama.cpp";
-    rev = "ec98e20021f7611db3bbcf6bb6629fed6e1ce4f0";
-    hash = "sha256-0O7dtGrIK7wG2DE4fEDcdWkAa5tdYnMJDBxCczgEZgs=";
+    rev = "073bb2c20b5b2c919469653214aaa1a9895816a2";
+    hash = "sha256-zr6FVsmL96dnvxVuR+EaFwA0Xde9fC/Jdx76FTU2sCE=";
   };
+
+  # Hal9000AIML/arc-pro-b70-ubuntu-gpu-speedup-bugfixes cherry-picks,
+  # 8 SYCL-backend patches against this exact base. Apply order is
+  # significant — see the README in that repo for the rationale.
+  # We deliberately skip the kit's two Vulkan patches and the
+  # in-progress fattn-tla skeleton; this build is SYCL-only.
+  patches = [
+    ./patches/0001-SYCL-Add-BF16-support-to-GET_ROWS-operation.patch
+    ./patches/0002-sycl-fused-MoE-mul_mat_vec_q-for-TG.patch
+    ./patches/0003-SYCL-use-native-subgroup-size-for-K-quant-DMMV-kerne.patch
+    ./patches/0004-sycl-route-small-f32-matmuls-to-oneMKL-bypass-oneDNN.patch
+    ./patches/0005-SYCL-fix-reorder-crash-when-device-memory-is-full.patch
+    ./patches/0006-SYCL-add-RAII-temp-buffer-class-macro-guard-for-host.patch
+    ./patches/0007-SYCL-Fix-Q8_0-reorder-add-missing-dequantize-path-fo.patch
+    ./patches/0008-SYCL-document-GGML_SYCL_HOST_MEM_FALLBACK-build-opti.patch
+  ];
 
   # intel-llvm in nativeBuildInputs so its bin/clang(++) is on $PATH and
   # the (now-fixed) merged output is in the build closure.
@@ -85,6 +114,11 @@ stdenv.mkDerivation (finalAttrs: {
   # Specialize on bfloat16 to use the standard
   # `sycl::ext::oneapi::bfloat16(float)` constructor — IGC has native
   # SPIR-V intrinsics for that path that don't need IMF bitcode.
+  #
+  # Note: this patches the WRITE path (set_rows.cpp); Hal9000's
+  # patch #1 (`Add BF16 support to GET_ROWS operation`) covers the
+  # READ path (getrows.cpp / ggml-sycl.cpp). Both are needed for full
+  # bf16 model support — different ops, different files.
   #
   # perl -0777 (slurp mode) handles the multi-line pattern cleanly;
   # `substituteInPlace` would need exact-byte indentation and Nix
@@ -149,8 +183,22 @@ stdenv.mkDerivation (finalAttrs: {
     (lib.cmakeBool "GGML_SYCL_F16"      true)
     # Use ggml-sycl's graph capture path — currently triggers a known
     # correctness bug on B70 (llama.cpp issue #21893). Disable for now;
-    # revisit once upstream merges a fix.
+    # revisit once upstream merges a fix. (Hal9000's kit enables it on
+    # 073bb2c20; their patches may have side-effected the bug, but we
+    # keep it OFF until we verify a regression-free run on B70.)
     (lib.cmakeBool "GGML_SYCL_GRAPH"    false)
+
+    # oneDNN — Hal9000's kit enables it. Patch #4 routes small f32
+    # matmuls to oneMKL *bypassing* oneDNN, so DNN is still used for
+    # the larger paths. Without this flag the patch's branch is dead
+    # code and we lose Gemma 4 / Qwen3 attention QKV speedups.
+    (lib.cmakeBool "GGML_SYCL_DNN"      true)
+
+    # Host-memory fallback — gated by patch #6 (RAII temp buffer +
+    # macro guard). When VRAM is tight (loading ~30 GB models on the
+    # 32 GB B70), the SYCL allocator falls back to pinned host memory
+    # instead of returning OOM. Documented by patch #8.
+    (lib.cmakeBool "GGML_SYCL_HOST_MEM_FALLBACK" true)
 
     # Tame defaults
     (lib.cmakeBool "BUILD_SHARED_LIBS"  false)  # static link — avoids RPATH games

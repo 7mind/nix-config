@@ -11,22 +11,34 @@
     smind.zfs.email.enable = lib.mkEnableOption "ZFS mailer";
   };
 
-  config = lib.mkIf config.smind.zfs.enable {
-    assertions = [
-      ({
-        assertion = !config.smind.zfs.email.enable || config.programs.msmtp.enable;
-        message = "msmtp must be configured for zfs mailer to work ( set programs.msmtp.enable=true )";
-      })
-    ];
+  config = lib.mkMerge [
+    # Set unconditionally — even when smind.zfs.enable=false, hosts may
+    # still pull in ZFS via boot.supportedFilesystems (e.g. PXE seed
+    # systems in private/hosts/vm/pxe/, pavel-fw with btrfs root that
+    # still loads zfs initrd helpers, raspi5 image flashing flow). The
+    # nixpkgs ZFS module warns at eval time whenever ZFS is detected
+    # without an explicit forceImportRoot value, recommending false as
+    # the new default in 26.11. mkDefault keeps host-level overrides
+    # cheap if any host genuinely needs forceImport=true (rare).
+    {
+      boot.zfs.forceImportRoot = lib.mkDefault false;
+    }
 
-    boot = {
-      kernelPackages = cfg-packages.linux-kernel;
-      supportedFilesystems = [ "zfs" ];
-      initrd = { supportedFilesystems = [ "zfs" ]; };
-      zfs.removeLinuxDRM = true;
-      zfs.package = pkgs.zfs_unstable;
-      zfs.forceImportRoot = false;
-    };
+    (lib.mkIf config.smind.zfs.enable {
+      assertions = [
+        ({
+          assertion = !config.smind.zfs.email.enable || config.programs.msmtp.enable;
+          message = "msmtp must be configured for zfs mailer to work ( set programs.msmtp.enable=true )";
+        })
+      ];
+
+      boot = {
+        kernelPackages = cfg-packages.linux-kernel;
+        supportedFilesystems = [ "zfs" ];
+        initrd = { supportedFilesystems = [ "zfs" ]; };
+        zfs.removeLinuxDRM = true;
+        zfs.package = pkgs.zfs_unstable;
+      };
 
     services.zfs = {
       trim.enable = true;
@@ -74,5 +86,6 @@
        zpool export test
        rm sparse_file
     */
-  };
+    })
+  ];
 }

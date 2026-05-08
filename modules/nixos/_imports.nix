@@ -36,6 +36,7 @@
   ./kernel-settings.nix
   ./keyring.nix
   ./ledger.nix
+  ./llama-server.nix
   ./llm.nix
   ./locale-ie.nix
   ./metrics.nix

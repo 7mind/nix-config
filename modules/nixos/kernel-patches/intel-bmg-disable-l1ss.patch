@@ -29,19 +29,29 @@ was narrowed to ASUS NUC13 only in 7.0, but that change is orthogonal:
 the failure here is link-state, not device-state, and surfaces
 regardless of d3cold_allowed.
 
-Disable both L1SS substates on the BMG card's upstream port via a final
-PCI fixup. Standard ASPM L1 still applies, so the link still benefits
-from the deepest substate that the BMG silicon actually handles
-correctly. The quirk is keyed on the upstream-port device ID 0xe2ff so
-it covers all current Battlemage SKUs (the GPU-endpoint ID varies by
-SKU, but the upstream switch is shared).
+Disable all four L1SS substates (ASPM_L1.1, ASPM_L1.2, PCI-PM_L1.1,
+PCI-PM_L1.2) on the BMG card's upstream port via a final PCI fixup.
+Standard ASPM L1 still applies, so the link still benefits from the
+deepest substate the BMG silicon actually handles correctly. The
+quirk is keyed on the upstream-port device ID 0xe2ff so it covers
+all current Battlemage SKUs (the GPU-endpoint ID varies by SKU, but
+the upstream switch is shared).
+
+Empirical narrowing (verified post-fix): with a partial mask that
+disabled only ASPM_L1.{1,2} but left PCI-PM_L1.{1,2} armed, the
+system boots and operates correctly. This isolates ASPM_L1.1 as the
+specific trigger of the brick (the AMD root port advertises ASPM_L1.1
+but not ASPM_L1.2, so ASPM_L1.2 cannot have been activated). The
+PCI-PM substates only activate during D3hot transitions which the
+GPU does not undergo during normal use; they are disabled here for
+hygiene rather than necessity.
 
 Reported-by: Pavel Shirshov <pavel@7mind.io>
 Signed-off-by: <FILL IN BEFORE SUBMITTING UPSTREAM>
 
 --- a/drivers/pci/quirks.c
 +++ b/drivers/pci/quirks.c
-@@ -6289,6 +6289,32 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x56b0, aspm_l1_acceptable_latency
+@@ -6289,6 +6289,34 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x56b0, aspm_l1_acceptable_latency
  DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x56b1, aspm_l1_acceptable_latency);
  DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x56c0, aspm_l1_acceptable_latency);
  DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x56c1, aspm_l1_acceptable_latency);
@@ -67,7 +77,9 @@ Signed-off-by: <FILL IN BEFORE SUBMITTING UPSTREAM>
 +static void quirk_intel_bmg_no_l1ss(struct pci_dev *dev)
 +{
 +	pci_disable_link_state(dev, PCIE_LINK_STATE_L1_2 |
-+				    PCIE_LINK_STATE_L1_1);
++				    PCIE_LINK_STATE_L1_1 |
++				    PCIE_LINK_STATE_L1_2_PCIPM |
++				    PCIE_LINK_STATE_L1_1_PCIPM);
 +	pci_info(dev, "intel-bmg-aspm-quirk: L1.1/L1.2 substates disabled on BMG upstream port\n");
 +}
 +DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0xe2ff, quirk_intel_bmg_no_l1ss);
