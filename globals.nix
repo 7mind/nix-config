@@ -174,6 +174,14 @@ rec {
                   # same upstream commit ollama pins.
                   ollama-sycl = final.callPackage ./pkg/ollama-sycl/default.nix { };
 
+                  # Whole-tree-bumped variant (llama.cpp@073bb2c20 + 8
+                  # Hal9000 SYCL patches + PR #16036 wiring). A/B
+                  # alternative to `ollama-sycl` — try this when
+                  # qwen35*/qwen36* SIGSEGV in the new ollama-engine
+                  # SYCL dispatch path on the surgical-splice variant.
+                  # See pkg/ollama-sycl/whole-tree.nix.
+                  ollama-sycl-whole-tree = final.callPackage ./pkg/ollama-sycl/whole-tree.nix { };
+
                   # Bump every flavor of stock nixpkgs ollama from the
                   # currently-pinned 0.21.0 to 0.23.0 — nixpkgs hasn't
                   # bumped yet but upstream is on 0.23.0 since 2026-05-03.

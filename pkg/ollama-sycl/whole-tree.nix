@@ -1,0 +1,199 @@
+# ollama-sycl, whole-tree-bumped variant.
+#
+# Sister derivation to ./default.nix. Difference:
+#
+#   default.nix     — surgically splices llama.cpp@15bff84's `ggml-sycl/`
+#                     into ollama 0.23.0's vendored ggml (which is from
+#                     llama.cpp@ec98e2002). Works for qwen2/qwen3 but
+#                     qwen35* SIGSEGVs in the new ollama-engine SYCL
+#                     dispatch path; the older 15bff84 ggml-sycl predates
+#                     the new-engine fixes for that arch.
+#
+#   whole-tree.nix  — bumps the ENTIRE vendored llama.cpp tree to
+#                     073bb2c20 (Apr 2026, same commit our pkg/llama-cpp-sycl
+#                     uses), with all 36 ollama patches reapplied + 8
+#                     Hal9000 SYCL patches + PR #16036's SYCL discovery
+#                     wiring. Tree was prepared off-derivation in
+#                     /tmp/exchange/ollama-main and snapshotted into
+#                     `./ollama-src/` (44 patches, all post-rsync
+#                     adaptations: llama_set_adapters_lora, common_grammar
+#                     ctor, props.memory_free, batch_size graph_compute
+#                     param, set_rows.cpp bf16 IMF bypass, src/models/
+#                     and common/ CGO include paths). See
+#                     project_ollama_sycl_fork.md for the full tree-prep
+#                     log.
+#
+# Why a separate derivation rather than a flag on default.nix: A/B
+# testing. We keep default.nix as the known-good qwen2/qwen3 path while
+# we burn in whole-tree. Once whole-tree proves out qwen35 inference, we
+# may collapse the two.
+{
+  lib,
+  ollama,
+  stdenv,
+  intel-llvm,
+  intel-compute-runtime,
+  level-zero,
+  ocl-icd,
+  opencl-headers,
+  mkl-sycl,
+  oneDNN,
+  tbb,
+  cmake,
+  pkg-config,
+  makeWrapper,
+  perl,
+}:
+
+ollama.overrideAttrs (oldAttrs: {
+  pname = "ollama-sycl-whole-tree";
+  version = "0.23.0-whole-tree+073bb2c20";
+
+  # The whole-tree-bumped source. This is the post-`make sync` working
+  # tree, NOT a clean upstream snapshot — the 36 ollama patches and 8
+  # Hal9000 SYCL patches are already applied to the vendored llama.cpp
+  # under `ml/backend/ggml/ggml/src/`. Patch *files* are kept under
+  # `llama/patches/` for reference but are not re-applied at build time
+  # (mirrors how upstream nixpkgs ollama treats its own tagged
+  # tarballs).
+  src = ./ollama-src;
+
+  # vendorHash will differ from upstream ollama 0.23.0 because the bump
+  # touched go.mod indirectly (CGO header search paths in src/models/
+  # and common/, plus the tree-prep flow re-tidied modules). Compute
+  # via the standard "set fakeHash, build, copy real hash from error,
+  # paste here" dance. If the build's `goModules` derivation succeeds
+  # against this hash, the source is internally consistent.
+  vendorHash = "sha256-Lc1Ktdqtv2VhJQssk8K1UOimeEjVNvDWePE9WkamCos=";
+
+  nativeBuildInputs = (oldAttrs.nativeBuildInputs or [ ]) ++ [
+    cmake
+    pkg-config
+    makeWrapper
+    perl
+  ];
+
+  # See default.nix for the buildInputs-vs-nativeBuildInputs rationale
+  # — intel-llvm's setup-hook only fires for host-role buildInputs.
+  buildInputs = (oldAttrs.buildInputs or [ ]) ++ [
+    intel-llvm
+    intel-compute-runtime
+    level-zero
+    ocl-icd
+    opencl-headers
+    mkl-sycl
+    oneDNN
+    tbb
+  ];
+
+  # Ride upstream nixpkgs ollama's postPatch (version/version.go bump,
+  # cmd/launch test substitutions, `rm -r app`). Then add our SYCL-side
+  # adjustments. None of the splicing/preset/CMake-block injection from
+  # default.nix is needed here — the whole-tree source already has:
+  #   - `ml/backend/ggml/ggml/src/ggml-sycl/` (rsynced from 073bb2c20)
+  #   - PR #16036's SYCL discovery wiring in the root CMakeLists.txt
+  #     (option OLLAMA_ENABLE_SYCL → GGML_SYCL=ON, install(TARGETS
+  #     ggml-sycl) block guarded by `if(TARGET ggml-sycl)`)
+  #   - bf16 IMF bypass in `set_rows.cpp` (verified: grep for
+  #     `is_same_v<TOut, sycl::ext::oneapi::bfloat16>` returns 1)
+  #   - HOST_MEM_FALLBACK CMake option from Hal9000 patch #8 (verified:
+  #     grep for `GGML_SYCL_HOST_MEM_FALLBACK` returns 3 matches in
+  #     ggml-sycl/CMakeLists.txt)
+  postPatch = (oldAttrs.postPatch or "") + ''
+    # Force the dense Qwen3 / Qwen3.5 family onto the legacy llama.cpp
+    # runner. The new ollama-engine SIGSEGVs in
+    # `ggml_backend_sched_graph_compute_async` on first prompt for these
+    # archs — verified empirically against qwen36-27b on 2026-05-08.
+    # The crash repro'd with both 15bff84 and 073bb2c20 ggml-sycl, so
+    # the defect lives in the new-engine Go scheduler, NOT in
+    # ggml-sycl.
+    #
+    # Legacy llama.cpp@073bb2c20 (this whole-tree's vendored copy) has
+    # full LLM_ARCH_QWEN35 + LLM_ARCH_QWEN35MOE support via
+    # `src/models/qwen35moe.cpp` + `llm_build_delta_net_base` —
+    # demonstrated working via `llama-cli`/`llama-server` in
+    # pkg/llama-cpp-sycl at this same commit (Qwen3.5/3.6 inference at
+    # 17–48 t/s). So routing qwen35* to legacy bypasses the new-engine
+    # bug while keeping SYCL acceleration.
+    #
+    # Leave qwen3next / qwen3vl / qwen3vlmoe on the new engine: those
+    # need its Mamba-SSM + vision support that legacy llama.cpp lacks.
+    # Leave qwen25vl on the new engine for the same reason.
+    perl -i -0777 -pe '
+      s{"qwen3", "qwen3moe",\n\t\t"qwen35", "qwen35moe",\n}
+       {// "qwen3", "qwen3moe", "qwen35", "qwen35moe" — forced to legacy runner via ollama-sycl-whole-tree postPatch\n}s
+    ' fs/ggml/ggml.go
+    grep -q 'forced to legacy runner via ollama-sycl-whole-tree postPatch' fs/ggml/ggml.go \
+      || (echo "qwen3+qwen35 routing patch did not apply to fs/ggml/ggml.go"; exit 1)
+  '';
+
+  # FORTIFY workaround — see default.nix and project_ollama_sycl_fork.md.
+  # IGC has no `__memcpy_chk` symbol so SYCL kernel JIT fails when ggml-sycl's
+  # dpct/helper.hpp `std::memcpy` gets the FORTIFY-checked variant. Disabling
+  # via cc-wrapper hardening (this attribute) actually removes the
+  # `-D_FORTIFY_SOURCE=2` injection, unlike CMake-level
+  # `target_compile_options(... -D_FORTIFY_SOURCE=0)` which loses the race
+  # against the wrapper.
+  hardeningDisable = (oldAttrs.hardeningDisable or [ ]) ++ [ "fortify" "fortify3" ];
+
+  # Same Go test issue as default.nix — `integration/` has all
+  # build-tag-gated files which `go test ./...` reports as
+  # `[setup failed]`. doInstallCheck still runs the version probe.
+  doCheck = false;
+
+  # See default.nix — intel-llvm's setup-hook is observed not to add the
+  # -isystem flag under buildGoModule's cc-wrapper. Force it here.
+  preConfigure = (oldAttrs.preConfigure or "") + ''
+    export NIX_CFLAGS_COMPILE="''${NIX_CFLAGS_COMPILE:-} -isystem ${intel-llvm}/include"
+  '';
+
+  MKLROOT = mkl-sycl;
+
+  # Override upstream's preBuild (which is plain `cmake -B build`) with
+  # one that enables SYCL. No CMakePresets.json SYCL preset exists in
+  # the bumped tree — PR #16036 wired SYCL via root CMakeLists.txt
+  # `option(OLLAMA_ENABLE_SYCL ...)` instead. Set it directly via
+  # `-D`, plus OLLAMA_RUNNER_DIR=sycl so the install target lands in
+  # `lib/ollama/sycl/` (matches the Vulkan/CUDA flavor convention).
+  preBuild = ''
+    mkdir -p $TMPDIR/intel-shim/bin
+    ln -sf ${intel-llvm}/bin/clang   $TMPDIR/intel-shim/bin/icx
+    ln -sf ${intel-llvm}/bin/clang++ $TMPDIR/intel-shim/bin/icpx
+    export CC=$TMPDIR/intel-shim/bin/icx
+    export CXX=$TMPDIR/intel-shim/bin/icpx
+    export PATH=$TMPDIR/intel-shim/bin:$PATH
+
+    cmake -B build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_SKIP_BUILD_RPATH=ON \
+        -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+        -DCMAKE_VERBOSE_MAKEFILE=ON \
+        -DOLLAMA_ENABLE_SYCL=ON \
+        -DGGML_SYCL=ON \
+        -DGGML_SYCL_F16=ON \
+        -DGGML_SYCL_TARGET=INTEL \
+        -DGGML_SYCL_GRAPH=OFF \
+        -DGGML_SYCL_DNN=ON \
+        -DGGML_SYCL_HOST_MEM_FALLBACK=ON \
+        -DMKL_THREADING=intel_thread \
+        -DMKL_SYCL_THREADING=intel_thread \
+        -DOLLAMA_RUNNER_DIR=sycl
+
+    cmake --build build -j $NIX_BUILD_CORES
+  '';
+
+  # Same SYCL runtime defaults as default.nix.
+  postFixup = (oldAttrs.postFixup or "") + ''
+    if [ -e $out/bin/ollama ]; then
+      wrapProgram $out/bin/ollama \
+        --set-default ONEAPI_DEVICE_SELECTOR opencl:gpu \
+        --set-default OCL_ICD_VENDORS /run/opengl-driver/etc/OpenCL/vendors \
+        --set-default SYCL_CACHE_PERSISTENT 1 \
+        --set-default ZES_ENABLE_SYSMAN 1
+    fi
+  '';
+
+  meta = (oldAttrs.meta or { }) // {
+    description = "Ollama with SYCL backend (whole-tree-bumped to llama.cpp@073bb2c20 for qwen35* support)";
+  };
+})
