@@ -119,12 +119,14 @@ ollama.overrideAttrs (oldAttrs: {
     # Leave qwen3next / qwen3vl / qwen3vlmoe on the new engine: those
     # need its Mamba-SSM + vision support that legacy llama.cpp lacks.
     # Leave qwen25vl on the new engine for the same reason.
-    perl -i -0777 -pe '
-      s{"qwen3", "qwen3moe",\n\t\t"qwen35", "qwen35moe",\n}
-       {// "qwen3", "qwen3moe", "qwen35", "qwen35moe" — forced to legacy runner via ollama-sycl-whole-tree postPatch\n}s
-    ' fs/ggml/ggml.go
-    grep -q 'forced to legacy runner via ollama-sycl-whole-tree postPatch' fs/ggml/ggml.go \
-      || (echo "qwen3+qwen35 routing patch did not apply to fs/ggml/ggml.go"; exit 1)
+    # 2026-05-08: legacy-runner routing was the wrong call for whole-tree.
+    # llama_decode in legacy SIGSEGVs even after the output_all=false fix
+    # (residual issue we couldn't pin down). Leave qwen35* on the new
+    # ollama-engine path — at 073bb2c20 with the bumped ggml-sycl that
+    # has more SYCL kernel fixes than the surgical-splice's 15bff84,
+    # the original new-engine SIGSEGV in graph_compute_async may now
+    # work.
+    echo "ollama-sycl-whole-tree: leaving OllamaEngineRequired untouched (qwen35* via new engine)"
 
     # Force device-side `memcpy` calls in `ggml-sycl/dequantize.hpp` to
     # use `__builtin_memcpy` instead. IGC (Intel Graphics Compiler)
