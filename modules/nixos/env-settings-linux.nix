@@ -13,6 +13,20 @@
   config = lib.mkMerge [
     {
       environment.systemPackages = [ pkgs.lsscsi ];
+
+      # Default for ZFS hosts: don't force-import the root pool. This
+      # is the new default in nixpkgs 26.11, and emitting it here
+      # rather than in modules/nixos/zfs.nix means the PXE seeds in
+      # private/hosts/vm/pxe/ pick it up too — they import this
+      # module via (cfg-meta.generic-linux-module) but skip the
+      # smind.zfs option set, so they wouldn't otherwise see the
+      # default. mkDefault keeps host-level overrides cheap if
+      # forceImport=true is ever needed (rare).
+      #
+      # Setting unconditionally is safe: when ZFS isn't enabled
+      # (no `boot.supportedFilesystems = ["zfs"]`), the option is
+      # inert.
+      boot.zfs.forceImportRoot = lib.mkDefault false;
     }
 
     (lib.mkIf config.smind.environment.linux.sane-defaults.enable {
