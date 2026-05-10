@@ -28,7 +28,7 @@ in
 
     smind.net.upnp.enable = lib.mkOption {
       type = lib.types.bool;
-      default = config.smind.net.mode == "systemd-networkd" && config.smind.isDesktop;
+      default = config.smind.isDesktop;
       description = "Enable miniupnpd for UPnP port forwarding";
     };
 
@@ -124,6 +124,47 @@ in
       # smind.net.mode is "none" and the host hand-rolls its own networking.
       services.resolved.settings = resolvedGlobalSettings;
     }
+
+    # SSDP/UPnP firewall support — applies regardless of smind.net.mode so
+    # NetworkManager hosts get it too. Inbound SSDP M-SEARCH responses are
+    # unicast from the IGD (e.g. 192.168.10.1:1900 → client:<eph>) and have
+    # no conntrack association with the multicast M-SEARCH the client sent,
+    # so without an explicit accept rule nixos-fw drops them.
+    #
+    # The ipset-based trick records (saddr,sport) of every outbound SSDP
+    # multicast and accepts inbound packets whose (daddr,dport) matches
+    # within a 3-second window. The accept must target the `nixos-fw` chain
+    # (not raw INPUT), otherwise nixos-fw rejects the packet first.
+    # Refs:
+    #   https://serverfault.com/a/911286/9166
+    #   https://github.com/NixOS/nixpkgs/issues/161328
+    (lib.mkIf config.smind.net.upnp.enable {
+      networking.firewall = {
+        allowedUDPPorts = [
+          1900 # SSDP — needed inbound for unsolicited multicast NOTIFYs
+          5351 # NAT-PMP / PCP
+        ];
+        extraPackages = [ pkgs.ipset ];
+        extraCommands = ''
+          set -xe
+          function apply_if_not_yet() {
+            cmd=$1
+            shift
+            shift
+            $cmd -C "$@" >/dev/null 2>&1 || \
+              $cmd -A "$@"
+          }
+
+          ipset list upnp >/dev/null 2>&1 || ipset create upnp hash:ip,port timeout 3
+          apply_if_not_yet iptables -A OUTPUT -d 239.255.255.250/32 -p udp -m udp --dport 1900 -j SET --add-set upnp src,src --exist
+          apply_if_not_yet iptables -A nixos-fw -p udp -m set --match-set upnp dst,dst -j nixos-fw-accept
+
+          ipset list upnp6 >/dev/null 2>&1 || ipset create upnp6 hash:ip,port family inet6 timeout 3
+          apply_if_not_yet ip6tables -A OUTPUT -d ff02::c/128 -p udp -m udp --dport 1900 -j SET --add-set upnp6 src,src --exist
+          apply_if_not_yet ip6tables -A nixos-fw -p udp -m set --match-set upnp6 dst,dst -j nixos-fw-accept
+        '';
+      };
+    })
     (lib.mkIf (config.smind.net.mode == "systemd-networkd") {
       assertions =
         [
@@ -148,39 +189,7 @@ in
         dhcpcd.enable = false;
         firewall = {
           enable = true;
-          allowedUDPPorts = [ 546 547 ] # enables dhcpv6
-            ++ (if config.smind.net.upnp.enable then
-            [
-              1900 # UPnP service discovery
-              5351 # ipv6 pcp port
-            ]
-          else [ ]);
-
-          # support SSDP https://serverfault.com/a/911286/9166
-          # https://discourse.nixos.org/t/ssdp-firewall-support/17809
-          # https://discourse.nixos.org/t/how-to-add-conntrack-helper-to-firewall/798
-          # https://discourse.nixos.org/t/firewall-rules-with-rygel-gnome-sharing/17471
-          extraPackages = lib.mkIf config.smind.net.upnp.enable [ pkgs.ipset ];
-
-          extraCommands = lib.mkIf config.smind.net.upnp.enable ''
-            set -xe
-            function apply_if_not_yet() {
-              cmd=$1
-              shift
-              shift
-              $cmd -C $* >/dev/null 2>&1 || \
-                $cmd -A $*
-            }
-
-            ipset list upnp >/dev/null 2>&1 || ipset create upnp hash:ip,port timeout 3
-            apply_if_not_yet iptables -A OUTPUT -p udp -m udp --dport 1900 -j SET --add-set upnp src,src --exist
-            apply_if_not_yet iptables -A INPUT -p udp -m set --match-set upnp dst,dst -j ACCEPT
-
-            ipset list upnp6 >/dev/null 2>&1 || ipset create upnp6 hash:ip,port family inet6 timeout 3
-            apply_if_not_yet ip6tables -A OUTPUT -p udp -m udp --dport 1900 -j SET --add-set upnp6 src,src --exist
-            apply_if_not_yet ip6tables -A INPUT -p udp -m set --match-set upnp6 dst,dst -j ACCEPT
-          '';
-
+          allowedUDPPorts = [ 546 547 ]; # enables dhcpv6
         };
 
         # Bridge is created via systemd.network.netdevs for proper MAC control
