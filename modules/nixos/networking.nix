@@ -159,6 +159,7 @@ in
           apply_if_not_yet iptables -A OUTPUT -d 239.255.255.250/32 -p udp -m udp --dport 1900 -j SET --add-set upnp src,src --exist
           apply_if_not_yet iptables -A nixos-fw -p udp -m set --match-set upnp dst,dst -j nixos-fw-accept
 
+        '' + lib.optionalString config.networking.enableIPv6 ''
           ipset list upnp6 >/dev/null 2>&1 || ipset create upnp6 hash:ip,port family inet6 timeout 3
           apply_if_not_yet ip6tables -A OUTPUT -d ff02::c/128 -p udp -m udp --dport 1900 -j SET --add-set upnp6 src,src --exist
           apply_if_not_yet ip6tables -A nixos-fw -p udp -m set --match-set upnp6 dst,dst -j nixos-fw-accept
