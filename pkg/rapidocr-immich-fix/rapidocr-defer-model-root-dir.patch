@@ -1,0 +1,40 @@
+Defer the model_root_dir.exists() precondition until after the
+custom-session early-return, so callers that supply their own
+onnxruntime InferenceSession (immich-machine-learning, anyone using
+PR #451's custom-session adapter) don't trip Path(None) → TypeError.
+
+Upstream regression introduced by RapidOCR commit 8ea96265
+("feat(python): add model_root_dir and download_models", 2026-03-19),
+which placed the new precondition before the PR #451 short-circuit
+that immich-ml depends on. Reported as immich-app/immich#28331; no
+upstream fix PR linked at the time of writing.
+
+This patch is the minimal reordering: move the model_root_dir check
+to immediately before its first real consumer (the `model_path is
+None` block that uses `model_root_dir / ...`). Behaviour for callers
+who DO need on-disk models is unchanged.
+
+--- a/rapidocr/inference_engine/onnxruntime/main.py
++++ b/rapidocr/inference_engine/onnxruntime/main.py
+@@ -17,10 +17,6 @@ from .provider_config import ProviderConfig
+
+ class OrtInferSession(InferSession):
+     def __init__(self, cfg: Dict[str, Any]):
+-        model_root_dir = Path(cfg.get("model_root_dir"))
+-        if not model_root_dir.exists():
+-            raise FileNotFoundError(f"model_root_dir {model_root_dir} does not exist")
+-
+         # support custom session (PR #451)
+         session = cfg.get("session", None)
+         if session is not None:
+@@ -33,6 +29,10 @@ class OrtInferSession(InferSession):
+             self.session = session
+             return
+
++        model_root_dir = Path(cfg.get("model_root_dir"))
++        if not model_root_dir.exists():
++            raise FileNotFoundError(f"model_root_dir {model_root_dir} does not exist")
++
+         model_path = cfg.get("model_path", None)
+         if model_path is None:
+             # 说明用户没有指定自己模型，使用默认模型
