@@ -1,4 +1,9 @@
-{ config, lib, cfg-meta, ... }:
+{
+  config,
+  lib,
+  cfg-meta,
+  ...
+}:
 
 let
   cfg = config.smind.age;
@@ -9,15 +14,50 @@ let
   # Load owner's secrets directly
   owner = config.smind.host.owner;
   group = if cfg-meta.isLinux then "users" else "staff";
-  secretsFile =
-    if cfg.secretsFile != null
-    then cfg.secretsFile
-    else "${cfg-meta.paths.secrets}/${owner}/age-secrets.nix";
+  defaultSecretsFileFor = secretOwner: "${cfg-meta.paths.secrets}/${secretOwner}/age-secrets.nix";
+  ownerSecretsFile = if cfg.secretsFile != null then cfg.secretsFile else defaultSecretsFileFor owner;
+  loadSecretsFile =
+    secretOwner: secretsFile:
+    if builtins.pathExists secretsFile then
+      import secretsFile {
+        inherit cfg-meta group;
+        owner = secretOwner;
+      }
+    else
+      { };
+  rekeyedUserSecrets =
+    user:
+    let
+      secrets = loadSecretsFile user (defaultSecretsFileFor user);
+      outputDir = "${cfg-meta.paths.secrets}/rekeyed/${cfg-meta.hostname}-${user}";
+      pubkeyHash = builtins.hashString "sha256" hostPubkey;
+      rekeyedSecretFor =
+        name:
+        let
+          secret = builtins.getAttr name secrets;
+          secretName = secret.name or name;
+          identHash = builtins.substring 0 32 (
+            builtins.hashString "sha256" (pubkeyHash + builtins.hashFile "sha256" secret.rekeyFile)
+          );
+        in
+        builtins.removeAttrs secret [ "rekeyFile" ]
+        // {
+          file = "${outputDir}/${identHash}-${secretName}.age";
+          name = "${user}/${secretName}";
+        };
+    in
+    builtins.listToAttrs (
+      map (name: {
+        name = "${user}/${name}";
+        value = rekeyedSecretFor name;
+      }) (builtins.attrNames secrets)
+    );
   loadOwnerSecrets = owner != null && cfg.enable && cfg.load-owner-secrets;
-  ownerSecrets =
-    if loadOwnerSecrets && builtins.pathExists secretsFile
-    then import secretsFile { inherit cfg-meta owner group; }
-    else {};
+  ownerSecrets = if loadOwnerSecrets then loadSecretsFile owner ownerSecretsFile else { };
+  loadAdditionalUserOnlySecrets = cfg.enable && cfg.additionalUserOnlySecrets != [ ];
+  additionalUserOnlySecrets = builtins.foldl' (acc: user: acc // rekeyedUserSecrets user) { } (
+    lib.unique cfg.additionalUserOnlySecrets
+  );
   hostPubkey = config.age.rekey.hostPubkey;
   # agenix-rekey's "not yet configured" placeholder; treat as unset here.
   agenixRekeyDummyPubkey = "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs3290gq";
@@ -30,6 +70,11 @@ in
     type = lib.types.nullOr (lib.types.either lib.types.path lib.types.str);
     default = null;
     description = "Override the owner secret definition file loaded when smind.age.load-owner-secrets is enabled.";
+  };
+  options.smind.age.additionalUserOnlySecrets = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = [ ];
+    description = "Additional users whose pre-rekeyed secrets should be loaded into age.secrets under <user>/... keys.";
   };
 
   options.smind.age.masterIdentity = {
@@ -48,6 +93,22 @@ in
 
   config = lib.mkMerge [
     {
+      lib.smind.age.userSecret =
+        {
+          hmConfig,
+          outerConfig,
+          ageSecrets ? outerConfig.age.secrets,
+          user ? hmConfig.home.username,
+        }:
+        name:
+        let
+          userScopedName = "${user}/${name}";
+        in
+        if builtins.hasAttr userScopedName ageSecrets then
+          builtins.getAttr userScopedName ageSecrets
+        else
+          builtins.getAttr name ageSecrets;
+
       assertions = [
         {
           assertion = !hostPubkeySet || builtins.match hostPubkeyPattern hostPubkey != null;
@@ -74,6 +135,13 @@ in
     # Load owner-specific secrets
     (lib.mkIf loadOwnerSecrets {
       age.secrets = ownerSecrets;
+    })
+
+    # Load additional user-specific secrets under <user>/... keys for multi-user hosts.
+    # These are not rekeyed by the system host target; each user rekeys their
+    # own source secrets into private/secrets/rekeyed/<host>-<user>/ first.
+    (lib.mkIf loadAdditionalUserOnlySecrets {
+      age.secrets = additionalUserOnlySecrets;
     })
 
     # Fallback for hosts with age disabled or no master identity.

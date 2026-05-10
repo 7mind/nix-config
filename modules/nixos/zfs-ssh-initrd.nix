@@ -22,7 +22,6 @@
 
     smind.zfs.initrd-unlock.hostname = lib.mkOption {
       type = lib.types.str;
-      # default = "initrd-${config.networking.hostName}.${config.networking.domain}";
       default = "initrd-${config.networking.hostName}";
       description = "hostname to use (must differ from primary system hostname)";
     };
@@ -37,6 +36,10 @@
       ({
         assertion = config.smind.zfs.initrd-unlock.hostname != "" && config.networking.hostName != "" && config.smind.zfs.initrd-unlock.hostname != config.networking.hostName;
         message = "set config.smind.zfs.initrd-unlock.hostname";
+      })
+      ({
+        assertion = builtins.match ".*\\..*" config.smind.zfs.initrd-unlock.hostname == null;
+        message = "smind.zfs.initrd-unlock.hostname must be a single DNS label; systemd-networkd DHCP client does not send dotted hostnames";
       })
     ];
 
@@ -86,8 +89,15 @@
             wait-online.timeout = 10;
             wait-online.extraArgs = [ config.smind.zfs.initrd-unlock.interface ];
 
-            # systemd.network.netdevs from main system are NOT copied to initrd
-            # We must explicitly create bridge and slave config here
+            # systemd.network.{links,netdevs} from the main system are NOT copied
+            # to initrd, so we must recreate the MAC-based rename and bridge setup.
+            links = lib.mkIf (config.smind.zfs.initrd-unlock.bridge-slave != null && config.smind.net.main-macaddr != "") {
+              "10-${config.smind.zfs.initrd-unlock.bridge-slave}.link" = {
+                matchConfig.PermanentMACAddress = config.smind.net.main-macaddr;
+                linkConfig.Name = config.smind.zfs.initrd-unlock.bridge-slave;
+              };
+            };
+
             netdevs = lib.mkIf (config.smind.zfs.initrd-unlock.bridge-slave != null) {
               "10-${config.smind.zfs.initrd-unlock.interface}" = {
                 netdevConfig = {
