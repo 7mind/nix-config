@@ -74,6 +74,15 @@ stdenv.mkDerivation (finalAttrs: {
     ./patches/0006-SYCL-add-RAII-temp-buffer-class-macro-guard-for-host.patch
     ./patches/0007-SYCL-Fix-Q8_0-reorder-add-missing-dequantize-path-fo.patch
     ./patches/0008-SYCL-document-GGML_SYCL_HOST_MEM_FALLBACK-build-opti.patch
+    # Upstream PR #22035 / commit 788fcbc5 (Apr 2026, post-073bb2c20 base):
+    # the four reorder_mul_mat_vec_q* SYCL dispatchers (Q4_0, Q8_0, Q4_K,
+    # Q6_K) asserted `block_num_y % 16 == 0`, which fails for any model
+    # whose output projection has nrows (= vocab size, since GGML_SYCL_MMV_Y=1)
+    # not divisible by 16. Granite 3.0 (vocab 49155, 49155 % 16 = 3) and
+    # HY-MT (120818) abort on first decode. The fix pads block_num_y up to
+    # a subgroup multiple and relies on the kernel's existing
+    # `if (row >= nrows) return;` guard. Tested upstream on B70 hardware.
+    ./patches/0009-SYCL-Fix-reorder-MMVQ-assert-on-unaligned-vocab-size.patch
   ];
 
   # intel-llvm in nativeBuildInputs so its bin/clang(++) is on $PATH and

@@ -1,0 +1,83 @@
+From 788fcbc5ddb16101e6388170bf84c0d10bd8c006 Mon Sep 17 00:00:00 2001
+From: Katostrofik <georgiopapairo@gmail.com>
+Date: Mon, 20 Apr 2026 01:39:45 -0400
+Subject: [PATCH] [SYCL] Fix reorder MMVQ assert on unaligned vocab sizes
+ (#22035)
+
+* [SYCL] Fix reorder MMVQ assert on unaligned vocab sizes
+
+The reorder mul_mat_vec_q dispatchers for Q4_0, Q8_0, Q4_K, and Q6_K
+asserted that block_num_y was a multiple of 16 subgroups. Models with
+a vocab size not divisible by 16 (for example HY-MT at 120818) aborted
+on model load when the output projection tripped the assert.
+
+I replaced the assert with padding: block_num_y now rounds up to a
+whole number of subgroup-sized workgroups. The kernel already has the
+row bounds check (`if (row >= nrows) return;`) so the extra padded
+threads early-exit cleanly. Row values are uniform across a subgroup
+so the collective reduce stays safe.
+
+For aligned vocab sizes the padded block_num_y equals the old value,
+so the kernel launch is identical and there is no regression.
+
+Thanks to @arthw for flagging the relationship to #21527.
+
+Fixes #22020.
+
+AI assisted coding, tested on Intel B70 hardware.
+
+* sycl: use WARP_SIZE for num_subgroups in reorder MMVQ launches
+
+Replaces the hardcoded 16 with WARP_SIZE in the four reorder_mul_mat_vec
+launch helpers (Q4_0, Q8_0, Q4_K, Q6_K). Compile-time no-op on the Intel
+target where WARP_SIZE is 16, but makes the relationship to subgroup
+size explicit. Per review by @NeoZhangJianyu on #22035.
+
+Assisted by Claude.
+---
+ ggml/src/ggml-sycl/mmvq.cpp | 24 ++++++++++++------------
+ 1 file changed, 12 insertions(+), 12 deletions(-)
+
+diff --git a/ggml/src/ggml-sycl/mmvq.cpp b/ggml/src/ggml-sycl/mmvq.cpp
+index af22b98dddb..3a4577ecbbc 100644
+--- a/ggml/src/ggml-sycl/mmvq.cpp
++++ b/ggml/src/ggml-sycl/mmvq.cpp
+@@ -537,9 +537,9 @@ static void mul_mat_vec_q_iq4_xs_q8_1(const void *__restrict__ vx,
+ static void reorder_mul_mat_vec_q4_0_q8_1_sycl(const void * vx, const void * vy, float * dst, const int ncols,
+                                                     const int nrows, dpct::queue_ptr stream) {
+     GGML_ASSERT(ncols % QK4_0 == 0);
+-    const int        block_num_y   = ceil_div(nrows, GGML_SYCL_MMV_Y);
+-    constexpr size_t num_subgroups = 16;
+-    GGML_ASSERT(block_num_y % num_subgroups == 0);
++    // Round up to a whole number of subgroup-sized workgroups; out-of-range rows are skipped inside the kernel.
++    constexpr size_t num_subgroups = WARP_SIZE;
++    const int        block_num_y   = ceil_div(nrows, GGML_SYCL_MMV_Y * (int) num_subgroups) * (int) num_subgroups;
+ 
+     const sycl::range<3> global_size(1, GGML_SYCL_MMV_Y, (block_num_y * WARP_SIZE));
+     const sycl::range<3> workgroup_size(1, GGML_SYCL_MMV_Y, num_subgroups * WARP_SIZE);
+@@ -798,9 +798,9 @@ static void reorder_mul_mat_vec_q4_k_q8_1_sycl(const void * vx, const void * vy,
+     const int nrows, dpct::queue_ptr stream) {
+     GGML_ASSERT(ncols % QK_K == 0);
+ 
+-    const int block_num_y = ceil_div(nrows, GGML_SYCL_MMV_Y);
+-    constexpr size_t num_subgroups = 16;
+-    GGML_ASSERT(block_num_y % num_subgroups == 0);
++    // Round up to a whole number of subgroup-sized workgroups; out-of-range rows are skipped inside the kernel.
++    constexpr size_t num_subgroups = WARP_SIZE;
++    const int block_num_y = ceil_div(nrows, GGML_SYCL_MMV_Y * (int) num_subgroups) * (int) num_subgroups;
+ 
+     const sycl::range<3> global_size(1, GGML_SYCL_MMV_Y, block_num_y * WARP_SIZE);
+     const sycl::range<3> workgroup_size(1, GGML_SYCL_MMV_Y, num_subgroups * WARP_SIZE);
+@@ -842,9 +842,9 @@ static void mul_mat_vec_q5_K_q8_1_sycl(const void *vx, const void *vy,
+ static void reorder_mul_mat_vec_q6_k_q8_1_sycl(const void * vx, const void * vy, float * dst, const int ncols,
+                                                const int nrows, dpct::queue_ptr stream) {
+     GGML_ASSERT(ncols % QK_K == 0);
+-    const int        block_num_y   = ceil_div(nrows, GGML_SYCL_MMV_Y);
+-    constexpr size_t num_subgroups = 16;
+-    GGML_ASSERT(block_num_y % num_subgroups == 0);
++    // Round up to a whole number of subgroup-sized workgroups; out-of-range rows are skipped inside the kernel.
++    constexpr size_t num_subgroups = WARP_SIZE;
++    const int        block_num_y   = ceil_div(nrows, GGML_SYCL_MMV_Y * (int) num_subgroups) * (int) num_subgroups;
+ 
+     const sycl::range<3> global_size(1, GGML_SYCL_MMV_Y, block_num_y * WARP_SIZE);
+     const sycl::range<3> workgroup_size(1, GGML_SYCL_MMV_Y, num_subgroups * WARP_SIZE);

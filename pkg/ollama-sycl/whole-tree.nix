@@ -173,6 +173,16 @@ ollama.overrideAttrs (oldAttrs: {
     ' ml/backend/ggml/ggml/src/ggml-sycl/cpy.hpp
     [ "$(grep -c '__builtin_memcpy(dsti->qh' ml/backend/ggml/ggml/src/ggml-sycl/cpy.hpp)" = "2" ] \
       || (echo "device-side memcpy substitution in cpy.hpp expected 2 hits"; exit 1)
+
+    # Upstream PR #22035 / commit 788fcbc5 (Apr 20 2026) — fixes
+    # `GGML_ASSERT(block_num_y % num_subgroups == 0)` in the four reorder
+    # mul_mat_vec_q dispatchers (Q4_0, Q8_0, Q4_K, Q6_K). 073bb2c20 is
+    # 2 weeks older than the fix, so the assertion still trips here on
+    # any model whose output projection has nrows not divisible by 16
+    # (Granite 3.0 / HY-MT / etc). Same patch file as pkg/llama-cpp-sycl
+    # since the base commit is identical — one source of truth.
+    patch -p4 -d ml/backend/ggml/ggml/src/ggml-sycl \
+      < ${../llama-cpp-sycl/patches/0009-SYCL-Fix-reorder-MMVQ-assert-on-unaligned-vocab-size.patch}
   '';
 
   # FORTIFY workaround — see default.nix and project_ollama_sycl_fork.md.

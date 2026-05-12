@@ -113,6 +113,26 @@ let
 
   hal9000Patches = [ ];
 
+  # Cherry-picks against the spliced ggml-sycl/ tree (15bff84). Applied
+  # with `patch -p4` so the patch's `a/ggml/src/ggml-sycl/foo.cpp` headers
+  # resolve to plain `foo.cpp` inside the cwd we hand `patch` below.
+  syclBackendPatches = [
+    # Upstream PR #22035 / commit 788fcbc5 (Apr 2026). The four reorder
+    # mul_mat_vec_q SYCL dispatchers asserted block_num_y % 16 == 0; the
+    # assert fails on any model whose output projection has nrows (=
+    # vocab size, since GGML_SYCL_MMV_Y=1) not divisible by 16. Granite
+    # 3.0 (vocab 49155 — 49155 % 16 = 3) crashes the runner on first
+    # decode. Upstream pads block_num_y up to a subgroup multiple and
+    # relies on the kernel's existing `if (row >= nrows) return;` guard.
+    # Tested upstream on B70 hardware.
+    #
+    # Variant patch: drops the Q8_0 hunk (Q8_0 reorder dispatcher was
+    # added between 15bff84 and the patch's base 073bb2c20). Q8_0 models
+    # at this pin dispatch via DMMV which has no subgroup precondition,
+    # so omitting the hunk is correct, not a regression.
+    ./patches/0009-SYCL-Fix-reorder-MMVQ-assert-on-unaligned-vocab-size.patch
+  ];
+
 in
 ollama.overrideAttrs (oldAttrs: {
   pname = "ollama-sycl";
@@ -167,7 +187,7 @@ ollama.overrideAttrs (oldAttrs: {
     # to 15bff84.)
     ${lib.concatMapStringsSep "\n" (p: ''
       patch -p4 -d ml/backend/ggml/ggml/src/ggml-sycl < ${p}
-    '') hal9000Patches}
+    '') (hal9000Patches ++ syclBackendPatches)}
 
     # 2. Mirror the Vulkan stanza in CMakeLists.txt for SYCL. Gated by
     #    the GGML_SYCL_BUILD option (off by default; the SYCL preset
