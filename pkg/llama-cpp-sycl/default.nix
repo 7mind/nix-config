@@ -81,6 +81,16 @@ stdenv.mkDerivation (finalAttrs: {
     # a subgroup multiple and relies on the kernel's existing
     # `if (row >= nrows) return;` guard. Tested upstream on B70 hardware.
     ./patches/0009-SYCL-Fix-reorder-MMVQ-assert-on-unaligned-vocab-size.patch
+    # ggml-sycl/convert.cpp gates its bf16 case behind
+    # `__INTEL_LLVM_COMPILER`, which only Intel's proprietary icpx/dpcpp
+    # defines. nixpkgs' open-source intel-llvm DPC++ (clang-based) has
+    # the same `<sycl/ext/oneapi/bfloat16.hpp>` extension available but
+    # doesn't set that macro. Without this patch, any model that mixes
+    # bf16 tensors with a quantized format (gpt-oss:20b MXFP4+bf16) hits
+    # `ggml-sycl/convert.cpp:764: fatal error: unsupport data type=bf16`
+    # on first decode. Patch drops the proprietary-compiler gate and
+    # keeps only the header-availability check.
+    ./patches/0010-SYCL-Enable-BF16-convert-on-open-source-DPC.patch
   ];
 
   # intel-llvm in nativeBuildInputs so its bin/clang(++) is on $PATH and

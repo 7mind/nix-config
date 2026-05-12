@@ -150,6 +150,17 @@ ollama.overrideAttrs (oldAttrs: {
     # since the base commit is identical — one source of truth.
     patch -p4 -d ml/backend/ggml/ggml/src/ggml-sycl \
       < ${../llama-cpp-sycl/patches/0009-SYCL-Fix-reorder-MMVQ-assert-on-unaligned-vocab-size.patch}
+
+    # ggml-sycl/convert.cpp gates the bf16 dequant path behind
+    # `__INTEL_LLVM_COMPILER`, which is set only by Intel's proprietary
+    # icpx/dpcpp. nixpkgs' open-source intel-llvm DPC++ exposes the same
+    # `<sycl/ext/oneapi/bfloat16.hpp>` extension but identifies as plain
+    # Clang. Without this patch, mixed-precision models (gpt-oss:20b is
+    # MXFP4 weights + bf16 norms/embeds) abort on first decode with
+    # `convert.cpp:764: fatal error: unsupport data type=bf16`. Patch
+    # keeps only the `__has_include` check.
+    patch -p4 -d ml/backend/ggml/ggml/src/ggml-sycl \
+      < ${../llama-cpp-sycl/patches/0010-SYCL-Enable-BF16-convert-on-open-source-DPC.patch}
   '';
 
   # FORTIFY workaround: IGC has no `__memcpy_chk` symbol so SYCL kernel

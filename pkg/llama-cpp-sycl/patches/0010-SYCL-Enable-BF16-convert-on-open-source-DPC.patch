@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Pavel Shirshov <pavel@7mind.io>
+Date: Tue, 12 May 2026 14:15:00 +0100
+Subject: [PATCH] [SYCL] Enable BF16 convert path on open-source DPC++
+
+Upstream gates the bf16 case of `ggml_get_to_fp16_sycl` (and the
+`ggml_get_to_fp16_nc_sycl` variant) behind:
+
+    #if defined(__INTEL_LLVM_COMPILER)
+        #if __has_include(<sycl/ext/oneapi/bfloat16.hpp>)
+            ...
+
+`__INTEL_LLVM_COMPILER` is only set by Intel's proprietary `icpx`/`dpcpp`
+distribution. nixpkgs builds DPC++ from the open-source `intel/llvm`
+upstream which exposes the same SYCL interface (including
+`<sycl/ext/oneapi/bfloat16.hpp>` and `sycl::ext::oneapi::bfloat16`) but
+identifies as plain Clang and does NOT define `__INTEL_LLVM_COMPILER`.
+
+Effect: any model that mixes bf16 tensors with a quantized format (e.g.
+gpt-oss:20b MXFP4 + bf16 norms / embeddings) aborts on first decode:
+
+    ggml-sycl/convert.cpp:764: fatal error: unsupport data type=bf16
+
+Reproduced on B70 with `ggml_backend_sched_graph_compute_async` →
+`ggml_sycl_op_mul_mat_sycl` → fall-through to `GGML_ABORT`.
+
+The `__has_include` check alone is sufficient — if the header is present
+the bfloat16 type works (we already rely on `sycl::ext::oneapi::bfloat16`
+in `set_rows.cpp` via the IMF-bypass postPatch, which compiles and runs
+cleanly on B70 across granite / qwen / gemma).
+
+This patch drops the proprietary-compiler gate and keeps the header
+availability check.
+---
+ ggml/src/ggml-sycl/convert.cpp | 8 +++-----
+ 1 file changed, 3 insertions(+), 5 deletions(-)
+
+--- a/ggml/src/ggml-sycl/convert.cpp
++++ b/ggml/src/ggml-sycl/convert.cpp
+@@ -2,11 +2,9 @@
+ #include "dequantize.hpp"
+ #include "presets.hpp"
+ 
+-#if defined(__INTEL_LLVM_COMPILER)
+-    #if __has_include(<sycl/ext/oneapi/bfloat16.hpp>)
+-        #include <sycl/ext/oneapi/bfloat16.hpp>
+-        #define GGML_SYCL_HAS_BF16
+-    #endif
++#if __has_include(<sycl/ext/oneapi/bfloat16.hpp>)
++    #include <sycl/ext/oneapi/bfloat16.hpp>
++    #define GGML_SYCL_HAS_BF16
+ #endif
+ 
+ template <int qk, int qr, dequantize_kernel_t dequantize_kernel, typename dst_t>
