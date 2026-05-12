@@ -1,29 +1,27 @@
 # llama.cpp built with the SYCL backend, using nixpkgs `intel-llvm` as the
 # DPC++ toolchain.
 #
-# Pinned to llama.cpp master `073bb2c20b5b2c919469653214aaa1a9895816a2`
-# (2026-04) — the same base Hal9000AIML's arc-pro-b70-ubuntu kit cherry-
-# picks against. We picked this commit (over the older ec98e20021 that
-# ollama 0.21.0 vendors) for two reasons:
-#   1. It knows the Qwen3.5 / Qwen3.6 model architectures natively
-#      ("unknown model architecture: 'qwen35'" load error went away).
-#   2. The eight Hal9000 SYCL cherry-picks in `patches/` apply cleanly
-#      against this exact base, so we get the BF16 GET_ROWS, MoE
-#      mul_mat_vec_q fusion, K-quant subgroup-16 DMMV, oneMKL small-
-#      matmul route, reorder-OOM safety, RAII temp buffer +
-#      HOST_MEM_FALLBACK, and Q8_0 reorder fixes that B70 (BMG-G31)
-#      specifically needs to not hang on MoE / not crash on Q8_0.
-# When we wire this into an ollama fork later, ollama's vendored ggml
-# will need an equivalent bump; the binary-compat constraint that
-# motivated the old ec98e2002 pin no longer holds.
+# Pinned to llama.cpp `073bb2c20b5b2c919469653214aaa1a9895816a2` (2026-04).
+# Same base used by:
+#   - Hal9000AIML/arc-pro-b70-ubuntu-gpu-speedup-bugfixes — provides the 8
+#     SYCL cherry-picks in `patches/0001-0008` (BF16 GET_ROWS, MoE
+#     mul_mat_vec_q fusion, K-quant subgroup-16 DMMV, oneMKL small-matmul
+#     route, reorder-OOM safety, RAII temp buffer + HOST_MEM_FALLBACK,
+#     Q8_0 reorder dequantize). Without these, stock SYCL hangs on MoE
+#     and crashes on Q8_0 on B70 (BMG-G31).
+#   - `pkg/ollama-sycl/` — vendors the SAME commit (whole-tree) so both
+#     binaries share kernel fixes. `patches/0009` (upstream PR #22035)
+#     is the single source of truth for the MMVQ unaligned-vocab fix
+#     and is referenced by relative path from ollama-sycl's postPatch.
 #
-# Build: nix build .?submodules=1#llama-cpp-sycl
+# Roles:
+#   - `llama-cli` / `llama-bench` — diagnostic/benchmark binaries
+#   - `llama-server` — OpenAI-compatible endpoint, wired as a NixOS
+#     systemd service via `modules/nixos/llama-server.nix`
+#
+# Build: nix build .?submodules=1#nixosConfigurations.vm.pkgs.llama-cpp-sycl
 # Run  : OCL_ICD_VENDORS=/run/opengl-driver/etc/OpenCL/vendors \
 #        result/bin/llama-cli --list-devices
-#
-# Note: this is a smoke-test / staging package. Once the ollama fork is
-# integrated and proven, this can either stay as a useful side artifact
-# (llama-server is a clean OpenAI-compatible endpoint) or be retired.
 {
   lib,
   stdenv,
