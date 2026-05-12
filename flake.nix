@@ -103,7 +103,7 @@
     };
 
     kanata-switcher = {
-      url = "github:7mind/kanata-switcher/persistent-daemon";
+      url = "github:7mind/kanata-switcher/trait-refactor";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

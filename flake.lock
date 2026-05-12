@@ -636,16 +636,16 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1778529907,
-        "narHash": "sha256-pEZtNots8a6pg1teJ3kob7VRZYrk764zEIK5/OmDCoA=",
+        "lastModified": 1778627937,
+        "narHash": "sha256-zvJ60wlCJ7K0qrMiN6CeKeIkjORrC9/KyMNDwrbMa8s=",
         "owner": "7mind",
         "repo": "kanata-switcher",
-        "rev": "143e8cb1bcccea9c5d138dc8f44c21040717b439",
+        "rev": "65e781bd892199801dfd000ce772279b56c3debd",
         "type": "github"
       },
       "original": {
         "owner": "7mind",
-        "ref": "persistent-daemon",
+        "ref": "trait-refactor",
         "repo": "kanata-switcher",
         "type": "github"
       }
