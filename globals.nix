@@ -168,19 +168,13 @@ rec {
                     mkl = final.mkl-sycl;
                   };
 
-                  # ollama with the GGML SYCL backend grafted in for the
-                  # Intel Arc Pro B70. Inherits the (overridden, see
-                  # below) `ollama` and vendors `ggml-sycl/` from the
-                  # same upstream commit ollama pins.
+                  # ollama with the GGML SYCL backend wired in for the
+                  # Intel Arc Pro B70. Vendors the entire llama.cpp tree
+                  # at the same commit as pkg/llama-cpp-sycl (073bb2c20),
+                  # so both packages share kernel fixes and our MMVQ
+                  # cherry-pick. Inherits the (overridden, see below)
+                  # `ollama` for go-side tooling versions.
                   ollama-sycl = final.callPackage ./pkg/ollama-sycl/default.nix { };
-
-                  # Whole-tree-bumped variant (llama.cpp@073bb2c20 + 8
-                  # Hal9000 SYCL patches + PR #16036 wiring). A/B
-                  # alternative to `ollama-sycl` — try this when
-                  # qwen35*/qwen36* SIGSEGV in the new ollama-engine
-                  # SYCL dispatch path on the surgical-splice variant.
-                  # See pkg/ollama-sycl/whole-tree.nix.
-                  ollama-sycl-whole-tree = final.callPackage ./pkg/ollama-sycl/whole-tree.nix { };
 
                   # Bump every flavor of stock nixpkgs ollama from the
                   # currently-pinned 0.21.0 to 0.23.0 — nixpkgs hasn't

@@ -1,42 +1,29 @@
-# ollama 0.21 with the GGML SYCL backend grafted in for the Intel Arc Pro B70
-# (and any other Battlemage / Xe2 device).
+# ollama-sycl: ollama with the GGML SYCL backend wired in for the Intel
+# Arc Pro B70 (Battlemage / Xe2).
 #
-# Why a derivation, not an upstream PR:
-#   - ollama 0.21 vendors `ml/backend/ggml/ggml/src/` from upstream llama.cpp
-#     but explicitly *excludes* `ggml-sycl/` via `.rsync-filter`.
-#   - The CMake hook `ggml_add_backend(SYCL)` is present but no source
-#     subdirectory exists — the SYCL backend cannot compile without one.
-#   - The Go-side discoverer (`discover/runner.go`) already routes by
-#     directory name (`vulkan`, `cuda_v12`, etc), so dropping a `sycl/`
-#     dir under `lib/ollama/` is enough to make the runner pick it up
-#     when `OLLAMA_LLM_LIBRARY=sycl` is set.
+# Vendors the ENTIRE upstream llama.cpp tree at commit 073bb2c20 (Apr 2026,
+# same commit our pkg/llama-cpp-sycl uses), with all 36 ollama patches
+# reapplied + 8 Hal9000 SYCL patches + PR #16036's SYCL discovery wiring
+# already present in the snapshotted source. Tree was prepared
+# off-derivation in /tmp/exchange/ollama-main and snapshotted into
+# `./ollama-src/` (44 patches, all post-rsync adaptations:
+# llama_set_adapters_lora, common_grammar ctor, props.memory_free,
+# batch_size graph_compute param, set_rows.cpp bf16 IMF bypass,
+# src/models/ and common/ CGO include paths). See
+# project_ollama_sycl_fork.md for the full tree-prep log.
 #
-# Build strategy:
-#   1. Inherit nixpkgs `ollama` (CPU variant, version 0.21.0).
-#   2. In `postPatch`, splice the upstream ggml-sycl/ directory from the
-#      *exact same* commit ollama already vendors (`ec98e2002`). Same
-#      SHA the rest of the vendored ggml is cut from, so ABI/types match.
-#   3. Patch the root CMakeLists.txt: add an `if(GGML_SYCL_BUILD)` block
-#      that mirrors the existing Vulkan pattern — `add_subdirectory` +
-#      `install(TARGETS ggml-sycl ...)` to `${OLLAMA_INSTALL_DIR}`.
-#   4. Add a `SYCL` preset to CMakePresets.json setting
-#      `OLLAMA_RUNNER_DIR=sycl` and `GGML_SYCL_BUILD=ON`.
-#   5. Wire intel-llvm/mkl-sycl/intel-compute-runtime/level-zero/oneDNN
-#      into nativeBuildInputs+buildInputs, set CC/CXX to intel-llvm's
-#      clang via the same icx/icpx shim as `pkg/llama-cpp-sycl/`.
-#   6. Wrap the `ollama` binary with the same OPENCL/SYCL env defaults
-#      as `pkg/llama-cpp-sycl/` (ONEAPI_DEVICE_SELECTOR=opencl:gpu,
-#      OCL_ICD_VENDORS, plus OLLAMA_LLM_LIBRARY=sycl so the runner picks
-#      the SYCL backend without a manual override).
-#
-# Runtime requires the same NixOS module config `pkg/llama-cpp-sycl/`
-# expects: `hardware.graphics.extraPackages` includes
-# `intel-compute-runtime` and `intel-compute-runtime.drivers`. Already
-# done in `modules/nixos/intel-gpu.nix`.
+# Earlier surgical-splice variant (only ggml-sycl/ replaced, ggml-base
+# left at ollama's ec98e2002 vendor) is retired — silent struct/ABI
+# mismatch between ggml-base and a newer ggml-sycl produced repetitive
+# garbage tokens (Feb-2026 fc0fe40 bump attempt). Whole-tree avoids that
+# by construction: ggml-base and ggml-sycl come from the same commit.
+# Validated 2026-05-12 on B70 across granite-guardian 2b/8b, granite3.3
+# 8b, qwen3.5 2b dense, qwen3.5 35b-a3b MoE (qwen35moe arch), qwen3.6
+# 27b dense, gemma4 e4b, gemma4 26b — all generate coherent tokens via
+# the new ollama-engine path.
 {
   lib,
   ollama,
-  fetchFromGitHub,
   stdenv,
   intel-llvm,
   intel-compute-runtime,
@@ -49,98 +36,28 @@
   cmake,
   pkg-config,
   makeWrapper,
-  perl,    # multi-line postPatch substitution (substituteInPlace can't)
+  perl,
 }:
 
-let
-  # The upstream llama.cpp commit we surgically lift `ggml-sycl/` from.
-  # ollama vendors ec98e2002 (Dec 2025) for the rest of ggml; we keep
-  # that commit for ggml core/CPU/CUDA/Vulkan (so ollama's 36 patches
-  # apply cleanly) but replace ONLY ggml-sycl/ with this newer commit.
-  # Pattern lifted from eleiton/ollama-intel-arc which proved this
-  # surgical-bump approach works in practice.
-  #
-  # Why bump just ggml-sycl: between ec98e2002 and recent master, the
-  # SYCL backend got fixes we directly need:
-  #   - b1be68e8ca [SYCL] Fix Q8_0 reorder: garbage on 2nd prompt + crash on full VRAM
-  #   - 225088ea76 sycl: Improve mul_mat_id memory efficiency + BF16 fast path
-  #     (replaces our manual IMF-bypass postPatch)
-  #   - 60b68a6279 sycl: fused MoE mul_mat_vec_q for TG (qwen3.5moe etc)
-  #   - 4ead6fd957 [SYCL] Update oneapi 2025.3.3
-  #   - eddd7a13a5 [SYCL] Optimize Q4_0 mul_mat for Arc770
-  #
-  # eleiton's verified-safe pin (Jan 8 2026, +241 commits past
-  # ec98e2002). Tried bumping to current master (May 4 2026) for the
-  # targeted SYCL fixes (Q8_0 reorder, BF16 fast path, fused MoE
-  # mul_mat_vec_q) but the ggml backend ABI itself was rewritten
-  # between those dates — new callback signatures, new ops
-  # (GGML_OP_GATED_DELTA_NET), new quant types (GGML_TYPE_Q1_0,
-  # block_nvfp4), grown struct layouts. Backporting all those into
-  # ollama's Dec-2025 ggml-base is a multi-evening project (the
-  # original "vendor bump" we estimated). Stay at eleiton's pin until
-  # either upstream ollama bumps its vendor or we commit to the full
-  # bump. qwen3.5moe inference stays broken at this pin.
-  # Tried bumping ggml-sycl from 15bff84 (Jan 2026) → 073bb2c20 (Apr 2026)
-  # to pull in the SYCL fixes for qwen35 dispatch. ABI break confirmed:
-  # 073bb2c20's ggml-sycl/ references `block_nvfp4` / `QK_NVFP4` (new
-  # quant type), `GGML_OP_GATED_DELTA_NET` (new op), `GGML_TENSOR_FLAG_COMPUTE`
-  # (new flag), AND five backend-interface callbacks with different
-  # signatures (`cpy_tensor`, `synchronize`, `graph_compute`,
-  # `event_record`, `event_wait`). Won't compile against ollama's
-  # ec98e2002 ggml-base. Reverting to 15bff84.
-  #
-  # Real path forward (logged in `project_ollama_sycl_fork.md`): bump
-  # ollama's WHOLE vendored llama.cpp to 073bb2c20 (so ggml-base + ggml-sycl
-  # come from the same commit, no ABI mismatch). Tree already prepared
-  # at `pkg/ollama-sycl/ollama-src/` — needs a separate derivation that
-  # uses stdenv.mkDerivation directly with `hardeningDisable` rather
-  # than ollama.overrideAttrs.
-  # 2026-05-08 — tried bumping to fc0fe40 (Feb 10, qwen35-introducing
-  # PR #19468). Builds, no SIGSEGV, but produces repetitive garbage
-  # tokens for BOTH qwen25-3b AND qwen36-27b, with OR without Hal9000
-  # patches applied. Some struct/ABI between ec98e2002 ggml-base and
-  # fc0f ggml-sycl is silently incompatible beyond the 5 callbacks
-  # the audit subagent listed. Reverted to 15bff84 (proven working
-  # for qwen2/qwen3). Whole-tree variant is the path forward for
-  # qwen35*; see pkg/ollama-sycl/whole-tree.nix.
-  ggmlSyclCommit = "15bff84bf56651d6f991f166a2bf0f362996f7f9";
-  llamaCppSrc = fetchFromGitHub {
-    owner = "ggml-org";
-    repo = "llama.cpp";
-    rev = ggmlSyclCommit;
-    hash = "sha256-sxkRgGdUFN0iKnjvogw+sxCe8g36LHh55FeX0kKwF/k=";
-  };
-
-  hal9000Patches = [ ];
-
-  # Cherry-picks against the spliced ggml-sycl/ tree (15bff84). Applied
-  # with `patch -p4` so the patch's `a/ggml/src/ggml-sycl/foo.cpp` headers
-  # resolve to plain `foo.cpp` inside the cwd we hand `patch` below.
-  syclBackendPatches = [
-    # Upstream PR #22035 / commit 788fcbc5 (Apr 2026). The four reorder
-    # mul_mat_vec_q SYCL dispatchers asserted block_num_y % 16 == 0; the
-    # assert fails on any model whose output projection has nrows (=
-    # vocab size, since GGML_SYCL_MMV_Y=1) not divisible by 16. Granite
-    # 3.0 (vocab 49155 — 49155 % 16 = 3) crashes the runner on first
-    # decode. Upstream pads block_num_y up to a subgroup multiple and
-    # relies on the kernel's existing `if (row >= nrows) return;` guard.
-    # Tested upstream on B70 hardware.
-    #
-    # Variant patch: drops the Q8_0 hunk (Q8_0 reorder dispatcher was
-    # added between 15bff84 and the patch's base 073bb2c20). Q8_0 models
-    # at this pin dispatch via DMMV which has no subgroup precondition,
-    # so omitting the hunk is correct, not a regression.
-    ./patches/0009-SYCL-Fix-reorder-MMVQ-assert-on-unaligned-vocab-size.patch
-  ];
-
-in
 ollama.overrideAttrs (oldAttrs: {
   pname = "ollama-sycl";
+  version = "0.23.0+llama-cpp-073bb2c20";
 
-  # Inherits version + src + vendorHash from `ollama` — globals.nix's
-  # overlay bumps the base nixpkgs `ollama` to 0.23.0, and overrideAttrs
-  # carries that through to ollama-sycl unchanged. If you ever bump
-  # ollama-sycl ahead of the rest, set version + src + vendorHash here.
+  # Vendored source — post-`make sync` working tree, NOT a clean upstream
+  # snapshot. The 36 ollama patches and 8 Hal9000 SYCL patches are already
+  # applied to the vendored llama.cpp under `ml/backend/ggml/ggml/src/`.
+  # Patch *files* are kept under `llama/patches/` for reference but are
+  # not re-applied at build time (mirrors how upstream nixpkgs ollama
+  # treats its own tagged tarballs).
+  src = ./ollama-src;
+
+  # vendorHash will differ from upstream ollama 0.23.0 because the bump
+  # touched go.mod indirectly (CGO header search paths in src/models/
+  # and common/, plus the tree-prep flow re-tidied modules). Compute
+  # via the standard "set fakeHash, build, copy real hash from error,
+  # paste here" dance. If the build's `goModules` derivation succeeds
+  # against this hash, the source is internally consistent.
+  vendorHash = "sha256-Lc1Ktdqtv2VhJQssk8K1UOimeEjVNvDWePE9WkamCos=";
 
   nativeBuildInputs = (oldAttrs.nativeBuildInputs or [ ]) ++ [
     cmake
@@ -149,224 +66,121 @@ ollama.overrideAttrs (oldAttrs: {
     perl
   ];
 
-  # intel-llvm goes in *buildInputs*, not nativeBuildInputs. Its
-  # setup-hook does
-  #   export NIX_CFLAGS_COMPILE''${role_post}+=" -isystem $1/include"
-  # — `role_post` is empty for buildInputs (host role) and
-  # `_FOR_BUILD` for nativeBuildInputs (build role). Putting it in
-  # nativeBuildInputs sets `NIX_CFLAGS_COMPILE_FOR_BUILD`, which the
-  # host-targeted ggml-sycl compile does NOT read, so `sycl/sycl.hpp`
-  # (which lives in intel-llvm's merged-output `/include/sycl/`) goes
-  # missing. host-role buildInputs gets it onto NIX_CFLAGS_COMPILE,
-  # which clang's cc-wrapper passes through.
+  # intel-llvm goes in buildInputs, not nativeBuildInputs. Its setup-hook
+  # adds `-isystem $1/include` to NIX_CFLAGS_COMPILE only for host-role
+  # (buildInputs); in nativeBuildInputs it would set
+  # NIX_CFLAGS_COMPILE_FOR_BUILD which the host-targeted ggml-sycl
+  # compile does not read, leaving `sycl/sycl.hpp` unresolvable.
   buildInputs = (oldAttrs.buildInputs or [ ]) ++ [
     intel-llvm
     intel-compute-runtime
     level-zero
     ocl-icd
-    # intel-llvm's `sycl/detail/cl.h` does `#include <CL/cl.h>`. ggml-sycl
-    # at the bumped pin (15bff84) reaches that include path; the older
-    # ec98e2002 used by pkg/llama-cpp-sycl/ does not. ocl-icd ships only
-    # `ocl_icd.h`, not the OpenCL headers proper, so add them explicitly.
     opencl-headers
     mkl-sycl
     oneDNN
     tbb
   ];
 
-  # Splice the upstream ggml-sycl/ tree into the vendored ggml source,
-  # then add the CMake hook (mirrors the Vulkan block in CMakeLists.txt).
-  # Done in postPatch (after upstream's substituteInPlace+app-removal)
-  # so we don't get reordered with their patches.
+  # Ride upstream nixpkgs ollama's postPatch (version/version.go bump,
+  # cmd/launch test substitutions, `rm -r app`). The vendored source
+  # already has SYCL wiring baked in (PR #16036's OLLAMA_ENABLE_SYCL
+  # option + ggml-sycl install rules in CMakeLists.txt; bf16 IMF bypass
+  # in set_rows.cpp; HOST_MEM_FALLBACK CMake option from Hal9000 patch
+  # #8) — no splicing/preset/CMake-block injection needed at derivation
+  # time. The only adjustments below are the device-side memcpy fixes
+  # IGC needs and the upstream MMVQ unaligned-vocab patch.
+  #
+  # OllamaEngineRequired is left untouched — qwen35* now routes through
+  # the new ollama-engine path (verified working at this base commit;
+  # the original Feb-2026 graph_compute_async SIGSEGV is gone).
   postPatch = (oldAttrs.postPatch or "") + ''
-    # 1. Splice ggml-sycl/ from upstream into the vendored ggml tree.
-    cp -r ${llamaCppSrc}/ggml/src/ggml-sycl ml/backend/ggml/ggml/src/
-    chmod -R u+w ml/backend/ggml/ggml/src/ggml-sycl
-
-    # (1b/1c removed 2026-05-08 — fc0f bump produced garbage; reverted
-    # to 15bff84.)
-    ${lib.concatMapStringsSep "\n" (p: ''
-      patch -p4 -d ml/backend/ggml/ggml/src/ggml-sycl < ${p}
-    '') (hal9000Patches ++ syclBackendPatches)}
-
-    # 2. Mirror the Vulkan stanza in CMakeLists.txt for SYCL. Gated by
-    #    the GGML_SYCL_BUILD option (off by default; the SYCL preset
-    #    enables it).
-    cat >> CMakeLists.txt <<'CMAKE_SYCL_EOF'
-
-# Ollama-SYCL: Intel Arc / Battlemage support. Mirrors the Vulkan
-# subdirectory pattern above — adds ggml-sycl as a separate shared
-# library installed under ''${OLLAMA_INSTALL_DIR}, picked up by the
-# runner when OLLAMA_LLM_LIBRARY=sycl.
-option(GGML_SYCL_BUILD "Enable the GGML SYCL backend (Intel oneAPI / Level Zero)" OFF)
-if(GGML_SYCL_BUILD AND NOT APPLE)
-    set(GGML_SYCL ON)
-    set(GGML_SYCL_TARGET INTEL)
-    set(GGML_SYCL_F16 ON)
-    # Workaround for llama.cpp issue #21893 — ggml-sycl graph-capture
-    # path produces wrong results on B70.
-    set(GGML_SYCL_GRAPH OFF)
-    # MKL 2025.x's tbb_thread backend wants TBBConfig.cmake on the
-    # CMake prefix path; nixpkgs' tbb.dev provides it but MKLConfig
-    # bails before falling through. Use Intel OpenMP (libiomp5.so from
-    # mkl-sycl) instead — safe for GPU SYCL where CPU threading mode
-    # only matters for kernel launches.
-    set(MKL_THREADING intel_thread)
-    set(MKL_SYCL_THREADING intel_thread)
-
-    add_subdirectory(''${CMAKE_CURRENT_SOURCE_DIR}/ml/backend/ggml/ggml/src/ggml-sycl)
-    target_include_directories(ggml-sycl PRIVATE ''${GGML_INCLUDE_DIRS})
-
-    # (See postPatch below — bf16 IMF bypass is patched into
-    # ggml-sycl's set_rows.cpp at source level, since
-    # intel-llvm@unstable-2025-11-14 has no `-fsycl-device-lib` flag
-    # to opt into the IMF bf16 bitcode at link time.)
-
-    install(TARGETS ggml-sycl
-        RUNTIME_DEPENDENCIES
-            PRE_INCLUDE_REGEXES "mkl_sycl|mkl_intel|mkl_core|mkl_tbb|mkl_def|libsycl|libOpenCL|libze|libiomp"
-            PRE_EXCLUDE_REGEXES ".*"
-        RUNTIME DESTINATION ''${OLLAMA_INSTALL_DIR} COMPONENT SYCL
-        LIBRARY DESTINATION ''${OLLAMA_INSTALL_DIR} COMPONENT SYCL
-    )
-endif()
-CMAKE_SYCL_EOF
-
-    # 3. Add the SYCL preset via CMakeUserPresets.json — cmake reads
-    #    both files and merges. Avoids surgery on the upstream
-    #    CMakePresets.json (where the Vulkan entry appears twice — in
-    #    configurePresets and buildPresets — and buildPresets schema
-    #    rejects cacheVariables, so any string-replace approach blows
-    #    up there). Use a Nix-side toJSON to dodge bash heredoc
-    #    indentation gotchas (PRESETS_EOF can't be unindented inside an
-    #    indented Nix string without ruining file alignment).
-    cp ${builtins.toFile "CMakeUserPresets.json" (builtins.toJSON {
-      version = 3;
-      configurePresets = [{
-        name = "SYCL";
-        inherits = [ "Default" ];
-        cacheVariables = {
-          OLLAMA_RUNNER_DIR = "sycl";
-          GGML_SYCL_BUILD = "ON";
-        };
-      }];
-      buildPresets = [{
-        name = "SYCL";
-        configurePreset = "SYCL";
-      }];
-    })} CMakeUserPresets.json
-    chmod u+w CMakeUserPresets.json
-
-    # 4. ggml-sycl@ec98e2002 expects MKL::MKL_SYCL::BLAS namespaced
-    #    target (oneMKL 2024.1+). Our mkl-sycl is 2025.3.1 — this
-    #    target exists natively, no patch needed.
-
-    # 5. Same _FORTIFY_SOURCE issue as pkg/llama-cpp-sycl/: IGC has no
-    #    __memcpy_chk symbol. Handled by hardeningDisable below.
-
-    # 6. ollama's vendored ggml carries patch
-    #    `0018-ggml-Add-batch-size-hint.patch` which adds a third
-    #    `int batch_size` argument to the backend `graph_compute`
-    #    callback (and the public `ggml_backend_graph_compute_async`).
-    #    ollama then re-patches ggml-cuda/vulkan/etc to match. Upstream
-    #    ggml-sycl@ec98e2002 still uses the original 2-arg signature.
-    #    Since we vendored that source verbatim, the type-init in
-    #    ggml_backend_sycl_i hits a type mismatch. Bump the SYCL backend's
-    #    signature to the patched ABI; the batch_size hint is unused
-    #    inside ggml-sycl's compute path (kernels are dispatched per
-    #    op, not per graph), so accepting and ignoring it is correct.
-    substituteInPlace ml/backend/ggml/ggml/src/ggml-sycl/ggml-sycl.cpp \
-      --replace-fail \
-        'static ggml_status ggml_backend_sycl_graph_compute(ggml_backend_t backend, ggml_cgraph * cgraph) {' \
-        'static ggml_status ggml_backend_sycl_graph_compute(ggml_backend_t backend, ggml_cgraph * cgraph, int /*batch_size*/) {'
-
-    # 7a. Force standard-transformer Qwen3 family back onto the legacy
-    #     llama.cpp runner. ollama 0.21+ routes any architecture in
-    #     `fs/ggml/ggml.go:OllamaEngineRequired()` through the
-    #     Go-native "ollama-engine" instead of the legacy runner —
-    #     and the new engine has a SYCL-side bug that NULL-derefs in
-    #     `ggml_backend_sched_graph_compute_async` on first prompt
-    #     (silent SIGSEGV). Verified empirically: same architecture
-    #     models load + serve correctly via llama-cli (which uses the
-    #     same ggml-sycl shared lib), so the legacy ollama runner
-    #     should work too. Strip just the classic-transformer arches
-    #     (qwen3, qwen3moe, qwen35, qwen35moe); leave qwen3next,
-    #     qwen3vl, qwen3vlmoe on the new engine since they need its
-    #     Mamba-SSM / vision support that llama.cpp lacks anyway.
-    #     Drop this patch when the ollama-engine SYCL dispatch bug
-    #     is fixed upstream.
-    # Strip ONLY `qwen3, qwen3moe` from OllamaEngineRequired — those
-    # have full classic-transformer support in the legacy llama.cpp
-    # runner (proven via llama-cli + ollama). Leave `qwen35, qwen35moe`
-    # on the new-engine path because the legacy llama.cpp@ec98e2002
-    # arch loader doesn't know `qwen35moe` and fails with
-    # "unknown model architecture: 'qwen35moe'". The new engine has
-    # its own Go-native arch handler that DOES know qwen35* and
-    # dispatches to ggml-sycl — which we bumped above to a newer SYCL
-    # source that includes Q8_0 reorder + bf16 fast-path + MoE
-    # mul_mat_vec_q fixes that may resolve the original new-engine
-    # SIGSEGV.
+    # Force device-side `memcpy` calls in `ggml-sycl/dequantize.hpp` to
+    # use `__builtin_memcpy` instead. IGC (Intel Graphics Compiler)
+    # cannot resolve a plain `memcpy` external symbol when JIT-ing
+    # SPIR-V kernels at runtime — the SPV-validation phase fails with
+    # `unresolved external symbol memcpy at offset … in instructions
+    # segment #N (aka kernel : ...dequantize_q5_0...)`. This kills the
+    # ollama legacy runner during eager kernel registration even
+    # though the model is Q4_K_M (the q5_0 / q5_1 / mxfp4 dequant
+    # template instantiations are link-pulled in regardless of the
+    # actual model's quant types). `__builtin_memcpy` gets inlined by
+    # clang at the call site so IGC never sees an external symbol.
     #
-    # If qwen35* still crashes after this bump, the next step is to
-    # bump ggml-sycl further (master has 1000+ commits past 15bff84
-    # with even more SYCL fixes) before considering Go-side patches.
-    perl -i -0777 -pe '
-      s{"qwen25vl",\n\t\t"qwen3", "qwen3moe",\n}
-       {"qwen25vl",\n\t\t// "qwen3", "qwen3moe" — forced to legacy runner via ollama-sycl postPatch\n}s
-    ' fs/ggml/ggml.go
-    grep -q 'forced to legacy runner via ollama-sycl postPatch' fs/ggml/ggml.go \
-      || (echo "qwen3 routing patch did not apply to fs/ggml/ggml.go"; exit 1)
+    # Why not in pkg/llama-cpp-sycl/: the same source builds fine for
+    # `llama-cli`/`llama-server` because those test paths only ever
+    # used Q4_K_M models that never lazy-JIT the q5_*/mxfp4 dequant
+    # kernels. Ollama's legacy runner is more aggressive about
+    # registering all dequantize variants at startup, so it trips this
+    # the moment it starts. Add the same patch to pkg/llama-cpp-sycl
+    # if/when it's tested with q5_* or mxfp4 models.
+    perl -i -pe '
+      s{^(\s*)memcpy\(&qh, x\[ib\]\.qh, sizeof\(qh\)\);}
+       {$1__builtin_memcpy(&qh, x[ib].qh, sizeof(qh));}
+    ' ml/backend/ggml/ggml/src/ggml-sycl/dequantize.hpp
+    grep -q '__builtin_memcpy(&qh, x\[ib\]\.qh' ml/backend/ggml/ggml/src/ggml-sycl/dequantize.hpp \
+      || (echo "device-side memcpy substitution did not apply to dequantize.hpp"; exit 1)
 
-    # 7b. bf16 conversion bypass for `set_rows` — see pkg/llama-cpp-sycl/
-    #     for the full rationale. perl -0777 multi-line substitution
-    #     (substituteInPlace can't reliably match across lines under
-    #     Nix indented-string whitespace stripping).
-    perl -i -0777 -pe '
-      s{auto dst_val = sycl::vec<TIn, 1>\(src_val\)\.template convert<TOut, sycl::rounding_mode::automatic>\(\)\[0\];\n\s+\*reinterpret_cast<TOut\*>\(dst\) = dst_val;}
-       {if constexpr (std::is_same_v<TOut, sycl::ext::oneapi::bfloat16>) {
-        *reinterpret_cast<TOut*>(dst) = sycl::ext::oneapi::bfloat16(static_cast<float>(src_val));
-    } else {
-        auto dst_val = sycl::vec<TIn, 1>(src_val).template convert<TOut, sycl::rounding_mode::automatic>()[0];
-        *reinterpret_cast<TOut*>(dst) = dst_val;
-    }}s
-    ' ml/backend/ggml/ggml/src/ggml-sycl/set_rows.cpp
-    grep -q 'is_same_v<TOut, sycl::ext::oneapi::bfloat16>' ml/backend/ggml/ggml/src/ggml-sycl/set_rows.cpp \
-      || (echo "bf16 IMF-bypass perl substitution did not apply to set_rows.cpp"; exit 1)
+    # Same fix for `ggml_sycl_e8m0_to_fp32` (mxfp4 dequant inner) and
+    # the `cpy_blck_f32_q5_{0,1}` block-quant copy helpers — both
+    # `__dpct_inline__`-class functions called from SYCL kernels, both
+    # use `memcpy(...)` to bit-cast scalar values without breaking
+    # strict aliasing. JIT picks them up through `dequantize_row_mxfp4_sycl`
+    # / GGML_OP_CPY for q5_0 / q5_1 quant types.
+    perl -i -pe '
+      s{^(\s*)memcpy\(&result, &bits, sizeof\(float\)\);}
+       {$1__builtin_memcpy(&result, &bits, sizeof(float));}
+    ' ml/backend/ggml/ggml/src/ggml-sycl/common.hpp
+    grep -q '__builtin_memcpy(&result, &bits, sizeof(float));' ml/backend/ggml/ggml/src/ggml-sycl/common.hpp \
+      || (echo "device-side memcpy substitution did not apply to common.hpp"; exit 1)
+
+    perl -i -pe '
+      s{^(\s*)memcpy\(dsti->qh, &qh, sizeof\(qh\)\);}
+       {$1__builtin_memcpy(dsti->qh, &qh, sizeof(qh));}
+    ' ml/backend/ggml/ggml/src/ggml-sycl/cpy.hpp
+    [ "$(grep -c '__builtin_memcpy(dsti->qh' ml/backend/ggml/ggml/src/ggml-sycl/cpy.hpp)" = "2" ] \
+      || (echo "device-side memcpy substitution in cpy.hpp expected 2 hits"; exit 1)
+
+    # Upstream PR #22035 / commit 788fcbc5 (Apr 20 2026) — fixes
+    # `GGML_ASSERT(block_num_y % num_subgroups == 0)` in the four reorder
+    # mul_mat_vec_q dispatchers (Q4_0, Q8_0, Q4_K, Q6_K). 073bb2c20 is
+    # 2 weeks older than the fix, so the assertion still trips here on
+    # any model whose output projection has nrows not divisible by 16
+    # (Granite 3.0 / HY-MT / etc). Same patch file as pkg/llama-cpp-sycl
+    # since the base commit is identical — one source of truth.
+    patch -p4 -d ml/backend/ggml/ggml/src/ggml-sycl \
+      < ${../llama-cpp-sycl/patches/0009-SYCL-Fix-reorder-MMVQ-assert-on-unaligned-vocab-size.patch}
   '';
 
+  # FORTIFY workaround: IGC has no `__memcpy_chk` symbol so SYCL kernel
+  # JIT fails when ggml-sycl's dpct/helper.hpp `std::memcpy` gets the
+  # FORTIFY-checked variant. Disabling via cc-wrapper hardening actually
+  # removes the `-D_FORTIFY_SOURCE=2` injection, unlike CMake-level
+  # `target_compile_options(... -D_FORTIFY_SOURCE=0)` which loses the
+  # race against the wrapper.
   hardeningDisable = (oldAttrs.hardeningDisable or [ ]) ++ [ "fortify" "fortify3" ];
 
-  # The upstream ollama Go test phase walks `./...` which includes the
-  # `integration/` package — every file there has `//go:build
-  # integration`, so without the tag `go test` reports "build
-  # constraints exclude all Go files in /build/source/integration"
-  # and counts that as `[setup failed]`. Upstream nixpkgs ollama somehow
-  # tolerates this, but our override path fails on it. Skip Go-side
-  # checks here — versionCheckHook (inherited via doInstallCheck) still
-  # runs to verify the binary works.
+  # Skip Go-side check phase: ollama's `integration/` package has all
+  # build-tag-gated files which `go test ./...` reports as
+  # `[setup failed]`. doInstallCheck still runs the version probe.
   doCheck = false;
 
-  # nixpkgs intel-llvm's wrapper-derivation has a setup-hook that *should*
-  # add `-isystem ${intel-llvm}/include` to NIX_CFLAGS_COMPILE — but that
-  # hook doesn't fire under buildGoModule's cc-wrapper (verified
-  # empirically: only mkl-sycl's -isystem appears in the compile line).
-  # ggml-sycl.cpp #include's <sycl/sycl.hpp> which lives under
-  # ${intel-llvm}/include/sycl/. Force the include path explicitly via
-  # preConfigure (NOT via `env.NIX_CFLAGS_COMPILE`, which would *replace*
-  # rather than append — and dropping nixpkgs' standard flags also drops
-  # `-fdebug-prefix-map`, leaving raw go-compiler store paths in DWARF
-  # which trip disallowedReferences at install-time).
+  # intel-llvm's setup-hook is observed not to add the -isystem flag
+  # under buildGoModule's cc-wrapper. Force it here (NOT via
+  # `env.NIX_CFLAGS_COMPILE`, which would replace rather than append
+  # and drop nixpkgs' standard flags like `-fdebug-prefix-map`).
   preConfigure = (oldAttrs.preConfigure or "") + ''
     export NIX_CFLAGS_COMPILE="''${NIX_CFLAGS_COMPILE:-} -isystem ${intel-llvm}/include"
   '';
 
-  # Make MKLConfig.cmake's CMAKE_CURRENT_LIST_DIR/../.. lookups land at
-  # the right prefix.
   MKLROOT = mkl-sycl;
 
-  # MKLConfig detects the DPC++ compiler by basename — symlink
-  # intel-llvm's clang/clang++ as icx/icpx so MKLConfig flips
-  # DPCPP_COMPILER=ON. Same trick as pkg/llama-cpp-sycl/.
+  # Override upstream's preBuild (which is plain `cmake -B build`) with
+  # one that enables SYCL. No CMakePresets.json SYCL preset exists in
+  # the bumped tree — PR #16036 wired SYCL via root CMakeLists.txt
+  # `option(OLLAMA_ENABLE_SYCL ...)` instead. Set it directly via
+  # `-D`, plus OLLAMA_RUNNER_DIR=sycl so the install target lands in
+  # `lib/ollama/sycl/` (matches the Vulkan/CUDA flavor convention).
   preBuild = ''
     mkdir -p $TMPDIR/intel-shim/bin
     ln -sf ${intel-llvm}/bin/clang   $TMPDIR/intel-shim/bin/icx
@@ -375,49 +189,39 @@ CMAKE_SYCL_EOF
     export CXX=$TMPDIR/intel-shim/bin/icpx
     export PATH=$TMPDIR/intel-shim/bin:$PATH
 
-    # Run the SYCL preset (sets OLLAMA_RUNNER_DIR=sycl,
-    # GGML_SYCL_BUILD=ON). Mirrors upstream's preBuild structure.
-    # CMAKE_VERBOSE_MAKEFILE=ON dumps the actual compile lines on
-    # failure — crucial for debugging "include not found" classes of
-    # error. Cheap to keep while ollama-sycl is fresh.
     cmake -B build \
-        --preset SYCL \
+        -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_SKIP_BUILD_RPATH=ON \
         -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
-        -DCMAKE_VERBOSE_MAKEFILE=ON
+        -DCMAKE_VERBOSE_MAKEFILE=ON \
+        -DOLLAMA_ENABLE_SYCL=ON \
+        -DGGML_SYCL=ON \
+        -DGGML_SYCL_F16=ON \
+        -DGGML_SYCL_TARGET=INTEL \
+        -DGGML_SYCL_GRAPH=OFF \
+        -DGGML_SYCL_DNN=ON \
+        -DGGML_SYCL_HOST_MEM_FALLBACK=ON \
+        -DMKL_THREADING=intel_thread \
+        -DMKL_SYCL_THREADING=intel_thread \
+        -DOLLAMA_RUNNER_DIR=sycl
 
     cmake --build build -j $NIX_BUILD_CORES
   '';
 
-  # Wrap with SYCL runtime env defaults. Note: do *not* set
-  # OLLAMA_LLM_LIBRARY=sycl — that env var skips libDirs whose
-  # `filepath.Base(dir)` doesn't equal the requested name (see
-  # discover/runner.go), and our libggml-sycl.so lands flat in
-  # `lib/ollama/` (Base = "ollama"), exactly like libggml-vulkan.so in
-  # nixpkgs ollama-vulkan. ggml's backend-reg auto-loads all
-  # `libggml-*.so` from the library path on init, so SYCL is picked up
-  # without explicit gating.
-  #
-  # ONEAPI_DEVICE_SELECTOR=opencl:gpu — intel-compute-runtime 26.09
-  # GMM helper aborts during Level Zero init on B70 (revisit when ICR
-  # bumps). OpenCL backend bypasses that path; ~5-10% slower, correct.
-  # SYCL_CACHE_PERSISTENT=0 — DISABLED. The intel-llvm@unstable-2025-11-14
-  # libsycl.so.8 has a NULL-deref in
-  #   sycl::detail::getSortedImages → __insertion_sort comparator → strcmp
+  # SYCL runtime defaults. SYCL_CACHE_PERSISTENT=0 is load-bearing:
+  # intel-llvm@unstable-2025-11-14's libsycl.so.8 has a NULL-deref in
+  # sycl::detail::getSortedImages → __insertion_sort comparator → strcmp
   # on the in-memory `vector<RTDeviceBinaryImage*>` it sorts inside
-  #   PersistentDeviceCodeCache::getItemFromDisc(...)
-  # called from `getOrCreateURProgram` at first kernel JIT (verified by
-  # libunwind backtrace 2026-05-08, full trace in
-  # `project_ollama_sycl_fork.md`). Reproducer: any SYCL kernel JIT'd via
-  # the persistent-cache path SIGSEGVs at first decode in ollama runner —
-  # NOT in our `pkg/llama-cpp-sycl` `llama-cli` because that path
-  # statically links ggml-sycl into the binary, while ollama loads
-  # libggml-sycl.so dynamically and the resulting RTDeviceBinaryImage
-  # property strings end up NULL on at least one image. Setting
-  # SYCL_CACHE_PERSISTENT=0 bypasses `getItemFromDisc` entirely. Verified
-  # 2026-05-08: qwen25-3b generates real text, qwen36-27b answers
-  # "Paris" at 12.73 t/s.
+  # PersistentDeviceCodeCache::getItemFromDisc, called from
+  # `getOrCreateURProgram` at first kernel JIT (verified via libunwind
+  # backtrace 2026-05-08, full trace in project_ollama_sycl_fork.md).
+  # Reproducer: any SYCL kernel JIT'd via the persistent-cache path
+  # SIGSEGVs at first decode in the ollama runner. Setting
+  # SYCL_CACHE_PERSISTENT=0 bypasses `getItemFromDisc` entirely.
   # ZES_ENABLE_SYSMAN — accurate VRAM free-memory queries on Battlemage.
+  # ONEAPI_DEVICE_SELECTOR=opencl:gpu — intel-compute-runtime 26.09 GMM
+  # helper aborts during Level Zero init on B70; OpenCL bypasses it
+  # (~5-10% slower, correct).
   postFixup = (oldAttrs.postFixup or "") + ''
     if [ -e $out/bin/ollama ]; then
       wrapProgram $out/bin/ollama \
@@ -429,6 +233,6 @@ CMAKE_SYCL_EOF
   '';
 
   meta = (oldAttrs.meta or { }) // {
-    description = "Ollama with the Intel oneAPI SYCL backend (Arc / Battlemage / Xe2)";
+    description = "Ollama with SYCL backend (Intel Arc / Battlemage / Xe2) — llama.cpp@073bb2c20";
   };
 })
