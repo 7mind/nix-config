@@ -29,6 +29,7 @@
   ./gnome-minimal-hotkeys.nix
   ./gnome-extensions.nix
   ./hyprland.nix
+  ./image-gen.nix
   ./kanata-super-remap.nix
   ./kde.nix
   ./niri.nix

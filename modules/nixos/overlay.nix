@@ -108,6 +108,8 @@
 
         saic-mqtt-gateway = pkgs.callPackage "${cfg-meta.paths.pkg}/saic-mqtt-gateway/default.nix" { };
 
+        sdcpp-webui = pkgs.callPackage "${cfg-meta.paths.pkg}/sdcpp-webui/default.nix" { };
+
         hoymiles-mqtt-bridge = pkgs.callPackage "${cfg-meta.paths.pkg}/hoymiles-mqtt-bridge/default.nix" { };
 
         enocean-mqtt = pkgs.callPackage "${cfg-meta.paths.pkg}/enocean-mqtt/default.nix" { };
