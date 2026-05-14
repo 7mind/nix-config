@@ -102,6 +102,11 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # Expose sd-cli / sd-server on the system PATH so interactive shells
+    # (`machinectl shell …`, ssh) can invoke them directly for diagnosis.
+    # The service unit's PATH is set independently below.
+    environment.systemPackages = [ cfg.sdcppPackage ];
+
     systemd.services.sdcpp-webui = {
       description = "sd.cpp-webui (Gradio frontend for stable-diffusion.cpp, ${cfg.backend} backend)";
       wantedBy = [ "multi-user.target" ];
