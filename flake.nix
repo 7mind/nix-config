@@ -123,6 +123,18 @@
       url = "git+https://gitlab.gnome.org/pshirshov/fractal.git?ref=wip/full-patchset";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # ComfyUI packaged with pre-built wheels for CUDA / ROCm / Intel XPU.
+    # Used on vm (Arc Pro B70 via XPU/oneAPI), pavel-am5 (W7900 via ROCm),
+    # and pavel-fw (5070 via CUDA). Deliberately NOT following our nixpkgs:
+    # the flake's vendored Python set pins websockets/gradio/comfyui-manager
+    # against its own snapshot; on nixos-unstable past ~2026-04 those pins
+    # break (websockets 16, gradio-client deps tightened, comfyui-manager
+    # wheel deps unmet). Using the flake's own nixpkgs keeps the package
+    # closure internally consistent at the cost of one extra nixpkgs eval.
+    comfyui-nix = {
+      url = "github:utensils/comfyui-nix";
+    };
   };
 
   outputs = inputs@{ self, ... }:

@@ -29,7 +29,7 @@ in
     })
 
     (lib.mkIf (cfg.mode == "safe") {
-      users.groups.ssh-users = { };
+      users.groups.ssh-users.gid = 600;
 
       services.openssh = {
         enable = true;
