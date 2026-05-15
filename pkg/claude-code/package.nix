@@ -1,5 +1,13 @@
 # Updating to a new version:
 #
+#   Easy path:  ./update.sh   (run from this directory)
+#               then verify:  ./verify-configs --verbose "$HOSTNAME"
+#
+# The script below automates the manual recipe. Keep the two in sync — if you
+# change one, change the other.
+#
+# Manual recipe:
+#
 #   1. Look up the latest version on npm:
 #        curl -s https://registry.npmjs.org/@anthropic-ai/claude-code/latest \
 #          | jq -r .version
@@ -9,7 +17,7 @@
 #      stub that postinstalls the matching `claude-code-<platform>` native pkg,
 #      so we hash those directly:
 #
-#        v=2.1.119; for pkg in claude-code-{linux-x64,linux-arm64,darwin-x64,darwin-arm64}; do
+#        v=2.1.142; for pkg in claude-code-{linux-x64,linux-arm64,darwin-x64,darwin-arm64}; do
 #          url="https://registry.npmjs.org/@anthropic-ai/${pkg}/-/${pkg}-${v}.tgz"
 #          sha=$(nix-prefetch-url --type sha256 --unpack "$url" 2>/dev/null)
 #          sri=$(nix hash convert --hash-algo sha256 --to sri "$sha")
@@ -30,7 +38,7 @@
   socat,
 }:
 let
-  version = "2.1.119";
+  version = "2.1.142";
 
   # Upstream now ships native binaries per platform via @anthropic-ai/claude-code-<platform>.
   # The umbrella @anthropic-ai/claude-code package is just a stub + postinstall that copies
@@ -38,19 +46,19 @@ let
   sources = {
     "x86_64-linux" = {
       pkg = "claude-code-linux-x64";
-      hash = "sha256-fVe3LUhRbfqbTeutDKOGzhj1XTQu6pONYXE8RS+AkDM=";
+      hash = "sha256-JD9hdZpLNNkp4tXXSEX82SS9uTMfXAh3XnXiG+3dH6k=";
     };
     "aarch64-linux" = {
       pkg = "claude-code-linux-arm64";
-      hash = "sha256-RkKTMRFpNnveae1VqkmPxzB5XGSXu4aveGjpNt23L+4=";
+      hash = "sha256-SLc0CVVreW74/blj/6VK5ibkkdYIgxvbSNE4B4KbL9M=";
     };
     "x86_64-darwin" = {
       pkg = "claude-code-darwin-x64";
-      hash = "sha256-x38Q7to9tmLjj1i2L8HZf3QB/njfmnmtXBoUnqBi44M=";
+      hash = "sha256-/gBbdDeT/ik2Qh/qFtyb6HYYcRH9rZScI35Xxfmc1XU=";
     };
     "aarch64-darwin" = {
       pkg = "claude-code-darwin-arm64";
-      hash = "sha256-faK1JsyiXNnDY3BbtP70Dyk8EirUbR14uK66tIXDG6Y=";
+      hash = "sha256-O0A8PBnRzMDBna0NoXG1tu1i7n9l+r9WQHjnG2xut6k=";
     };
   };
 
