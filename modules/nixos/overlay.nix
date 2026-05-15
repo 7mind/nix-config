@@ -112,6 +112,8 @@
 
         sycl-force-platform-l0 = pkgs.callPackage "${cfg-meta.paths.pkg}/sycl-force-platform-l0/default.nix" { };
 
+        comfyui-xpu-cpu-state-fix = pkgs.callPackage "${cfg-meta.paths.pkg}/comfyui-xpu-cpu-state-fix/default.nix" { };
+
         hoymiles-mqtt-bridge = pkgs.callPackage "${cfg-meta.paths.pkg}/hoymiles-mqtt-bridge/default.nix" { };
 
         enocean-mqtt = pkgs.callPackage "${cfg-meta.paths.pkg}/enocean-mqtt/default.nix" { };
