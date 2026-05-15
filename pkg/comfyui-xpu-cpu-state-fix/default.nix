@@ -28,8 +28,16 @@
 # behaviour, only the XPU-specific case the upstream patch missed.
 #
 # Consumed by setting PYTHONPATH=${this}/lib on the systemd unit; Python
-# auto-imports any `sitecustomize` module found on `sys.path` during
-# startup, before user code runs (see `site` module docs).
+# auto-imports any `usercustomize` module found on `sys.path` during
+# startup, *after* sitecustomize, before user code runs (see `site`
+# module docs).
+#
+# Why `usercustomize` and not `sitecustomize`: comfyui-nix's launcher
+# already prepends its own dir to PYTHONPATH and writes its own
+# `sitecustomize.py` there — that shadows any sitecustomize.py we ship
+# (Python imports the first one it finds on sys.path). `usercustomize`
+# is a separate import name in the same auto-import mechanism, so the
+# two coexist instead of fighting over the namespace.
 #
 # Drop this whole derivation when comfyui-nix fixes its patch — issue to
 # file: utensils/comfyui-nix → make `comfyui-cpu-fallback.patch` check
@@ -37,7 +45,7 @@
 
 runCommand "comfyui-xpu-cpu-state-fix" { } ''
   mkdir -p $out/lib
-  cat > $out/lib/sitecustomize.py <<'EOF'
+  cat > $out/lib/usercustomize.py <<'EOF'
 """Reset comfy.model_management.cpu_state to GPU when XPU is available.
 
 Workaround for the over-eager CPU-fallback patch in
