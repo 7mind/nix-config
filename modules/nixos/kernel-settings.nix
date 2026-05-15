@@ -24,7 +24,7 @@
         "net.core.somaxconn" = 65536;
         "vm.dirty_writeback_centisecs" = 1500; # powertop advice
         "kernel.nmi_watchdog" = 0; # powertop advice
-        "fs.inotify.max_user_watches" = 1048576;
+        "fs.inotify.max_user_watches" = 10485760;
         "kernel.perf_event_paranoid" = 1; # intellij profiler
         "kernel.kptr_restrict" = 0; # intellij profiler
         "dev.tty.legacy_tiocsti" = 0; # disable TIOCSTI injection; lets llm-sandbox drop --new-session so SIGWINCH reaches TUIs
