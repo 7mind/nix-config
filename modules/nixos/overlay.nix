@@ -110,6 +110,8 @@
 
         sdcpp-webui = pkgs.callPackage "${cfg-meta.paths.pkg}/sdcpp-webui/default.nix" { };
 
+        sycl-force-platform-l0 = pkgs.callPackage "${cfg-meta.paths.pkg}/sycl-force-platform-l0/default.nix" { };
+
         hoymiles-mqtt-bridge = pkgs.callPackage "${cfg-meta.paths.pkg}/hoymiles-mqtt-bridge/default.nix" { };
 
         enocean-mqtt = pkgs.callPackage "${cfg-meta.paths.pkg}/enocean-mqtt/default.nix" { };

@@ -137,6 +137,18 @@ let
       };
     };
 
+  # Env triple required to coax PyTorch's XPU stack through SYCL's OpenCL
+  # UR adapter instead of the Level-Zero one, sidestepping the NEO
+  # gmm_helper/resource_info.cpp:15 abort that bricks single-process L0
+  # init on Battlemage + xe-kmd (upstream intel/compute-runtime#922).
+  # Pass the shim derivation as `shim`; built `-nostdlib` so it works
+  # against any glibc the consumer brings.
+  mkIntelXpuOpenclBypassEnv = { shim }: {
+    ONEAPI_DEVICE_SELECTOR = "opencl:gpu";
+    OCL_ICD_VENDORS = "/run/opengl-driver/etc/OpenCL/vendors";
+    LD_PRELOAD = "${shim}/lib/libsycl_force_platform_l0.so";
+  };
+
   wrapAppWithNetnsSlice = { pkg, name, binName ? null, extraFlags ? [ ], slice ? "app-heavy.slice", netns ? null }:
     let
       actualBinName = if binName != null then binName else (pkg.meta.mainProgram or name);
@@ -193,6 +205,8 @@ in
   _module.args.override_pkg = override_pkg;
 
   _module.args.mk_container = mk_container;
+
+  _module.args.mkIntelXpuOpenclBypassEnv = mkIntelXpuOpenclBypassEnv;
 
   _module.args.wrapAppWithNetnsSlice = wrapAppWithNetnsSlice;
 
