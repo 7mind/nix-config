@@ -19,33 +19,39 @@
 # would (correctly) return True. The patched ComfyUI then loads every
 # weight tensor on CPU and runs the whole forward pass on the host CPU
 # (32 GB resident, 600% across cores, 0% GPU activity — exactly what
-# we observed).
+# we observed before this fix landed).
 #
-# This sitecustomize.py installs an import hook that detects when
-# `comfy.model_management` is loaded and, if XPU is available but
-# `cpu_state` got clobbered to CPU, resets it to GPU. The fix is
-# minimally invasive: it does *not* override the broader CPU-fallback
-# behaviour, only the XPU-specific case the upstream patch missed.
+# Outputs
+# -------
+# * `$out/lib/comfyui_xpu_fix.py` — the import-hook module.
+# * `$out/share/comfyui-xpu-fix/aaa-xpu-fix.pth` — a `.pth` file that
+#   gets copied into the venv site-packages by an ExecStartPre. Python
+#   processes `.pth` files via `site.addsitedir()` (which comfyui-nix's
+#   own sitecustomize calls on `$VIRTUAL_ENV/lib/.../site-packages`),
+#   and crucially **`.pth` processing ignores `PYTHONNOUSERSITE`** —
+#   so it fires even though nixpkgs's `python.withPackages` wrapper
+#   exports `PYTHONNOUSERSITE=true`.
 #
-# Consumed by setting PYTHONPATH=${this}/lib on the systemd unit; Python
-# auto-imports any `usercustomize` module found on `sys.path` during
-# startup, *after* sitecustomize, before user code runs (see `site`
-# module docs).
+# Why a `.pth` and not `sitecustomize.py` / `usercustomize.py`:
+#   * `sitecustomize.py` — comfyui-nix's launcher prepends its own
+#     `SITE_CUSTOMIZE_DIR` to `PYTHONPATH` and writes a sitecustomize.py
+#     there. That shadows ours (Python imports the first one it finds
+#     on sys.path; the launcher's wins by ordering).
+#   * `usercustomize.py` — Python only loads it if `ENABLE_USER_SITE` is
+#     true, but nixpkgs sets `PYTHONNOUSERSITE=true` in the python
+#     wrapper to keep envs hermetic. So `execusercustomize()` is
+#     skipped even when our file is on sys.path.
+#   * `.pth` — processed by `addsitedir()` unconditionally, independent
+#     of the user-site flag. Works.
 #
-# Why `usercustomize` and not `sitecustomize`: comfyui-nix's launcher
-# already prepends its own dir to PYTHONPATH and writes its own
-# `sitecustomize.py` there — that shadows any sitecustomize.py we ship
-# (Python imports the first one it finds on sys.path). `usercustomize`
-# is a separate import name in the same auto-import mechanism, so the
-# two coexist instead of fighting over the namespace.
-#
-# Drop this whole derivation when comfyui-nix fixes its patch — issue to
+# Drop this whole derivation once comfyui-nix fixes its patch (issue to
 # file: utensils/comfyui-nix → make `comfyui-cpu-fallback.patch` check
-# `torch.xpu.is_available()` and `torch.mps.is_available()` too.
+# `torch.xpu.is_available()` and `torch.mps.is_available()` too).
 
 runCommand "comfyui-xpu-cpu-state-fix" { } ''
-  mkdir -p $out/lib
-  cat > $out/lib/usercustomize.py <<'EOF'
+  mkdir -p $out/lib $out/share/comfyui-xpu-fix
+
+  cat > $out/lib/comfyui_xpu_fix.py <<'EOF'
 """Reset comfy.model_management.cpu_state to GPU when XPU is available.
 
 Workaround for the over-eager CPU-fallback patch in
@@ -108,4 +114,10 @@ class _Finder(importlib.abc.MetaPathFinder):
 
 sys.meta_path.insert(0, _Finder())
 EOF
+
+  # The .pth file is a single line that gets exec'd by Python's site
+  # machinery during `addsitedir()`. It triggers the import of our
+  # module; the module lives on PYTHONPATH (set on the service unit
+  # to include this derivation's `lib/`).
+  echo 'import comfyui_xpu_fix' > $out/share/comfyui-xpu-fix/aaa-xpu-fix.pth
 ''
