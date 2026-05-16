@@ -128,16 +128,17 @@
     # Used on vm (Arc Pro B70 via XPU/oneAPI), pavel-am5 (W7900 via ROCm),
     # and pavel-fw (5070 via CUDA).
     #
-    # Pin the flake's nixpkgs to the exact revision its CI tested against —
-    # `nix flake lock` against the flake's bare `nixos-unstable` url races
-    # ahead of the overlay's vendored Python pins (websockets<16, gradio-
-    # client deps, comfyui-manager runtime deps) and produces an unbuildable
-    # closure on every nixos-unstable commit past ~2026-04-23.
-    # Bump alongside the comfyui-nix rev itself, after sanity-checking the
-    # flake's own flake.lock at that commit.
+    # We deliberately do NOT set `inputs.nixpkgs.follows = "nixpkgs"` here —
+    # the flake's overlay vendors Python deps (gradio, comfyui-manager,
+    # facexlib, timm, mss) whose nixpkgs versions drift past the wheels'
+    # compatibility window on commits after ~2026-04-23. Letting comfyui-nix
+    # use its own `flake.lock`-pinned nixpkgs keeps us on the snapshot the
+    # upstream maintainer tested the wheels against (currently nixos-unstable
+    # `c0b0e0fd` / 2025-12-28). When comfyui-nix bumps its lock with new
+    # wheels, our `nix flake update` picks it up; until then we sit on a
+    # known-good closure.
     comfyui-nix = {
       url = "github:utensils/comfyui-nix";
-      inputs.nixpkgs.url = "github:NixOS/nixpkgs/c0b0e0fddf73fd517c3471e546c0df87a42d53f4";
     };
   };
 
