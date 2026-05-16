@@ -113,11 +113,26 @@ if cpu_state == CPUState.GPU:
     # model downloader (LoRA, checkpoint, embedding), and metadata
     # parser. Talks to the Civitai HTTP API directly from the
     # ComfyUI process.
-    "ComfyUI-Civitai-Toolkit" = pkgs.fetchFromGitHub {
-      owner = "BAIKEMARK";
-      repo = "ComfyUI-Civitai-Toolkit";
-      rev = "c1589348ff3ecbb07f326a833936e692fec4fa2d";
-      hash = "sha256-cIyKst4le8t8RuvBLXaTA0eKD6bTr1/T0f3utRuy3d0=";
+    #
+    # Patched here for the same reason as RES4LYF: upstream stores its
+    # SQLite DB at `<source_dir>/data/civitai_helper.db`, which fails
+    # with EROFS when the source is symlinked from the nix store.
+    # Redirect to `$HOME/.local/share/ComfyUI-Civitai-Toolkit/data/`
+    # (writable; persists in the bind-mounted /var/lib/comfyui).
+    "ComfyUI-Civitai-Toolkit" = pkgs.applyPatches {
+      name = "ComfyUI-Civitai-Toolkit-writable-db";
+      src = pkgs.fetchFromGitHub {
+        owner = "BAIKEMARK";
+        repo = "ComfyUI-Civitai-Toolkit";
+        rev = "c1589348ff3ecbb07f326a833936e692fec4fa2d";
+        hash = "sha256-cIyKst4le8t8RuvBLXaTA0eKD6bTr1/T0f3utRuy3d0=";
+      };
+      postPatch = ''
+        substituteInPlace utils.py \
+          --replace-fail \
+            'self.db_path = os.path.join(project_root, "data", "civitai_helper.db")' \
+            'self.db_path = os.path.join(os.path.expanduser("~/.local/share/ComfyUI-Civitai-Toolkit"), "data", "civitai_helper.db")'
+      '';
     };
 
     # calcuis/gguf — provides the plain-named `LoaderGGUF`,
