@@ -94,6 +94,20 @@ if cpu_state == CPUState.GPU:
       hash = "sha256-aYY8U1KzVeIzzkJih6F/0yPJt0qei/nPsBAJlSBUpps=";
     };
 
+    # ciri/comfyui-model-downloader — provides three nodes:
+    #   * `HF Download`        — paste a HuggingFace URL, pick folder, queue.
+    #   * `CivitAI Download`   — same for Civitai (uses Manager's API key).
+    #   * `Auto Model Finder`  — experimental, source-agnostic.
+    # Surfaces in ComfyUI's node menu under "loaders" — no separate Manager
+    # tab needed; drop a node, paste a URL, hit Queue Prompt, file lands in
+    # `models/<folder>/`.
+    "comfyui-model-downloader" = pkgs.fetchFromGitHub {
+      owner = "ciri";
+      repo = "comfyui-model-downloader";
+      rev = "0e12a95b68f6079af6d294eb12f2d58739bac672";
+      hash = "sha256-dfJB7Jg7b5ml2N3L9FS0h3Vd/C41OD5cWGqirKP3mU4=";
+    };
+
     # ClownsharkBatwing/RES4LYF — ~115 sampler types, noise inversion,
     # advanced img2img toolkit. Provides ReAuraPatcher,
     # ConditioningDownsample (T5), ModelSamplingAdvancedResolution,
