@@ -85,11 +85,28 @@ if cpu_state == CPUState.GPU:
     # advanced img2img toolkit. Provides ReAuraPatcher,
     # ConditioningDownsample (T5), ModelSamplingAdvancedResolution,
     # ClownsharKSampler, SharkSampler, …
-    RES4LYF = pkgs.fetchFromGitHub {
-      owner = "ClownsharkBatwing";
-      repo = "RES4LYF";
-      rev = "1c9bf61792ba585ad2460c998f62ae75f7ca982b";
-      hash = "sha256-61cgXEDWpHdmDvTXXpYpfocpKLD5uB7enIAVWA4+YGo=";
+    #
+    # Patched here because the upstream code calls
+    # `get_ext_dir(CONFIG_FILE_NAME)` which resolves to a path inside
+    # its own source directory — and comfyui-nix `customNodes`
+    # symlinks the source from the read-only nix store, so the first
+    # `open(..., "w")` fails with EROFS at module init. We redirect
+    # `config_path` to `$HOME/.config/RES4LYF/` (which is writable —
+    # `/var/lib/comfyui/.config/RES4LYF/` for the service user).
+    RES4LYF = pkgs.applyPatches {
+      name = "RES4LYF-writable-config";
+      src = pkgs.fetchFromGitHub {
+        owner = "ClownsharkBatwing";
+        repo = "RES4LYF";
+        rev = "1c9bf61792ba585ad2460c998f62ae75f7ca982b";
+        hash = "sha256-61cgXEDWpHdmDvTXXpYpfocpKLD5uB7enIAVWA4+YGo=";
+      };
+      postPatch = ''
+        substituteInPlace res4lyf.py \
+          --replace-fail \
+            'get_ext_dir(CONFIG_FILE_NAME)' \
+            '(os.makedirs(os.path.expanduser("~/.config/RES4LYF"), exist_ok=True) or os.path.expanduser("~/.config/RES4LYF/" + CONFIG_FILE_NAME))'
+      '';
     };
 
     # calcuis/gguf — provides the plain-named `LoaderGGUF`,
@@ -130,6 +147,18 @@ in
         attrset or by extending with `//`.
       '';
     };
+
+    xpuShim = lib.mkOption {
+      type = lib.types.nullOr lib.types.package;
+      default = pkgs.sycl-force-platform-l0 or null;
+      defaultText = lib.literalExpression "pkgs.sycl-force-platform-l0 (when the project overlay is in scope)";
+      description = ''
+        The `sycl-force-platform-l0` LD_PRELOAD shim used when
+        `gpuSupport = "xpu"`. The default resolves it from the host's
+        project overlay; nspawn-isolated containers (which don't apply
+        the overlay) must set this explicitly via specialArgs.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
@@ -154,12 +183,37 @@ in
     # XPU-specific extras: the L0 → OpenCL bypass + the source-patch
     # variant of comfy-ui that handles XPU in cpu_state initialisation.
     (lib.mkIf (cfg.gpuSupport == "xpu") {
+      assertions = [
+        {
+          assertion = cfg.xpuShim != null;
+          message = ''
+            smind.services.comfyui.gpuSupport = "xpu" requires
+            `xpuShim` — either ensure the project overlay providing
+            `pkgs.sycl-force-platform-l0` is in scope, or set
+            `smind.services.comfyui.xpuShim` explicitly.
+          '';
+        }
+      ];
       services.comfyui = {
         package = lib.mkDefault xpuFixedPackage;
         environment = lib.mkDefault (mkIntelXpuOpenclBypassEnv {
-          shim = pkgs.sycl-force-platform-l0;
+          shim = cfg.xpuShim;
         });
       };
     })
+
+    # One-shot cleanup of an obsolete `.pth` shim from an earlier
+    # workaround attempt (we briefly tried injecting a Python startup
+    # hook via `comfyui_xpu_fix.pth` before we settled on the
+    # source-patch approach). The file lives in the persisted venv at
+    # `<dataDir>/.venv/lib/.../site-packages/aaa-xpu-fix.pth`; Python
+    # logs an ImportError for it on every startup until removed.
+    # Safe to drop this block once every comfyui-enabled host has
+    # started at least once with this code.
+    {
+      systemd.services.comfyui.serviceConfig.ExecStartPre = [
+        "${pkgs.coreutils}/bin/rm -f ${config.services.comfyui.dataDir}/.venv/lib/python3.12/site-packages/aaa-xpu-fix.pth"
+      ];
+    }
   ]);
 }

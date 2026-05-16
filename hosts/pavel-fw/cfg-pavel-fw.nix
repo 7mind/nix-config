@@ -198,6 +198,14 @@ in
     ];
     llm.ollama.customContextLength = 131072;
 
+    # ComfyUI on the 5070 (Blackwell) via CUDA. comfyui-nix's prebuilt
+    # wheel supports Pascal→Blackwell in a single closure, so no
+    # `cudaCapabilities` tuning needed. Listens on 0.0.0.0:8188 — for a
+    # laptop you may want to override `services.comfyui.listenAddress`
+    # to "127.0.0.1" and `openFirewall = false`.
+    services.comfyui.enable = true;
+    services.comfyui.gpuSupport = "cuda";
+
     gaming.steam.enable = true;
 
     # Virtualization

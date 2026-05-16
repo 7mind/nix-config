@@ -186,6 +186,11 @@
     llm.enable = true;
     llm.ollama.package = pkgs.ollama-vulkan;
 
+    # ComfyUI on the W7900 via ROCm. Listens on 0.0.0.0:8188, manager
+    # UI enabled, curated custom-node set from `modules/nixos/comfyui.nix`.
+    services.comfyui.enable = true;
+    services.comfyui.gpuSupport = "rocm";
+
     llm.ollama.customModels = [
       { baseName = "huihui_ai/qwen3.5-abliterated:35b"; }
       { baseName = "glm-4.7-flash:q8_0"; }
