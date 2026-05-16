@@ -109,6 +109,17 @@ if cpu_state == CPUState.GPU:
       '';
     };
 
+    # BAIKEMARK/ComfyUI-Civitai-Toolkit — in-UI Civitai browser,
+    # model downloader (LoRA, checkpoint, embedding), and metadata
+    # parser. Talks to the Civitai HTTP API directly from the
+    # ComfyUI process.
+    "ComfyUI-Civitai-Toolkit" = pkgs.fetchFromGitHub {
+      owner = "BAIKEMARK";
+      repo = "ComfyUI-Civitai-Toolkit";
+      rev = "c1589348ff3ecbb07f326a833936e692fec4fa2d";
+      hash = "sha256-cIyKst4le8t8RuvBLXaTA0eKD6bTr1/T0f3utRuy3d0=";
+    };
+
     # calcuis/gguf — provides the plain-named `LoaderGGUF`,
     # `{Clip,DualClip,TripleClip,QuadrupleClip,AudioEncoder}LoaderGGUF`,
     # `VaeGGUF`, plus GGUF conversion utilities. Distinct from
