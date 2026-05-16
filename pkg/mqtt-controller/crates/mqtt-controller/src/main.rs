@@ -85,11 +85,6 @@ struct ProvisionArgs {
     #[arg(long)]
     dry_run: bool,
 
-    /// Re-issue scene_add for every configured scene even if a scene with
-    /// the same id and name already exists.
-    #[arg(long)]
-    force_update: bool,
-
     /// Rewrite every per-device option unconditionally, bypassing the
     /// dedup check against z2m's state cache. Use when a device is
     /// known to report a stale value (e.g. Sonoff inching/overload
@@ -236,7 +231,6 @@ async fn run_provision(args: ProvisionArgs) -> Result<()> {
         rooms = config.rooms.len(),
         devices = config.devices.len(),
         dry_run = args.dry_run,
-        force_update = args.force_update,
         force_options = args.force_options,
         prune = args.prune,
         "loaded config (provision)"
@@ -245,7 +239,6 @@ async fn run_provision(args: ProvisionArgs) -> Result<()> {
     let mqtt = build_mqtt_config(&args.mqtt, "provision")?;
     let options = ProvisionOptions {
         dry_run: args.dry_run,
-        force_update: args.force_update,
         force_options: args.force_options,
         prune: args.prune,
         timeout: Duration::from_secs_f64(args.timeout),

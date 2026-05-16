@@ -19,8 +19,11 @@
 //!      the config. Then create missing groups. Then reconcile member
 //!      sets (additive by default; --prune removes extras).
 //!
-//!   3. **Scenes.** For each room, ensure every declared scene exists in
-//!      z2m. Dedup by id+name; --force-update re-issues every scene.
+//!   3. **Scenes.** For each room, re-issue `scene_add` for every declared
+//!      scene on every run. z2m's `bridge/groups` only reports a scene's
+//!      `id` + `name`, not its brightness/color_temp/state/transition —
+//!      drift in those fields would be invisible to a dedup check, so we
+//!      just republish them all.
 //!
 //!   4. **Devices.** Per-device options writes (motion sensor sensitivity,
 //!      led indication, occupancy timeout). Each option is dedup-checked
@@ -62,10 +65,6 @@ pub struct ProvisionOptions {
     /// Don't actually publish anything; just log what *would* happen.
     pub dry_run: bool,
 
-    /// Re-issue `scene_add` for every configured scene even if a scene
-    /// with the same id and name already exists.
-    pub force_update: bool,
-
     /// Rewrite every per-device option even when z2m's state cache
     /// reports a matching value. Escape hatch for devices that report
     /// a setting as applied while the hardware actually hasn't synced
@@ -97,7 +96,6 @@ impl Default for ProvisionOptions {
     fn default() -> Self {
         Self {
             dry_run: false,
-            force_update: false,
             force_options: false,
             prune: false,
             timeout: Duration::from_secs(5),

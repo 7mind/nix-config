@@ -1,16 +1,20 @@
-//! Phase 3: scene reconciliation. For each room, walk every declared
-//! scene; if z2m doesn't already have one with that id+name, issue a
-//! `scene_add`. With `--force-update`, re-issue every declared scene
-//! regardless of whether it already exists.
+//! Phase 3: scene reconciliation. For each room, re-issue `scene_add`
+//! for every declared scene on every run.
 //!
-//! No "delete extra scenes" path — z2m has no clean API for that and
-//! the python version doesn't do it either.
+//! We cannot dedup safely: z2m's `bridge/groups` only reports each scene's
+//! `id` and `name`, not its brightness/color_temp/state/transition. Any
+//! drift in those fields would be invisible, so a stored scene with the
+//! same (id, name) but different values would keep playing back the old
+//! brightness forever. Reissuing every scene is cheap (a handful per
+//! group) and runs once per provision pass, so we just publish them all.
+//!
+//! No "delete extra scenes" path — z2m has no clean API for that.
 
 use std::collections::HashMap;
 
 use crate::config::Config;
 
-use super::client::{ExistingGroup, ExistingScene, Z2mClient};
+use super::client::{ExistingGroup, Z2mClient};
 use super::{ProvisionError, ProvisionOptions, ReconcileSummary};
 
 pub async fn reconcile_scenes(
@@ -35,29 +39,19 @@ pub async fn reconcile_scenes(
             continue;
         };
 
-        let existing_by_id: HashMap<u8, &ExistingScene> = existing_group
-            .scenes
-            .iter()
-            .map(|s| (s.id, s))
-            .collect();
+        let existing_ids: std::collections::HashSet<u8> =
+            existing_group.scenes.iter().map(|s| s.id).collect();
 
         for scene in &room.scenes.scenes {
-            let current = existing_by_id.get(&scene.id).copied();
-            let (needs, reason) = scene_status(scene, current, options.force_update);
-            if !needs {
-                tracing::info!(
-                    group = %room.group_name,
-                    id = scene.id,
-                    name = %scene.name,
-                    "[skip] scene: {reason}"
-                );
-                summary.skipped += 1;
-                continue;
-            }
-            let verb = if options.dry_run {
-                "[dry-run] would create"
+            let reason = if existing_ids.contains(&scene.id) {
+                "rewrite (existing id)"
             } else {
-                "create"
+                "create (missing)"
+            };
+            let verb = if options.dry_run {
+                "[dry-run] would publish"
+            } else {
+                "publish"
             };
             tracing::info!(
                 group = %room.group_name,
@@ -83,17 +77,4 @@ pub async fn reconcile_scenes(
     }
 
     Ok(summary)
-}
-
-fn scene_status(
-    desired: &crate::config::Scene,
-    existing: Option<&ExistingScene>,
-    force_update: bool,
-) -> (bool, &'static str) {
-    match existing {
-        None => (true, "missing"),
-        Some(e) if e.name != desired.name => (true, "name differs"),
-        Some(_) if force_update => (true, "force-update"),
-        Some(_) => (false, "already exists with matching id+name"),
-    }
 }

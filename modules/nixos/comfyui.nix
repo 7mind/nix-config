@@ -81,6 +81,19 @@ if cpu_state == CPUState.GPU:
   # Curated custom-node set, shared across all hosts. Add new entries
   # here once and they land on every comfyui-enabled host.
   curatedCustomNodes = {
+    # ltdrdata/ComfyUI-Manager — the canonical Manager that users
+    # know (toolbar button, Install Custom Nodes / Install Models /
+    # snapshot tabs). NOT the same as Comfy-Org's pip-installed
+    # `comfyui_manager` 4.x which is wired up via the
+    # `--enable-manager` flag and integrates with Comfy Cloud; that
+    # one doesn't expose the in-UI install flows users expect.
+    "ComfyUI-Manager" = pkgs.fetchFromGitHub {
+      owner = "ltdrdata";
+      repo = "ComfyUI-Manager";
+      rev = "871a646fd723e48ac8588052a131faf106dbbfd2";
+      hash = "sha256-aYY8U1KzVeIzzkJih6F/0yPJt0qei/nPsBAJlSBUpps=";
+    };
+
     # ClownsharkBatwing/RES4LYF — ~115 sampler types, noise inversion,
     # advanced img2img toolkit. Provides ReAuraPatcher,
     # ConditioningDownsample (T5), ModelSamplingAdvancedResolution,
@@ -106,32 +119,6 @@ if cpu_state == CPUState.GPU:
           --replace-fail \
             'get_ext_dir(CONFIG_FILE_NAME)' \
             '(os.makedirs(os.path.expanduser("~/.config/RES4LYF"), exist_ok=True) or os.path.expanduser("~/.config/RES4LYF/" + CONFIG_FILE_NAME))'
-      '';
-    };
-
-    # BAIKEMARK/ComfyUI-Civitai-Toolkit — in-UI Civitai browser,
-    # model downloader (LoRA, checkpoint, embedding), and metadata
-    # parser. Talks to the Civitai HTTP API directly from the
-    # ComfyUI process.
-    #
-    # Patched here for the same reason as RES4LYF: upstream stores its
-    # SQLite DB at `<source_dir>/data/civitai_helper.db`, which fails
-    # with EROFS when the source is symlinked from the nix store.
-    # Redirect to `$HOME/.local/share/ComfyUI-Civitai-Toolkit/data/`
-    # (writable; persists in the bind-mounted /var/lib/comfyui).
-    "ComfyUI-Civitai-Toolkit" = pkgs.applyPatches {
-      name = "ComfyUI-Civitai-Toolkit-writable-db";
-      src = pkgs.fetchFromGitHub {
-        owner = "BAIKEMARK";
-        repo = "ComfyUI-Civitai-Toolkit";
-        rev = "c1589348ff3ecbb07f326a833936e692fec4fa2d";
-        hash = "sha256-cIyKst4le8t8RuvBLXaTA0eKD6bTr1/T0f3utRuy3d0=";
-      };
-      postPatch = ''
-        substituteInPlace utils.py \
-          --replace-fail \
-            'self.db_path = os.path.join(project_root, "data", "civitai_helper.db")' \
-            'self.db_path = os.path.join(os.path.expanduser("~/.local/share/ComfyUI-Civitai-Toolkit"), "data", "civitai_helper.db")'
       '';
     };
 
@@ -200,9 +187,14 @@ in
         port = lib.mkDefault 8188;
         openFirewall = lib.mkDefault true;
 
-        # Manager works against comfyui-nix's pinned nixpkgs (where the
-        # comfyui-manager 4.1 wheel's deps are satisfied).
-        enableManager = lib.mkDefault true;
+        # `enableManager` here drives Comfy-Org's pip-installed
+        # `comfyui_manager` 4.x — a different package than what users
+        # think of when they say "ComfyUI Manager". Its UI doesn't
+        # expose the Install Custom Nodes / Install Models flows;
+        # those live in the classic `ltdrdata/ComfyUI-Manager` which
+        # we bundle as a regular custom node above. Leaving this off
+        # avoids two Managers fighting over the same routes.
+        enableManager = lib.mkDefault false;
       };
     }
 
