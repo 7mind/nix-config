@@ -30,6 +30,7 @@
   ./gnome-extensions.nix
   ./hyprland.nix
   ./image-gen.nix
+  ./comfyui.nix
   ./kanata-super-remap.nix
   ./kde.nix
   ./niri.nix
