@@ -191,16 +191,30 @@ if cpu_state == CPUState.GPU:
     # `CR Multi Upscale Stack`, `CR Latent Input Switch`,
     # `CR Apply Multi Upscale`, plus ~150 more (XY plot, prompt builder,
     # conditioning mixers, graphics/text/border, latent switches, …).
-    # Pure-Python, no extra wheels. comfyui-nix's launcher already
-    # rewrites the hardcoded `/usr/share/fonts/truetype` path in
-    # `nodes/nodes_graphics_text.py` to the bundled-fonts dir on NixOS
-    # (see comfyui-nix packages.nix postBuild patch logic), so no further
-    # patching is needed here.
-    ComfyUI_Comfyroll_CustomNodes = pkgs.fetchFromGitHub {
-      owner = "Suzie1";
-      repo = "ComfyUI_Comfyroll_CustomNodes";
-      rev = "d78b780ae43fcf8c6b7c6505e6ffb4584281ceca";
-      hash = "sha256-+qhDJ9hawSEg9AGBz8w+UzohMFhgZDOzvenw8xVVyPc=";
+    # Pure-Python, no extra wheels.
+    #
+    # comfyui-nix's launcher (packages.nix L405-413) tries to `sed -i`
+    # `nodes/nodes_graphics_text.py` at runtime to swap the hardcoded
+    # `/usr/share/fonts/truetype` for the bundled-fonts dir — but
+    # comfyui-nix's NixOS module wires `customNodes` via direct symlinks
+    # into the read-only Nix store, so the in-place sed fails with
+    # EROFS and crashes the service. We pre-apply the substitution here
+    # (driven by `$COMFYUI_BASE_DIR`, which the launcher exports) so the
+    # launcher's `grep -q` no longer matches and its sed is skipped.
+    ComfyUI_Comfyroll_CustomNodes = pkgs.applyPatches {
+      name = "ComfyUI_Comfyroll_CustomNodes-nixos-fonts";
+      src = pkgs.fetchFromGitHub {
+        owner = "Suzie1";
+        repo = "ComfyUI_Comfyroll_CustomNodes";
+        rev = "d78b780ae43fcf8c6b7c6505e6ffb4584281ceca";
+        hash = "sha256-+qhDJ9hawSEg9AGBz8w+UzohMFhgZDOzvenw8xVVyPc=";
+      };
+      postPatch = ''
+        substituteInPlace nodes/nodes_graphics_text.py \
+          --replace-fail \
+            'font_dir = "/usr/share/fonts/truetype"' \
+            'font_dir = os.path.join(os.environ.get("COMFYUI_BASE_DIR", os.path.expanduser("~/.config/comfy-ui")), "fonts")'
+      '';
     };
 
     # Fannovel16/comfyui_controlnet_aux — ControlNet aux preprocessors

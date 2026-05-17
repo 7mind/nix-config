@@ -18,7 +18,7 @@ in
     };
     smind.nix.nix-impl = lib.mkOption {
       type = lib.types.enum [ "nix" "lix" "determinate" ];
-      default = "determinate";
+      default = "nix";
       description = "Use a replacement implementation of Nix";
     };
   };
