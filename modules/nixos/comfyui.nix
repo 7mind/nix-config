@@ -55,10 +55,35 @@ if cpu_state == CPUState.GPU:
         cpu_state = CPUState.CPU"
         '';
       };
+
+      # Extra Python wheels needed by `comfyui_controlnet_aux` preprocessors
+      # that aren't already in comfyui-nix's bundled `pythonRuntime`. Built
+      # against the *same* python instance (origXpu.pythonRuntime.python) so
+      # torch/numpy/etc. are shared without ABI drift across two envs.
+      #
+      # `mediapipe` is deliberately absent — not packaged in nixpkgs
+      # (TF/Bazel build dance). The affected preprocessors
+      # (mesh_graphormer, mediapipe_face) raise ImportError at load time;
+      # controlnet_aux's `__init__.py` catches that per-wrapper and just
+      # omits them from the AIO_Preprocessor dropdown.
+      controlnetAuxPyRuntime = origXpu.passthru.pythonRuntime;
+      controlnetAuxExtraDeps = controlnetAuxPyRuntime.python.withPackages (
+        ps: with ps; [
+          fvcore
+          yapf
+          addict
+          yacs
+          trimesh
+          albumentations
+          scikit-learn
+          python-dateutil
+        ]
+      );
     in
     pkgs.runCommand "comfy-ui-xpu-mm-fixed"
       {
         inherit (origXpu) meta;
+        nativeBuildInputs = [ pkgs.makeWrapper ];
       }
       ''
         orig_src=$(${pkgs.gnugrep}/bin/grep -hoE \
@@ -75,6 +100,19 @@ if cpu_state == CPUState.GPU:
         for f in $out/bin/*; do
           [ -f "$f" ] || continue
           ${pkgs.gnused}/bin/sed -i "s|$orig_src|${comfyuiSrcFixed}|g" "$f"
+        done
+
+        # Layer controlnet_aux's extra Python deps onto the launcher via
+        # PYTHONPATH suffix. Order doesn't matter for correctness because
+        # `controlnetAuxExtraDeps` is built against `pythonRuntime.python`
+        # (same overridden package set as comfyui-nix's bundled env), so
+        # overlapping transitive deps point at identical store paths.
+        # Suffix is just so any debug `python -c 'import sys; print(sys.path)'`
+        # still shows the base pythonRuntime first.
+        for f in $out/bin/*; do
+          [ -f "$f" ] || continue
+          wrapProgram "$f" \
+            --suffix PYTHONPATH : "${controlnetAuxExtraDeps}/${controlnetAuxPyRuntime.python.sitePackages}"
         done
       '';
 
@@ -147,6 +185,49 @@ if cpu_state == CPUState.GPU:
       repo = "gguf";
       rev = "4ef6a641b825a7b10336d101da6b5a6150f88a43";
       hash = "sha256-vUm71zCVZ29Ly5nMEMhEfmeU81jS2SWGFSR0GR6BEQk=";
+    };
+
+    # Suzie1/ComfyUI_Comfyroll_CustomNodes — the canonical "CR …" suite:
+    # `CR Multi Upscale Stack`, `CR Latent Input Switch`,
+    # `CR Apply Multi Upscale`, plus ~150 more (XY plot, prompt builder,
+    # conditioning mixers, graphics/text/border, latent switches, …).
+    # Pure-Python, no extra wheels. comfyui-nix's launcher already
+    # rewrites the hardcoded `/usr/share/fonts/truetype` path in
+    # `nodes/nodes_graphics_text.py` to the bundled-fonts dir on NixOS
+    # (see comfyui-nix packages.nix postBuild patch logic), so no further
+    # patching is needed here.
+    ComfyUI_Comfyroll_CustomNodes = pkgs.fetchFromGitHub {
+      owner = "Suzie1";
+      repo = "ComfyUI_Comfyroll_CustomNodes";
+      rev = "d78b780ae43fcf8c6b7c6505e6ffb4584281ceca";
+      hash = "sha256-+qhDJ9hawSEg9AGBz8w+UzohMFhgZDOzvenw8xVVyPc=";
+    };
+
+    # Fannovel16/comfyui_controlnet_aux — ControlNet aux preprocessors
+    # (canny, depth_anything[/v2], dwpose, openpose, hed, lineart[/anime],
+    # scribble, tile, normalbae, mlsd, midas, leres, zoe, segment_anything,
+    # teed, pidinet, anyline, metric3d, dsine, densepose, oneformer, …)
+    # and the catch-all `AIO_Preprocessor` dispatcher node.
+    #
+    # Dep coverage: `__init__.py` loads each preprocessor wrapper inside a
+    # try/except, so missing deps degrade gracefully — only the affected
+    # wrappers fail to register and are hidden from the dropdown. The
+    # base comfyui-nix `pythonRuntime` already covers most needs
+    # (opencv, scikit-image, matplotlib, omegaconf, ftfy, transformers,
+    # huggingface-hub, onnxruntime, timm, einops, scipy, ...); the
+    # remaining ones (fvcore, yacs, addict, yapf, trimesh, albumentations,
+    # scikit-learn, python-dateutil) are layered onto the XPU launcher
+    # via PYTHONPATH — see `controlnetAuxExtraDeps` above.
+    #
+    # Known gap: `mediapipe` is not in nixpkgs, so `mesh_graphormer` and
+    # `mediapipe_face` won't register. Non-xpu backends would also miss
+    # the python-deps layering above; we don't run any non-xpu comfyui
+    # hosts today.
+    comfyui_controlnet_aux = pkgs.fetchFromGitHub {
+      owner = "Fannovel16";
+      repo = "comfyui_controlnet_aux";
+      rev = "e8b689a513c3e6b63edc44066560ca5919c0576e";
+      hash = "sha256-tMmERf4y7sfuEGao7JHC7FLjBgPuViCtHxr8f9NnHzo=";
     };
   };
 in

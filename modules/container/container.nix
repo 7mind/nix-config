@@ -19,6 +19,13 @@
 
   system.stateVersion = cfg-meta.state-version-system;
 
+  # Containers have no use for the NixOS options manual / manpages.
+  # Skips rendering work at build time and shaves a few MB per container.
+  # (Doesn't measurably affect eval time — option-doc generation is lazy
+  # and toplevel doesn't force it — but it's free hygiene.)
+  documentation.enable = lib.mkDefault false;
+  documentation.nixos.enable = lib.mkDefault false;
+
   environment.systemPackages = [
     pkgs.ghostty.terminfo
   ];
