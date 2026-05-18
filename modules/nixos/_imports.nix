@@ -29,6 +29,7 @@
   ./gnome-minimal-hotkeys.nix
   ./gnome-extensions.nix
   ./hyprland.nix
+  ./i2c.nix
   ./image-gen.nix
   ./comfyui.nix
   ./kanata-super-remap.nix

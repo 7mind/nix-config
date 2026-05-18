@@ -139,6 +139,56 @@ rec {
                   };
                 in {
                   claude-code = final.callPackage ./pkg/claude-code/package.nix { };
+                  # Two overrides on intel-compute-runtime:
+                  #
+                  # (1) Bump 26.14.37833.4 → 26.18.38308.1 (published
+                  #     2026-05-12). gmmlib in nixpkgs is already 22.10.0
+                  #     (the pairing 26.18 ships with), so no companion
+                  #     bump is needed. Drop this once nixpkgs bumps past
+                  #     26.18.
+                  #
+                  # (2) Patch intel-graphics-compiler into the RPATH of the
+                  #     Level Zero driver `libze_intel_gpu.so.1` (the
+                  #     `drivers` split output). Upstream nixpkgs'
+                  #     `postFixup` only fixes RPATH on the OpenCL ICD
+                  #     (`libigdrcl.so`); the L0 driver is left without
+                  #     IGC on any search path, so NEO's runtime dlopen of
+                  #     `libigdfcl.so.2` / `libigc.so.2` during eager
+                  #     device init fails, and NEO's `abortUnrecoverable`
+                  #     routes that through `gmm_helper/resource_info.cpp:15`.
+                  #     This is the abort that has been mis-attributed to
+                  #     `intel/compute-runtime#922` on this host since at
+                  #     least 2026-02 — verified by checking that the same
+                  #     `libze_intel_gpu.so.1` (both 26.14 and 26.18)
+                  #     yields a clean `zeInit = 0x0`, device enumeration,
+                  #     and 1 MiB device+host USM allocations the moment
+                  #     `${intel-graphics-compiler}/lib` is on
+                  #     `LD_LIBRARY_PATH`. Closing the packaging gap here
+                  #     unbricks Level Zero on Battlemage without any of
+                  #     the OpenCL-UR-bypass shimming this repo grew.
+                  intel-compute-runtime = (prev.intel-compute-runtime.overrideAttrs (oldAttrs: rec {
+                    version = "26.18.38308.1";
+                    src = prev.fetchFromGitHub {
+                      owner = "intel";
+                      repo = "compute-runtime";
+                      tag = version;
+                      hash = "sha256-539TqwzPhclEpyxrwRB0DBLCAgM8JojdshvhNp0jeKU=";
+                    };
+                    postFixup = (oldAttrs.postFixup or "") + ''
+                      for lib in "$drivers"/lib/libze_intel*.so* ; do
+                        # symlinks have no headers — skip cleanly
+                        [ -L "$lib" ] && continue
+                        patchelf --set-rpath ${
+                          prev.lib.makeLibraryPath [
+                            prev.intel-gmmlib
+                            prev.intel-graphics-compiler
+                            prev.libva
+                            prev.stdenv.cc.cc
+                          ]
+                        } "$lib"
+                      done
+                    '';
+                  }));
                   # The upstream nixpkgs `intel-llvm` (PR #470035, merged
                   # April 2026) has a packaging bug: its top-level merged
                   # output is built via symlinkJoin + __structuredAttrs = true,

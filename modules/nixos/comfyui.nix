@@ -1,11 +1,9 @@
-{ config, lib, pkgs, inputs, mkIntelXpuOpenclBypassEnv, ... }:
+{ config, lib, pkgs, inputs, ... }:
 
 # Opinionated wrapper around utensils/comfyui-nix's `services.comfyui`:
 #   * picks the right GPU backend per host (cuda / rocm / xpu)
 #   * applies the same curated set of custom nodes across all hosts
-#   * for `xpu`: stacks the Battlemage-only fixes we need on top —
-#       the L0 → OpenCL UR adapter bypass (`sycl-force-platform-l0`
-#       + env triple) and a rebuilt ComfyUI source that drops
+#   * for `xpu`: stacks a rebuilt ComfyUI source that drops
 #       comfyui-nix's CUDA-only cpu-fallback patch in favour of an
 #       XPU-aware variant.
 #
@@ -253,9 +251,6 @@ in
       type = lib.types.enum [ "cuda" "rocm" "xpu" "none" ];
       description = ''
         Which GPU backend ComfyUI's torch wheel should target.
-        `xpu` on Battlemage (Arc Pro B70) automatically pulls in the
-        OpenCL UR adapter bypass — see
-        `smind.hw.intel.gpu.xpu.openclBackend` for the rationale.
       '';
     };
 
@@ -270,17 +265,6 @@ in
       '';
     };
 
-    xpuShim = lib.mkOption {
-      type = lib.types.nullOr lib.types.package;
-      default = pkgs.sycl-force-platform-l0 or null;
-      defaultText = lib.literalExpression "pkgs.sycl-force-platform-l0 (when the project overlay is in scope)";
-      description = ''
-        The `sycl-force-platform-l0` LD_PRELOAD shim used when
-        `gpuSupport = "xpu"`. The default resolves it from the host's
-        project overlay; nspawn-isolated containers (which don't apply
-        the overlay) must set this explicitly via specialArgs.
-      '';
-    };
   };
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
@@ -307,25 +291,11 @@ in
       };
     }
 
-    # XPU-specific extras: the L0 → OpenCL bypass + the source-patch
-    # variant of comfy-ui that handles XPU in cpu_state initialisation.
+    # XPU-specific extras: the source-patch variant of comfy-ui that
+    # handles XPU in cpu_state initialisation.
     (lib.mkIf (cfg.gpuSupport == "xpu") {
-      assertions = [
-        {
-          assertion = cfg.xpuShim != null;
-          message = ''
-            smind.services.comfyui.gpuSupport = "xpu" requires
-            `xpuShim` — either ensure the project overlay providing
-            `pkgs.sycl-force-platform-l0` is in scope, or set
-            `smind.services.comfyui.xpuShim` explicitly.
-          '';
-        }
-      ];
       services.comfyui = {
         package = lib.mkDefault xpuFixedPackage;
-        environment = lib.mkDefault (mkIntelXpuOpenclBypassEnv {
-          shim = cfg.xpuShim;
-        });
       };
     })
 

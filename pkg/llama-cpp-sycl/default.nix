@@ -20,15 +20,13 @@
 #     systemd service via `modules/nixos/llama-server.nix`
 #
 # Build: nix build .?submodules=1#nixosConfigurations.vm.pkgs.llama-cpp-sycl
-# Run  : OCL_ICD_VENDORS=/run/opengl-driver/etc/OpenCL/vendors \
-#        result/bin/llama-cli --list-devices
+# Run  : result/bin/llama-cli --list-devices
 {
   lib,
   stdenv,
   fetchFromGitHub,
   cmake,
   pkg-config,
-  makeWrapper,
   intel-llvm,
   intel-compute-runtime,
   level-zero,
@@ -95,7 +93,7 @@ stdenv.mkDerivation (finalAttrs: {
 
   # intel-llvm in nativeBuildInputs so its bin/clang(++) is on $PATH and
   # the (now-fixed) merged output is in the build closure.
-  nativeBuildInputs = [ cmake pkg-config makeWrapper intel-llvm perl ];
+  nativeBuildInputs = [ cmake pkg-config intel-llvm perl ];
 
   # Override CC/CXX explicitly. Two layers here:
   # 1. nixpkgs cmake setup-hook reads $CC/$CXX and passes them as
@@ -249,34 +247,11 @@ stdenv.mkDerivation (finalAttrs: {
   # side too because IGC inherits NIX_CFLAGS_COMPILE for the kernels.
   hardeningDisable = [ "fortify" "fortify3" ];
 
-  # Wrap binaries so users don't have to discover the right env vars.
-  #
-  # ONEAPI_DEVICE_SELECTOR=opencl:gpu — explicit reasoning: we'd prefer
-  # `level_zero:gpu` (~5-10% faster + lower dispatch overhead), but the
-  # nixpkgs Level Zero stack on Battlemage has two stacked bugs as of
-  # 2026-05: (1) `intel-compute-runtime`'s `drivers` output had to be
-  # added to hardware.graphics.extraPackages just to get
-  # libze_intel_gpu.so on the loader's path (fix shipped in our
-  # modules/nixos/intel-gpu.nix), and (2) even with the driver present,
-  # intel-compute-runtime 26.09.37435.1 aborts in its GMM helper
-  # during L0 init on the B70 (UNRECOVERABLE_IF in
-  # gmm_helper/resource_info.cpp:15). OpenCL avoids the GMM init path
-  # entirely and works flawlessly. Override at runtime via the env var
-  # if you want to test L0 once those upstream bugs are fixed.
-  #
-  # OCL_ICD_VENDORS=/run/opengl-driver/etc/OpenCL/vendors — points the
-  # bundled ocl-icd loader at NixOS's OpenGL/OpenCL driver farm, which
-  # is where intel-compute-runtime's intel-neo.icd lands via
-  # hardware.graphics.extraPackages.
-  postFixup = ''
-    for prog in llama-cli llama-server llama-bench; do
-      if [ -e $out/bin/$prog ]; then
-        wrapProgram $out/bin/$prog \
-          --set-default ONEAPI_DEVICE_SELECTOR opencl:gpu \
-          --set-default OCL_ICD_VENDORS /run/opengl-driver/etc/OpenCL/vendors
-      fi
-    done
-  '';
+  # No wrapper env vars needed: SYCL picks Level Zero by default and
+  # `intel-compute-runtime`'s `drivers` split is on
+  # /run/opengl-driver/lib via hardware.graphics.extraPackages
+  # (modules/nixos/intel-gpu.nix), with IGC patched into
+  # libze_intel_gpu.so.1's RPATH (overlay in globals.nix).
 
   # llama.cpp's CMake install puts binaries in $out/bin/ already; nothing to do.
   meta = with lib; {

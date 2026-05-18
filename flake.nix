@@ -140,6 +140,17 @@
     comfyui-nix = {
       url = "github:utensils/comfyui-nix";
     };
+
+    # zimt — multi-model image-generation REPL + web UI, pre-built per
+    # backend (xpu / cuda / rocm / cpu). Used on vm (Arc Pro B70 via the
+    # XPU backend). Like comfyui-nix, we deliberately do NOT make zimt
+    # follow our nixpkgs: the flake vendors a large stack of pip wheels
+    # (torch+IPEX, diffusers, transformers, fastapi …) whose
+    # compatibility window tracks zimt's own pinned nixpkgs commit.
+    # Letting it drift onto our nixpkgs would break the wheel build.
+    zimt = {
+      url = "github:pshirshov/zimt";
+    };
   };
 
   outputs = inputs@{ self, ... }:

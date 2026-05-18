@@ -82,10 +82,7 @@ in
       default = { };
       example = { ZES_ENABLE_SYSMAN = "1"; };
       description = ''
-        Extra environment variables for the systemd unit. The package's
-        `wrapProgram` already injects `ONEAPI_DEVICE_SELECTOR=opencl:gpu`
-        and `OCL_ICD_VENDORS=…/opengl-driver/etc/OpenCL/vendors`; only
-        set entries here that you want to override or add.
+        Extra environment variables for the systemd unit.
       '';
     };
   };

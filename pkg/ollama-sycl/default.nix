@@ -230,14 +230,9 @@ ollama.overrideAttrs (oldAttrs: {
   # SIGSEGVs at first decode in the ollama runner. Setting
   # SYCL_CACHE_PERSISTENT=0 bypasses `getItemFromDisc` entirely.
   # ZES_ENABLE_SYSMAN — accurate VRAM free-memory queries on Battlemage.
-  # ONEAPI_DEVICE_SELECTOR=opencl:gpu — intel-compute-runtime 26.09 GMM
-  # helper aborts during Level Zero init on B70; OpenCL bypasses it
-  # (~5-10% slower, correct).
   postFixup = (oldAttrs.postFixup or "") + ''
     if [ -e $out/bin/ollama ]; then
       wrapProgram $out/bin/ollama \
-        --set-default ONEAPI_DEVICE_SELECTOR opencl:gpu \
-        --set-default OCL_ICD_VENDORS /run/opengl-driver/etc/OpenCL/vendors \
         --set-default SYCL_CACHE_PERSISTENT 0 \
         --set-default ZES_ENABLE_SYSMAN 1
     fi

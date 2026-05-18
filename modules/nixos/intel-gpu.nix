@@ -128,53 +128,7 @@ in
       '';
     };
 
-    xpu.openclBackend = {
-      enable = lib.mkEnableOption ''
-        Route PyTorch's XPU stack through SYCL's OpenCL UR adapter
-        instead of Level Zero. Workaround for Battlemage (Arc Pro B70
-        and family) on xe-kmd, where NEO's L0 driver init aborts in
-        `gmm_helper/resource_info.cpp:15` on the first
-        `GEM_USERPTR`-backed allocation (upstream
-        `intel/compute-runtime#922`). The OpenCL ICD path on the
-        same NEO + same gmmlib works correctly; ollama-sycl,
-        llama.cpp-SYCL, and OpenVINO already use it.
-
-        Effect: sets `ONEAPI_DEVICE_SELECTOR=opencl:gpu`,
-        `OCL_ICD_VENDORS=/run/opengl-driver/etc/OpenCL/vendors`,
-        and `LD_PRELOAD` of a 1-symbol shim
-        (`pkgs.sycl-force-platform-l0`) that flips PyTorch's
-        hardcoded L0-only filter
-        (`c10/xpu/XPUFunctions.cpp:113`) to admit OpenCL-backed
-        platforms. oneDNN's own per-backend switch in
-        `intel::sycl::device_id` handles the OpenCL path correctly
-        downstream — only the torch.xpu filter needed bypassing.
-
-        Disable on hosts with Alchemist (Arc A-series) or older Xe1
-        iGPUs; their L0 path is functional and bypassing it
-        forfeits oneDNN's specialised L0 kernels.
-
-        Validated end-to-end on B70 + xe-kmd 7.0.3 with PyTorch
-        2.10.0+xpu and 2.13.0.dev+xpu: fp32 matmul 2048² @
-        3.7 TFLOPS, fp16 1024² @ 3.2 TFLOPS (cooperative-matrix
-        path), conv2d, SDPA on SD-UNet shapes, transformer block
-        forward+backward + Adam step.
-      '';
-
-      serviceEnvironment = lib.mkOption {
-        type = lib.types.attrsOf lib.types.str;
-        readOnly = true;
-        description = ''
-          Env vars services running PyTorch's XPU stack need to set
-          to opt into the OpenCL backend. Computed when
-          `xpu.openclBackend.enable = true`. Spread into a service's
-          `environment = { … };` block — host-wide
-          `environment.sessionVariables` already gets these for
-          interactive shells.
-        '';
-      };
-    };
-
-    aspm.bmgL1ssQuirk = lib.mkOption {
+    aspm.bmgL1ssQuirk =lib.mkOption {
       type = lib.types.bool;
       default = false;
       description = ''
@@ -237,13 +191,17 @@ in
         extraPackages = lib.optionals cfg.compute.enable (with pkgs; [
           intel-compute-runtime
           # The `drivers` output is a separate split in nixpkgs
-          # (intel-compute-runtime/package.nix:47-60 moves
-          # libze_intel*.so out of $out/lib into $drivers/lib). Without
-          # adding it here, /run/opengl-driver/lib/ is missing the
-          # Level Zero driver and `zeInitDrivers` reports "0 Drivers
-          # Discovered" — SYCL's L0 v2 adapter then segvs trying to
-          # initialise an empty driver list (observed on B70 with
-          # intel-llvm@unstable-2025-11-14).
+          # (intel-compute-runtime/package.nix moves libze_intel*.so
+          # out of `$out/lib` into `$drivers/lib`). Without adding it
+          # here, `/run/opengl-driver/lib/` is missing the Level Zero
+          # driver and `zeInitDrivers` reports "0 Drivers Discovered".
+          # Our overlay (see globals.nix) also patches
+          # intel-graphics-compiler into the Level Zero driver's RPATH
+          # so NEO can dlopen libigdfcl.so.2 / libigc.so.2 during
+          # eager device init — without that fix, NEO's
+          # `abortUnrecoverable` routes through
+          # `gmm_helper/resource_info.cpp:15` on first allocation,
+          # which masquerades as upstream `intel/compute-runtime#922`.
           intel-compute-runtime.drivers
           level-zero
           ocl-icd
@@ -267,21 +225,6 @@ in
       # /run/opengl-driver/lib via NixOS' addOpenGLRunpath; no LD_LIBRARY_PATH
       # pollution needed here.
     }
-
-    (lib.mkIf cfg.xpu.openclBackend.enable {
-      smind.hw.intel.gpu.xpu.openclBackend.serviceEnvironment = {
-        ONEAPI_DEVICE_SELECTOR = "opencl:gpu";
-        OCL_ICD_VENDORS = "/run/opengl-driver/etc/OpenCL/vendors";
-        LD_PRELOAD = "${pkgs.sycl-force-platform-l0}/lib/libsycl_force_platform_l0.so";
-      };
-
-      # Host-wide opt-in: interactive shells (ssh, terminal) and any
-      # `nix shell python …` session pick up the bypass automatically.
-      # Systemd services still need to spread `serviceEnvironment`
-      # into their unit `environment = { … }` block — NixOS doesn't
-      # propagate `sessionVariables` into service units.
-      environment.sessionVariables = config.smind.hw.intel.gpu.xpu.openclBackend.serviceEnvironment;
-    })
 
     (lib.mkIf cfg.sriov.enable {
       # SR-IOV provisioning runs once on boot, after the xe driver has bound

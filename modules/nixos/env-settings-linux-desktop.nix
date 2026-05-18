@@ -34,6 +34,11 @@ in
 
         yt-dlp
         brightnessctl
+        # External-monitor brightness/contrast/input-source over DDC/CI
+        # via /dev/i2c-*. i2c-dev + the `i2c` group are wired
+        # host-wide in modules/nixos/i2c.nix; the owner is already a
+        # member.
+        ddcutil
         mission-center
         nvtopPackages.full
 
