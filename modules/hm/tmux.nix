@@ -16,6 +16,9 @@
         # Mouse works as expected, incl. scrolling
         set-option -g mouse on
 
+        # Forward OSC 52 clipboard writes to the outer terminal (no general passthrough).
+        set -g set-clipboard on
+
         bind c new-window -c "#{pane_current_path}"
         bind '"' split-window -v -c "#{pane_current_path}"
         bind % split-window -h -c "#{pane_current_path}"
