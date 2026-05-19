@@ -137,6 +137,12 @@ BASE_ARGS=(
   "${ENV_ARGS[@]}"
 )
 
+# Expose the ollama model store read-only so sandboxed sessions can
+# llama-bench / load GGUF blobs without first sudo-copying them to
+# /tmp/exchange. --ro is a no-op if the path doesn't exist (handled by
+# llm-sandbox.sh), so this is safe on hosts that don't run ollama.
+BASE_ARGS+=(--ro /var/lib/ollama)
+
 EXTRA_ARGS=()
 EXEC_CMD=()
 
