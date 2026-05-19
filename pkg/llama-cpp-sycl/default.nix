@@ -26,6 +26,7 @@
   stdenv,
   fetchFromGitHub,
   cmake,
+  makeWrapper,           # wrapProgram for the LD_LIBRARY_PATH suffix below
   pkg-config,
   autoAddDriverRunpath,  # adds /run/opengl-driver/lib to RPATH of ELFs that
                          # use libGL / libze / libOpenCL — without this, bare
@@ -106,7 +107,7 @@ stdenv.mkDerivation (finalAttrs: {
 
   # intel-llvm in nativeBuildInputs so its bin/clang(++) is on $PATH and
   # the (now-fixed) merged output is in the build closure.
-  nativeBuildInputs = [ cmake pkg-config autoAddDriverRunpath intel-llvm perl ];
+  nativeBuildInputs = [ cmake pkg-config autoAddDriverRunpath intel-llvm makeWrapper perl ];
 
   # Override CC/CXX explicitly. Two layers here:
   # 1. nixpkgs cmake setup-hook reads $CC/$CXX and passes them as
@@ -310,13 +311,39 @@ stdenv.mkDerivation (finalAttrs: {
   # side too because IGC inherits NIX_CFLAGS_COMPILE for the kernels.
   hardeningDisable = [ "fortify" "fortify3" ];
 
-  # No wrapper env vars by default — SYCL picks the Level Zero UR v2
-  # adapter automatically and that is the fastest path on Battlemage
-  # (Arc Pro B70): llama-bench on Qwen-0.5B Q4_K_M, ngl=99, 16 threads
-  # measured 103.96 t/s tg16 on L0 V2 vs 48.64 t/s on OpenCL UR
-  # (2.14× speedup), pp32 within 2 % (1428 vs 1449 t/s). Override at
-  # runtime if needed (`ONEAPI_DEVICE_SELECTOR=opencl:gpu`).
+  # SYCL picks the Level Zero UR v2 adapter automatically and that is
+  # the fastest path on Battlemage (Arc Pro B70): llama-bench on
+  # Qwen-0.5B Q4_K_M, ngl=99, 16 threads measured 103.96 t/s tg16 on
+  # L0 V2 vs 48.64 t/s on OpenCL UR (2.14× speedup), pp32 within 2%.
+  # Override at runtime if needed (`ONEAPI_DEVICE_SELECTOR=opencl:gpu`).
   #
+  # The wrapper below sets LD_LIBRARY_PATH=/run/opengl-driver/lib (the
+  # NixOS-managed symlink farm pointing at hardware.graphics.extraPackages,
+  # i.e. intel-compute-runtime's libze_intel_gpu.so.1). Without this,
+  # libze_loader.so.1's driver-discovery logic doesn't find the GPU
+  # driver — autoAddDriverRunpath gets `/run/opengl-driver/lib` onto
+  # the binary's RPATH but the L0 loader's `dlopen("libze_intel_gpu.so.1")`
+  # uses its OWN search logic (controlled by LD_LIBRARY_PATH, ld.so.cache,
+  # and the loader's own RPATH; NOT the calling binary's RPATH per ELF
+  # spec). With no driver found, level-zero@1.28.2's `zeInitDrivers`
+  # NULL-derefs instead of returning ZE_RESULT_ERROR_UNINITIALIZED —
+  # observed via gdb: bare `llama-cli` SIGSEGVs at zeInitDrivers+0x10
+  # because ggml_backend_load_all_from_path eagerly forces SYCL init
+  # via common_params_parser_init → llama_supports_rpc before any
+  # arg parsing.
+  postFixup = ''
+    for bin in llama-cli llama-bench llama-server llama-batched \
+               llama-batched-bench llama-completion llama-embedding \
+               llama-passkey llama-perplexity llama-simple llama-simple-chat \
+               llama-quantize llama-gguf llama-gguf-hash llama-debug \
+               llama-debug-template-parser; do
+      if [ -e "$out/bin/$bin" ]; then
+        wrapProgram "$out/bin/$bin" \
+          --suffix LD_LIBRARY_PATH : /run/opengl-driver/lib
+      fi
+    done
+  '';
+
   # Note: ollama-sycl (vendored llama.cpp tree at the same commit)
   # currently still routes through OpenCL UR — its runner subprocess
   # SIGSEGVs on L0 for reasons specific to ollama-runner's child

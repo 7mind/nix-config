@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 # Matrix test: llama-cli / llama-bench from pkg.llama-cpp-sycl
-# (already on PATH after `nixos-rebuild switch`) against the ollama
-# model store on L0.
+# (already on PATH after `nixos-rebuild switch`) against HuggingFace
+# GGUFs on Level Zero (Intel Arc Pro B70 / Battlemage).
 #
-# Goal: prove qwen3.5 / qwen3.6 / glm-4.7-flash / gpt-oss / gemma4 /
-# ministral-3 load and generate coherent tokens under
-# ONEAPI_DEVICE_SELECTOR=level_zero:0 on the Intel Arc Pro B70
-# (Battlemage). qwen3.5 (qwen35 arch) is the original motivator —
-# previously broken on the deployed ollama-sycl + OpenCL combo.
+# Earlier rev tried ollama-store blobs from /var/lib/ollama; failed
+# on every arch except qwen3 because ollama emits GGUFs through its
+# own Go engine using arch-name spellings (`glm4moelite`, `gptoss`,
+# `mistral3`) and metadata layouts that don't match upstream stock
+# llama.cpp@ad09224's expectations. HF GGUFs published by community
+# quantizers track upstream arch names, so they exercise the SYCL
+# backend end-to-end without the ollama-format drift.
 #
-# Run from a yolo-sandboxed claude session — /var/lib/ollama is now
-# bind-mounted read-only into the sandbox. Falls back to
-# /tmp/exchange/<name>.gguf if a model's blob isn't readable.
+# Run from a yolo-sandboxed claude session. Downloads land in
+# /tmp/exchange/hf-ggufs/ and are reused across runs.
 #
 # Output:
 #   /tmp/exchange/llama-cli-l0-matrix.tsv  (one-line-per-model table)
@@ -21,31 +22,54 @@ set -uo pipefail
 
 OUT=/tmp/exchange/llama-cli-l0-matrix.out
 TSV=/tmp/exchange/llama-cli-l0-matrix.tsv
+# GGUFs land under ./debug/hf-ggufs/ (gitignored) so they survive
+# reboots — /tmp/exchange is tmpfs and loses them. Tested files are
+# 45 GB total; redownloading from HF every time is wasteful.
+GGUF_DIR="$(dirname "$0")/../debug/hf-ggufs"
 
-# Models to test, paired with the ollama-store ref. The script resolves
-# each into a GGUF blob path via the model's manifest. All confirmed
-# present in /var/lib/ollama on the vm host as of 2026-05-19.
-# Architectures exercised:
-#   - qwen3        (Mamba-2 hybrid; SSM_SCAN)           : qwen3:4b
-#   - qwen35       (dense)                              : qwen3.5:9b, qwen3.6:27b
-#   - qwen35moe    (MoE)                                : qwen3.6:latest
-#   - glm4moelite  (MoE; needs MLA-FA)                  : glm-4.7-flash:latest
-#   - gptoss       (MXFP4 + bf16 mix)                   : gpt-oss:20b
-#   - gemma4       (dense)                              : gemma4:e4b
-#   - mistral3     (uses GATED_DELTA_NET)               : ministral-3:14b
+# Each row: <label>|<HF repo>|<filename>. Filenames verified live on
+# 2026-05-19 via /api/models/<repo>/tree/main — all are single-file
+# GGUFs, public, no auth required. Total ≈ 50 GB if all fresh.
+#
+# Architectures targeted (per llama.cpp@ad09224 src/llama-arch.cpp):
+#   qwen2          — long-standing dense Transformer; control
+#   qwen3          — dense, post-Qwen2; ad09224's Qwen3-Next adds SSM_SCAN
+#                    but base Qwen3 dense is plain GQA Transformer
+#   qwen35         — qwen3.5 family dense; rope.dimension_sections
+#                    was the ollama-format mismatch in earlier rev
+#   gemma3         — Google Gemma 3; tied embeddings
+#   glm4           — THUDM GLM-4 dense Chat (not glm4moe — different arch)
+#   gpt-oss        — OpenAI 20B MoE; MXFP4 + bf16 norms
+#   llama          — control
+#   ministral      — Mistral's 8B dense; uses sliding-window attn
 declare -a MODELS=(
-  "qwen3:4b"
-  "qwen3.5:9b"
-  "qwen3.6:27b"
-  "qwen3.6:latest"
-  "glm-4.7-flash:latest"
-  "gpt-oss:20b"
-  "gemma4:e4b"
-  "ministral-3:14b"
+  # qwen2 arch — control case
+  "qwen2.5_7b_q4|bartowski/Qwen2.5-7B-Instruct-GGUF|Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+  # qwen3 arch dense, small/fast smoke (1.83 GB Q8_0)
+  "qwen3_1.7b_q8|Qwen/Qwen3-1.7B-GGUF|Qwen3-1.7B-Q8_0.gguf"
+  # qwen3 arch dense larger
+  "qwen3_8b_q4|unsloth/Qwen3-8B-GGUF|Qwen3-8B-Q4_K_M.gguf"
+  # qwen35 arch — the one ollama-store version failed with
+  # `rope.dimension_sections has wrong array length`. HF unsloth
+  # quant should have the upstream-expected metadata layout.
+  "qwen3.5_9b_q4|unsloth/Qwen3.5-9B-GGUF|Qwen3.5-9B-Q4_K_M.gguf"
+  # gemma3 arch
+  "gemma3_4b_q4|ggml-org/gemma-3-4b-it-GGUF|gemma-3-4b-it-Q4_K_M.gguf"
+  # glm4 arch (THUDM GLM-4-9B-Chat). The original THUDM repo is gated;
+  # bartowski's quant is public.
+  "glm4_9b_q4|bartowski/glm-4-9b-chat-GGUF|glm-4-9b-chat-Q4_K_M.gguf"
+  # gpt-oss arch — OpenAI 20B MoE, MXFP4 weights + bf16 norms.
+  # Exercises the bf16 IMF-bypass postPatch in pkg/llama-cpp-sycl
+  # AND the mxfp4 dequant memcpy fix.
+  "gpt-oss_20b_mxfp4|ggml-org/gpt-oss-20b-GGUF|gpt-oss-20b-mxfp4.gguf"
+  # llama arch — control
+  "llama3.1_8b_q4|bartowski/Meta-Llama-3.1-8B-Instruct-GGUF|Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf"
+  # mistral arch (Ministral, Mistral's 8B with sliding-window attn)
+  "ministral_8b_q4|bartowski/Ministral-8B-Instruct-2410-GGUF|Ministral-8B-Instruct-2410-Q4_K_M.gguf"
 )
-
-OLLAMA_STORE=/var/lib/ollama/models
 PROMPT="Reply with one short sentence: what is the capital of France?"
+
+mkdir -p "$GGUF_DIR"
 
 # Common L0 env. SYCL_CACHE_PERSISTENT=0 works around the libsycl
 # getSortedImages NULL-deref (intel-llvm@unstable-2025-11-14); see
@@ -92,50 +116,47 @@ echo "=== L0 device discovery ==="
 "${L0_ENV[@]}" "$LLAMA_CLI" --list-devices 2>&1 | head -20
 
 # ============================================================
-# Helpers
+# HF download helper
 # ============================================================
 
-# Resolve a model:tag into an absolute path of its GGUF blob via the
-# ollama manifest.
-resolve_blob () {
-  local model="$1"
-  local ns="${model%%:*}"
-  local tag="${model#*:}"
-  [ "$ns" = "$tag" ] && tag=latest
-  local mf="$OLLAMA_STORE/manifests/registry.ollama.ai/library/$ns/$tag"
-  [ -r "$mf" ] || return 1
-  python3 - "$mf" "$OLLAMA_STORE" <<'PYEOF'
-import json, os, sys
-mf, store = sys.argv[1], sys.argv[2]
-with open(mf) as f:
-    m = json.load(f)
-for layer in m.get("layers", []):
-    mt = layer.get("mediaType", "")
-    if "model" in mt and "projector" not in mt:
-        digest = layer["digest"].replace(":", "-")
-        path = os.path.join(store, "blobs", digest)
-        if os.path.exists(path):
-            print(path)
-            sys.exit(0)
-sys.exit(2)
-PYEOF
+# Download <repo>/<filename> to <dst>. Resumes if partial. Returns 0
+# on success, non-zero otherwise.
+download_gguf () {
+  local repo="$1"
+  local fname="$2"
+  local dst="$3"
+  local url="https://huggingface.co/${repo}/resolve/main/${fname}"
+
+  if [ -f "$dst" ]; then
+    # Quick check: is it a valid GGUF (starts with "GGUF" magic)?
+    if [ "$(head -c 4 "$dst" 2>/dev/null)" = "GGUF" ]; then
+      echo "  HAVE: $(basename "$dst") ($(stat -c%s "$dst" | numfmt --to=iec))"
+      return 0
+    else
+      echo "  CORRUPT: $(basename "$dst") doesn't start with GGUF magic; redownloading"
+      rm -f "$dst"
+    fi
+  fi
+
+  echo "  DOWNLOAD: $url"
+  if ! curl -L -C - --fail --progress-bar -o "$dst" "$url"; then
+    echo "  FAIL: curl exit non-zero"
+    rm -f "$dst"
+    return 1
+  fi
+  if [ "$(head -c 4 "$dst" 2>/dev/null)" != "GGUF" ]; then
+    echo "  FAIL: downloaded file is not a GGUF (probably 404/HTML error page)"
+    head -c 200 "$dst" | sed 's/^/  >> /'
+    rm -f "$dst"
+    return 1
+  fi
+  echo "  OK: $(stat -c%s "$dst" | numfmt --to=iec)"
+  return 0
 }
 
-# Fallback for non-ollama-store GGUFs (e.g. /tmp/exchange/qwen3-4b.gguf
-# from earlier testing).
-fallback_blob () {
-  local model="$1"
-  local sanitized="${model//[:\/]/_}"
-  for cand in \
-    "/tmp/exchange/${sanitized}.gguf" \
-    "/tmp/exchange/${model%%:*}-${model#*:}.gguf"; do
-    if [ -r "$cand" ]; then
-      echo "$cand"
-      return 0
-    fi
-  done
-  return 1
-}
+# ============================================================
+# Test runner
+# ============================================================
 
 # Run llama-bench + llama-cli --single-turn for one model. Captures
 # pp/tg throughput and the first few generated words.
@@ -182,25 +203,40 @@ run_one () {
 }
 
 # ============================================================
-# Main loop
+# Main: download + test loop
 # ============================================================
 
+echo
+echo "============================================================"
+echo "=== fetching missing GGUFs to $GGUF_DIR"
+echo "============================================================"
+declare -A RESOLVED
+for row in "${MODELS[@]}"; do
+  IFS='|' read -r label repo fname <<< "$row"
+  echo
+  echo "[$label] $repo / $fname"
+  dst="$GGUF_DIR/${label}.gguf"
+  if download_gguf "$repo" "$fname" "$dst"; then
+    RESOLVED["$label"]="$dst"
+  fi
+done
+
+echo
+echo "============================================================"
+echo "=== running L0 matrix"
+echo "============================================================"
 printf 'model\tpp_t_s\ttg_t_s\tbench_exit\tcli_exit\tcli_tg_t_s\tfirst_words\n' > "$TSV"
 
-for model in "${MODELS[@]}"; do
-  blob=$(resolve_blob "$model" 2>/dev/null) || true
-  if [ -z "$blob" ]; then
-    blob=$(fallback_blob "$model" 2>/dev/null) || true
-  fi
-  if [ -z "$blob" ]; then
+for row in "${MODELS[@]}"; do
+  IFS='|' read -r label _ _ <<< "$row"
+  gguf="${RESOLVED[$label]:-}"
+  if [ -z "$gguf" ]; then
     echo
-    echo "============================================================"
-    echo "=== SKIP $model (no blob found in $OLLAMA_STORE or /tmp/exchange)"
-    echo "============================================================"
-    printf '%s\tSKIP\tSKIP\t-\t-\t-\tno blob resolved\n' "$model" >> "$TSV"
+    echo "=== SKIP $label (download failed)"
+    printf '%s\tSKIP\tSKIP\t-\t-\t-\tdownload failed\n' "$label" >> "$TSV"
     continue
   fi
-  run_one "$model" "$blob"
+  run_one "$label" "$gguf"
 done
 
 # ============================================================
@@ -215,3 +251,4 @@ column -t -s $'\t' "$TSV"
 echo
 echo "logs : $OUT"
 echo "table: $TSV"
+echo "ggufs: $GGUF_DIR ($(du -sh "$GGUF_DIR" 2>/dev/null | cut -f1) total)"
