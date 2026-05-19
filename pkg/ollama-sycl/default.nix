@@ -234,29 +234,19 @@ ollama.overrideAttrs (oldAttrs: {
   #
   # ZES_ENABLE_SYSMAN=1 — accurate VRAM free-memory queries on Battlemage.
   #
-  # ONEAPI_DEVICE_SELECTOR=opencl:gpu — route through the SYCL OpenCL UR
-  # adapter rather than the Level Zero UR adapter. ggml-sycl itself
-  # works on L0 V2 on Battlemage (`llama-bench` via `pkg/llama-cpp-sycl`
-  # measured 2.14× faster tg16 on L0 vs OpenCL), so the bug here is
-  # NOT in ggml-sycl / libsycl / NEO at large. It is specific to the
-  # ollama runner subprocess: when ollama-runner spawns the embedded
-  # llama runner over the L0 backend, the child SIGSEGVs inside
-  # libsycl before any SYCL backend log fires (Go runtime panic +
-  # register dump from the parent, no stderr from the child).
-  # Suspected cause: env-var propagation through ollama-runner's
-  # exec model differs from a direct shell invocation; the L0 V2
-  # adapter is sensitive to that. To be debugged separately. Until
-  # then, force the runner onto OpenCL UR — same model, same kernels,
-  # validated stable across architectures, ~50 % of L0's tg throughput
-  # but functionally correct.
-  #
-  # OCL_ICD_VENDORS — point the bundled ocl-icd loader inside SYCL at
-  # NixOS's OpenCL ICD directory so the Intel NEO ICD is discoverable.
+  # No ONEAPI_DEVICE_SELECTOR default — SYCL picks the Level Zero UR
+  # v2 adapter automatically, which is the fastest path on Battlemage
+  # (~2.14× faster tg16 vs OpenCL UR per `llama-bench`). The earlier
+  # SIGSEGV that motivated forcing opencl:gpu turned out to be caused
+  # by an incomplete strip during the IGC-RPATH packaging fix cycle
+  # (the wrapper was temporarily missing both `--set-default` envs
+  # AND the IGC fix wasn't on the live system yet) — not a real
+  # ggml-sycl-on-L0 bug. Verified: `ollama run qwen3.5:9b` completes
+  # cleanly on L0 in both host and container, with no coredump.
+  # Override at runtime if needed (`ONEAPI_DEVICE_SELECTOR=opencl:gpu`).
   postFixup = (oldAttrs.postFixup or "") + ''
     if [ -e $out/bin/ollama ]; then
       wrapProgram $out/bin/ollama \
-        --set-default ONEAPI_DEVICE_SELECTOR opencl:gpu \
-        --set-default OCL_ICD_VENDORS /run/opengl-driver/etc/OpenCL/vendors \
         --set-default SYCL_CACHE_PERSISTENT 0 \
         --set-default ZES_ENABLE_SYSMAN 1
     fi
