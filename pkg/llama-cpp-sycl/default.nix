@@ -27,6 +27,12 @@
   fetchFromGitHub,
   cmake,
   pkg-config,
+  autoAddDriverRunpath,  # adds /run/opengl-driver/lib to RPATH of ELFs that
+                         # use libGL / libze / libOpenCL — without this, bare
+                         # `llama-cli` SIGSEGVs inside zeInitDrivers() during
+                         # eager backend bootstrap (ggml_backend_load_all
+                         # is called by common_params_parser_init even before
+                         # arg parsing is complete).
   intel-llvm,
   intel-compute-runtime,
   level-zero,
@@ -100,7 +106,7 @@ stdenv.mkDerivation (finalAttrs: {
 
   # intel-llvm in nativeBuildInputs so its bin/clang(++) is on $PATH and
   # the (now-fixed) merged output is in the build closure.
-  nativeBuildInputs = [ cmake pkg-config intel-llvm perl ];
+  nativeBuildInputs = [ cmake pkg-config autoAddDriverRunpath intel-llvm perl ];
 
   # Override CC/CXX explicitly. Two layers here:
   # 1. nixpkgs cmake setup-hook reads $CC/$CXX and passes them as
