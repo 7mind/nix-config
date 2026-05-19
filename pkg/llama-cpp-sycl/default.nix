@@ -47,13 +47,21 @@
 # nativeBuildInput and pointing CC/CXX at it explicitly in preConfigure.
 stdenv.mkDerivation (finalAttrs: {
   pname = "llama-cpp-sycl";
-  version = "073bb2c20";
+  # Bumped 073bb2c20 (Apr 2026) → ad09224 (2026-05-07): merge commit of
+  # ggml-org/llama.cpp#22149 which added SYCL implementations for
+  # GGML_OP_SSM_SCAN, GGML_OP_GATED_DELTA_NET (small touch),
+  # GGML_OP_SOLVE_TRI, GGML_OP_FILL, GGML_OP_CUMSUM, GGML_OP_DIAG.
+  # Without these, Qwen3 (Mamba-2 hybrid attention layers use
+  # SSM_SCAN) and other newer architectures load-crash on L0 because
+  # the sched routes ops to SYCL that have no implementation and no
+  # gating in device_supports_op.
+  version = "ad09224";
 
   src = fetchFromGitHub {
     owner = "ggml-org";
     repo = "llama.cpp";
-    rev = "073bb2c20b5b2c919469653214aaa1a9895816a2";
-    hash = "sha256-zr6FVsmL96dnvxVuR+EaFwA0Xde9fC/Jdx76FTU2sCE=";
+    rev = "ad092246587b16299291056a78bf6f73f636f114";
+    hash = "sha256-lr51w3GfbiCqqzqFLvtxwa8a+fwoRAGiXEc45bPQKrU=";
   };
 
   # Hal9000AIML/arc-pro-b70-ubuntu-gpu-speedup-bugfixes cherry-picks,
@@ -63,32 +71,31 @@ stdenv.mkDerivation (finalAttrs: {
   # in-progress fattn-tla skeleton; this build is SYCL-only.
   patches = [
     ./patches/0001-SYCL-Add-BF16-support-to-GET_ROWS-operation.patch
-    ./patches/0002-sycl-fused-MoE-mul_mat_vec_q-for-TG.patch
-    ./patches/0003-SYCL-use-native-subgroup-size-for-K-quant-DMMV-kerne.patch
+    # 0002 (fused MoE mul_mat_vec_q for TG) upstreamed in ad09224 —
+    # `ggml_sycl_mul_mat_id_mmvq_fused` is at ggml-sycl.cpp:3825.
+    # Re-applying causes a redefinition compile error.  Dropped.
+    # 0003 (use native subgroup size for K-quant DMMV) is effectively
+    # obsolete: ad09224 now ships the q4_k/q6_k reorder kernel
+    # templates AND their SYCL wrappers AND the dispatch sites. The
+    # only thing 0003 still contributed was a QK_WARP_SIZE→WARP_SIZE
+    # micro-optimization on B70 (wave16 native), but applying the
+    # patch's kernel-defining hunks now produces redefinition errors.
+    # Dropped wholesale.  Files under patches/ retained for reference.
     ./patches/0004-sycl-route-small-f32-matmuls-to-oneMKL-bypass-oneDNN.patch
-    ./patches/0005-SYCL-fix-reorder-crash-when-device-memory-is-full.patch
-    ./patches/0006-SYCL-add-RAII-temp-buffer-class-macro-guard-for-host.patch
-    ./patches/0007-SYCL-Fix-Q8_0-reorder-add-missing-dequantize-path-fo.patch
-    ./patches/0008-SYCL-document-GGML_SYCL_HOST_MEM_FALLBACK-build-opti.patch
-    # Upstream PR #22035 / commit 788fcbc5 (Apr 2026, post-073bb2c20 base):
-    # the four reorder_mul_mat_vec_q* SYCL dispatchers (Q4_0, Q8_0, Q4_K,
-    # Q6_K) asserted `block_num_y % 16 == 0`, which fails for any model
-    # whose output projection has nrows (= vocab size, since GGML_SYCL_MMV_Y=1)
-    # not divisible by 16. Granite 3.0 (vocab 49155, 49155 % 16 = 3) and
-    # HY-MT (120818) abort on first decode. The fix pads block_num_y up to
-    # a subgroup multiple and relies on the kernel's existing
-    # `if (row >= nrows) return;` guard. Tested upstream on B70 hardware.
-    ./patches/0009-SYCL-Fix-reorder-MMVQ-assert-on-unaligned-vocab-size.patch
-    # ggml-sycl/convert.cpp gates its bf16 case behind
-    # `__INTEL_LLVM_COMPILER`, which only Intel's proprietary icpx/dpcpp
-    # defines. nixpkgs' open-source intel-llvm DPC++ (clang-based) has
-    # the same `<sycl/ext/oneapi/bfloat16.hpp>` extension available but
-    # doesn't set that macro. Without this patch, any model that mixes
-    # bf16 tensors with a quantized format (gpt-oss:20b MXFP4+bf16) hits
-    # `ggml-sycl/convert.cpp:764: fatal error: unsupport data type=bf16`
-    # on first decode. Patch drops the proprietary-compiler gate and
-    # keeps only the header-availability check.
-    ./patches/0010-SYCL-Enable-BF16-convert-on-open-source-DPC.patch
+    # Patches 0005, 0006, 0007, 0008 (reorder OOM fallback +
+    # GGML_SYCL_HOST_MEM_FALLBACK CMake option + Q8_0 reorder
+    # dequantize) are all in upstream ad09224 — sycl_reorder_temp_buffer
+    # RAII, dequantize_mul_mat_vec_q8_0_sycl_reorder, and the CMake
+    # `if (GGML_SYCL_HOST_MEM_FALLBACK)` block all present. Dropped.
+    # Previous patch 0009 (PR #22035 reorder MMVQ unaligned-vocab
+    # assert) was in commit 788fcbc5, before ad09224. Also dropped.
+    # Source files still under patches/ for reference + ollama-sycl
+    # which references patches/0009 and patches/0010 by path.
+    # Patch 0010 (ggml-sycl/convert.cpp BF16 `__INTEL_LLVM_COMPILER`
+    # gate drop) is upstreamed in ad09224 — the proprietary-compiler
+    # guard was removed and bf16 falls through to
+    # `convert_unary_sycl<sycl::ext::oneapi::bfloat16>` directly.
+    # Dropped; file kept on disk for reference / ollama-sycl.
   ];
 
   # intel-llvm in nativeBuildInputs so its bin/clang(++) is on $PATH and
@@ -150,6 +157,42 @@ stdenv.mkDerivation (finalAttrs: {
     ' ggml/src/ggml-sycl/set_rows.cpp
     grep -q 'is_same_v<TOut, sycl::ext::oneapi::bfloat16>' ggml/src/ggml-sycl/set_rows.cpp \
       || (echo "bf16 IMF-bypass perl substitution did not apply to set_rows.cpp"; exit 1)
+
+    # Device-side memcpy → __builtin_memcpy fixes. IGC (Intel Graphics
+    # Compiler) cannot resolve a plain `memcpy` external symbol when
+    # JIT-ing SPIR-V kernels: the SPV-validation phase fails with
+    #   error : unresolved external symbol memcpy at offset … in
+    #   instructions segment #N (aka kernel : ...dequantize_q5_0...)
+    # Triggers on q5_0 / q5_1 / mxfp4 dequant template instantiations
+    # that get link-pulled in regardless of the model's actual quant
+    # types. `__builtin_memcpy` inlines at the call site so IGC never
+    # sees the external symbol.
+    #
+    # These fixes used to live in pkg/ollama-sycl/postPatch (where the
+    # ollama runner trips this aggressively at SYCL backend init). Now
+    # that ollama-sycl consumes libggml-sycl.so from this package
+    # instead of rebuilding the SYCL backend from a vendored copy, the
+    # fixes have to be applied here.
+    perl -i -pe '
+      s{^(\s*)memcpy\(&qh, x\[ib\]\.qh, sizeof\(qh\)\);}
+       {$1__builtin_memcpy(&qh, x[ib].qh, sizeof(qh));}
+    ' ggml/src/ggml-sycl/dequantize.hpp
+    grep -q '__builtin_memcpy(&qh, x\[ib\]\.qh' ggml/src/ggml-sycl/dequantize.hpp \
+      || (echo "device-side memcpy substitution did not apply to dequantize.hpp"; exit 1)
+
+    perl -i -pe '
+      s{^(\s*)memcpy\(&result, &bits, sizeof\(float\)\);}
+       {$1__builtin_memcpy(&result, &bits, sizeof(float));}
+    ' ggml/src/ggml-sycl/common.hpp
+    grep -q '__builtin_memcpy(&result, &bits, sizeof(float));' ggml/src/ggml-sycl/common.hpp \
+      || (echo "device-side memcpy substitution did not apply to common.hpp"; exit 1)
+
+    perl -i -pe '
+      s{^(\s*)memcpy\(dsti->qh, &qh, sizeof\(qh\)\);}
+       {$1__builtin_memcpy(dsti->qh, &qh, sizeof(qh));}
+    ' ggml/src/ggml-sycl/cpy.hpp
+    [ "$(grep -c '__builtin_memcpy(dsti->qh' ggml/src/ggml-sycl/cpy.hpp)" = "2" ] \
+      || (echo "device-side memcpy substitution in cpy.hpp expected 2 hits"; exit 1)
   '';
 
   # MKLConfig.cmake locates everything relative to MKLROOT. Our
@@ -215,8 +258,22 @@ stdenv.mkDerivation (finalAttrs: {
     # instead of returning OOM. Documented by patch #8.
     (lib.cmakeBool "GGML_SYCL_HOST_MEM_FALLBACK" true)
 
-    # Tame defaults
-    (lib.cmakeBool "BUILD_SHARED_LIBS"  false)  # static link — avoids RPATH games
+    # Shared libraries + ggml backend dlopen plugins. The plugins go to
+    # $out/lib/libggml-{base,cpu,sycl}.so and are dlopen'd at runtime by
+    # `ggml_backend_load_all_from_path`. This is what makes the .so
+    # consumable by other packages (notably `pkgs.ollama-sycl`, which
+    # plants libggml-sycl.so into its own `lib/ollama/sycl/` instead of
+    # rebuilding the SYCL backend from a vendored copy of llama.cpp).
+    (lib.cmakeBool "BUILD_SHARED_LIBS"  true)
+    (lib.cmakeBool "GGML_BACKEND_DL"    true)
+    # GGML_CPU_ALL_VARIANTS deliberately OFF: this package's job is to
+    # provide libggml-sycl.so for ollama-sycl + the standalone
+    # llama-cli/llama-bench binaries. We only need one native CPU
+    # backend variant; ollama-sycl builds the per-µarch variants
+    # itself for runtime dispatch. Turning this on adds ~10 separate
+    # `add_library(ggml_cpu_<variant>)` targets, the worst of which
+    # (sapphirerapids with AMX_INT8 + AMX_TILE + AVX512_*) takes
+    # 60+ minutes single-threaded on `amx/mmq.cpp`.
     (lib.cmakeBool "LLAMA_BUILD_TESTS"  false)
     (lib.cmakeBool "LLAMA_BUILD_EXAMPLES" true) # llama-cli, llama-server, llama-bench
     (lib.cmakeBool "LLAMA_CURL"         true)
