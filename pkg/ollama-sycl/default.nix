@@ -235,18 +235,20 @@ ollama.overrideAttrs (oldAttrs: {
   # ZES_ENABLE_SYSMAN=1 — accurate VRAM free-memory queries on Battlemage.
   #
   # ONEAPI_DEVICE_SELECTOR=opencl:gpu — route through the SYCL OpenCL UR
-  # adapter rather than the Level Zero UR adapter. The L0 NEO packaging
-  # bug that motivated this (IGC missing from libze_intel_gpu.so.1's
-  # RPATH → `gmm_helper/resource_info.cpp:15` abort) is fixed in our
-  # overlay (see globals.nix), and `torch.xpu` runs end-to-end on Level
-  # Zero. But ggml-sycl's L0 path (libsycl URM v2 adapter +
-  # ze-backed USM allocators) has not been validated on B70: routing
-  # the ollama runner through L0 produces a silent SIGSEGV inside the
-  # runner subprocess before any SYCL backend log fires (Go runtime
-  # panic + register dump, no stderr from libsycl). OpenCL UR has
-  # months of cross-architecture mileage in this repo and runs every
-  # ggml-sycl model coherently. Keep the OpenCL routing until ggml-sycl
-  # is independently validated on L0 on this hardware.
+  # adapter rather than the Level Zero UR adapter. ggml-sycl itself
+  # works on L0 V2 on Battlemage (`llama-bench` via `pkg/llama-cpp-sycl`
+  # measured 2.14× faster tg16 on L0 vs OpenCL), so the bug here is
+  # NOT in ggml-sycl / libsycl / NEO at large. It is specific to the
+  # ollama runner subprocess: when ollama-runner spawns the embedded
+  # llama runner over the L0 backend, the child SIGSEGVs inside
+  # libsycl before any SYCL backend log fires (Go runtime panic +
+  # register dump from the parent, no stderr from the child).
+  # Suspected cause: env-var propagation through ollama-runner's
+  # exec model differs from a direct shell invocation; the L0 V2
+  # adapter is sensitive to that. To be debugged separately. Until
+  # then, force the runner onto OpenCL UR — same model, same kernels,
+  # validated stable across architectures, ~50 % of L0's tg throughput
+  # but functionally correct.
   #
   # OCL_ICD_VENDORS — point the bundled ocl-icd loader inside SYCL at
   # NixOS's OpenCL ICD directory so the Intel NEO ICD is discoverable.

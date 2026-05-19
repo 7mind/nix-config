@@ -82,10 +82,11 @@ in
       default = { };
       example = { ZES_ENABLE_SYSMAN = "1"; };
       description = ''
-        Extra environment variables for the systemd unit. The package's
-        `wrapProgram` already injects `ONEAPI_DEVICE_SELECTOR=opencl:gpu`
-        and `OCL_ICD_VENDORS=…/opengl-driver/etc/OpenCL/vendors`; only
-        set entries here that you want to override or add.
+        Extra environment variables for the systemd unit. The package
+        defaults to SYCL's automatic backend selection (Level Zero V2
+        on Battlemage); override here if you want OpenCL UR
+        (`ONEAPI_DEVICE_SELECTOR=opencl:gpu` +
+        `OCL_ICD_VENDORS=/run/opengl-driver/etc/OpenCL/vendors`).
       '';
     };
   };

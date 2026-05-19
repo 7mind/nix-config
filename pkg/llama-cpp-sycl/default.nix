@@ -27,7 +27,6 @@
   fetchFromGitHub,
   cmake,
   pkg-config,
-  makeWrapper,
   intel-llvm,
   intel-compute-runtime,
   level-zero,
@@ -94,7 +93,7 @@ stdenv.mkDerivation (finalAttrs: {
 
   # intel-llvm in nativeBuildInputs so its bin/clang(++) is on $PATH and
   # the (now-fixed) merged output is in the build closure.
-  nativeBuildInputs = [ cmake pkg-config makeWrapper intel-llvm perl ];
+  nativeBuildInputs = [ cmake pkg-config intel-llvm perl ];
 
   # Override CC/CXX explicitly. Two layers here:
   # 1. nixpkgs cmake setup-hook reads $CC/$CXX and passes them as
@@ -248,29 +247,17 @@ stdenv.mkDerivation (finalAttrs: {
   # side too because IGC inherits NIX_CFLAGS_COMPILE for the kernels.
   hardeningDisable = [ "fortify" "fortify3" ];
 
-  # Wrap binaries so users don't have to discover the right env vars.
+  # No wrapper env vars by default — SYCL picks the Level Zero UR v2
+  # adapter automatically and that is the fastest path on Battlemage
+  # (Arc Pro B70): llama-bench on Qwen-0.5B Q4_K_M, ngl=99, 16 threads
+  # measured 103.96 t/s tg16 on L0 V2 vs 48.64 t/s on OpenCL UR
+  # (2.14× speedup), pp32 within 2 % (1428 vs 1449 t/s). Override at
+  # runtime if needed (`ONEAPI_DEVICE_SELECTOR=opencl:gpu`).
   #
-  # ONEAPI_DEVICE_SELECTOR=opencl:gpu — route through the SYCL OpenCL UR
-  # adapter. The historical NEO packaging bug (IGC missing from
-  # libze_intel_gpu.so.1's RPATH → `gmm_helper/resource_info.cpp:15`
-  # abort during eager device init) is fixed in our overlay (see
-  # globals.nix), but ggml-sycl's L0 code path on B70 has not yet been
-  # independently validated — when ollama-sycl is run on L0 the runner
-  # subprocess SIGSEGVs inside libsycl before any backend log fires.
-  # OpenCL UR has cross-architecture mileage and is stable. Override
-  # at runtime if you want to retest L0.
-  #
-  # OCL_ICD_VENDORS — point the bundled ocl-icd loader inside SYCL at
-  # NixOS's OpenCL ICD directory so the Intel NEO ICD is discoverable.
-  postFixup = ''
-    for prog in llama-cli llama-server llama-bench; do
-      if [ -e $out/bin/$prog ]; then
-        wrapProgram $out/bin/$prog \
-          --set-default ONEAPI_DEVICE_SELECTOR opencl:gpu \
-          --set-default OCL_ICD_VENDORS /run/opengl-driver/etc/OpenCL/vendors
-      fi
-    done
-  '';
+  # Note: ollama-sycl (vendored llama.cpp tree at the same commit)
+  # currently still routes through OpenCL UR — its runner subprocess
+  # SIGSEGVs on L0 for reasons specific to ollama-runner's child
+  # process model, not ggml-sycl. See pkg/ollama-sycl/default.nix.
 
   # llama.cpp's CMake install puts binaries in $out/bin/ already; nothing to do.
   meta = with lib; {
