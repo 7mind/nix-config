@@ -219,20 +219,42 @@ ollama.overrideAttrs (oldAttrs: {
     cmake --build build -j $NIX_BUILD_CORES
   '';
 
-  # SYCL runtime defaults. SYCL_CACHE_PERSISTENT=0 is load-bearing:
-  # intel-llvm@unstable-2025-11-14's libsycl.so.8 has a NULL-deref in
-  # sycl::detail::getSortedImages → __insertion_sort comparator → strcmp
-  # on the in-memory `vector<RTDeviceBinaryImage*>` it sorts inside
+  # SYCL runtime defaults for the ollama-sycl wrapper.
+  #
+  # SYCL_CACHE_PERSISTENT=0 is load-bearing: intel-llvm@unstable-2025-11-14's
+  # libsycl.so.8 has a NULL-deref in sycl::detail::getSortedImages →
+  # __insertion_sort comparator → strcmp on the in-memory
+  # `vector<RTDeviceBinaryImage*>` it sorts inside
   # PersistentDeviceCodeCache::getItemFromDisc, called from
   # `getOrCreateURProgram` at first kernel JIT (verified via libunwind
   # backtrace 2026-05-08, full trace in project_ollama_sycl_fork.md).
   # Reproducer: any SYCL kernel JIT'd via the persistent-cache path
   # SIGSEGVs at first decode in the ollama runner. Setting
   # SYCL_CACHE_PERSISTENT=0 bypasses `getItemFromDisc` entirely.
-  # ZES_ENABLE_SYSMAN — accurate VRAM free-memory queries on Battlemage.
+  #
+  # ZES_ENABLE_SYSMAN=1 — accurate VRAM free-memory queries on Battlemage.
+  #
+  # ONEAPI_DEVICE_SELECTOR=opencl:gpu — route through the SYCL OpenCL UR
+  # adapter rather than the Level Zero UR adapter. The L0 NEO packaging
+  # bug that motivated this (IGC missing from libze_intel_gpu.so.1's
+  # RPATH → `gmm_helper/resource_info.cpp:15` abort) is fixed in our
+  # overlay (see globals.nix), and `torch.xpu` runs end-to-end on Level
+  # Zero. But ggml-sycl's L0 path (libsycl URM v2 adapter +
+  # ze-backed USM allocators) has not been validated on B70: routing
+  # the ollama runner through L0 produces a silent SIGSEGV inside the
+  # runner subprocess before any SYCL backend log fires (Go runtime
+  # panic + register dump, no stderr from libsycl). OpenCL UR has
+  # months of cross-architecture mileage in this repo and runs every
+  # ggml-sycl model coherently. Keep the OpenCL routing until ggml-sycl
+  # is independently validated on L0 on this hardware.
+  #
+  # OCL_ICD_VENDORS — point the bundled ocl-icd loader inside SYCL at
+  # NixOS's OpenCL ICD directory so the Intel NEO ICD is discoverable.
   postFixup = (oldAttrs.postFixup or "") + ''
     if [ -e $out/bin/ollama ]; then
       wrapProgram $out/bin/ollama \
+        --set-default ONEAPI_DEVICE_SELECTOR opencl:gpu \
+        --set-default OCL_ICD_VENDORS /run/opengl-driver/etc/OpenCL/vendors \
         --set-default SYCL_CACHE_PERSISTENT 0 \
         --set-default ZES_ENABLE_SYSMAN 1
     fi

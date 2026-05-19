@@ -132,7 +132,34 @@ Zero works correctly with the underlying packaging fix.
    on. Once it returns a store path, the consumer can re-enable the
    `./containers/zimt.nix` import and run `./setup vm -s` cleanly.
 
-5. **Optional: bump the pinned nixpkgs.** The flake currently pins
+5. **Fix `libsycl.so.8: cannot open shared object file` at zimt-xpu
+   startup.** Once the wheels do download, `zimt.service` still
+   restart-loops with:
+   ```
+   File "…/torch/__init__.py", line 444, in <module>
+     from torch._C import *  # noqa: F403
+   ImportError: libsycl.so.8: cannot open shared object file: No such file or directory
+   ```
+   `libsycl.so.8` is shipped inside the Intel runtime wheels —
+   typically under `intel_cmplr_lib_rt/lib/` and/or `torch/lib/` after
+   the `torch+xpu` wheel install. The library is in the closure (some
+   wheel unpacked it), but the loader can't find it because the
+   Python env's site-packages directory layout doesn't end up on the
+   dynamic linker's search path the way the upstream pip wheels
+   assume. Common fixes:
+    - Run `autoPatchelfHook` on each Intel runtime wheel so each `.so`
+      gets its DT_RUNPATH set explicitly to point at its bundled
+      `lib/` siblings.
+    - Or set `LD_LIBRARY_PATH` / `extraEnvironment` on `zimt.service`
+      to include the wheel-installed `lib/` directories — fragile but
+      the simplest unblock.
+    - Or use `python.pkgs.buildPythonPackage`-level `propagatedNativeBuildInputs`
+      hooks that wire the runtime libs into Python's `torch.lib`
+      `torch._dl` discovery the way the upstream wheels expect.
+   The cleanest path is `autoPatchelfHook`-style RPATH-fixing on the
+   binary wheels.
+
+6. **Optional: bump the pinned nixpkgs.** The flake currently pins
    `nixpkgs nixos-unstable d233902339c02a9c334e7e593de68855ad26c4cb`.
    The PyPI URL breakage may have been introduced by a fetchPypi
    refactor in nixpkgs. Compare against current `nixos-unstable` HEAD;
