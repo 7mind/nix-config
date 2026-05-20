@@ -297,13 +297,21 @@ Only two valid terminations:
     happen, and no bounded null can be constructed because the
     user's frame is wrong). Surface this as a blocker; do not
     "answer" it by confirming the negation, which would be
-    misleading. **Guardrail**: before invoking this reason,
-    confirm the malformedness is itself *evidenced* — cite the
-    file:line, command output, or other observation showing the
-    presupposition is false. Without that citation this reason
-    becomes a polite-decline channel for hard questions; reject
-    any draft blocker that names "question malformed" without an
-    evidence pointer.
+    misleading. **Guardrail (two-stage)**:
+    1. *Cite*: before invoking this reason, the draft blocker
+       must cite a file:line, command output, or observation
+       showing the presupposition is false. Reject any draft
+       that names "question malformed" without an evidence
+       pointer.
+    2. *Verify*: the orchestrator must independently open the
+       cited file at the cited line (or re-run the cited
+       command) and confirm that the evidence actually
+       *falsifies* the presupposition — not merely that the
+       citation exists or is tangentially related. A subagent
+       under pressure can cite weak or sideways evidence; only
+       orchestrator-verified falsification closes this blocker.
+       If verification fails, the blocker is rejected and the
+       loop iterates.
   - **Empty answer space with no bounded null** — every
     plausible hypothesis closed `wrong` *and* no completeness
     hypothesis can be constructed with a defensible scope. The

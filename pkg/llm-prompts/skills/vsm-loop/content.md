@@ -293,8 +293,8 @@ the signal affects a control decision.
 A note on lineage: the WIP / review / scope metrics below are
 operational signals drawn from lean and agile traditions — they
 are cybernetic in spirit but not Beer's. The genuinely Beer
-metrics are the homeostat-pulse signals (§11–13) and algedonic
-frequency (§7): they directly measure the system's adaptive
+metrics are the homeostat-pulse signals (§12–14) and algedonic
+frequency (§7–8): they directly measure the system's adaptive
 behaviour rather than its throughput.
 
 ### Required metrics
@@ -333,17 +333,23 @@ behaviour rather than its throughput.
    - Control action: revise that loop's brief template before
      continuing.
 7. **Algedonic frequency** — user escalations per milestone, grouped
-   by reason and by channel (ordinary / bypass / depth-limit).
+   by reason and by channel (ordinary / bypass / depth-limit), and
+   cross-tabulated against the user-verdict captured at resolution
+   time (legitimate / false-positive / unclear / deferred — see the
+   "Capturing the user verdict" subsection in the algedonic
+   section).
    - Threshold: more than one non-credential ordinary escalation in
-     one milestone; any bypass false-positive (see §7a).
+     one milestone; any bypass false-positive (see §8); any
+     `unclear` verdict on a non-trivial escalation.
    - Control action: diagnose bad scope, missing S5 policy, or weak S4
      planning before continuing.
-7a. **Bypass false-positive rate** — count of `BYPASS`-flagged
+8. **Bypass false-positive rate** — count of `BYPASS`-flagged
    algedonic that the user later judged were not policy
-   violations. Tracked because the must-propagate-unchanged
-   contract makes bypass a high-stakes channel: a noisy subagent
-   that raises bypass on ordinary blockers trains the user to
-   discount the channel, defeating its purpose.
+   violations (`user-verdict=false-positive` from the capture
+   step). Tracked because the must-propagate-unchanged contract
+   makes bypass a high-stakes channel: a noisy subagent that
+   raises bypass on ordinary blockers trains the user to discount
+   the channel, defeating its purpose.
    - Threshold: any bypass false-positive.
    - Control action: review the brief and the subagent's
      reasoning together; tighten the bypass criteria in the brief
@@ -351,20 +357,20 @@ behaviour rather than its throughput.
      reach for bypass vs ordinary algedonic. A single false
      positive is enough to act on — bypass earns its weight by
      being rare.
-8. **Blocked age** — age of `[!]` task entries in sessions.
+9. **Blocked age** — age of `[!]` task entries in sessions.
    - Threshold: blocked entry older than one session.
    - Control action: resolve, rescope, explicitly defer, or escalate.
      Do not let blocked entries accumulate silently.
-9. **Archive pressure** — active ledger length when nothing is in
-   flight.
-   - Threshold: active `./tasks.md` no longer fits roughly one screen.
-   - Control action: archive closed milestone material under
-     `./docs/archive/`.
-10. **Plan accuracy** — planned file/scope boundaries versus actual
+10. **Archive pressure** — active ledger length when nothing is in
+    flight.
+    - Threshold: active `./tasks.md` no longer fits roughly one screen.
+    - Control action: archive closed milestone material under
+      `./docs/archive/`.
+11. **Plan accuracy** — planned file/scope boundaries versus actual
     touched files, defects, and follow-up tasks.
     - Threshold: repeated scope expansion in one milestone.
     - Control action: route to S4; the plan underestimated variety.
-11. **Homeostat firings (S3↔S4)** — count of research triggers
+12. **Homeostat firings (S3↔S4)** — count of research triggers
     (I5) and replan triggers (I6) per ledger entry, tracked
     separately. **Counting rule**: only events that pass the
     "should the homeostat fire?" test above count toward this
@@ -383,7 +389,7 @@ behaviour rather than its throughput.
       (c) **mis-bounded entry**: re-partition the entry along the
       fault line the execution exposed. Do not fire the homeostat
       a fourth time without naming the cause.
-12. **Time to stabilize** — number of sub-cycles between a
+13. **Time to stabilize** — number of sub-cycles between a
     homeostat firing and the next *clean return* (a sub-cycle
     that returns its compressed report without raising another
     homeostat firing or an algedonic flag). Tracked per firing
@@ -395,7 +401,7 @@ behaviour rather than its throughput.
       observations from the *failed* refresh round, or
       re-partition. Do not request a third refresh on the same
       framing.
-13. **Material scope delta** — closed-entry actual scope vs
+14. **Material scope delta** — closed-entry actual scope vs
     planned scope (files touched, follow-ups opened). Drift that
     is pure leaf-level refinement (touching a planned file in a
     way the plan did not enumerate line-for-line) is **not**
@@ -421,10 +427,10 @@ Metrics:
 - Audit discrepancies <n>; algedonic <ordinary:n, bypass:n, depth-limit:n>; bypass false-positives <n>
 ```
 
-The single-line form exceeded the one-screen budget; the bullet
-form is the canonical layout. Track `depth-limit` separately
-from ordinary algedonic and bypass per [[vsm-node]] § *Recursion-
-depth bound*.
+The four-bullet form is the canonical layout — a single-line
+form would exceed the one-screen budget once all counters are
+included. Track `depth-limit` separately from ordinary algedonic
+and bypass per [[vsm-node]] § *Recursion-depth bound*.
 
 Only expand beyond that line when a threshold fired. The control action
 belongs in the ledger entry or session log next to the metric that
@@ -574,6 +580,34 @@ When escalating: one paragraph framing the situation, the exact
 question (yes/no, A/B/C, or "please provide X"), the cost of each
 alternative if you can characterize them, and a pointer to the
 ledger entry. No multi-page recap; the ledger has the detail.
+
+### Capturing the user verdict (closes the §8 loop)
+
+When the user resolves an algedonic escalation, the orchestrator
+**must** record the user's judgement in the session log alongside
+the original escalation entry, in a fixed shape:
+
+```markdown
+Escalation <id>: channel=<ordinary|bypass|depth-limit>;
+  user-verdict=<legitimate|false-positive|unclear|deferred>;
+  notes=<one line, optional>.
+```
+
+- For **ordinary** algedonic the verdict feeds metric §7 (frequency
+  by reason).
+- For **`BYPASS`** algedonic the verdict feeds metric §8 (false-
+  positive rate). Without this capture step §8 has no data; do
+  not omit it.
+- For **`DEPTH-LIMIT`** the verdict captures whether the user
+  agreed the plan needed replanning at that depth or judged the
+  subagent could have absorbed the work — useful signal for
+  recursion-permission tuning.
+
+The verdict is recorded by the orchestrator at the moment the
+user's response arrives, not deferred to session end (deferral
+loses fidelity). If the user does not state a verdict explicitly,
+infer it from their response and mark `unclear` if genuinely
+ambiguous; do not default to `legitimate`.
 
 Algedonic must stay rare. A loop that escalates every cycle has
 either bad briefing (its plans don't survive contact with
@@ -730,7 +764,7 @@ during I1–I4 a sub-cycle returns "blocked on missing knowledge"
 back into the active plan or the relevant ledger entry, and
 resume I2 with the refreshed brief. This is S3 routing work to
 S4 mid-execution — the homeostat doing its job. Count this
-firing; see §11–12.
+firing; see §12–13.
 
 **I6. Mid-cycle replan trigger (S3 → S4 homeostat firing).** If
 a sub-cycle returns "the plan for this entry is wrong given what

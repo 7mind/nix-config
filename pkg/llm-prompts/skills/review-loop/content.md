@@ -10,7 +10,10 @@ running the loop.
 
 - **Never do planning, execution, or review yourself.** Every phase runs in a
   subagent. Your job is orchestration, ledger maintenance, and decision-making
-  on the loop exit condition.
+  on the loop exit condition. This is the orchestrator-side counterpart of the
+  leaf-authority principle in [[vsm-loop]] § *S1's local environment loop*:
+  leaves iterate locally against tests/build/FS within their envelope; you do
+  not. Local iteration is the leaf's resource bargain, not yours.
 - **Run independent subagents in parallel** whenever the work partitions
   cleanly (e.g. multiple independent fixes, multiple independent defects).
   Parallel subagents share no memory — each prompt must be self-contained.

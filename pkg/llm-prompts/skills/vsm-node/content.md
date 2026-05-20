@@ -137,7 +137,12 @@ contains:
 - **Verification** — exact commands run and their results
   (one-liner per command).
 - **Surprises** — anything you discovered that the parent's
-  context did not predict, one sentence each.
+  context did not predict, one sentence each. Entries here are
+  *refinement-class* observations absorbed at S1 — they
+  explicitly do **not** count as homeostat firings in the
+  parent's metric #12. If a discovery actually invalidated the
+  plan or required new research, route it through I5/I6 instead;
+  do not bury a true homeostat firing under *Surprises*.
 - **Left undone** — anything in your brief you did not complete,
   with reason.
 - **Algedonic flag** (only if escalating) — see next section.
@@ -154,7 +159,23 @@ Re-compress before returning.
 
 ## The algedonic flag
 
-Set the algedonic flag in your return only when **all** hold:
+The algedonic surface has **three channels**, each with different
+propagation rules:
+
+- **Ordinary algedonic** (this section) — escalates to the
+  parent; any ancestor whose S5 is sufficient may resolve and
+  stop the propagation.
+- **`BYPASS`** (see § *Bypass authority* below) — policy-
+  violation channel; must propagate unchanged to the metasystem.
+- **`DEPTH-LIMIT`** (see § *Recursion-depth bound* below) —
+  plan-resolution channel; must propagate unchanged to the
+  plan-owning ancestor.
+
+The criteria below cover **ordinary algedonic**. Read the other
+two sections before flagging when the situation might warrant
+them, because the parent's handling differs.
+
+Set the ordinary algedonic flag in your return only when **all** hold:
 
 - The brief cannot be discharged from inside your scope.
 - More work, more research, or a re-plan from you cannot resolve
@@ -245,11 +266,31 @@ not an ordinary algedonic. Like bypass, the parent **must
 propagate it upward unchanged** — no intermediate ancestor can
 resolve it by re-briefing with smaller scope, because doing so
 silently masks the upstream plan defect that depth-3 indicates.
-It resolves only at the **nearest ancestor that owns the plan
-for the affected work** — typically the top orchestrator, or the
-ancestor that ran the [[vsm-loop]] planner whose output this
-branch traces back to. Track `DEPTH-LIMIT` separately from
-ordinary algedonic in the dashboard line.
+
+**Resolution authority and scope:** `DEPTH-LIMIT` resolves at
+the **nearest ancestor that owns the plan for the affected
+work** — typically the top orchestrator, or the ancestor that
+ran the [[vsm-loop]] planner whose output this branch traces back
+to. It does **not** automatically cross the metasystem boundary
+to the user.
+
+The three channels differ in where they resolve:
+
+- **Ordinary algedonic** — resolves at any ancestor whose S5
+  (i.e. `CLAUDE.md` + their brief) is sufficient. May terminate
+  before reaching the top.
+- **`BYPASS`** — resolves only at the metasystem (user). Must
+  propagate unchanged through every layer.
+- **`DEPTH-LIMIT`** — resolves at the plan-owning ancestor
+  (internal). Must propagate unchanged through layers below it,
+  but does not need to reach the metasystem unless the
+  plan-owner itself cannot replan from inside its own S5 +
+  available planning budget.
+
+Track `DEPTH-LIMIT` separately from ordinary algedonic and
+bypass in the dashboard line. Surface to the user only when the
+plan-owning ancestor returned its own ordinary or bypass
+algedonic in response.
 
 **Soft signal:** at depth 2, log the depth in your report so the
 top orchestrator can see how the tree is growing. A tree that is
