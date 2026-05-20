@@ -273,8 +273,10 @@ in
       home.file.".gemini-work/settings.json".source = config.home.file.".gemini/settings.json".source;
       home.file.".gemini-work/AGENTS.md".source = config.home.file.".gemini/AGENTS.md".source;
 
-      home.file.".claude-work/settings.json".source = config.home.file.".claude/settings.json".source;
-      home.file.".claude-work/CLAUDE.md".source = config.home.file.".claude/CLAUDE.md".source;
+      home.file.".claude-work/settings.json".source =
+        config.home.file."${config.programs.claude-code.configDir}/settings.json".source;
+      home.file.".claude-work/CLAUDE.md".source =
+        config.home.file."${config.programs.claude-code.configDir}/CLAUDE.md".source;
 
       # Copilot does not support skills — uses pre-composed context from llm-prompts package
       home.file.".copilot/copilot-instructions.md".source = llmPrompts.contextWithEnvFile;

@@ -11,11 +11,17 @@
 {
   hardware.i2c.enable = true;
 
-  # `smind.host.owner` is nullable; only wire the group on hosts that
-  # actually declare an owner. The owner user itself is declared
-  # elsewhere (users/*.nix); this attribute just merges "i2c" onto
-  # their `extraGroups` via the NixOS module system's submodule merge.
-  users.users = lib.optionalAttrs (config.smind.host.owner != null) {
-    ${config.smind.host.owner}.extraGroups = [ "i2c" ];
-  };
+  # `smind.host.owner` is nullable, and on headless cloud nodes
+  # (o1/o2) it names a logical owner that is *not* a real local user
+  # account. Only merge "i2c" onto the owner's `extraGroups` when the
+  # owner is also declared as a home-manager user on this host — that
+  # is the signal that the owner has a real account here. Checking
+  # `home-manager.users` instead of `config.users.users` avoids a
+  # definition cycle (we contribute to the latter).
+  users.users = lib.optionalAttrs
+    (config.smind.host.owner != null
+      && (config.home-manager.users or { }) ? ${config.smind.host.owner})
+    {
+      ${config.smind.host.owner}.extraGroups = [ "i2c" ];
+    };
 }
