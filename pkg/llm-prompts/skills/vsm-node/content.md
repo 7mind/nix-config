@@ -235,10 +235,21 @@ a transduction boundary at which information can be lost.
 
 **Hard cap:** at depth ≥ 3 below the top orchestrator, do **not**
 spawn another vsm-node. If your brief implies that you would need
-to, return to your parent with a normal algedonic flag (not
-bypass) tagged `DEPTH-LIMIT: replan-required`. Depth that high
-signals that the original plan under-modelled the work's
-structure — the cure is upstream replanning, not deeper recursion.
+to, return to your parent with an algedonic flag tagged
+`DEPTH-LIMIT: replan-required`. Depth that high signals that the
+original plan under-modelled the work's structure — the cure is
+upstream replanning, not deeper recursion.
+
+`DEPTH-LIMIT` is a *plan-resolution* algedonic, not a bypass and
+not an ordinary algedonic. Like bypass, the parent **must
+propagate it upward unchanged** — no intermediate ancestor can
+resolve it by re-briefing with smaller scope, because doing so
+silently masks the upstream plan defect that depth-3 indicates.
+It resolves only at the **nearest ancestor that owns the plan
+for the affected work** — typically the top orchestrator, or the
+ancestor that ran the [[vsm-loop]] planner whose output this
+branch traces back to. Track `DEPTH-LIMIT` separately from
+ordinary algedonic in the dashboard line.
 
 **Soft signal:** at depth 2, log the depth in your report so the
 top orchestrator can see how the tree is growing. A tree that is

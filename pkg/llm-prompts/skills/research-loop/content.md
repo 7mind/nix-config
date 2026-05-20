@@ -297,7 +297,13 @@ Only two valid terminations:
     happen, and no bounded null can be constructed because the
     user's frame is wrong). Surface this as a blocker; do not
     "answer" it by confirming the negation, which would be
-    misleading.
+    misleading. **Guardrail**: before invoking this reason,
+    confirm the malformedness is itself *evidenced* — cite the
+    file:line, command output, or other observation showing the
+    presupposition is false. Without that citation this reason
+    becomes a polite-decline channel for hard questions; reject
+    any draft blocker that names "question malformed" without an
+    evidence pointer.
   - **Empty answer space with no bounded null** — every
     plausible hypothesis closed `wrong` *and* no completeness
     hypothesis can be constructed with a defensible scope. The

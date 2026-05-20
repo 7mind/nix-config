@@ -333,11 +333,24 @@ behaviour rather than its throughput.
    - Control action: revise that loop's brief template before
      continuing.
 7. **Algedonic frequency** — user escalations per milestone, grouped
-   by reason.
-   - Threshold: more than one non-credential escalation in one
-     milestone.
+   by reason and by channel (ordinary / bypass / depth-limit).
+   - Threshold: more than one non-credential ordinary escalation in
+     one milestone; any bypass false-positive (see §7a).
    - Control action: diagnose bad scope, missing S5 policy, or weak S4
      planning before continuing.
+7a. **Bypass false-positive rate** — count of `BYPASS`-flagged
+   algedonic that the user later judged were not policy
+   violations. Tracked because the must-propagate-unchanged
+   contract makes bypass a high-stakes channel: a noisy subagent
+   that raises bypass on ordinary blockers trains the user to
+   discount the channel, defeating its purpose.
+   - Threshold: any bypass false-positive.
+   - Control action: review the brief and the subagent's
+     reasoning together; tighten the bypass criteria in the brief
+     template, or escalate to S4 to refine when subagents should
+     reach for bypass vs ordinary algedonic. A single false
+     positive is enough to act on — bypass earns its weight by
+     being rare.
 8. **Blocked age** — age of `[!]` task entries in sessions.
    - Threshold: blocked entry older than one session.
    - Control action: resolve, rescope, explicitly defer, or escalate.
@@ -353,7 +366,13 @@ behaviour rather than its throughput.
     - Control action: route to S4; the plan underestimated variety.
 11. **Homeostat firings (S3↔S4)** — count of research triggers
     (I5) and replan triggers (I6) per ledger entry, tracked
-    separately.
+    separately. **Counting rule**: only events that pass the
+    "should the homeostat fire?" test above count toward this
+    metric. Refinement-class drift reported in a subagent's
+    *Surprises* line does **not** increment the counter, because
+    it did not actually fire the homeostat; it was absorbed at
+    S1. Counting refinements would let careful executors who
+    surface detail look worse than careless ones who suppress it.
     - Threshold: more than two firings of either type on a single
       entry; or three combined across types on one entry.
     - Control action: diagnose which of three upstream causes is
@@ -395,8 +414,17 @@ At session end, include a compact metrics line in
 `./docs/logs/YYYYMMDD-HHMM-log.md`:
 
 ```markdown
-Metrics: WIP max <n>; review rounds <PR-01:n, PR-02:n>; S3-S4 firings <research:n, replan:n>; time-to-stabilize <research:max, replan:max>; material scope delta <none|summary>; verification <complete|gaps>; audit discrepancies <n>; algedonic escalations <ordinary:n, bypass:n>.
+Metrics:
+- WIP max <n>; review rounds <PR-01:n, PR-02:n>
+- S3-S4 firings <research:n, replan:n>; time-to-stabilize <research:max, replan:max>
+- Material scope delta <none|summary>; verification <complete|gaps>
+- Audit discrepancies <n>; algedonic <ordinary:n, bypass:n, depth-limit:n>; bypass false-positives <n>
 ```
+
+The single-line form exceeded the one-screen budget; the bullet
+form is the canonical layout. Track `depth-limit` separately
+from ordinary algedonic and bypass per [[vsm-node]] § *Recursion-
+depth bound*.
 
 Only expand beyond that line when a threshold fired. The control action
 belongs in the ledger entry or session log next to the metric that
@@ -431,6 +459,17 @@ A subagent does **not** need to escalate every interaction with
 its local environment back through S3. Each S1 unit is itself a
 viable system embedded in its own piece of the world, and Beer's
 model gives it authority to close its own loop locally.
+
+**Whose authority is this?** The local-loop authority belongs to
+the *leaf executing subagent* — the level that actually runs
+tests, edits files, probes services. It does **not** extend to
+orchestrators at any layer. The main session running [[review-loop]]
+or vsm-loop is an orchestrator, not a leaf, even when the
+orchestrator itself is the S1 of a parent vsm-loop. Orchestrators
+dispatch and audit; they do not iterate against the local
+environment themselves. The "never edit yourself, even trivial"
+rule in [[review-loop]] is the orchestrator-side counterpart of
+this rule: leaves iterate locally, orchestrators do not.
 
 Concretely: inside the scope envelope set by the brief, the
 subagent is authorized to iterate against:
@@ -494,9 +533,13 @@ identity-threatening signals), the framework reintroduces a
 restricted bypass in [[vsm-node]]'s *Bypass authority* subsection:
 a `BYPASS`-flagged algedonic that the parent **must** propagate
 upward unchanged, with no opportunity to re-litigate. This covers
-the genuine policy-violation case (credentials, security gates,
-identity rules from `CLAUDE.md`) while keeping the ordinary
-"I'm stuck" / "the plan is wrong" path inside the loop.
+the genuine policy-violation case — credentials, security gates,
+identity rules from `CLAUDE.md`, and operational-policy gates the
+metasystem has marked non-negotiable (immutable data, required
+CI/CD checks, mandatory audit trails) — while keeping the
+ordinary "I'm stuck" / "the plan is wrong" path inside the loop.
+See [[vsm-node]] § *Bypass authority* for the full criteria; the
+two files use the same list.
 
 If you find yourself reaching for ordinary algedonic frequently,
 the loop has a deeper problem (bad scope, bad plan, weak briefs);
