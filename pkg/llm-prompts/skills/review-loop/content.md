@@ -271,7 +271,9 @@ out-of-scope, explicitly recorded with `[x] resolved (deferred …)`):
 - Flip the task in `./tasks.md` from `[~]` to `[x]`.
 - Write a rich **Completed** entry for the PR (what shipped,
   verification commands + results, surprises, workarounds, constraints
-  future work must respect).
+  future work must respect). Include a compact metrics line:
+  `Metrics: review rounds <n>; defects <major:n, minor:n, nit:n>;
+  verification <complete|gaps>; scope delta <none|summary>`.
 - Commit the PR's code changes plus the ledger updates. One PR = one
   commit. Commit message names the PR. Do not push unless the user
   asked.
@@ -293,8 +295,12 @@ escalate to **session end** with `reason = blocked`.
    this session, the rounds of review per PR (what was found, what was
    fixed), any deferred defects and why, the final ledger state, and —
    if terminating on a blocker — the specific question the user must
-   resolve. The log is written by you, from conversation context — not
-   by a subagent. Use the current local date/time for the filename.
+   resolve. Include the compact VSM metrics line when this loop runs
+   under [[vsm-loop]] or when any metric threshold fired:
+   `Metrics: WIP max <n>; review rounds <PR-01:n>; verification
+   <complete|gaps>; audit discrepancies <n>; algedonic escalations
+   <n>`. The log is written by you, from conversation context — not by
+   a subagent. Use the current local date/time for the filename.
 2. **Final commit.** Commit the session log (and any remaining ledger
    state not already committed with a PR). Separate commit from the
    per-PR commits. Do not push unless the user asked.
@@ -320,6 +326,26 @@ Only two valid terminations of the **outer** loop:
 Running out of patience, hitting a "good enough" point, finishing one
 milestone, or wanting to check in mid-session are **not** stop
 conditions. Keep going.
+
+## Metrics emitted by this loop
+
+When this loop runs standalone, metrics live in the PR Completed entry
+and session log. When [[vsm-loop]] invokes this loop, these metrics feed
+the parent loop's control decisions:
+
+- **Review churn:** number of review rounds and defects per round.
+  A third round with major or minor findings returns control to S4 for
+  replan instead of starting another fix round blindly.
+- **Defect recurrence:** repeated defect class in the current
+  milestone. The second occurrence becomes a cross-cutting
+  architectural note or a research question.
+- **Verification coverage:** exact command results for every completed
+  PR/task. Missing results prevent closure.
+- **Plan accuracy:** scope delta between planned file/module envelope
+  and actual touched files/follow-up tasks. Repeated expansion triggers
+  replan.
+- **WIP load:** maximum simultaneous `[~]` entries, active subagents,
+  and concurrent editors observed during the session.
 
 ## Subagent briefing discipline
 

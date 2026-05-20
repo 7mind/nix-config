@@ -257,8 +257,13 @@ outside scope.
 11. **Deliver** — write the research result to the user: which
     hypothesis (or hypotheses) was confirmed, the key validated
     evidence with file:line citations, a brief note of which
-    branches were ruled out, and a pointer to the ledger. Keep it
-    short; the ledger is the long form.
+    branches were ruled out, and a pointer to the ledger. Include a
+    compact metrics line when the investigation ran under [[vsm-loop]]
+    or when a threshold fired: `Metrics: hypotheses <total:n,
+    confirmed:n, wrong:n, uncertain:0>; evidence <correct:n,
+    incorrect:n, unverified:0>; validation discrepancies <n>;
+    null/completeness <yes|no>`. Keep it short; the ledger is the long
+    form.
 
 ## Stop conditions
 
@@ -281,6 +286,30 @@ Running out of patience, hitting a "probably this" hunch without
 evidence, wanting to check in mid-investigation, or observing that
 "nothing matched" without a bounded null/completeness hypothesis are
 **not** stop conditions. Iterate.
+
+## Metrics emitted by this loop
+
+When this loop runs standalone, metrics live in the research ledger and
+final result. When [[vsm-loop]] invokes this loop, these metrics feed
+the parent loop's S4 control decisions:
+
+- **Hypothesis closure:** total hypotheses and final counts by state.
+  The loop cannot close while any root or descendant remains
+  `uncertain`.
+- **Evidence validation discrepancy rate:** count `incorrect`
+  citations or excerpts. Any load-bearing incorrect evidence triggers
+  re-briefing; repeated incorrect evidence from the same loop type
+  counts as a transduction failure upstream.
+- **Unverified evidence count:** count evidence items left
+  `unverified`. Stop only when the count is zero or the remaining
+  unverified items sit outside the stated scope and no verdict depends
+  on them.
+- **Null/completeness coverage:** whether a negative result used an
+  explicit bounded null/completeness hypothesis, with scope and
+  completeness limit.
+- **Research churn:** rounds per hypothesis branch. Repeated
+  inconclusive rounds on one branch indicate bad hypothesis framing and
+  should trigger an S4 reframe before more evidence gathering.
 
 ## Subagent briefing discipline
 

@@ -46,9 +46,9 @@ Two cross-cutting mechanisms make the model work:
 
 | VSM | Function | Realization in this loop |
 |-----|----------|--------------------------|
-| **S5** | Sets goals, holds non-negotiables | User + main session in identity/policy capacity. `CLAUDE.md`, project constraints, "what must always be true." |
+| **S5** | Sets goals, holds non-negotiables | User + project constitution: `CLAUDE.md`, `AGENTS.md`, explicit user instructions, safety/security policy, and "what must always be true." |
 | **S4** | Plans, researches, models | Planning subagents; [[research-loop]] invocations; design-deliberation subagents. |
-| **S3** | Allocates work here-and-now | Main session as orchestrator: dispatches subagents, maintains ledgers, decides parallelism, sequences cycles. |
+| **S3** | Allocates work here-and-now | Main session as orchestrator: dispatches subagents, maintains ledgers, decides parallelism, sequences cycles, and transduces S5 policy into operational constraints. |
 | **S3\*** | Direct audit of S1 | Adversarial review subagents ([[review-loop]] I2); verification subagents that re-read raw code or re-run tests instead of trusting executor self-report. |
 | **S2** | Conflict damping, conventions | Ledger format and locking, defect ID schema, worktree isolation, naming conventions, parallel-vs-serial discipline. |
 | **S1** | The actual work | Execution subagents (code, tests, edits). For substantial S1 tasks, the subagent runs its own vsm-loop per [[vsm-node]]. |
@@ -62,11 +62,13 @@ at the leaves, the work is atomic and the subagent simply does it.
 
 ## Non-negotiable rules
 
-- **You (the main session) operate at S3.** You never gather
-  evidence yourself, you never plan in detail yourself, you never
-  write production code yourself. Your work is dispatch, ledger
-  maintenance, transduction across channels, audit interpretation,
-  and escalation. Every other phase runs in a subagent.
+- **You (the main session) operate at S3/S2, with S3\* audit
+  authority.** You do not perform primary execution, primary research,
+  or detailed planning yourself; those phases run in subagents. You may
+  validate cited artefacts, inspect samples, re-run checks, and compare
+  reports against diffs/ledgers as S3\* audit. You also transduce S5
+  policy from the user and project constitution into operational
+  constraints, but you do not invent new policy.
 - **Variety must change at every channel crossing.** Down the
   hierarchy → expand (a one-line goal becomes a brief with file
   paths, examples, acceptance criteria, recursion contract). Up
@@ -87,14 +89,15 @@ at the leaves, the work is atomic and the subagent simply does it.
   recursion permission. Inside that envelope, the subagent
   decides how to do the work and what intermediate steps to
   take. Do not micromanage; do audit.
-- **Algedonic is rare and structured.** A subagent escalates to
-  the user only when the brief cannot be discharged from inside
-  the loop *and* the resolution requires authority above S3:
-  missing credential, contradictory requirement, architectural
-  choice needing user input, safety/security finding requiring
-  policy judgement. Everything else stays in the loop —
-  including "I'm stuck" (route to S4 / more research) and "this
-  is harder than estimated" (route to S4 / replan).
+- **Algedonic is rare and structured.** A subagent raises an algedonic
+  flag to its parent only when the brief cannot be discharged from
+  inside the loop *and* the resolution requires authority above the
+  parent: missing credential, contradictory requirement, architectural
+  choice needing user input, safety/security finding requiring policy
+  judgement. Only the top-level loop escalates to S5/user unless the
+  parent itself is the S5 boundary. Everything else stays in the loop —
+  including "I'm stuck" (route to S4 / more research) and "this is
+  harder than estimated" (route to S4 / replan).
 - **One ledger entry = one S1 cycle = one commit.** S2
   discipline. Cycles that bleed into each other corrupt the
   audit trail.
@@ -109,9 +112,11 @@ Operationally:
 **Going down (S5 → S4 → S3 → S1) — amplification.** Each channel
 adds specificity the downstream level needs to act:
 
-- **S5 → S4** (user / main session → planner): goal +
+- **S5 → S4** (user / project constitution → planner): goal +
   non-negotiables + in/out of scope + budget constraint. The
-  planner expands this into a milestone breakdown, PR sequence,
+  orchestrator transduces the user's request and standing project
+  policy into this planning brief; it does not create new policy. The
+  planner expands the brief into a milestone breakdown, PR sequence,
   risk register, and acceptance criteria per unit.
 - **S4 → S3** (plan → orchestrator): plan + acceptance criteria
   + cross-cutting decisions. The orchestrator turns each plan
@@ -155,17 +160,116 @@ exceeds budget, the orchestrator compresses before forwarding;
 if it cannot be compressed without losing fidelity, the original
 is archived and only the compressed version travels up.
 
+## Control metrics: viability signals
+
+These are control metrics, not productivity metrics. Their purpose is
+to detect loss of viability: too much work in flight, weak
+transduction, bad plans, weak review, or excessive escalation. Track
+them in `./tasks.md`, `./defects.md`, and the session log only where
+the signal affects a control decision.
+
+### Required metrics
+
+1. **WIP load** — count `[~]` task entries, active subagents, and
+   concurrent editors.
+   - Threshold: one active cycle per ledger group; parallel editors
+     only when write scopes are disjoint.
+   - Control action: serialise conflicting work; do not spawn more
+     editors until WIP returns inside the threshold.
+2. **Review churn** — review rounds per PR/task and defects found per
+   round.
+   - Threshold: a third review round with major or minor findings.
+   - Control action: route to S4 for replan or scope correction before
+     another fix round.
+3. **Defect recurrence** — repeated defect class across PRs or across
+   review rounds.
+   - Threshold: same class appears twice in one milestone.
+   - Control action: record a cross-cutting architectural note or open
+     a [[research-loop]] question.
+4. **Verification coverage** — every completed PR/task has exact
+   verification commands and results.
+   - Threshold: missing command result on a completed entry.
+   - Control action: the entry cannot close; run verification or mark
+     the entry blocked with the missing precondition.
+5. **S3\* audit discrepancy rate** — spot-checks where the report,
+   diff, ledger, or cited source do not match.
+   - Threshold: any discrepancy in the current cycle.
+   - Control action: re-open review for that cycle. Two discrepancies
+     in one milestone trigger a brief/report-contract correction.
+6. **Transduction failure rate** — subagent returns too verbose, too
+   vague, missing paths, missing verification, or raw uncompressed
+   output.
+   - Threshold: two failed reports from the same loop type in one
+     milestone.
+   - Control action: revise that loop's brief template before
+     continuing.
+7. **Algedonic frequency** — user escalations per milestone, grouped
+   by reason.
+   - Threshold: more than one non-credential escalation in one
+     milestone.
+   - Control action: diagnose bad scope, missing S5 policy, or weak S4
+     planning before continuing.
+8. **Blocked age** — age of `[!]` task entries in sessions.
+   - Threshold: blocked entry older than one session.
+   - Control action: resolve, rescope, explicitly defer, or escalate.
+     Do not let blocked entries accumulate silently.
+9. **Archive pressure** — active ledger length when nothing is in
+   flight.
+   - Threshold: active `./tasks.md` no longer fits roughly one screen.
+   - Control action: archive closed milestone material under
+     `./docs/archive/`.
+10. **Plan accuracy** — planned file/scope boundaries versus actual
+    touched files, defects, and follow-up tasks.
+    - Threshold: repeated scope expansion in one milestone.
+    - Control action: route to S4; the plan underestimated variety.
+
+### Minimal dashboard
+
+At session end, include a compact metrics line in
+`./docs/logs/YYYYMMDD-HHMM-log.md`:
+
+```markdown
+Metrics: WIP max <n>; review rounds <PR-01:n, PR-02:n>; verification <complete|gaps>; audit discrepancies <n>; algedonic escalations <n>.
+```
+
+Only expand beyond that line when a threshold fired. The control action
+belongs in the ledger entry or session log next to the metric that
+triggered it.
+
+## Environment channels: outside and future
+
+VSM distinguishes the system from its environment. In this workflow,
+the environment includes the repository, tests/CI, runtime/tooling,
+upstream documentation and APIs, external systems, user constraints,
+security/operations context, and future maintenance pressure.
+
+- **S1** interacts with the immediate operational environment: files,
+  tests, builds, local services, and generated artefacts.
+- **S4** scans outside-and-future context: upstream docs, API changes,
+  architectural alternatives, long-term risks, migration paths, and
+  uncertainty that current execution exposed.
+- **S3** reconciles current capability with S4's environmental model:
+  it updates the active plan, changes sequencing, allocates work, or
+  routes back to S5 when policy authority is required.
+- **S5** supplies identity and policy constraints: which risks matter,
+  which tradeoffs are acceptable, what must never be violated.
+
+Do not treat the codebase as the whole environment. If execution
+uncovers dependency drift, external API ambiguity, CI/runtime mismatch,
+security exposure, or a maintenance constraint, route the question to
+S4 before continuing operational work.
+
 ## The algedonic channel: when to escalate to the user
 
-S5 (user) hears from the loop in only two cases:
+S5 (user + project constitution) hears from the loop in only two cases:
 
 1. **Cycle completion.** A goal's outer loop has discharged: the
-   ledger is drained for the cycle's scope, the work is
-   committed, and the compressed report is ready. This is the
-   *expected* channel.
-2. **Algedonic escalation.** A subagent or the orchestrator has
-   found something the loop cannot resolve. Criteria — all must
-   hold:
+   ledger is drained for the cycle's scope, the work is committed, the
+   compressed report is ready, and any metric threshold that fired has
+   a recorded control action. This is the *expected* channel.
+2. **Algedonic escalation.** A subagent has raised an algedonic flag
+   through its parent chain, or the top-level orchestrator has found
+   something the loop cannot resolve. Criteria — all must hold:
    - The blocker is **not** a knowledge gap that more research
      could close. If it is, spawn a [[research-loop]] sub-cycle
      first.

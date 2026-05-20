@@ -26,7 +26,9 @@ own scope:
 
 Above you, your parent is S3 (or possibly S4/S5). You speak to
 your parent through one channel: your final compressed report,
-plus an algedonic flag if you must escalate.
+plus an algedonic flag if you must escalate. Do not bypass the parent
+chain to reach the user directly unless your brief explicitly names you
+as the top-level S5 boundary.
 
 ## Receiving the brief
 
@@ -152,7 +154,7 @@ Set the algedonic flag in your return only when **all** hold:
 - More work, more research, or a re-plan from you cannot resolve
   the blocker.
 - The decision requires authority above your parent — typically
-  the user, reached via the parent's own escalation chain.
+  S5/user, reached via the parent's own escalation chain.
 
 Examples that **do not** qualify:
 
