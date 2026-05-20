@@ -80,7 +80,7 @@ at the leaves, the work is atomic and the subagent simply does it.
   sessions, subagent lifecycles, and recursion levels. Active
   work lives in `./tasks.md` (current goal, plan, in-progress
   entries, recent defects). Completed work migrates to
-  `./archive/tasks-YYYY-MM.md` with a one-line stub left in
+  `./docs/archive/tasks-<milestone-id>.md` with a one-line stub left in
   `./tasks.md`. Never delete; only flip state, append, or migrate.
 - **Subagents are locally autonomous within their brief.** You
   set the goal, the success criteria, the file scope, and the
@@ -191,7 +191,7 @@ to escalate.
 
 ## Ledgers
 
-Two active ledgers, plus rolling monthly archives, plus a session
+Two active ledgers, plus per-milestone archives, plus a session
 log.
 
 ### `./tasks.md` — active task ledger
@@ -207,16 +207,17 @@ knows which cycle it is in.
 ledger should fit on one screen. That is S3's working set. Any
 detail beyond that goes to archive.
 
-### `./archive/tasks-YYYY-MM.md` — rolling monthly archive
+### `./docs/archive/tasks-<milestone-id>.md` — per-milestone task archive
 
-Created on first archival of each month. Append-only. The full
+Created when a milestone first archives completed task entries.
+Append-only. The full
 rich entries (what shipped, when, verification commands +
 results, surprises, workarounds, constraints future work must
 respect) live here. The active ledger only carries a one-line
 stub:
 
 ```markdown
-- [x] **PR-04** — Feature X (archived: archive/tasks-2026-05.md#PR-04)
+- [x] **PR-04** — Feature X (archived: ./docs/archive/tasks-M1.md#PR-04)
 ```
 
 ### `./defects.md` — active defect ledger
@@ -224,8 +225,8 @@ stub:
 Schema identical to [[review-loop]]'s `defects.md` (`PR-NN-DMM`
 IDs, Status / Severity / Location / Description / Root cause /
 Fix). On cycle completion where all defects in a PR group are
-`resolved`, migrate that PR's defect section to
-`./archive/defects-YYYY-MM.md` with the same stub-and-pointer
+`[x] resolved`, migrate that PR's defect section to
+`./docs/archive/defects-<milestone-id>.md` with the same stub-and-pointer
 pattern.
 
 ### `./docs/logs/YYYYMMDD-HHMM-log.md` — session log
@@ -325,9 +326,9 @@ transduction → re-spawn its review phase with the discrepancy
 as input.
 
 **I4. Update ledger and archive.** Flip the entry to `[x]`,
-write the rich completion summary, migrate to the month's
+write the rich completion summary, migrate to the milestone's
 archive, leave the one-line stub in `./tasks.md`. Migrate any
-resolved defects' PR group to the defect archive. Commit. One
+resolved defects' PR group to the milestone defect archive. Commit. One
 ledger entry = one commit (code + ledger updates).
 
 **I5. Mid-cycle research trigger.** If during I1–I4 a sub-cycle
@@ -441,11 +442,15 @@ the context nor the authority.
 S2's job is to keep parallel S1s from clobbering each other. The
 discipline from [[review-loop]] applies verbatim:
 
-- **Use the Agent tool's `isolation: "worktree"`** for every
-  concurrent editor. Read-only subagents share the main
-  checkout.
-- **Never script worktree lifecycle by hand.** Briefs never
-  mention `git worktree`, `cd`, or `rm`.
+- **One concurrent editor, one isolated workspace.** Use the
+  runtime's native per-agent checkout isolation when available.
+  Codex equivalent: `worker` agents in forked workspaces satisfy the
+  invariant; if a Codex runner writes workers into the same checkout,
+  the orchestrator creates one `git worktree` per concurrent editor or
+  serialises the work.
+- **Subagents do not manage worktrees.** The orchestrator decides
+  isolation before dispatch. Briefs describe relative paths and write
+  scope, not `git worktree`, `cd`, or cleanup commands.
 - **Merge back deterministically.** The orchestrator merges in a
   defined order.
 - **Serial when the work doesn't partition.** Sub-tasks that
@@ -471,16 +476,20 @@ defect; a weak S4 leads the whole loop in the wrong direction.
 
 Defaults, overridable when a task warrants it:
 
-- **S4 (planning, research) subagents** — strongest available
-  reasoning model with the largest context. The plan must hold
-  the goal, the ledger, and cross-cutting decisions
+- **S4 (planning, research) subagents** — frontier reasoning model
+  with the largest context. Codex equivalent: strongest available
+  GPT-5.x reasoning model with high or extra-high reasoning effort.
+  The plan must hold the goal, the ledger, and cross-cutting decisions
   simultaneously.
-- **S3\* (audit, review) subagents** — same. Adversarial review
-  is exactly where a weaker model regresses to surface checks.
-- **S1 (execution, fix) subagents** — Sonnet-class default. Most
-  S1 work is mechanical once the brief is good. Escalate to a
-  stronger model for S1 tasks that are design decisions in
-  disguise.
+- **S3\* (audit, review) subagents** — same. Codex equivalent:
+  strongest available reviewer/explorer on the frontier reasoning
+  model. Adversarial review is exactly where a weaker model regresses
+  to surface checks.
+- **S1 (execution, fix) subagents** — strong coding model default.
+  Codex equivalent: `worker` agents; medium reasoning for mechanical
+  edits, high reasoning when the task involves design judgement. Most
+  S1 work is mechanical once the brief is good. Escalate to a stronger
+  model for S1 tasks that are design decisions in disguise.
 - **S3 (orchestrator — you), S2 (ledger maintenance), S5
   (escalation drafting)** — orchestrator model, no subagent.
 
@@ -498,10 +507,10 @@ Two non-negotiable rules:
 - `./tasks.md` — active task ledger (S3's working set).
   Checked in.
 - `./defects.md` — active defect ledger. Checked in.
-- `./archive/tasks-YYYY-MM.md` — completed tasks, rolling monthly
-  archive. Checked in.
-- `./archive/defects-YYYY-MM.md` — resolved defects, rolling
-  monthly archive. Checked in.
+- `./docs/archive/tasks-<milestone-id>.md` — completed tasks for a
+  closed milestone. Checked in.
+- `./docs/archive/defects-<milestone-id>.md` — resolved defects for a
+  closed milestone. Checked in.
 - `./docs/drafts/YYYYMMDD-HHMM-<name>.md` — per-cycle plan docs.
   Checked in.
 - `./docs/logs/YYYYMMDD-HHMM-log.md` — one file per session.

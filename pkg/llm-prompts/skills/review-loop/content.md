@@ -27,9 +27,11 @@ running the loop.
 
 ### `./tasks.md` — planned and completed work
 
-The authoritative ledger. Structured, not a flat checklist. Four status
-markers, three standing sections, and a rich **Completed** section that
-doubles as the project's post-mortem log.
+The authoritative active ledger. Structured, not a flat checklist. Four
+status markers, three standing sections, and a **Completed** section for
+the current milestone's rich completion entries. Closed milestones are
+archived under `./docs/archive/` so the active ledger stays small
+without losing history.
 
 **Status legend (always include verbatim near the top):**
 
@@ -50,11 +52,13 @@ Status: `[ ]` planned · `[~]` in progress · `[x]` done · `[!]` blocked
    multiple PRs: library choices, schema invariants, testing conventions,
    etc. Each entry is a checkbox so that "decide X" items visibly resolve
    to "decided: X, land in PR-N" items.
-4. **Completed** — one rich entry per finished PR/task. Not a one-liner.
-   Each entry captures: what shipped, date, what was discovered/surprising,
-   workarounds applied, verification commands run and their results, and
-   constraints or caveats that future work must respect. This is the part
-   future subagents (and future-you) will actually read — invest in it.
+4. **Completed** — one rich entry per finished PR/task in the current
+   milestone. Not a one-liner. Each entry captures: what shipped, date,
+   what was discovered/surprising, workarounds applied, verification
+   commands run and their results, and constraints or caveats that
+   future work must respect. When the milestone closes, migrate these
+   entries to `./docs/archive/tasks-<milestone-id>.md` and leave a
+   one-line stub in the active ledger.
 
 **Skeleton:**
 
@@ -110,8 +114,15 @@ Rules:
   lives in the per-milestone plan doc under `./docs/drafts/`, not here.
 - Cross-cutting notes decay as questions resolve: `[ ] decide X` becomes
   `[x] X = <choice>, lands in PR-N`. Never silently delete.
-- Completed entries are append-only. They are the audit trail and the
-  knowledge base for later subagents — terseness is a failure here.
+- Completed entries are append-only while active. They are the audit
+  trail and the knowledge base for later subagents — terseness is a
+  failure here. When a milestone closes, migrate the rich entries to
+  `./docs/archive/tasks-<milestone-id>.md` and keep only a stub in
+  `./tasks.md`, e.g.
+
+```markdown
+- [x] **M1** — Archived completed entries: `./docs/archive/tasks-M1.md`
+```
 
 ### `./defects.md` — discovered defects
 
@@ -123,25 +134,26 @@ are impossible and the fix rationale survives beyond this session.
 **Status legend (always include verbatim near the top):**
 
 ```
-Status: `[ ]` open · `[~]` under fix · `[x]` resolved
+Status: `[ ] open` · `[~] under fix` · `[x] resolved`
 ```
 
 **Grouping:** one top-level section per PR/task (`## PR-01`, `## PR-02`,
-…). Defects within a PR are numbered `PR-NN-DMM` (`PR-01-D01`,
-`PR-01-D02`, …) — the ID never changes once assigned, even after fix.
-Separate PR groups with `---`.
+…). Defects within a PR are third-level entries (`### [PR-NN-DMM]
+<headline>`) numbered `PR-NN-DMM` (`PR-01-D01`, `PR-01-D02`, …) — the
+ID never changes once assigned, even after fix. Separate PR groups with
+`---`.
 
 **Entry schema** (every defect, open or resolved):
 
 ```markdown
-## [PR-NN-DMM] <one-line headline that states the problem, not the fix>
-**Status:** open | under fix | resolved | resolved (<qualifier, e.g. "mitigated; full fix deferred to PR-25">)
+### [PR-NN-DMM] <one-line headline that states the problem, not the fix>
+**Status:** [ ] open | [~] under fix | [x] resolved | [x] resolved (<qualifier, e.g. "mitigated; full fix deferred to PR-25">)
 **Severity:** major | minor | nit
 **Location:** <absolute or repo-relative path>[:<line>[-<line>]][, <more locations>]
 **Description:** <prose. What is wrong, what breaks, under what conditions. Concrete enough that a future subagent reading only this entry can reproduce the problem.>
 **Root cause:** <optional; include when the bug originates somewhere non-obvious — upstream library behaviour, generator quirk, flag default, etc. Cite file:line in external sources if you investigated them.>
-**Fix:** <what was done, with file:line of the change. For resolved entries this replaces "Suggested fix".>
-**Suggested fix:** <for open entries: the recommended approach. Gets replaced by "Fix:" when closed.>
+**Suggested fix:** <for open or under-fix entries: the recommended approach. Gets replaced by "Fix:" when closed.>
+**Fix:** <for resolved entries: what was done, with file:line of the change. Omit while open.>
 ```
 
 Rules:
@@ -153,11 +165,11 @@ Rules:
 - **Severity has three levels, not a freeform string.** `major` blocks
   merge; `minor` should be fixed but can be deferred with rationale;
   `nit` is cosmetics / nice-to-have.
-- **Resolved with qualifier** is legitimate: `resolved (mitigated; full
-  fix deferred to PR-25)`, `resolved (pin retained; rationale
-  documented)`, `resolved (note-only; no functional change per defect's
-  own guidance)`. The qualifier tells the next reviewer why a defect
-  that still "looks wrong" is closed.
+- **Resolved with qualifier** is legitimate: `[x] resolved (mitigated;
+  full fix deferred to PR-25)`, `[x] resolved (pin retained; rationale
+  documented)`, `[x] resolved (note-only; no functional change per
+  defect's own guidance)`. The qualifier tells the next reviewer why a
+  defect that still "looks wrong" is closed.
 - **Location is precise.** Full path + line range for source; ledger
   file + line for ledger-bug defects; release URL for upstream findings.
   Vague locations waste the next round.
@@ -170,6 +182,16 @@ Rules:
 - **Cross-round regressions get a new defect.** If a fix in round N
   breaks something fixed in round N-1, open a new `PR-NN-DMM` entry that
   references the earlier one — don't re-open the closed defect.
+- **Archive per milestone.** When a milestone closes and all defects in
+  its PR groups are `[x] resolved` (including qualified resolutions),
+  migrate those PR groups to `./docs/archive/defects-<milestone-id>.md`
+  and leave a one-line stub in `./defects.md`, e.g.
+
+```markdown
+## PR-01
+
+Archived resolved defects: `./docs/archive/defects-M1.md#PR-01`
+```
 
 Create the ledger files if they do not exist. If they already exist with
 unrelated content, append a new PR section rather than overwriting.
@@ -225,7 +247,7 @@ diff and the original task brief. Ask for a structured list of defects
 with severity.
 
 **I3. Update ledgers.** Append every reviewer finding to `./defects.md`
-as a structured entry (`## [PR-NN-DMM] <headline>` with the full schema:
+as a structured entry (`### [PR-NN-DMM] <headline>` with the full schema:
 Status / Severity / Location / Description / Root cause / Suggested fix).
 Assign defect IDs sequentially within the PR group; never reuse an ID.
 In `./tasks.md` keep the current task at `[~]` (still in progress).
@@ -239,13 +261,13 @@ Location + Description + Suggested fix), the fix expectation, the exact
 file paths. **Do not edit the code yourself**, even for "trivial" fixes —
 that bypasses the loop discipline. When a fix subagent returns, replace
 the entry's **Suggested fix:** with **Fix:** (describing what was
-actually done, with file:line), and flip status to `resolved` (or
-`resolved (<qualifier>)` when the fix is intentionally partial). Then
+actually done, with file:line), and flip status to `[x] resolved` (or
+`[x] resolved (<qualifier>)` when the fix is intentionally partial). Then
 **go to I2** for another review round.
 
 **I5. Clean review → close out this PR.** When the reviewer returns no
 open defects (or only entries both you and the reviewer agree are
-out-of-scope, explicitly recorded with `resolved (deferred …)`):
+out-of-scope, explicitly recorded with `[x] resolved (deferred …)`):
 - Flip the task in `./tasks.md` from `[~]` to `[x]`.
 - Write a rich **Completed** entry for the PR (what shipped,
   verification commands + results, surprises, workarounds, constraints
@@ -323,55 +345,58 @@ Those push synthesis onto the subagent. You have the context; transfer it.
   — e.g. correctness vs. security — are fine when the change warrants it.)
 - Fixes: parallel when defects are independent.
 
-Send parallel subagents in a single message with multiple tool calls; that
-is what makes them actually run concurrently.
+Dispatch parallel subagents in the runtime's parallel-call form; that is
+what makes them actually run concurrently.
 
 ### Worktrees for parallel editors
 
 Any time you spawn two or more subagents that will **edit** the tree
 concurrently — parallel executors in I1, parallel fix subagents in I4,
-or any other case — each one needs its own `git worktree`. Two agents
-writing into the same checkout will clobber each other's edits, corrupt
-the index, and produce a diff that mixes unrelated changes; the loop
-cannot recover from that cleanly.
+or any other case — each editor needs an isolated checkout or forked
+workspace. Two editors writing into the same checkout will clobber each
+other's edits, corrupt the index, and produce a diff that mixes
+unrelated changes; the loop cannot recover from that cleanly.
 
-Discipline:
+The invariant is runtime-neutral: **one concurrent editor, one isolated
+workspace, one disjoint write scope**. If the runtime cannot provide
+that invariant, serialise the editing work.
 
-- **Use the Agent tool's built-in `isolation: "worktree"` parameter.**
-  Pass `isolation: "worktree"` when spawning each concurrent editor.
-  The runtime creates a temporary worktree, runs the subagent inside
-  it, and tears it down automatically (auto-cleans if the agent made
-  no changes; otherwise returns the worktree path and branch name in
-  the agent's result for merge-back). This is the *only* sanctioned
-  way to create worktrees in this loop.
-- **Never script worktree lifecycle by hand.** Do not run
-  `git worktree add`, `git worktree remove`, `rm -rf wt-*`, or any
-  equivalent — neither in the orchestrator nor in subagent briefs.
-  Manual worktree management causes permission prompts, clobbers the
-  runtime's bookkeeping, and is the failure mode that motivated this
-  rule. If `isolation: "worktree"` cannot express what you need,
-  serialise the work instead.
-- **Subagent briefs must not mention worktree management.** Tell the
-  executor what to change and where (relative paths within its
-  working tree); do not tell it to `cd`, create, remove, or inspect
-  worktrees, and do not pass `git -C <path>` style commands. The
-  runtime drops the subagent inside its worktree already, so its CWD
-  is correct. A defensive line like "operate only in your current
-  working directory; do not invoke `git worktree`, `rm`, or any
-  path-cleanup command" belongs in every parallel-editor brief.
+Runtime adapters:
+
+- **Claude-style runtimes:** if the Agent/Task tool supports native
+  worktree isolation, request that isolation for each concurrent editor.
+  Use the runtime-reported branch/path for deterministic merge-back.
+- **Codex-style runtimes:** spawn editing agents as `worker` agents and
+  give each one explicit ownership of a disjoint file/module set. When
+  the runtime runs workers in forked workspaces, treat each fork as the
+  isolated workspace and integrate returned changes one worker at a
+  time. Do not use a Claude-only `isolation` parameter in Codex briefs
+  or tool calls. If your Codex runner writes workers into the same
+  checkout, create one `git worktree` per concurrent editor before
+  dispatch, pass that worktree as the editor's working directory if the
+  runner supports it, and remove the worktree after merge-back; if the
+  runner cannot target a worktree, serialise.
+- **Other runtimes:** use the runtime's native per-agent checkout
+  isolation when it exists. Otherwise create explicit `git worktree`
+  checkouts for concurrent editors and merge/cherry-pick back in a
+  defined order.
+
+Operational rules:
+
+- **Do not ask subagents to manage worktrees.** The orchestrator
+  chooses isolation before dispatch. Subagent briefs should say what to
+  change and where, using paths relative to the subagent's current
+  checkout.
 - **Read-only subagents share the main checkout.** Reviewers (I2),
-  planners (O1), and exploration subagents do not need
-  `isolation: "worktree"` — they only read.
-- **Merge back deterministically.** When each editor returns, you (the
-  orchestrator) merge or cherry-pick its commits back into the main
-  branch in a defined order, using the path/branch the runtime
-  reported in the agent's result. Resolve conflicts at merge time,
-  not at edit time. Never let two subagents race for the same file.
+  planners (O1), and exploration subagents do not need worktree
+  isolation because they only read.
+- **Merge back deterministically.** When each editor returns, merge or
+  cherry-pick its commits/patches back into the main branch in a defined
+  order. Resolve conflicts at merge time, not at edit time. Never let
+  two subagents race for the same file.
 - **Serial when it doesn't partition.** If two sub-tasks touch the same
   file or build on each other's output, do not parallelise them across
-  worktrees — run them serially in the main checkout. Worktrees are a
-  tool for *independent* work, not a way to dodge a sequencing
-  requirement.
+  workspaces — run them serially in the main checkout.
 
 ## Model selection per phase
 
@@ -382,22 +407,28 @@ weaker executor wastes a round; a weaker reviewer ships a bug. Spend the
 budget where the asymmetry hurts.
 
 Default model assignment, **always overridable when a task obviously
-warrants it**:
+warrants it**. Names are role classes; map them to the strongest
+stable model available in the current runtime:
 
-- **Planning subagents (O1):** the strongest available reasoning model
-  with the largest available context — currently Opus-class with the 1M
-  context window. Plans need to hold the full spec, the existing ledger,
-  and cross-cutting decisions in mind simultaneously.
-- **Review subagents (I2):** same — strongest available model, large
-  context. The reviewer's job is adversarial pattern-matching against
-  the entire diff plus surrounding code; this is exactly where a
-  weaker model regresses to surface-level checks.
-- **Execution subagents (I1) and fix subagents (I4):** Sonnet-class is
-  the default. Most fixes are mechanical once the defect entry names the
-  file, the line, and the change. Use the stronger model for executors
-  only when the task itself is a non-trivial design decision masquerading
-  as "just implement it" — flag this in the brief rather than escalating
-  silently.
+- **Planning subagents (O1):** frontier reasoning model with the largest
+  available context. Codex equivalent: use the strongest GPT-5.x
+  reasoning model available with high or extra-high reasoning effort.
+  Plans need to hold the full spec, the existing ledger, and
+  cross-cutting decisions in mind simultaneously.
+- **Review subagents (I2):** same — frontier reasoning model, large
+  context. Codex equivalent: use a strong reviewer/explorer agent on
+  the strongest available reasoning model. The reviewer's job is
+  adversarial pattern-matching against the entire diff plus surrounding
+  code; this is exactly where a weaker model regresses to surface-level
+  checks.
+- **Execution subagents (I1) and fix subagents (I4):** strong coding
+  model by default. Codex equivalent: use `worker` agents; medium
+  reasoning is enough for mechanical edits, high reasoning for edits
+  that require design judgement. Most fixes are mechanical once the
+  defect entry names the file, the line, and the change. Use the
+  frontier reasoning model for executors only when the task itself is a
+  non-trivial design decision masquerading as "just implement it" —
+  flag this in the brief rather than escalating silently.
 - **Ledger maintenance, commits, session log:** orchestrator (you), no
   subagent.
 
@@ -416,6 +447,10 @@ Two non-negotiable rules:
 
 - `./tasks.md` — persistent task ledger (checked in).
 - `./defects.md` — persistent defect ledger (checked in).
+- `./docs/archive/tasks-<milestone-id>.md` — archived completed task
+  entries for a closed milestone (checked in).
+- `./docs/archive/defects-<milestone-id>.md` — archived resolved
+  defects for a closed milestone (checked in).
 - `./docs/logs/YYYYMMDD-HHMM-log.md` — one file per session (checked in).
 - Code changes — as normal.
 - Nothing transient in the loop (draft plans, intermediate reviewer output)

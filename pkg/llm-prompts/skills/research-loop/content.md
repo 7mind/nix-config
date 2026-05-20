@@ -34,21 +34,24 @@ answer hinges on cross-cutting evidence.
   evidence collected drilling one branch often closes neighbours
   without a separate subagent.
 - **Run independent subagents in parallel only when seeding.** When
-  seeding round 1 with several disjoint top-level hypotheses, send
-  parallel `Agent` calls in a single message. Once drilling a branch,
-  go serial — each round's findings reshape the next round's questions.
+  seeding round 1 with several disjoint top-level hypotheses, dispatch
+  parallel read-only subagents in the runtime's parallel-call form.
+  Codex equivalent: use `explorer` or default read-only agents in
+  parallel. Once drilling a branch, go serial — each round's findings
+  reshape the next round's questions.
 - **The ledger is durable.** It persists between iterations and across
   sessions. Append findings; never rewrite history. A wrong hypothesis
   stays as `wrong` with its evidence — it is not deleted. Incorrect
   evidence stays as `incorrect` so a future round doesn't re-cite it.
 - **At least one hypothesis must end `confirmed`.** A loop that closes
   with every hypothesis `wrong` or `uncertain` is not done — expand the
-  hypothesis set and iterate. "Nothing matched" is not a research
-  result.
+  hypothesis set and iterate. For negative-result investigations,
+  model the negative result as a bounded null/completeness hypothesis
+  and confirm that hypothesis with evidence.
 
 ## The ledger
 
-Path: `.docs/research/research-<short-kebab-description>.md`. Create
+Path: `./docs/research/research-<short-kebab-description>.md`. Create
 the directory if it does not exist. One file per research task; reuse
 the same file across iterations of the same investigation.
 
@@ -139,6 +142,39 @@ Rules:
   reporting. Trigger follow-up investigation if a hypothesis rests on
   unconfirmed facts.
 
+### Null / completeness hypotheses
+
+When the user's question can legitimately answer "no matching case
+exists" or "none of the proposed causes apply", create an explicit
+null/completeness hypothesis. Do not rely on all other hypotheses
+ending `wrong`; that only says the tried explanations failed.
+
+The null/completeness hypothesis must define:
+
+1. **Scope** — exact repository paths, runtime components, data set,
+   time window, or API surface being searched.
+2. **Predicate** — the concrete condition that would count as a match.
+3. **Search operations** — commands, code paths, indexes, tests, or
+   source reads used to cover the scope.
+4. **Completeness limit** — what remains outside the scope, if
+   anything.
+
+Example:
+
+```markdown
+## H0 — No caller under `src/server/` invokes `send()` without a timeout
+
+**State:** `confirmed` — rests on E0.a, E0.b. The claim is bounded to
+static call sites under `src/server/`; dynamic calls via reflection are
+outside scope.
+
+**Evidence:**
+- **E0.a** [`correct`] — `rg "send\\(" src/server` returned 12 call
+  sites; each passes a non-null timeout argument. Source-verified round 1.
+- **E0.b** [`correct`] — `SenderFactory.cs:44-71` constructs all
+  server-side senders and does not expose a timeout-free wrapper.
+```
+
 ## The loop
 
 1. **Investigate** — read the user's request, the relevant code, and
@@ -149,7 +185,7 @@ Rules:
 2. **Seed the ledger** — write each top-level hypothesis as a `## Hn`
    entry with the headline, prose description, empty `Evidence:`
    block, and `State: uncertain`. Create
-   `.docs/research/research-<name>.md` if it does not exist.
+   `./docs/research/research-<name>.md` if it does not exist.
 3. **Pick the next branch (DFS)** — choose the leftmost open
    hypothesis whose state is `uncertain`. Within a branch, prefer the
    deepest open node (most-specific refinement first). Open
@@ -170,7 +206,7 @@ Rules:
 
    When **seeding round 1** with several disjoint top-level
    hypotheses, brief multiple subagents in parallel (one message,
-   multiple `Agent` calls). After round 1, drilling a branch is
+   multiple subagent calls). After round 1, drilling a branch is
    usually serial — each round informs the next.
 5. **Validate evidence** — for every evidence item the subagent
    returned, open the cited file at the cited line, confirm the
@@ -215,8 +251,9 @@ Rules:
      refined question.
 10. **Stop when** the user's question is answered: every leaf
     hypothesis is `confirmed` or `wrong` (none `uncertain`) and at
-    least one root or descendant is `confirmed`. See **Stop
-    conditions** below.
+    least one root or descendant is `confirmed`. The confirmed node may
+    be a bounded null/completeness hypothesis. See **Stop conditions**
+    below.
 11. **Deliver** — write the research result to the user: which
     hypothesis (or hypotheses) was confirmed, the key validated
     evidence with file:line citations, a brief note of which
@@ -230,7 +267,9 @@ Only two valid terminations:
 - **Answered.** At least one hypothesis is `confirmed` and no
   hypothesis (root or descendant) remains `uncertain`. The user's
   question has a direct answer backed by validated evidence. Deliver
-  the result.
+  the result. If the answer is negative, the confirmed hypothesis must
+  be an explicit null/completeness hypothesis with a stated scope and
+  completeness limit.
 - **Blocked on user input.** The investigation has uncovered a
   question that cannot be resolved from the code or the original
   brief: ambiguous scope, missing system access, or a choice the
@@ -239,8 +278,9 @@ Only two valid terminations:
   user.
 
 Running out of patience, hitting a "probably this" hunch without
-evidence, or wanting to check in mid-investigation are **not** stop
-conditions. Iterate.
+evidence, wanting to check in mid-investigation, or observing that
+"nothing matched" without a bounded null/completeness hypothesis are
+**not** stop conditions. Iterate.
 
 ## Subagent briefing discipline
 
@@ -288,8 +328,9 @@ context; transfer it.
   parent's siblings.
 - Reviewing, evidence validation, and adjudication are orchestrator
   work, not subagent work.
-- All research subagents are **read-only**, so they share the main
-  checkout — `isolation: "worktree"` is unnecessary.
+- All research subagents are **read-only**, so they may share the main
+  checkout. No worktree isolation is required for pure evidence
+  gathering.
 
 ## Model selection per phase
 
@@ -301,15 +342,19 @@ The hypothesis-testing subagents themselves are usually mechanical
 once the brief names the files and the evidence form.
 
 Default model assignment, overridable when a task obviously warrants
-it:
+it. Names are role classes; map them to the strongest stable model
+available in the current runtime:
 
 - **Orchestrator (hypothesis formation, evidence validation,
-  adjudication — i.e. you):** strongest available reasoning model
-  with the largest available context. The orchestrator holds the
-  full code context and the ledger simultaneously; this is exactly
-  where a weaker model regresses to surface-level pattern matching
-  or accepts unverified citations.
-- **Research subagents:** Sonnet-class is the default — most
+  adjudication — i.e. you):** frontier reasoning model with the
+  largest available context. Codex equivalent: strongest available
+  GPT-5.x reasoning model with high or extra-high reasoning effort.
+  The orchestrator holds the full code context and the ledger
+  simultaneously; this is exactly where a weaker model regresses to
+  surface-level pattern matching or accepts unverified citations.
+- **Research subagents:** strong code-reading model by default. Codex
+  equivalent: `explorer` or default read-only agents; use higher
+  reasoning for hypotheses that require design judgement. Most
   evidence-gathering reduces to "read these files, report what you
   find with excerpts." Escalate to a stronger model when the
   hypothesis requires non-trivial design reasoning to evaluate (e.g.
@@ -323,7 +368,7 @@ delivered wrong answer is the dominant failure mode of this loop.
 
 ## What lives where
 
-- `.docs/research/research-<name>.md` — the persistent research
+- `./docs/research/research-<name>.md` — the persistent research
   ledger for this investigation. Survives across sessions. The tree
   of hypotheses, all evidence items with their validation status,
   and the round-by-round log all live here.

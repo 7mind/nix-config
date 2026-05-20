@@ -92,9 +92,14 @@ from your context into the subagent's. You must:
   state. Do **not** propagate the subagent's raw output upward
   unchanged.
 
-If you spawn parallel editors, use `isolation: "worktree"` per
-[[review-loop]] § *Worktrees for parallel editors*. Never script
-worktree lifecycle by hand.
+If you spawn parallel editors, follow [[review-loop]] § *Worktrees for
+parallel editors*: one concurrent editor, one isolated workspace, one
+disjoint write scope. Codex equivalent: use `worker` agents in forked
+workspaces when the runtime provides them; if a Codex runner writes
+workers into the same checkout, the parent/orchestrator must create
+separate `git worktree` checkouts before dispatch or serialise the
+edits. Do not ask child subagents to create, remove, or clean
+worktrees.
 
 ## When you do the work yourself
 
