@@ -43,11 +43,15 @@ answer hinges on cross-cutting evidence.
   sessions. Append findings; never rewrite history. A wrong hypothesis
   stays as `wrong` with its evidence — it is not deleted. Incorrect
   evidence stays as `incorrect` so a future round doesn't re-cite it.
-- **At least one hypothesis must end `confirmed`.** A loop that closes
-  with every hypothesis `wrong` or `uncertain` is not done — expand the
-  hypothesis set and iterate. For negative-result investigations,
-  model the negative result as a bounded null/completeness hypothesis
-  and confirm that hypothesis with evidence.
+- **The investigation cannot terminate until the user's question
+  has a positively-stated answer.** That answer may be affirmative
+  (a confirmed hypothesis directly supports the claim) or
+  negative (a confirmed bounded null/completeness hypothesis with
+  explicit scope), but it must be *confirmed* — never inferred
+  from "all other branches ended `wrong`". Absence of
+  counter-evidence is not confirmation. If every branch closes
+  `wrong` or `uncertain`, expand the hypothesis set (including a
+  bounded null if a negative is plausible) and iterate.
 
 ## The ledger
 
@@ -269,12 +273,13 @@ outside scope.
 
 Only two valid terminations:
 
-- **Answered.** At least one hypothesis is `confirmed` and no
-  hypothesis (root or descendant) remains `uncertain`. The user's
-  question has a direct answer backed by validated evidence. Deliver
-  the result. If the answer is negative, the confirmed hypothesis must
-  be an explicit null/completeness hypothesis with a stated scope and
-  completeness limit.
+- **Answered.** The user's question has a positively-stated
+  answer backed by validated evidence: at least one hypothesis is
+  `confirmed` (affirmative answer) or a bounded null/completeness
+  hypothesis is `confirmed` (negative answer with explicit scope),
+  *and* no hypothesis (root or descendant) remains `uncertain`.
+  Deliver the result. A loop that closes with every branch `wrong`
+  is not done — the answer has not been positively stated.
 - **Blocked on user input.** The investigation has uncovered a
   question that cannot be resolved from the code or the original
   brief: ambiguous scope, missing system access, or a choice the

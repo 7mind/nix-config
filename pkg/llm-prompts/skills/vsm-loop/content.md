@@ -13,6 +13,27 @@ compose [[review-loop]] for build–fix–review cycles and
 enough to be viable systems of their own follow the [[vsm-node]]
 recursion contract, so the hierarchy stays viable at every level.
 
+## When to invoke vsm-loop
+
+This skill carries real overhead — a planning subagent, an audit
+pass, ledger discipline, and a recursion contract. Invoke it when
+**all three** hold:
+
+1. **Plan-the-plan is itself a deliverable.** The user's request
+   is open enough that producing the milestone breakdown is real
+   work, not a paragraph.
+2. **At least one S1 cycle will spawn its own sub-cycles.** The
+   work will recurse — sub-tasks substantial enough to need their
+   own planning and audit, per [[vsm-node]].
+3. **Multiple decision points the orchestrator cannot
+   pre-resolve.** During execution, the loop will discover
+   constraints that change the plan, not just refine it.
+
+If only one or two hold, prefer [[review-loop]] alone (build-style
+work) or [[research-loop]] alone (investigation). The meta-overhead
+of vsm-loop is paid back by reduced rework on genuinely large
+tasks; on small ones it taints perceived value.
+
 ## VSM in one paragraph
 
 A *viable system* is one that can sustain a separate existence in
@@ -29,7 +50,9 @@ system:
 - **S4 — Strategy/Intelligence** ("Outside-and-Future"). Models the
   environment, plans, researches.
 - **S5 — Policy/Identity** ("Ethos"). Sets purpose, balances S3
-  against S4, holds the system's identity.
+  against S4, holds the system's identity. S5 is **internal** to
+  the viable system; the level above it is the *metasystem* in
+  which the viable system is embedded.
 
 Two cross-cutting mechanisms make the model work:
 
@@ -46,11 +69,12 @@ Two cross-cutting mechanisms make the model work:
 
 | VSM | Function | Realization in this loop |
 |-----|----------|--------------------------|
-| **S5** | Sets goals, holds non-negotiables | User + project constitution: `CLAUDE.md`, `AGENTS.md`, explicit user instructions, safety/security policy, and "what must always be true." |
+| **Metasystem** | Commissioning authority, identity-level rules above the viable system | User + project constitution: `CLAUDE.md`, `AGENTS.md`, explicit user instructions, safety/security policy, the "what must always be true" the system inherits from outside. |
+| **S5** | Holds the system's identity; balances S3 against S4 | The orchestrator's commitment to translate metasystem intent into operational policy and enforce identity rules (security, safety, scope, non-negotiables). |
 | **S4** | Plans, researches, models | Planning subagents; [[research-loop]] invocations; design-deliberation subagents. |
-| **S3** | Allocates work here-and-now | Main session as orchestrator: dispatches subagents, maintains ledgers, decides parallelism, sequences cycles, and transduces S5 policy into operational constraints. |
-| **S3\*** | Direct audit of S1 | Adversarial review subagents ([[review-loop]] I2); verification subagents that re-read raw code or re-run tests instead of trusting executor self-report. |
-| **S2** | Conflict damping, conventions | Ledger format and locking, defect ID schema, worktree isolation, naming conventions, parallel-vs-serial discipline. |
+| **S3** | Allocates work here-and-now; regular oversight | Main session as orchestrator: dispatches subagents, maintains ledgers, decides parallelism, sequences cycles. Includes the structured per-cycle review channel ([[review-loop]] I2) — that is S3 oversight via the S2 ledger/diff channel, *not* S3\*. |
+| **S3\*** | Sporadic, direct audit of S1 that bypasses S2 | Orchestrator's spot-checks during vsm-loop I3: open the diff or research artefact, verify one or two claims against source, confirm the cycle's report matches reality. Sporadic by design — exhaustive audit collapses back into S3. |
+| **S2** | Anti-oscillation between parallel S1s; coordination | Worktree isolation, one-cycle-per-ledger-group rule, naming conventions, parallel-vs-serial discipline. The ledger format is S2's substrate but also S3's institutional memory. |
 | **S1** | The actual work | Execution subagents (code, tests, edits). For substantial S1 tasks, the subagent runs its own vsm-loop per [[vsm-node]]. |
 
 The S1 units in this mapping are themselves viable systems
@@ -62,13 +86,21 @@ at the leaves, the work is atomic and the subagent simply does it.
 
 ## Non-negotiable rules
 
-- **You (the main session) operate at S3/S2, with S3\* audit
-  authority.** You do not perform primary execution, primary research,
-  or detailed planning yourself; those phases run in subagents. You may
-  validate cited artefacts, inspect samples, re-run checks, and compare
-  reports against diffs/ledgers as S3\* audit. You also transduce S5
-  policy from the user and project constitution into operational
-  constraints, but you do not invent new policy.
+- **You (the main session) operate at S3/S2 and hold the
+  orchestrator's own S5 commitment, with S3\* audit authority.**
+  You do not perform primary execution, primary research, or detailed
+  planning yourself; those phases run in subagents. You may validate
+  cited artefacts, inspect samples, re-run checks, and compare reports
+  against diffs/ledgers as S3\* audit. You translate metasystem intent
+  (user + project constitution) into operational policy; you do not
+  invent new metasystem policy.
+- **The brief is the resource bargain.** In Beer's terms, the
+  brief between S3 and S1 (or between any level and its
+  subordinate) is a negotiated envelope of scope, budget, and
+  autonomy: inside the envelope the subagent acts; outside it
+  returns or escalates. Violating the bargain — editing outside
+  the scope, expanding the goal, returning raw output without
+  compression — is a structural failure, not a stylistic one.
 - **Variety must change at every channel crossing.** Down the
   hierarchy → expand (a one-line goal becomes a brief with file
   paths, examples, acceptance criteria, recursion contract). Up
@@ -94,10 +126,13 @@ at the leaves, the work is atomic and the subagent simply does it.
   inside the loop *and* the resolution requires authority above the
   parent: missing credential, contradictory requirement, architectural
   choice needing user input, safety/security finding requiring policy
-  judgement. Only the top-level loop escalates to S5/user unless the
-  parent itself is the S5 boundary. Everything else stays in the loop —
-  including "I'm stuck" (route to S4 / more research) and "this is
-  harder than estimated" (route to S4 / replan).
+  judgement. Only the top-level orchestrator crosses the *metasystem
+  boundary* (to the user + project constitution); intermediate
+  layers resolve algedonic from inside the orchestrator's own S5
+  whenever `CLAUDE.md` + the brief is sufficient. Everything else
+  stays in the loop — including "I'm stuck" (route to S4 / more
+  research) and "this is harder than estimated" (route to S4 /
+  replan).
 - **One ledger entry = one S1 cycle = one commit.** S2
   discipline. Cycles that bleed into each other corrupt the
   audit trail.
@@ -109,8 +144,19 @@ is *variety mismatch*: too much detail at a level that needed a
 summary, too little detail at a level that needed a brief.
 Operationally:
 
-**Going down (S5 → S4 → S3 → S1) — amplification.** Each channel
-adds specificity the downstream level needs to act:
+**Going down (S5 → S4 → S3 → S1) — amplification.** Amplification
+has two faces. **Expand**: specify the paths, examples, acceptance
+criteria, and context the downstream level needs to discharge the
+brief. **Constrain**: close off the solution space — "do not
+introduce new dependencies", "edit only these files", "do not
+refactor adjacent code". Both are amplification of *control*:
+expansion gives the subagent enough state to act; constraint
+removes states it should not enter. A brief that only expands
+typically produces over-scoped work; one that only constrains
+without expanding produces stuck work. Every channel crossing
+should do both.
+
+Each channel adds specificity the downstream level needs to act:
 
 - **S5 → S4** (user / project constitution → planner): goal +
   non-negotiables + in/out of scope + budget constraint. The
@@ -160,6 +206,50 @@ exceeds budget, the orchestrator compresses before forwarding;
 if it cannot be compressed without losing fidelity, the original
 is archived and only the compressed version travels up.
 
+## The S3-S4 homeostat
+
+Beer's central cybernetic loop: S3 ("inside-and-now") and S4
+("outside-and-future") are coupled, with S5 holding the balance.
+Operationally, this homeostat fires whenever execution exposes
+information the plan did not model.
+
+- **S3 → S4 firing** — a sub-cycle returns "blocked on missing
+  knowledge", "the upstream API behaves unexpectedly", or "the
+  plan for this entry is wrong given what was discovered". The
+  orchestrator routes to S4 (a [[research-loop]] sub-cycle or a
+  planner refresh) before another execution round. This is I5
+  and I6 of the inner loop.
+- **S4 → S3 firing** — S4 returns a refreshed plan or validated
+  research result; S3 reflects it into the active ledger and
+  resumes dispatch.
+- **Stable state** — the next sub-cycle returns clean against
+  the refreshed plan.
+
+These triggers are not exceptional events. They are the
+homeostat doing its job: in a viable system the inside-now and
+outside-future loops must oscillate as the environment reveals
+itself. A loop that *never* fires its homeostat is suspicious —
+either the plan was prescient or the executor is ignoring its
+brief.
+
+**Failure mode**: repeated firing on one entry without
+convergence — research routes back to plan, plan back to
+execution, execution back to research, with no clean return.
+When this happens, the cause is upstream, not in the current
+cycle:
+
+- S4's environmental model is stale (the planner is working from
+  outdated assumptions).
+- S5 policy is over-constrained (no plan can satisfy both the
+  brief and the non-negotiables).
+- The entry's scope was mis-bounded (the work crosses a fault
+  line the plan didn't see).
+
+Diagnose the meta-cause: re-seed the planner with fresh
+environmental observations, route a clarifying question to the
+metasystem (algedonic), or re-partition the entry. Do not keep
+oscillating.
+
 ## Control metrics: viability signals
 
 These are control metrics, not productivity metrics. Their purpose is
@@ -167,6 +257,13 @@ to detect loss of viability: too much work in flight, weak
 transduction, bad plans, weak review, or excessive escalation. Track
 them in `./tasks.md`, `./defects.md`, and the session log only where
 the signal affects a control decision.
+
+A note on lineage: the WIP / review / scope metrics below are
+operational signals drawn from lean and agile traditions — they
+are cybernetic in spirit but not Beer's. The genuinely Beer
+metrics are the homeostat-pulse signals (§11–13) and algedonic
+frequency (§7): they directly measure the system's adaptive
+behaviour rather than its throughput.
 
 ### Required metrics
 
@@ -222,6 +319,22 @@ the signal affects a control decision.
     touched files, defects, and follow-up tasks.
     - Threshold: repeated scope expansion in one milestone.
     - Control action: route to S4; the plan underestimated variety.
+11. **Homeostat firings (S3↔S4)** — count of research triggers
+    (I5) and replan triggers (I6) per ledger entry.
+    - Threshold: more than two firings on one entry.
+    - Control action: diagnose upstream cause (stale S4 model,
+      over-constrained S5 policy, mis-bounded entry); do not
+      keep oscillating.
+12. **Time to stabilize** — sub-cycles between a homeostat firing
+    and the next clean return.
+    - Threshold: more than two sub-cycles to stabilize.
+    - Control action: the refreshed plan is also wrong; re-seed
+      the planner with fresh observations or re-partition.
+13. **Scope delta** — closed-entry actual scope vs planned scope
+    (files touched, follow-ups opened).
+    - Threshold: scope delta non-zero on two consecutive entries.
+    - Control action: route to S4; the planner is under-modelling
+      variety in the current area.
 
 ### Minimal dashboard
 
@@ -229,7 +342,7 @@ At session end, include a compact metrics line in
 `./docs/logs/YYYYMMDD-HHMM-log.md`:
 
 ```markdown
-Metrics: WIP max <n>; review rounds <PR-01:n, PR-02:n>; verification <complete|gaps>; audit discrepancies <n>; algedonic escalations <n>.
+Metrics: WIP max <n>; review rounds <PR-01:n, PR-02:n>; S3-S4 firings <research:n, replan:n>; time-to-stabilize <max>; scope delta <none|summary>; verification <complete|gaps>; audit discrepancies <n>; algedonic escalations <n>.
 ```
 
 Only expand beyond that line when a threshold fired. The control action
@@ -259,17 +372,34 @@ uncovers dependency drift, external API ambiguity, CI/runtime mismatch,
 security exposure, or a maintenance constraint, route the question to
 S4 before continuing operational work.
 
-## The algedonic channel: when to escalate to the user
+## The algedonic channel: when to cross the metasystem boundary
 
-S5 (user + project constitution) hears from the loop in only two cases:
+The user and `CLAUDE.md` form the *metasystem* above this viable
+agent system. Algedonic that terminates inside the orchestrator's
+own S5 (a policy call the orchestrator can resolve from `CLAUDE.md`
++ the brief) is normal and does not need to surface. Algedonic
+that **crosses the metasystem boundary** — reaching the user
+directly — is what this section covers.
+
+Note: the canonical Beer algedonic *bypasses* the chain (S1
+directly to S5). The discipline here is stricter — leaves flag
+through their parent chain — for operational safety. A genuine
+bypass is reserved for the safety/security carve-out in
+[[vsm-node]]'s "algedonic flag" section, where a subagent may
+escalate directly past the parent chain when the brief itself
+would force a policy violation.
+
+The user-facing metasystem hears from the loop in only two cases:
 
 1. **Cycle completion.** A goal's outer loop has discharged: the
    ledger is drained for the cycle's scope, the work is committed, the
    compressed report is ready, and any metric threshold that fired has
    a recorded control action. This is the *expected* channel.
-2. **Algedonic escalation.** A subagent has raised an algedonic flag
-   through its parent chain, or the top-level orchestrator has found
-   something the loop cannot resolve. Criteria — all must hold:
+2. **Algedonic escalation across the metasystem boundary.** A
+   subagent has raised an algedonic flag through its parent chain
+   and the orchestrator's own S5 cannot resolve it; or the
+   top-level orchestrator has found something the loop cannot
+   resolve from `CLAUDE.md` + the brief. Criteria — all must hold:
    - The blocker is **not** a knowledge gap that more research
      could close. If it is, spawn a [[research-loop]] sub-cycle
      first.
@@ -435,19 +565,22 @@ archive, leave the one-line stub in `./tasks.md`. Migrate any
 resolved defects' PR group to the milestone defect archive. Commit. One
 ledger entry = one commit (code + ledger updates).
 
-**I5. Mid-cycle research trigger.** If during I1–I4 a sub-cycle
-returns "blocked on missing knowledge" (not a user-facing
-blocker — just an unknown), spawn a [[research-loop]] sub-cycle
-for that question, fold its findings back into the active plan
-or the relevant ledger entry, and resume I2 with the refreshed
-brief. This is S3 routing work to S4 mid-execution — exactly
-what an adaptive viable system does.
+**I5. Mid-cycle research trigger (S3 → S4 homeostat firing).** If
+during I1–I4 a sub-cycle returns "blocked on missing knowledge"
+(not a user-facing blocker — just an unknown), spawn a
+[[research-loop]] sub-cycle for that question, fold its findings
+back into the active plan or the relevant ledger entry, and
+resume I2 with the refreshed brief. This is S3 routing work to
+S4 mid-execution — the homeostat doing its job. Count this
+firing; see §11–12.
 
-**I6. Mid-cycle replan trigger.** If a sub-cycle returns "the
-plan for this entry is wrong given what was discovered" (not
-blocked, just wrong), spawn a planner refresh on the affected
-scope. Reflect the new plan into the ledger. Do *not* let the
-executor improvise around the plan — that breaks the audit trail.
+**I6. Mid-cycle replan trigger (S3 → S4 homeostat firing).** If
+a sub-cycle returns "the plan for this entry is wrong given what
+was discovered" (not blocked, just wrong), spawn a planner refresh
+on the affected scope. Reflect the new plan into the ledger. Do
+*not* let the executor improvise around the plan — that breaks the
+audit trail. Count this firing; if I5+I6 exceed the threshold on
+one entry, diagnose upstream per the homeostat section.
 
 **I7. Cycle blocker.** If a sub-cycle reports a true algedonic
 blocker (criteria above), mark the entry `[!]`, record the
@@ -512,7 +645,10 @@ must be earned.
 ## Subagent briefing under VSM
 
 Each brief is the explicit transduction from your S3 into the
-subagent's S5. It must contain:
+subagent's S5 — and it is the **resource bargain** between you
+and the subagent: a negotiated envelope of scope, budget, and
+autonomy. Inside the envelope the subagent acts; outside it
+returns or escalates. The brief must contain:
 
 1. **Identity / scope** — who this subagent is in the hierarchy.
    "You are a build-cycle subagent operating at level N+1; parent
@@ -543,25 +679,47 @@ the context nor the authority.
 
 ## Parallelism and S2 anti-oscillation
 
-S2's job is to keep parallel S1s from clobbering each other. The
-discipline from [[review-loop]] applies verbatim:
+S2's job is to keep parallel S1s from clobbering each other. This
+section is the **canonical home** for parallel-editor discipline;
+[[review-loop]] and [[vsm-node]] reference it for runtime-specific
+guidance.
 
-- **One concurrent editor, one isolated workspace.** Use the
-  runtime's native per-agent checkout isolation when available.
-  Codex equivalent: `worker` agents in forked workspaces satisfy the
-  invariant; if a Codex runner writes workers into the same checkout,
-  the orchestrator creates one `git worktree` per concurrent editor or
-  serialises the work.
+### The invariant (runtime-neutral)
+
+- **One concurrent editor, one isolated workspace, one disjoint
+  write scope.** If the runtime cannot provide that invariant,
+  serialise.
 - **Subagents do not manage worktrees.** The orchestrator decides
   isolation before dispatch. Briefs describe relative paths and write
   scope, not `git worktree`, `cd`, or cleanup commands.
-- **Merge back deterministically.** The orchestrator merges in a
-  defined order.
+- **Merge back deterministically.** When each editor returns,
+  merge or cherry-pick its commits back in a defined order.
+  Resolve conflicts at merge time, not at edit time.
+- **Read-only subagents share the main checkout.** Reviewers,
+  planners, and exploration subagents do not need isolation.
 - **Serial when the work doesn't partition.** Sub-tasks that
   touch the same file or build on each other's output run
   serially.
 
-vsm-loop adds two S2 rules of its own:
+### Runtime adapters
+
+- **Claude-style runtimes:** if the Agent/Task tool supports
+  native worktree isolation, request it for each concurrent
+  editor; use the runtime-reported branch/path for deterministic
+  merge-back.
+- **Codex-style runtimes:** spawn editing agents as `worker`
+  agents in forked workspaces with disjoint write scopes. If a
+  Codex runner writes workers into the same checkout, create one
+  `git worktree` per concurrent editor before dispatch, pass it
+  as the editor's working directory if the runner supports it,
+  and remove the worktree after merge-back; if it cannot target
+  a worktree, serialise. Do not use a Claude-only `isolation`
+  parameter in Codex briefs.
+- **Other runtimes:** use the runtime's native per-agent checkout
+  isolation when it exists. Otherwise create explicit `git
+  worktree` checkouts and merge in a defined order.
+
+### vsm-loop-specific S2 rules
 
 - **One active cycle per ledger group at a time.** Two parallel
   S1s on the same `./tasks.md` PR group corrupts the audit trail
@@ -607,6 +765,12 @@ Two non-negotiable rules:
   than improvise.
 
 ## What lives where
+
+Default paths use the repo root. If the root is already crowded
+or convention prefers nested state, override to `./docs/state/`
+(e.g. `./docs/state/tasks.md`, `./docs/state/defects.md`).
+Whichever you pick, use it consistently — the ledger schema and
+discipline are unchanged.
 
 - `./tasks.md` — active task ledger (S3's working set).
   Checked in.

@@ -25,6 +25,11 @@ running the loop.
 
 ## Ledgers
 
+Default paths use the repo root. If the root is already crowded
+or your project nests state under `./docs/`, override to
+`./docs/state/tasks.md` and `./docs/state/defects.md`. The schema
+and discipline are unchanged — pick one and use it consistently.
+
 ### `./tasks.md` — planned and completed work
 
 The authoritative active ledger. Structured, not a flat checklist. Four
@@ -246,6 +251,13 @@ sloppy edits, surprise side effects, unfixed todos." Point it at the
 diff and the original task brief. Ask for a structured list of defects
 with severity.
 
+In VSM terms this is **S3 oversight via the S2 ledger/diff
+channel** — the regular, every-cycle review of S1's output. It
+is **not** S3\*: Beer's S3\* is *sporadic, surprise* audit that
+bypasses normal reporting. When [[vsm-loop]] wraps this loop, the
+orchestrator's spot-check in vsm-loop I3 is the actual S3\*
+channel layered on top.
+
 **I3. Update ledgers.** Append every reviewer finding to `./defects.md`
 as a structured entry (`### [PR-NN-DMM] <headline>` with the full schema:
 Status / Severity / Location / Description / Root cause / Suggested fix).
@@ -383,46 +395,20 @@ workspace. Two editors writing into the same checkout will clobber each
 other's edits, corrupt the index, and produce a diff that mixes
 unrelated changes; the loop cannot recover from that cleanly.
 
-The invariant is runtime-neutral: **one concurrent editor, one isolated
-workspace, one disjoint write scope**. If the runtime cannot provide
-that invariant, serialise the editing work.
+The invariant: **one concurrent editor, one isolated workspace, one
+disjoint write scope**. If the runtime cannot provide that invariant,
+serialise.
 
-Runtime adapters:
+Read-only subagents (reviewers in I2, planners in O1, exploration)
+share the main checkout — no isolation needed. The orchestrator
+chooses isolation before dispatch; subagent briefs describe
+relative paths and write scope, not `git worktree`, `cd`, or
+cleanup commands. Merge back deterministically when each editor
+returns.
 
-- **Claude-style runtimes:** if the Agent/Task tool supports native
-  worktree isolation, request that isolation for each concurrent editor.
-  Use the runtime-reported branch/path for deterministic merge-back.
-- **Codex-style runtimes:** spawn editing agents as `worker` agents and
-  give each one explicit ownership of a disjoint file/module set. When
-  the runtime runs workers in forked workspaces, treat each fork as the
-  isolated workspace and integrate returned changes one worker at a
-  time. Do not use a Claude-only `isolation` parameter in Codex briefs
-  or tool calls. If your Codex runner writes workers into the same
-  checkout, create one `git worktree` per concurrent editor before
-  dispatch, pass that worktree as the editor's working directory if the
-  runner supports it, and remove the worktree after merge-back; if the
-  runner cannot target a worktree, serialise.
-- **Other runtimes:** use the runtime's native per-agent checkout
-  isolation when it exists. Otherwise create explicit `git worktree`
-  checkouts for concurrent editors and merge/cherry-pick back in a
-  defined order.
-
-Operational rules:
-
-- **Do not ask subagents to manage worktrees.** The orchestrator
-  chooses isolation before dispatch. Subagent briefs should say what to
-  change and where, using paths relative to the subagent's current
-  checkout.
-- **Read-only subagents share the main checkout.** Reviewers (I2),
-  planners (O1), and exploration subagents do not need worktree
-  isolation because they only read.
-- **Merge back deterministically.** When each editor returns, merge or
-  cherry-pick its commits/patches back into the main branch in a defined
-  order. Resolve conflicts at merge time, not at edit time. Never let
-  two subagents race for the same file.
-- **Serial when it doesn't partition.** If two sub-tasks touch the same
-  file or build on each other's output, do not parallelise them across
-  workspaces — run them serially in the main checkout.
+For runtime-specific guidance (Claude / Codex / other), see
+[[vsm-loop]] § *Parallelism and S2 anti-oscillation* — that
+section is the canonical reference and applies verbatim here.
 
 ## Model selection per phase
 

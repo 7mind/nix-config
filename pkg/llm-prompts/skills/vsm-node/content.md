@@ -15,11 +15,19 @@ recursion.
 
 ## Your role
 
-You sit one level below your parent in the VSM tree. Inside your
-own scope:
+You sit one level below your parent in the VSM tree. Your brief
+from the parent is the **resource bargain** — a negotiated
+envelope of scope, budget, and autonomy. Inside the envelope you
+act; outside you return or escalate.
+
+Inside your own scope:
 
 - You are **S5** for any subagents you spawn — you state their
-  identity and set their goals.
+  identity, set their goals, and translate your parent's brief
+  into non-negotiables that apply downward. Failed transduction
+  at this boundary is where bad recursion compounds: if you pass
+  your parent's brief through verbatim, you have not done the
+  S5-translation work and downstream subagents will improvise.
 - You are **S4** when you plan how to discharge your brief.
 - You are **S3** when you dispatch and audit work.
 - You are **S1** when you execute the work yourself.
@@ -94,14 +102,12 @@ from your context into the subagent's. You must:
   state. Do **not** propagate the subagent's raw output upward
   unchanged.
 
-If you spawn parallel editors, follow [[review-loop]] § *Worktrees for
-parallel editors*: one concurrent editor, one isolated workspace, one
-disjoint write scope. Codex equivalent: use `worker` agents in forked
-workspaces when the runtime provides them; if a Codex runner writes
-workers into the same checkout, the parent/orchestrator must create
-separate `git worktree` checkouts before dispatch or serialise the
-edits. Do not ask child subagents to create, remove, or clean
-worktrees.
+If you spawn parallel editors, the invariant is **one concurrent
+editor, one isolated workspace, one disjoint write scope** — if
+your runtime cannot provide it, serialise. Do not ask child
+subagents to create, remove, or clean worktrees. For
+runtime-specific guidance (Claude / Codex / other), see
+[[vsm-loop]] § *Parallelism and S2 anti-oscillation*.
 
 ## When you do the work yourself
 
