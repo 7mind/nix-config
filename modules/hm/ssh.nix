@@ -13,12 +13,10 @@
     programs.ssh = {
       enable = true;
       enableDefaultConfig = false;
-      matchBlocks."*" = {
-        addKeysToAgent = lib.mkIf cfg-meta.isLinux "yes";
-        extraOptions = {
-          "IgnoreUnknown" = "UseKeychain";
-          "UseKeychain" = "yes";
-        };
+      settings."*" = {
+        AddKeysToAgent = lib.mkIf cfg-meta.isLinux "yes";
+        IgnoreUnknown = "UseKeychain";
+        UseKeychain = "yes";
       };
     };
 

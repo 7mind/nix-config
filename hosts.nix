@@ -2,6 +2,7 @@ builders: {
   nixos = [
     (builders.make-nixos-x86_64 "pavel-am5")
     (builders.make-nixos-x86_64 "pavel-fw")
+    (builders.make-nixos-x86_64 "pavel-trx40")
     (builders.make-nixos-x86_64 "testbench")
   ];
 

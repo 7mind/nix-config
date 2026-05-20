@@ -2,7 +2,7 @@
 
 let
   cfg = config.smind.services.qendercore;
-  rustAdapter = cfg-flakes.qendercore-adapter.packages.${pkgs.system}.qendercore-mqtt-adapter;
+  rustAdapter = cfg-flakes.qendercore-adapter.packages.${pkgs.stdenv.hostPlatform.system}.qendercore-mqtt-adapter;
 in
 {
   options = {

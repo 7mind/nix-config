@@ -9,18 +9,29 @@ let
   isSelf = machine: builderShortName machine == config.networking.hostName;
 
   allBuildMachines = [
-      # {
-      #   hostName = "pavel-nix.home.7mind.io";
-      #   system = "x86_64-linux";
-      #   protocol = "ssh-ng";
-      #   sshUser = "root";
-      #   maxJobs = 2;
-      #   sshKey = lib.mkIf ownerSecretsEnabled "${config.age.secrets.builder-key.path}";
-      #   publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSUxqclA0bHIrV1NnTDNrNWVBNis0Q0dZbXR6NlVpdEltWSszUkFSYU0wcnkgcm9vdEBmcmVzaG5peAo=";
-      #   speedFactor = 32;
-      #   supportedFeatures = [ "benchmark" "big-parallel" "kvm" ];
-      #   mandatoryFeatures = [ ];
-      # }
+      # Threadripper 3970x box (32 cores / 64 threads, dual GPU). May
+      # be powered off or otherwise unreachable; relies on
+      # `nix.settings.fallback = true` below so a missing builder
+      # degrades to a local build instead of failing the rebuild.
+      # publicHostKey carried over from the prior `pavel-nix` install
+      # (the host SSH ed25519 key was preserved across the takeover).
+      {
+        hostName = "pavel-trx40.home.7mind.io";
+        system = "x86_64-linux";
+        protocol = "ssh-ng";
+        sshUser = "root";
+        maxJobs = 4;
+        sshKey = lib.mkIf ownerSecretsEnabled "${config.age.secrets.builder-key.path}";
+        publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSUxqclA0bHIrV1NnTDNrNWVBNis0Q0dZbXR6NlVpdEltWSszUkFSYU0wcnkgcm9vdEBmcmVzaG5peAo=";
+        # vm's x86 speedFactor is 2; the Threadripper benchmarks well
+        # over 4x faster (per the user), and Nix prefers higher
+        # speedFactor builders for the same system. Keep some headroom
+        # so future-faster builders can slot in above without
+        # renumbering.
+        speedFactor = 16;
+        supportedFeatures = [ "benchmark" "big-parallel" "kvm" ];
+        mandatoryFeatures = [ ];
+      }
 
       {
         hostName = "vm.home.7mind.io";
@@ -83,6 +94,14 @@ in
 
   config = lib.mkIf config.smind.infra.nix-build.enable {
     nix.distributedBuilds = true;
+
+    # If every remote builder declines the job (offline, ssh timeout,
+    # no matching system+features), fall through to a local build
+    # instead of failing. Pairs with the short `connect-timeout = 3`
+    # set in modules/nix-generic/attic-cache.nix — together they make
+    # an offline pavel-trx40/o1/o2 non-fatal.
+    nix.settings.fallback = true;
+
     nix.extraOptions = ''
       	  builders-use-substitutes = true
       	'';

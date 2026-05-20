@@ -34,7 +34,7 @@
       !keyringEnabled || sshAgent == "standalone"
     );
 
-    programs.ssh.matchBlocks."*".addKeysToAgent = lib.mkIf cfg-meta.isLinux "yes";
+    programs.ssh.settings."*".AddKeysToAgent = lib.mkIf cfg-meta.isLinux "yes";
 
     programs.zoxide = {
       enable = true;

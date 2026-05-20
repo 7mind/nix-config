@@ -186,7 +186,25 @@ in
     };
   };
 
-  config = lib.mkIf config.smind.security.keyring.enable (lib.mkMerge [
+  config = lib.mkMerge [
+    # TPM stack for keyring-related operations.
+    #
+    # Kept OUTSIDE the `keyring.enable` guard on purpose: headless hosts
+    # (e.g. vm) don't want a desktop keyring, but still need `tss`
+    # membership for `pavel`/`kai` so `age-plugin-tpm` can open
+    # /dev/tpmrm0 without sudo. The `tpmUnlock.enable` branch below
+    # *does* depend on gnome-keyring and stays nested.
+    (lib.mkIf cfg.tpm.enable {
+      security.tpm2 = {
+        enable = true;
+        pkcs11.enable = true;
+        tctiEnvironment.enable = true;
+      };
+
+      users.users = lib.genAttrs cfg.tpm.users (_: { extraGroups = [ "tss" ]; });
+    })
+
+    (lib.mkIf config.smind.security.keyring.enable (lib.mkMerge [
     # gnome-keyring backend
     (lib.mkIf (config.smind.security.keyring.backend == "gnome-keyring") {
       services.gnome.gnome-keyring.enable = true;
@@ -248,19 +266,6 @@ in
       });
     })
 
-    # TPM stack for keyring-related operations
-    (lib.mkIf cfg.tpm.enable {
-      # Enable TPM2 support with user access
-      security.tpm2 = {
-        enable = true;
-        pkcs11.enable = true;
-        tctiEnvironment.enable = true;
-      };
-
-      # Grant configured users access to /dev/tpmrm0 via the tss group.
-      users.users = lib.genAttrs cfg.tpm.users (_: { extraGroups = [ "tss" ]; });
-    })
-
     # TPM-based keyring unlock (for fingerprint login)
     (lib.mkIf cfg.tpmUnlock.enable {
       assertions = [{
@@ -291,5 +296,6 @@ in
         args = [ "quiet" "${keyringTpmUnlockScript}" ];
       };
     })
-  ]);
+  ]))
+  ];
 }

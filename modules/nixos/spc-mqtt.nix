@@ -2,7 +2,7 @@
 
 let
   cfg = config.smind.services.spc-mqtt;
-  spcMqtt = cfg-flakes.mqtt-spc.packages.${pkgs.system}.default;
+  spcMqtt = cfg-flakes.mqtt-spc.packages.${pkgs.stdenv.hostPlatform.system}.default;
 in
 {
   options = {

@@ -87,7 +87,24 @@ let
 in
 {
   options.smind.hw.nvidia = {
-    enable = lib.mkEnableOption "NVIDIA hybrid graphics with PRIME offload";
+    enable = lib.mkEnableOption "NVIDIA GPU support (proprietary driver, CUDA)";
+
+    prime.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Enable PRIME offload between an integrated GPU and the NVIDIA
+        dGPU. Required for laptops with iGPU + dGPU; should be false on
+        desktops that have a discrete AMD/Intel GPU as the primary
+        (PRIME is meaningless without a render offload chain) or on
+        headless machines where NVIDIA is only used for compute.
+
+        When false, the PRIME-specific bus IDs, VFIO passthrough
+        scripts, RTD3 power management, and `nvidia-offload` wrapper
+        are all skipped; the module installs only the proprietary
+        driver, modesetting, and the container toolkit.
+      '';
+    };
 
     specialisation = {
       enable = lib.mkEnableOption "boot menu entries for with/without NVIDIA GPU";
@@ -104,8 +121,9 @@ in
 
     pciId = lib.mkOption {
       type = lib.types.str;
+      default = "";
       example = "0000:c1:00.0";
-      description = "PCI bus ID of NVIDIA GPU (from lspci -D)";
+      description = "PCI bus ID of NVIDIA GPU (from lspci -D). Required when prime.enable.";
     };
 
     audioPciId = lib.mkOption {
@@ -117,8 +135,9 @@ in
 
     vendorDeviceId = lib.mkOption {
       type = lib.types.str;
+      default = "";
       example = "10de 2900";
-      description = "Vendor and device ID for GPU (from lspci -nn, e.g., '10de 2900' for RTX 5070)";
+      description = "Vendor and device ID for GPU (from lspci -nn). Required when prime.enable.";
     };
 
     audioVendorDeviceId = lib.mkOption {
@@ -130,14 +149,16 @@ in
 
     nvidiaBusId = lib.mkOption {
       type = lib.types.str;
+      default = "";
       example = "PCI:193:0:0";
-      description = "NVIDIA GPU bus ID for PRIME (decimal format: PCI:bus:device:function)";
+      description = "NVIDIA GPU bus ID for PRIME (decimal format: PCI:bus:device:function). Required when prime.enable.";
     };
 
     amdgpuBusId = lib.mkOption {
       type = lib.types.str;
+      default = "";
       example = "PCI:0:2:0";
-      description = "AMD iGPU bus ID for PRIME (decimal format)";
+      description = "AMD iGPU bus ID for PRIME (decimal format). Required when prime.enable.";
     };
 
     open = lib.mkOption {
@@ -157,6 +178,14 @@ in
     let
       # NVIDIA configuration to apply when GPU is active
       nvidiaConfig = {
+        assertions = [
+          {
+            assertion = !cfg.prime.enable
+              || (cfg.nvidiaBusId != "" && cfg.amdgpuBusId != "");
+            message = "smind.hw.nvidia.prime.enable requires both nvidiaBusId and amdgpuBusId.";
+          }
+        ];
+
         services.xserver.videoDrivers = [ "nvidia" ];
 
         # CUDA support for containers (Podman/Docker)
@@ -171,9 +200,13 @@ in
           modesetting.enable = true;
           nvidiaSettings = true;
 
-          powerManagement.enable = true;
-          powerManagement.finegrained = true;
-
+          # PRIME-specific power management: only safe under PRIME
+          # offload, where the dGPU genuinely sleeps when idle. On a
+          # non-PRIME machine (pure compute or dual-dGPU) the runtime
+          # PM path is irrelevant and would only add wake latency.
+          powerManagement.enable = cfg.prime.enable;
+          powerManagement.finegrained = cfg.prime.enable;
+        } // lib.optionalAttrs cfg.prime.enable {
           prime = {
             offload = {
               enable = true;
@@ -190,13 +223,14 @@ in
           package = cfg.package;
         };
 
-        boot.kernelModules = [ "vfio-pci" ];
+        boot.kernelModules = lib.mkIf cfg.prime.enable [ "vfio-pci" ];
 
         # Enable NVIDIA RTD3 (Runtime D3) power management
         # 0x02 = Fine-grained power management, allows GPU to power down when idle
         # NVreg_PreserveVideoMemoryAllocations=1 is REQUIRED for suspend/resume
         # NVreg_TemporaryFilePath sets where VRAM is saved during suspend
-        boot.extraModprobeConfig = ''
+        # (PRIME-only: these knobs are part of the dGPU-sleep story.)
+        boot.extraModprobeConfig = lib.mkIf cfg.prime.enable ''
           options nvidia NVreg_DynamicPowerManagement=0x02
           options nvidia NVreg_PreserveVideoMemoryAllocations=1
           options nvidia NVreg_TemporaryFilePath=/var/tmp
@@ -238,9 +272,10 @@ in
         ];
 
         environment.systemPackages = [
+          pkgs.libva-utils
+        ] ++ lib.optionals cfg.prime.enable [
           gpuBindVfio
           gpuBindNvidia
-          pkgs.libva-utils
 
           # Replacement for the upstream-generated `nvidia-offload` (we
           # disabled enableOffloadCmd above). Same env vars as the
@@ -269,7 +304,7 @@ in
         # Force session to use AMD iGPU by default
         # This allows NVIDIA GPU to power down via RTD3 when not in use
         # Use nvidia-offload for explicit GPU workloads
-        environment.sessionVariables = {
+        environment.sessionVariables = lib.mkIf cfg.prime.enable {
           # Default to Mesa/AMD for OpenGL
           __GLX_VENDOR_LIBRARY_NAME = "mesa";
           # Don't set VK_DRIVER_FILES - let Vulkan discover drivers automatically
