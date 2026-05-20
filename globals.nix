@@ -115,16 +115,16 @@ rec {
                 inputs.rust-overlay.overlays.default
                 (final: prev:
                 let
-                  # Shared override attrs for the ollama 0.21.0 → 0.23.0
+                  # Shared override attrs for the ollama 0.21.0 → 0.24.0
                   # bump (referenced four times below for each
                   # accelerated variant: stock + cuda + rocm + vulkan).
                   ollamaBumpAttrs = {
-                    version = "0.23.0";
+                    version = "0.24.0";
                     src = prev.fetchFromGitHub {
                       owner = "ollama";
                       repo = "ollama";
-                      tag = "v0.23.0";
-                      hash = "sha256-VYaFCSqhIlJPJv1SUiNDgSzLqySK3NTfucdWA7IZaAk=";
+                      tag = "v0.24.0";
+                      hash = "sha256-cSZtbF0oUI7a++baTipF6OUu+w8tBpILzE0Wm1Y6wUk=";
                     };
                     # 0.23.0 added a `cmd/launch` test that npm-installs
                     # `@ollama/pi-web-search` — fails in the nix

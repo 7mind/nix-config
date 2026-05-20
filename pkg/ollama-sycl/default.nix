@@ -41,7 +41,7 @@
 
 ollama.overrideAttrs (oldAttrs: {
   pname = "ollama-sycl";
-  version = "0.23.0+llama-cpp-073bb2c20";
+  version = "0.24.0+llama-cpp-073bb2c20";
 
   # Vendored source — post-`make sync` working tree, NOT a clean upstream
   # snapshot. The 36 ollama patches and 8 Hal9000 SYCL patches are already
