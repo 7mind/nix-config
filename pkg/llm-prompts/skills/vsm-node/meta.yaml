@@ -1,0 +1,11 @@
+name: vsm-node
+description: >-
+  Recursive viability contract for subagents operating inside a vsm-loop
+  hierarchy. Defines how a subagent decides between do-it-yourself and
+  delegate, runs its own internal S1-S5 cycle when delegating, audits
+  what it dispatches (S3*), and compresses its return to its parent's
+  variety budget. Also defines the algedonic-flag criteria. TRIGGER
+  when: a subagent brief names vsm-node as the recursion contract; or
+  the orchestrator is briefing a substantial sub-task that warrants its
+  own internal cycle. Do not invoke for atomic tasks — read this skill
+  only when recursion is explicitly authorized in the brief.
