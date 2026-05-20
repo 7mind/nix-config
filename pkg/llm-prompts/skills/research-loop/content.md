@@ -282,15 +282,39 @@ Only two valid terminations:
   is not done — the answer has not been positively stated.
 - **Blocked on user input.** The investigation has uncovered a
   question that cannot be resolved from the code or the original
-  brief: ambiguous scope, missing system access, or a choice the
-  user must make about which sub-question matters. Record the
-  blocker as a final `## Blocker` section in the ledger and ask the
-  user.
+  brief. Valid blocker reasons:
+  - **Ambiguous scope** — the user's question is interpretable
+    in multiple incompatible ways and each interpretation would
+    take a different investigation.
+  - **Missing system access** — the answer depends on logs, a
+    running service, a database, or an external system the loop
+    cannot reach.
+  - **Choice between sub-questions** — the investigation
+    decomposed into multiple sub-questions and the user must
+    say which one matters.
+  - **Question malformed** — the question presupposes something
+    false ("why does X happen", where X demonstrably does not
+    happen, and no bounded null can be constructed because the
+    user's frame is wrong). Surface this as a blocker; do not
+    "answer" it by confirming the negation, which would be
+    misleading.
+  - **Empty answer space with no bounded null** — every
+    plausible hypothesis closed `wrong` *and* no completeness
+    hypothesis can be constructed with a defensible scope. The
+    answer is "we don't know and cannot find out from here";
+    surface the gap and ask the user to widen scope, supply
+    information, or restate the question.
+
+  Record the blocker as a final `## Blocker` section in the
+  ledger, naming the specific reason from the list above, and
+  ask the user. Do **not** convert a blocker into a confirmed
+  result by relaxing the evidence bar.
 
 Running out of patience, hitting a "probably this" hunch without
 evidence, wanting to check in mid-investigation, or observing that
-"nothing matched" without a bounded null/completeness hypothesis are
-**not** stop conditions. Iterate.
+"nothing matched" without either a bounded null/completeness
+hypothesis or a stated blocker reason are **not** stop conditions.
+Iterate or escalate; do not silently terminate.
 
 ## Metrics emitted by this loop
 

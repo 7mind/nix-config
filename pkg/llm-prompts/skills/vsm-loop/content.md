@@ -74,7 +74,7 @@ Two cross-cutting mechanisms make the model work:
 | **S4** | Plans, researches, models | Planning subagents; [[research-loop]] invocations; design-deliberation subagents. |
 | **S3** | Allocates work here-and-now; regular oversight | Main session as orchestrator: dispatches subagents, maintains ledgers, decides parallelism, sequences cycles. Includes the structured per-cycle review channel ([[review-loop]] I2) — that is S3 oversight via the S2 ledger/diff channel, *not* S3\*. |
 | **S3\*** | Sporadic, direct audit of S1 that bypasses S2 | Orchestrator's spot-checks during vsm-loop I3: open the diff or research artefact, verify one or two claims against source, confirm the cycle's report matches reality. Sporadic by design — exhaustive audit collapses back into S3. |
-| **S2** | Anti-oscillation between parallel S1s; coordination | Worktree isolation, one-cycle-per-ledger-group rule, naming conventions, parallel-vs-serial discipline. The ledger format is S2's substrate but also S3's institutional memory. |
+| **S2** | Anti-oscillation between parallel S1s; *automatic*, non-managerial coordination | Two parts: (a) **transversal conventions** — sequential defect IDs, sequential PR IDs, ledger-entry-per-cycle, naming schemes for plan docs and archives, fixed report shapes. These let parallel S1s avoid collision without S3 intervention. (b) **Workspace isolation** — worktree-per-editor, one-cycle-per-ledger-group, parallel-vs-serial discipline. The ledger format is S2's substrate (the conventions all S1s read and write through) but the *content* of the active ledger is S3's institutional memory. |
 | **S1** | The actual work | Execution subagents (code, tests, edits). For substantial S1 tasks, the subagent runs its own vsm-loop per [[vsm-node]]. |
 
 The S1 units in this mapping are themselves viable systems
@@ -232,11 +232,43 @@ itself. A loop that *never* fires its homeostat is suspicious —
 either the plan was prescient or the executor is ignoring its
 brief.
 
-**Failure mode**: repeated firing on one entry without
-convergence — research routes back to plan, plan back to
-execution, execution back to research, with no clean return.
-When this happens, the cause is upstream, not in the current
-cycle:
+### When the homeostat should *not* fire
+
+A loop that fires its homeostat on every drift is as broken as
+one that never fires. Most plan-vs-reality gaps are leaf-level
+refinement, not S4 territory. Distinguish:
+
+- **Refinement (no firing).** The executor touched a planned
+  file in a way the plan did not enumerate line-for-line; the
+  acceptance criterion was met by a slightly different path; a
+  test required a one-line setup the plan did not name; a
+  variable name changed during implementation. These do not
+  invalidate the plan; they fill in detail the plan deliberately
+  left to the leaf. Report the result in the *Surprises* line of
+  the subagent return; do not fire I5 or I6.
+- **Uncovered structure (fire S4).** Execution revealed a new
+  dependency, an upstream API behaves differently from the
+  plan's model, a constraint exists that the plan did not see,
+  the brief's acceptance criterion is impossible without
+  modifying scope. The plan's *model* of reality is wrong, not
+  just its detail. Route to S4 (I5 or I6).
+
+The test: would a different leaf executor have hit the same
+issue? If yes, fire S4 — the issue is structural, in the plan's
+environmental model. If no, the issue is local to this execution
+and is leaf-level refinement.
+
+A second test: did the brief's acceptance criterion still apply
+verbatim? If yes, no firing. If the executor had to *redefine*
+the acceptance criterion to discharge the brief, fire S4 — the
+plan's reading of the goal was wrong.
+
+### Failure mode: homeostat thrashing
+
+Repeated firing on one entry without convergence — research routes
+back to plan, plan back to execution, execution back to research,
+with no clean return. When this happens, the cause is upstream,
+not in the current cycle:
 
 - S4's environmental model is stale (the planner is working from
   outdated assumptions).
@@ -320,21 +352,42 @@ behaviour rather than its throughput.
     - Threshold: repeated scope expansion in one milestone.
     - Control action: route to S4; the plan underestimated variety.
 11. **Homeostat firings (S3↔S4)** — count of research triggers
-    (I5) and replan triggers (I6) per ledger entry.
-    - Threshold: more than two firings on one entry.
-    - Control action: diagnose upstream cause (stale S4 model,
-      over-constrained S5 policy, mis-bounded entry); do not
-      keep oscillating.
-12. **Time to stabilize** — sub-cycles between a homeostat firing
-    and the next clean return.
-    - Threshold: more than two sub-cycles to stabilize.
-    - Control action: the refreshed plan is also wrong; re-seed
-      the planner with fresh observations or re-partition.
-13. **Scope delta** — closed-entry actual scope vs planned scope
-    (files touched, follow-ups opened).
-    - Threshold: scope delta non-zero on two consecutive entries.
+    (I5) and replan triggers (I6) per ledger entry, tracked
+    separately.
+    - Threshold: more than two firings of either type on a single
+      entry; or three combined across types on one entry.
+    - Control action: diagnose which of three upstream causes is
+      active and address it directly — (a) **stale S4 model**:
+      re-seed the planner with fresh environmental observations
+      from this cycle; (b) **over-constrained S5 policy**: route
+      a policy clarification through algedonic to the metasystem;
+      (c) **mis-bounded entry**: re-partition the entry along the
+      fault line the execution exposed. Do not fire the homeostat
+      a fourth time without naming the cause.
+12. **Time to stabilize** — number of sub-cycles between a
+    homeostat firing and the next *clean return* (a sub-cycle
+    that returns its compressed report without raising another
+    homeostat firing or an algedonic flag). Tracked per firing
+    type.
+    - Threshold: more than two sub-cycles to stabilize on a
+      single firing.
+    - Control action: the refreshed plan or research result is
+      also wrong relative to reality; re-seed the planner with
+      observations from the *failed* refresh round, or
+      re-partition. Do not request a third refresh on the same
+      framing.
+13. **Material scope delta** — closed-entry actual scope vs
+    planned scope (files touched, follow-ups opened). Drift that
+    is pure leaf-level refinement (touching a planned file in a
+    way the plan did not enumerate line-for-line) is **not**
+    material; *uncovered* work (new files not in the plan, new
+    follow-up tasks, new defects in unplanned areas) **is**
+    material.
+    - Threshold: material delta on two consecutive entries in
+      one milestone.
     - Control action: route to S4; the planner is under-modelling
-      variety in the current area.
+      variety in the current area. Pure refinement deltas are
+      normal and not a trigger.
 
 ### Minimal dashboard
 
@@ -342,7 +395,7 @@ At session end, include a compact metrics line in
 `./docs/logs/YYYYMMDD-HHMM-log.md`:
 
 ```markdown
-Metrics: WIP max <n>; review rounds <PR-01:n, PR-02:n>; S3-S4 firings <research:n, replan:n>; time-to-stabilize <max>; scope delta <none|summary>; verification <complete|gaps>; audit discrepancies <n>; algedonic escalations <n>.
+Metrics: WIP max <n>; review rounds <PR-01:n, PR-02:n>; S3-S4 firings <research:n, replan:n>; time-to-stabilize <research:max, replan:max>; material scope delta <none|summary>; verification <complete|gaps>; audit discrepancies <n>; algedonic escalations <ordinary:n, bypass:n>.
 ```
 
 Only expand beyond that line when a threshold fired. The control action
@@ -372,6 +425,41 @@ uncovers dependency drift, external API ambiguity, CI/runtime mismatch,
 security exposure, or a maintenance constraint, route the question to
 S4 before continuing operational work.
 
+### S1's local environment loop
+
+A subagent does **not** need to escalate every interaction with
+its local environment back through S3. Each S1 unit is itself a
+viable system embedded in its own piece of the world, and Beer's
+model gives it authority to close its own loop locally.
+
+Concretely: inside the scope envelope set by the brief, the
+subagent is authorized to iterate against:
+
+- The test suite (run, observe failure, edit, re-run).
+- The build (compile, type-check, lint, fix, repeat).
+- A REPL or local service (probe, observe, adjust).
+- The filesystem within the write scope.
+
+These local-loop iterations are **S1's own homeostat**, not S3-S4
+firings. The subagent does not report each iteration; it reports
+the *converged* result (or non-convergence as *left undone*).
+
+Escalate to S3 only when the local loop fails to converge inside
+the budget the brief authorized, or when the loop reveals
+something the brief did not anticipate (an unrelated regression,
+an upstream change, a missing dependency). The cost of
+*not* granting this autonomy is that S3 saturates on iteration
+detail; the cost of granting too much is that subagents
+silently improvise outside scope. The scope envelope is what
+keeps the autonomy bounded.
+
+This is implicit in Beer's recursion (each S1 contains its own
+S1–S5), but worth naming because agentic systems frequently
+either over-report (every test run surfaces to the orchestrator)
+or under-bound (subagents iterate themselves into unrelated
+parts of the tree). The fix is *bounded autonomy*: explicit
+local-loop authority inside an explicit envelope.
+
 ## The algedonic channel: when to cross the metasystem boundary
 
 The user and `CLAUDE.md` form the *metasystem* above this viable
@@ -381,13 +469,40 @@ own S5 (a policy call the orchestrator can resolve from `CLAUDE.md`
 that **crosses the metasystem boundary** — reaching the user
 directly — is what this section covers.
 
-Note: the canonical Beer algedonic *bypasses* the chain (S1
-directly to S5). The discipline here is stricter — leaves flag
-through their parent chain — for operational safety. A genuine
-bypass is reserved for the safety/security carve-out in
-[[vsm-node]]'s "algedonic flag" section, where a subagent may
-escalate directly past the parent chain when the brief itself
-would force a policy violation.
+### Deviation from canonical Beer: a deliberate tradeoff
+
+The single largest deviation from Beer's classical VSM in this
+framework lives here, and the reader should not skim past it.
+
+In Beer's canonical model, the algedonic channel **bypasses the
+chain**: a pain signal goes from *any* S1 directly to S5, without
+intermediate filtering. This is the body-analogue: pain receptors
+in your hand do not consult your elbow before firing your cortex.
+
+This framework deliberately narrows that. The default discipline
+is that algedonic walks the parent chain, and each layer's S5
+gets to resolve from `CLAUDE.md` + the brief before propagating
+further. The reason is operational safety in an agentic context:
+unrestrained S1→user bypass turns every confused leaf subagent
+into a user interrupt, which destroys both the orchestrator's
+audit trail and the user's attention budget.
+
+The cost of this narrowing is real: a leaf subagent that genuinely
+detects a policy violation cannot phone home directly. To preserve
+the *substantive* function of Beer's bypass (the carve-out for
+identity-threatening signals), the framework reintroduces a
+restricted bypass in [[vsm-node]]'s *Bypass authority* subsection:
+a `BYPASS`-flagged algedonic that the parent **must** propagate
+upward unchanged, with no opportunity to re-litigate. This covers
+the genuine policy-violation case (credentials, security gates,
+identity rules from `CLAUDE.md`) while keeping the ordinary
+"I'm stuck" / "the plan is wrong" path inside the loop.
+
+If you find yourself reaching for ordinary algedonic frequently,
+the loop has a deeper problem (bad scope, bad plan, weak briefs);
+diagnose the meta-cause rather than escalating each instance.
+
+### The two channels to the metasystem
 
 The user-facing metasystem hears from the loop in only two cases:
 
@@ -679,10 +794,45 @@ the context nor the authority.
 
 ## Parallelism and S2 anti-oscillation
 
-S2's job is to keep parallel S1s from clobbering each other. This
-section is the **canonical home** for parallel-editor discipline;
+S2's job is to keep parallel S1s from clobbering each other —
+*automatically*, without S3 having to mediate every interaction.
+Beer's analogue is the sympathetic nervous system: it coordinates
+the body's organs through standing reflexes, not through cortical
+attention. This section is the **canonical home** for both faces
+of S2: transversal conventions and parallel-editor discipline.
 [[review-loop]] and [[vsm-node]] reference it for runtime-specific
 guidance.
+
+### Transversal conventions (the standing reflexes)
+
+These are the rules every S1 subagent inherits through the brief
+and the ledger schema, with no per-cycle negotiation:
+
+- **Sequential, never-reused IDs.** Defect IDs (`PR-NN-DMM`),
+  PR IDs, milestone IDs, archive filenames are all assigned in
+  monotonically increasing order and never reused even after a
+  defect is resolved or a PR is reverted. Two parallel subagents
+  cannot collide on an ID because they never both pick the next
+  one — the orchestrator hands them out.
+- **One ledger entry = one cycle = one commit.** A standing
+  reflex that prevents two cycles from blending into one
+  uncommittable mass.
+- **Append-only ledgers.** Subagents may *propose* state
+  transitions in their report; only the orchestrator flips
+  status. This eliminates write-conflict races on the ledger.
+- **Fixed report shape** (deliverable / verification / surprises /
+  left undone / algedonic). Two parallel subagents return
+  comparable reports; the orchestrator does not have to
+  reverse-engineer each one.
+- **Per-subagent worktree paths** assigned by the orchestrator,
+  not chosen by the subagent. No two subagents can race on the
+  same checkout because the namespace is allocated up front.
+
+Transversal conventions matter because they let the orchestrator
+*not* be in the loop on most coordination. If every parallel
+subagent had to ask "what defect ID do I get?", S3 would
+saturate. S2's whole purpose is to absorb that variety at the
+convention layer.
 
 ### The invariant (runtime-neutral)
 

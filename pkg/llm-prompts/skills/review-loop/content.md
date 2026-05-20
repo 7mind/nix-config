@@ -252,11 +252,19 @@ diff and the original task brief. Ask for a structured list of defects
 with severity.
 
 In VSM terms this is **S3 oversight via the S2 ledger/diff
-channel** — the regular, every-cycle review of S1's output. It
-is **not** S3\*: Beer's S3\* is *sporadic, surprise* audit that
-bypasses normal reporting. When [[vsm-loop]] wraps this loop, the
-orchestrator's spot-check in vsm-loop I3 is the actual S3\*
-channel layered on top.
+channel** — the regular, every-cycle review of S1's output. The
+S1 (executor) reports through the standing S2 conventions (the
+diff, the ledger entry, the fixed report shape); the S3 oversight
+function reads that channel and adjudicates. The reviewer
+subagent is the operational realization of that oversight: it
+does not bypass S2; it consumes what S2 produces.
+
+It is **not** S3\*: Beer's S3\* is *sporadic, surprise* audit that
+bypasses normal reporting (the boss walking the factory floor
+unannounced). When [[vsm-loop]] wraps this loop, the orchestrator's
+spot-check in vsm-loop I3 is the actual S3\* channel layered on
+top — it re-reads the raw artefact rather than trusting either the
+executor's self-report or the reviewer's adjudication.
 
 **I3. Update ledgers.** Append every reviewer finding to `./defects.md`
 as a structured entry (`### [PR-NN-DMM] <headline>` with the full schema:
