@@ -45,7 +45,7 @@
 
     net.mode = "systemd-networkd";
     net.main-interface = "eth-main";
-    net.main-macaddr = "00:e0:4c:75:00:9c";       # on-board Realtek NIC
+    net.main-macaddr = "00:e0:4c:75:00:9c"; # on-board Realtek NIC
     net.main-bridge-macaddr = "00:e0:4c:75:00:9d";
 
     net.tailscale.enable = true;
@@ -72,7 +72,7 @@
       # path; flip to `open = true` once the open modules are validated.
       open = false;
       amdgpuBusId = "PCI:23:0:0";
-      nvidiaBusId = "PCI:03:0:0";
+      nvidiaBusId = "PCI:02:0:0";
     };
 
     # ESP32 / Arduino USB-TTY flashing. No IDE on a headless build
