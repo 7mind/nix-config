@@ -96,7 +96,7 @@
   # opt into either backend will rebuild from source.
   nixpkgs.config = {
     allowUnfree = true;
-    cudaSupport = true;
+    # cudaSupport = true;
   };
 
   # hostId preserved from the prior install on this machine — required
