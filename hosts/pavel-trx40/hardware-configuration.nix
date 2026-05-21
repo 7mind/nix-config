@@ -44,7 +44,24 @@
     options = [ "fmask=0022" "dmask=0022" ];
   };
 
-  swapDevices = [ ];
+  # Random-key encrypted swap on the Samsung 970 EVO Plus. The disk is
+  # ephemeral by design: dm-crypt opens it with a fresh /dev/urandom key
+  # at every boot and mkswap runs on the resulting mapper, so there is
+  # no persistent on-disk state to manage. `nofail` keeps a missing or
+  # failed disk from blocking boot; the 32G zd0 zvol swap remains as a
+  # lower-priority fallback.
+  swapDevices = [
+    {
+      device = "/dev/disk/by-id/nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0R971112P-part1";
+      randomEncryption = {
+        enable = true;
+        cipher = "aes-xts-plain64";
+        allowDiscards = true;
+      };
+      priority = 100;
+      options = [ "nofail" ];
+    }
+  ];
 
   nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
   hardware.cpu.amd.updateMicrocode = lib.mkDefault config.hardware.enableRedistributableFirmware;
