@@ -60,21 +60,6 @@
     # `nixpkgs.config.rocmSupport` globally (see modules/nixos/rocm.nix).
     hw.amd.gpu.enable = true;
 
-    # NVIDIA RTX 3080 — CUDA compute. PRIME offload between the AMD
-    # 6900XT (primary) and the 3080 (offload target), matching how this
-    # box was set up under the old config. Bus IDs are preserved from
-    # `debug/nixos-infra/hosts/ws/pavel-nix/cfg-pavel-nix.nix` — verify
-    # with `lspci -D | grep -i "vga\|3d"` after the takeover and
-    # adjust if the slot wiring changed.
-    hw.nvidia = {
-      enable = true;
-      # RTX 3080 (Ampere): proprietary driver is the better-tested
-      # path; flip to `open = true` once the open modules are validated.
-      open = false;
-      amdgpuBusId = "PCI:23:0:0";
-      nvidiaBusId = "PCI:02:0:0";
-    };
-
     # ESP32 / Arduino USB-TTY flashing. No IDE on a headless build
     # machine; the module's value is the CH340 udev rule and the
     # `dialout` group on `pavel`. CP210x, FTDI, and CDC-ACM are
@@ -97,13 +82,8 @@
     llm.ollama.package = pkgs.ollama-vulkan;
   };
 
-  # CUDA-enabled package variants. allowUnfree is required by the
-  # NVIDIA driver and by cuDNN; rocmSupport is turned on by the AMD
-  # module above. Enabling both simultaneously means ML packages that
-  # opt into either backend will rebuild from source.
   nixpkgs.config = {
     allowUnfree = true;
-    # cudaSupport = true;
   };
 
   # hostId preserved from the prior install on this machine — required
