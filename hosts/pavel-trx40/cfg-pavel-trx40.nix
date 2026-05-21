@@ -72,11 +72,6 @@
     # Build/work machine: keep nix-build infrastructure on, expose LLM
     # tooling for Claude workflows.
     infra.nix-build.enable = true;
-    # Trust the local nix signing key so closures pushed from other
-    # hosts (e.g. `./setup -s` from vm) are accepted, and substitute
-    # from the home attic cache. `push.enable` deferred until after the
-    # first `agenix rekey -a` pass (needs attic-admin-token and
-    # nix-signing-key rekeyed to this host's pubkey).
     infra.attic-cache.enable = true;
     llm.enable = true;
     llm.ollama.package = pkgs.ollama-vulkan;
