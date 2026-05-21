@@ -566,7 +566,7 @@ do_switch() {
                 if [[ "$THISHOST" == "$host" ]]; then
                     "${closure}/sw/bin/darwin-rebuild" switch --flake .
                 else
-                    nix copy --to "ssh://${remote_target}" "${ROOTS}/${host}"
+                    nix copy --to "ssh-ng://${remote_target}" "${ROOTS}/${host}"
                     ssh -t "${remote_target}" sudo -H --preserve-env=PATH env nix-env -p /nix/var/nix/profiles/system --set "$closure"
                     ssh -t "${remote_target}" "sudo ${closure}/sw/bin/darwin-rebuild" activate
                 fi
@@ -576,7 +576,7 @@ do_switch() {
                     sudo nix-env -p /nix/var/nix/profiles/system --set "$closure"
                     sudo /nix/var/nix/profiles/system/bin/switch-to-configuration "$action"
                 else
-                    nix copy --to "ssh://root@${remote_target}" "${ROOTS}/${host}"
+                    nix copy --to "ssh-ng://root@${remote_target}" "${ROOTS}/${host}"
                     ssh "root@${remote_target}" nix-env -p /nix/var/nix/profiles/system --set "$closure"
                     ssh "root@${remote_target}" /nix/var/nix/profiles/system/bin/switch-to-configuration "$action"
                 fi

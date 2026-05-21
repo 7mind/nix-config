@@ -33,6 +33,31 @@ let
         mandatoryFeatures = [ ];
       }
 
+      # Same Threadripper as the x86_64 entry above, exposed as an
+      # aarch64-linux builder via the binfmt/QEMU emulation enabled in
+      # hosts/pavel-trx40/cfg-pavel-trx40.nix. Per-job throughput is
+      # below a native ARM64 box (o1/o2), but 32C/64T + the userspace
+      # QEMU translator running on Zen2 still beats local emulation on
+      # vm by a wide margin, and frequently the small o1/o2 boxes too
+      # — so this entry is given a higher speedFactor than the native
+      # ones to make the scheduler prefer it whenever pavel-trx40 is
+      # up. The `nix.settings.fallback = true` below keeps vm building
+      # locally if pavel-trx40 is offline. Drops "kvm" because QEMU
+      # user-mode emulation provides no virtualisation acceleration to
+      # aarch64 derivations.
+      {
+        hostName = "pavel-trx40.home.7mind.io";
+        system = "aarch64-linux";
+        protocol = "ssh-ng";
+        sshUser = "root";
+        maxJobs = 4;
+        sshKey = lib.mkIf ownerSecretsEnabled "${config.age.secrets.builder-key.path}";
+        publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSUxqclA0bHIrV1NnTDNrNWVBNis0Q0dZbXR6NlVpdEltWSszUkFSYU0wcnkgcm9vdEBmcmVzaG5peAo=";
+        speedFactor = 10;
+        supportedFeatures = [ "benchmark" "big-parallel" ];
+        mandatoryFeatures = [ ];
+      }
+
       {
         hostName = "vm.home.7mind.io";
         system = "x86_64-linux";
