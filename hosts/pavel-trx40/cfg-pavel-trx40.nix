@@ -94,6 +94,7 @@
     # nix-signing-key rekeyed to this host's pubkey).
     infra.attic-cache.enable = true;
     llm.enable = true;
+    llm.ollama.package = pkgs.ollama-vulkan;
   };
 
   # CUDA-enabled package variants. allowUnfree is required by the
