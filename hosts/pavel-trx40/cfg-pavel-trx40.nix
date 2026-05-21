@@ -53,6 +53,7 @@
     ssh.mode = "safe";
 
     isDesktop = false;
+    roles.server.generic = true;   # pulls in shell.zsh.enable + sane-defaults
     hw.cpu.isAmd = true;
 
     # AMD Radeon 6900XT — amdgpu kernel driver, ROCm compute stack,
