@@ -16,24 +16,33 @@ set -e
 AGE_DIR="${HOME}/.age"
 TPM_IDENTITY="${AGE_DIR}/tpm-identity.txt"
 MASTER_KEY_TPM="${AGE_DIR}/master-key.age"
+
+MODE="enroll"
+if [[ "${1:-}" == "--verify" || "${1:-}" == "-v" ]]; then
+    MODE="verify"
+    shift
+fi
+
 MASTER_KEY_PASSWORD="${1:-${HOME}/age-key.age}"
 
 usage() {
     cat <<EOF
-Usage: $(basename "$0") [PASSWORD_PROTECTED_KEY]
+Usage:
+  $(basename "$0") [PASSWORD_PROTECTED_KEY]   Enroll TPM (default: ~/age-key.age)
+  $(basename "$0") --verify | -v              Verify existing TPM enrollment
 
-Enroll this machine's TPM to protect the age master identity.
-
-Arguments:
-  PASSWORD_PROTECTED_KEY    Path to password-protected age key (default: ~/age-key.age)
-
-This script will:
+Enroll mode:
   1. Generate a TPM-bound age identity (if not exists)
   2. Decrypt your password-protected key (prompts for password)
   3. Re-encrypt it to the TPM identity
   4. Store the TPM-encrypted key at ~/.age/master-key.age
 
 The original password-protected key is kept as backup for other machines.
+
+Verify mode (read-only, no prompts, no side effects):
+  1. Check that the TPM device exists and age-plugin-tpm runs
+  2. Check that ~/.age/tpm-identity.txt and ~/.age/master-key.age exist
+  3. Attempt to decrypt master-key.age via the TPM identity
 
 Create a password-protected master key if you don't have one:
     age-keygen -o ~/age-key.txt
@@ -43,7 +52,7 @@ EOF
     exit 0
 }
 
-[[ "$1" == "-h" || "$1" == "--help" ]] && usage
+[[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && usage
 
 # Check for age-plugin-tpm
 if ! command -v age-plugin-tpm &>/dev/null; then
@@ -62,6 +71,38 @@ fi
 if [[ ! -e /dev/tpmrm0 && ! -e /dev/tpm0 ]]; then
     echo "Error: No TPM device found (/dev/tpmrm0 or /dev/tpm0)"
     echo "Make sure TPM is enabled in BIOS and kernel module is loaded"
+    exit 1
+fi
+
+if [[ "$MODE" == "verify" ]]; then
+    echo "==> Verifying TPM enrollment..."
+    fail=0
+    if [[ ! -f "$TPM_IDENTITY" ]]; then
+        echo "    [FAIL] Missing TPM identity: $TPM_IDENTITY"
+        fail=1
+    else
+        echo "    [ ok ] TPM identity present: $TPM_IDENTITY"
+    fi
+    if [[ ! -f "$MASTER_KEY_TPM" ]]; then
+        echo "    [FAIL] Missing TPM-encrypted master key: $MASTER_KEY_TPM"
+        fail=1
+    else
+        echo "    [ ok ] TPM-encrypted master key present: $MASTER_KEY_TPM"
+    fi
+    if (( fail == 0 )); then
+        if age -d -i "$TPM_IDENTITY" "$MASTER_KEY_TPM" >/dev/null 2>&1; then
+            echo "    [ ok ] Decryption with TPM identity succeeded"
+            echo ""
+            echo "==> TPM enrollment is healthy."
+            exit 0
+        else
+            echo "    [FAIL] Decryption with TPM identity failed"
+            fail=1
+        fi
+    fi
+    echo ""
+    echo "==> TPM enrollment verification FAILED."
+    echo "    Re-enroll with: $(basename "$0") ~/age-key.age"
     exit 1
 fi
 
