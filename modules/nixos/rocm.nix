@@ -87,6 +87,11 @@
     ] ++ (if config.smind.hw.amd.rocm.enable then [
       rocmPackages.rocminfo
       rocmPackages.rocm-smi
+      # `amd-smi` is AMD's next-gen replacement for `rocm-smi`; ROCm
+      # 7.x ships both, with rocm-smi in long-term-deprecation mode.
+      # Keep both on PATH while scripts/muscle-memory still reach for
+      # the old name.
+      rocmPackages.amdsmi
 
       # zluda # broken
 
