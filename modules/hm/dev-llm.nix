@@ -174,6 +174,19 @@ in
       default = true;
       description = "Enable fullscreen TUI mode for agent CLIs that support it";
     };
+
+    smind.hm.dev.llm.llmSshKeyPath = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        Path to an SSH private key to ro-bind into the yolo sandbox. Used on
+        llm-worker hosts to give the unattended `llm` user access to the
+        agenix-managed SSH key for git push / remote ssh from inside the
+        bubblewrap sandbox. The key is bound at the same path it lives at
+        on the host; agents must reference it explicitly
+        (e.g. `GIT_SSH_COMMAND='ssh -i <path>'`).
+      '';
+    };
   };
 
   config = lib.mkMerge [
@@ -541,6 +554,7 @@ in
           hwNvidiaEnable = outerConfig.smind.hw.nvidia.enable or false;
           hwAmdGpuEnable = outerConfig.smind.hw.amd.gpu.enable or false;
           hwIntelGpuEnable = outerConfig.smind.hw.intel.gpu.enable or false;
+          llmSshKeyPath = config.smind.hm.dev.llm.llmSshKeyPath;
         })
       ];
     })

@@ -13,6 +13,7 @@
   hwNvidiaEnable ? false,
   hwAmdGpuEnable ? false,
   hwIntelGpuEnable ? false,
+  llmSshKeyPath ? null,
 }:
 
 let
@@ -20,6 +21,9 @@ let
   podmanExports = lib.optionalString (podmanSocketPath != null) ''
     export YOLO_PODMAN_SOCKET_PATH=${lib.escapeShellArg podmanSocketPath}
     export YOLO_PODMAN_SOCKET_URI=${lib.escapeShellArg podmanSocketUri}
+  '';
+  llmSshKeyExports = lib.optionalString (llmSshKeyPath != null) ''
+    export YOLO_LLM_SSH_KEY_PATH=${lib.escapeShellArg llmSshKeyPath}
   '';
 in
 pkgs.writeShellScriptBin "yolo" ''
@@ -34,5 +38,6 @@ pkgs.writeShellScriptBin "yolo" ''
   export YOLO_HW_AMD_GPU_ENABLE=${if hwAmdGpuEnable then "1" else "0"}
   export YOLO_HW_INTEL_GPU_ENABLE=${if hwIntelGpuEnable then "1" else "0"}
   ${podmanExports}
+  ${llmSshKeyExports}
   exec bash ${yoloScript} "$@"
 ''

@@ -54,6 +54,7 @@
 
     isDesktop = false;
     roles.server.generic = true;   # pulls in shell.zsh.enable + sane-defaults
+    roles.server.llm-worker.enable = true; # creates the `llm` user + agenix-managed ssh key
     hw.cpu.isAmd = true;
 
     # AMD Radeon 6900XT — amdgpu kernel driver, ROCm compute stack,

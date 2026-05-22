@@ -14,6 +14,8 @@
 #   YOLO_HW_NVIDIA_ENABLE    - "1" if smind.hw.nvidia.enable is set on the host (gates --gpu)
 #   YOLO_HW_AMD_GPU_ENABLE   - "1" if smind.hw.amd.gpu.enable is set on the host (gates --gpu)
 #   YOLO_HW_INTEL_GPU_ENABLE - "1" if smind.hw.intel.gpu.enable is set on the host (gates --gpu)
+#   YOLO_LLM_SSH_KEY_PATH    - path to an agenix-managed SSH private key to ro-bind into the sandbox
+#                              (set on llm-worker hosts so the llm user can use the key inside yolo)
 
 : "${YOLO_LLM_SANDBOX:?must be set}"
 : "${YOLO_NIX_LD:?must be set}"
@@ -121,6 +123,21 @@ if [[ $GPU_MODE -eq 1 ]]; then
   fi
 fi
 
+LLM_SSH_KEY_ARGS=()
+if [[ -n "${YOLO_LLM_SSH_KEY_PATH:-}" ]]; then
+  # Resolve symlinks so we bind the real decrypted file. bwrap follows
+  # symlinks on the host, but agenix swaps the symlink target across
+  # generations and a stale source path would leave the sandbox holding
+  # an empty bind on the next rebuild.
+  _llm_key_real="$(readlink -f "$YOLO_LLM_SSH_KEY_PATH" 2>/dev/null || true)"
+  if [[ -n "$_llm_key_real" && -e "$_llm_key_real" ]]; then
+    LLM_SSH_KEY_ARGS+=(--ro-bind "$_llm_key_real,$YOLO_LLM_SSH_KEY_PATH")
+    LLM_SSH_KEY_ARGS+=(--env "YOLO_LLM_SSH_KEY_PATH=$YOLO_LLM_SSH_KEY_PATH")
+  else
+    echo "warning: YOLO_LLM_SSH_KEY_PATH=$YOLO_LLM_SSH_KEY_PATH not readable; skipping bind" >&2
+  fi
+fi
+
 BASE_ARGS=(
   --rw "${PWD}"
   --rw "${HOME}/.cache"
@@ -128,6 +145,7 @@ BASE_ARGS=(
   "${SOCKET_ARGS[@]}"
   "${TMUX_BIND_ARGS[@]}"
   "${GPU_ARGS[@]}"
+  "${LLM_SSH_KEY_ARGS[@]}"
   --ro "${HOME}/.config/git"
   --ro "${HOME}/.config/direnv"
   --ro "${HOME}/.local/share/direnv"
