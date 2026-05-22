@@ -16,8 +16,18 @@
 
     smind.initrd-unlock.bridge-slave = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
-      default = if config.smind.net.mode == "systemd-networkd" then config.smind.net.main-interface else null;
-      description = "Physical interface to enslave to the bridge (auto-detected from smind.net.main-interface when smind.net.mode is systemd-networkd)";
+      default =
+        if config.smind.net.mode == "systemd-networkd" && config.smind.net.bridge.enable
+        then config.smind.net.main-interface
+        else null;
+      description = ''
+        Physical interface to enslave to the bridge in initrd. Auto-detected
+        from smind.net.main-interface when smind.net.mode is systemd-networkd
+        AND smind.net.bridge.enable is true. Otherwise null, meaning DHCP
+        runs directly on `interface` with no bridge synthesis — required
+        when there is no bridge (e.g. single-NIC hosts) since a bridge named
+        the same as the only physical NIC would collide.
+      '';
     };
 
     smind.initrd-unlock.hostname = lib.mkOption {
@@ -55,6 +65,13 @@
           initrdBin = with pkgs; [
             busybox
           ];
+
+          # Disable systemd's 90s DefaultDeviceTimeoutSec inside initrd.
+          # SSH-unlock means a human types the passphrase, which often
+          # exceeds 90s; and on LUKS+LVM stacks the LVM device-timeout
+          # races the LUKS open even with fast passphrase entry, dropping
+          # the boot into emergency.target. See NixOS 26.05 release notes.
+          settings.Manager.DefaultDeviceTimeoutSec = "infinity";
 
           # Pull network-online.target into the initrd boot graph. Without
           # something `wants`ing it, systemd-networkd-wait-online.service
