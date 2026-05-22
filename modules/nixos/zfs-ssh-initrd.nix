@@ -56,32 +56,16 @@
             busybox
           ];
 
-          #extraBin = {
-          ##  zfs-unlock-shell = pkgs.writeScript "zfs-unlock-shell" ''
-          #    #!/bin/sh
-          #    exec /bin/systemd-tty-ask-password-agent --watch
-          #  '';
-          #};
-          #users.root.shell = "/bin/zfs-unlock-shell";
-
-          services.zfs-remote-unlock = {
-            description = "Prepare for ZFS remote unlock";
-            wantedBy = [ "initrd.target" ];
-            after = [
-              # "systemd-networkd.service"
-              "network-online.target"
-            ];
-            wants = [ "network-online.target" ];
-
-            path = with pkgs; [
-              zfs
-            ];
-
-            serviceConfig.Type = "oneshot";
-            script = ''
-              echo "systemctl default" >> /var/empty/.profile
+          # Replace root's login shell so any SSH session immediately watches
+          # systemd's password-agent socket. Works for both LUKS (cryptsetup)
+          # and ZFS (zfs-import-*.service uses systemd-ask-password too).
+          extraBin = {
+            unlock-shell = pkgs.writeScript "unlock-shell" ''
+              #!/bin/sh
+              exec /bin/systemd-tty-ask-password-agent --watch
             '';
           };
+          users.root.shell = "/bin/unlock-shell";
 
           network = {
             enable = true;
