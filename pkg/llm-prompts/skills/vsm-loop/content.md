@@ -137,6 +137,113 @@ at the leaves, the work is atomic and the subagent simply does it.
   discipline. Cycles that bleed into each other corrupt the
   audit trail.
 
+## Stop conditions: when (and only when) the loop emits user-facing text
+
+The loop emits user-facing text on exactly **two** triggers:
+
+1. **G4 — ledger drained.** All planned entries in the active
+   ledger are `[x]` and archived; defects are closed or migrated;
+   the cycle's commits are made; the compressed summary is ready.
+2. **Algedonic escalation across the metasystem boundary.** A
+   blocker meeting all three criteria in § *The algedonic channel*
+   has been raised and the orchestrator's own S5 cannot resolve
+   it.
+
+A third trigger — **explicit user stop** — overrides the loop:
+if the user types something that *unambiguously* halts the work
+("stop", "pause", "halt", "abort", "we're done", "let's stop
+here"), end the cycle. A user message that is *not* an explicit
+stop — a clarifying question, a side-question, a correction, a
+new constraint, a piece of context, a redirect within the same
+goal — does **not** end the loop. Answer the question or absorb
+the input, then resume the next ledger entry without asking
+permission. Treating every user message as an implicit "stop" is
+the symmetric failure of the courtesy-checkpoint pattern: it
+converts a question into an unsolicited handoff. If the user's
+message is ambiguous between "answer and continue" and "stop",
+ask which — but the default reading of a non-stop message is
+*continue*.
+
+Everything else is **not** a stop condition. In particular, the
+following are *not* triggers for emitting user-facing text:
+
+- A clean inner-loop cycle finished. (This is G3 → next entry,
+  not G4.)
+- A milestone closed but other milestones remain in the ledger.
+- The work feels like a "natural checkpoint" or a "good place to
+  pause."
+- The next milestone is "trickier" or "design-heavy" and you
+  would feel better with the user reviewing first.
+- Commits are made and you want to "give the user a chance" to
+  review or push them.
+- You are uncertain whether the user wants you to continue.
+
+If you are uncertain whether the user wants you to continue, the
+brief already answered: **continue.** The brief that invoked
+vsm-loop is durable authority for the whole goal, not for one
+cycle. Re-confirming each cycle is the exact failure mode this
+discipline exists to suppress.
+
+### Pre-flight check before any mid-loop user-facing text
+
+Before emitting *any* text to the user while the ledger is not
+drained, run this check. If you are about to write any of the
+following phrases — or anything paraphrasing them — **stop and
+continue the loop instead**:
+
+- "natural checkpoint" / "good checkpoint" / "clean handoff"
+- "pausing here" / "stopping here" / "taking a break here"
+- "would you like me to…" / "should I…" / "do you want me to…"
+- "shall I continue" / "ready for me to proceed"
+- "(a) … / (b) … / (c) …" menus of options
+- "the working tree is clean and the suite is green, so…"
+- "state is stable for either decision"
+- "this is a natural place to…" / "this is where the skill says
+  S4 earns its keep, so…"
+- Any framing that offers the user a choice between *continue*
+  and *stop* when the brief already authorized *continue*.
+
+These phrases are not neutral status updates. They are RLHF-
+induced solicitations of approval, and they convert durable
+authority into per-cycle re-authorization, which is exactly what
+the resource bargain rules out. The correct mid-loop emission
+volume is **zero text**. Run the next cycle.
+
+The check applies regardless of how well the cycle went, how
+"tricky" the next entry looks, or how courteous the
+checkpoint-offer would feel. Courtesy is not a stop condition.
+
+### Failure mode: courtesy checkpoint
+
+**Symptom.** Orchestrator returns to the user after a clean
+cycle with a status report and a menu of options ("continue /
+pause / push"), framed as a courtesy or a "clean handoff."
+
+**Cause.** The model's trained helpfulness reflex (RLHF rewards
+mid-task check-ins) overrides the skill's durable-authority
+contract. The loop is not actually blocked — it has a clear next
+entry and a clean working tree. The "checkpoint" is invented.
+
+**Why it matters.** Every such emission is a *false algedonic* —
+indistinguishable to the user from a real one, but with no
+underlying blocker. It trains the user to discount the loop's
+escalations, costs their attention budget, and breaks the
+audit-trail contract that says the user-facing channel carries
+only G4 reports and real escalations.
+
+**Counts as.** A non-credential ordinary algedonic for metric §7
+(a false positive against the frequency threshold). Diagnose the
+same way: bad brief? unclear authority? scope creep? If none,
+it is reflex-failure; the corrective action is to continue
+immediately and note the near-miss in the session log.
+
+**Control action.** If you catch yourself mid-emission, delete
+the draft and run the next cycle. If the emission has already
+left your output, your next action on the user's next turn is to
+continue the loop without further preamble — do not apologise,
+do not re-justify, do not narrate the recovery. Each of those
+compounds the variety leak.
+
 ## Variety engineering: the transduction discipline
 
 The single most common failure mode of multi-agent orchestration
@@ -778,10 +885,15 @@ one entry, diagnose upstream per the homeostat section.
 blocker (criteria above), mark the entry `[!]`, record the
 blocker in the ledger, and exit to G4 / algedonic escalation.
 
-A clean sub-cycle is not a stop condition for the outer loop. It
-ends the inner loop for *this* entry. The outer loop proceeds to
-the next planned entry. Returning to the user after one cycle
-"because it went well" is the primary failure mode of this skill.
+**Inner-loop completion → unconditionally proceed to next ledger
+entry.** No status update to the user. No offer. No
+acknowledgement that a cycle finished. The next user-facing
+emission is G4 (ledger drained) or an algedonic that meets all
+three criteria — nothing else. See § *Stop conditions* for the
+closed list and the phrase-detector; *Returning to the user
+after one cycle "because it went well" is the primary failure
+mode of this skill*, and the most common surface of it is the
+courtesy-checkpoint pattern catalogued there.
 
 ## Composing with `[[review-loop]]` and `[[research-loop]]`
 

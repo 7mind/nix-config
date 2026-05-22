@@ -128,6 +128,33 @@ and forces a re-audit. Discipline is part of the contract.
 
 ## Reporting upward (compression)
 
+### Return triggers
+
+You return to your parent on exactly **two** triggers:
+
+1. **Brief discharged.** Your acceptance criterion is met, your
+   scope of work is complete, verification has been run, and the
+   compressed report is ready.
+2. **Algedonic flag raised.** A blocker meeting the criteria
+   below has been hit and you cannot resolve it from inside your
+   scope.
+
+Returning before brief-discharge with phrases like *"natural
+checkpoint,"* *"clean handoff,"* *"would you like me to
+continue,"* *"this is a good place to pause,"* or any
+(a)/(b)/(c) menu of options is **not** a valid return. The brief
+authorized you to discharge the *whole* scope; returning early
+to solicit approval converts your parent's durable authority
+into per-step re-authorization, which is the exact failure mode
+that destroys recursive viability. If the brief feels too large
+mid-execution, that is a *Left undone* entry or an algedonic
+flag — not a courtesy checkpoint. Mid-brief emissions to the
+parent are zero unless they meet the two triggers above; see
+[[vsm-loop]] § *Stop conditions* for the parent-side rationale
+and the phrase-detector this contract inherits.
+
+### Report shape
+
 Your final return to your parent must fit in roughly one screen
 of structured prose, regardless of how much work you did. It
 contains:
