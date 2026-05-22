@@ -67,6 +67,63 @@ let
       "- Hostname: $HOST. Use this exact value where CLAUDE.md or scripts reference the current host; do not rely on \$HOSTNAME (zsh, the user's login shell, does not export it)." \
       "- $SANDBOX_LINE"
   '';
+
+  # Stop hook: enforce the vsm-loop "Stop conditions" contract by blocking
+  # turn-end while the active ledger still has open ([ ] or [~]) entries.
+  # The prompt-side discipline in pkg/llm-prompts/skills/vsm-loop is
+  # advisory; this hook is what makes it load-bearing against the RLHF
+  # "courtesy checkpoint" reflex. No-op outside vsm-loop projects (gated
+  # on the Cycle marker the skill mandates at the top of tasks.md).
+  claudeVsmLoopStopGuard = pkgs.writeShellScript "claude-vsm-loop-stop-guard" ''
+    set -eu
+    input=$(cat)
+    # Avoid re-blocking when Claude is already responding to a prior block.
+    stop_hook_active=$(printf '%s' "$input" | ${pkgs.jq}/bin/jq -r '.stop_hook_active // false' 2>/dev/null || echo false)
+    if [ "$stop_hook_active" = "true" ]; then
+      exit 0
+    fi
+    cwd=$(printf '%s' "$input" | ${pkgs.jq}/bin/jq -r '.cwd // empty' 2>/dev/null || true)
+    if [ -z "$cwd" ]; then
+      cwd="$(pwd)"
+    fi
+    ledger=""
+    for candidate in "$cwd/tasks.md" "$cwd/docs/state/tasks.md"; do
+      if [ -f "$candidate" ]; then
+        ledger="$candidate"
+        break
+      fi
+    done
+    if [ -z "$ledger" ]; then
+      exit 0
+    fi
+    # vsm-loop ledgers always carry a Cycle marker; bail if it's absent so
+    # we don't fire on unrelated tasks.md files.
+    if ! ${pkgs.gnugrep}/bin/grep -qE '\bCycle\b' "$ledger" 2>/dev/null; then
+      exit 0
+    fi
+    # Open = planned [ ] or in-progress [~]. Blocked [!] and done [x] are
+    # valid leave-behind states (algedonic-raised or completed).
+    # `grep -c` exits 1 with output "0" on no-match; capture the count and
+    # only reset on actual command failure, otherwise `|| echo 0` would
+    # concatenate "0\n0".
+    open_count=$(${pkgs.gnugrep}/bin/grep -cE '^[[:space:]]*-[[:space:]]*\[[~ ]\]' "$ledger" 2>/dev/null) || open_count=0
+    if [ "$open_count" -gt 0 ]; then
+      printf '%s\n' \
+        "vsm-loop ledger \"$ledger\" has $open_count open entries ([ ] or [~])." \
+        "Courtesy checkpoint is not a valid stop condition — see the vsm-loop" \
+        "skill § \"Stop conditions\" for the closed list of valid stop triggers." \
+        "" \
+        "Choose one before stopping:" \
+        "  1. (default) Continue the next ledger entry. No user-facing preamble," \
+        "     no menu of options, no acknowledgement that a cycle finished." \
+        "  2. Raising algedonic? Flip the relevant entry to [!] in the ledger" \
+        "     and emit the escalation per the skill's algedonic contract." \
+        "  3. User explicitly asked to stop? Flip open entries to [!] with the" \
+        "     note \"user-stopped: <reason>\" before stopping." >&2
+      exit 2
+    fi
+    exit 0
+  '';
   copilotConfig = jsonFormat.generate "copilot-config.json" {
     alt_screen = false;
     banner = "never";
@@ -178,6 +235,19 @@ in
                   {
                     type = "command";
                     command = "${claudeSessionStartHook}";
+                  }
+                ];
+              }
+            ];
+            # Enforce vsm-loop "Stop conditions" by blocking turn-end while
+            # the active ledger still has open entries. See
+            # claudeVsmLoopStopGuard above for rationale.
+            Stop = [
+              {
+                hooks = [
+                  {
+                    type = "command";
+                    command = "${claudeVsmLoopStopGuard}";
                   }
                 ];
               }
