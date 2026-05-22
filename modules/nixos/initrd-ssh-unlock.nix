@@ -56,17 +56,6 @@
             busybox
           ];
 
-          # Replace root's login shell so any SSH session immediately watches
-          # systemd's password-agent socket. Works for both LUKS (cryptsetup)
-          # and ZFS (zfs-import-*.service uses systemd-ask-password too).
-          extraBin = {
-            unlock-shell = pkgs.writeScript "unlock-shell" ''
-              #!/bin/sh
-              exec /bin/systemd-tty-ask-password-agent --watch
-            '';
-          };
-          users.root.shell = "/bin/unlock-shell";
-
           network = {
             enable = true;
             wait-online.enable = true;
@@ -128,6 +117,16 @@
         ssh = {
           enable = true;
           port = 22;
+
+          # Per NixOS 26.05 release notes: `cryptsetup-askpass` is gone under
+          # systemd-initrd; the supported way to drive the unlock from an SSH
+          # session is to run `systemctl default`, which itself acts as a
+          # password agent when attached to a TTY. ForceCommand applies to
+          # every key, so callers don't have to remember the `command="…"`
+          # prefix in authorizedKeys.
+          extraConfig = ''
+            ForceCommand systemctl default
+          '';
 
           # `ssh-keygen -t ed25519 -N "" -f /path/to/ssh_host_ed25519_key`
           # hostKeys = [ "/etc/secrets/initrd/ssh_host_ed25519_key" ];
