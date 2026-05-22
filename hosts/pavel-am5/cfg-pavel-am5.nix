@@ -150,8 +150,8 @@
     host.email.to = "team@7mind.io";
     host.email.sender = "${config.networking.hostName}@home.7mind.io";
 
-    zfs.initrd-unlock.enable = true;
-    zfs.initrd-unlock.macaddr = "d0:94:66:55:aa:ab";
+    initrd-unlock.enable = true;
+    initrd-unlock.macaddr = "d0:94:66:55:aa:ab";
     # bridge-slave auto-detected from net.main-interface when net.mode is systemd-networkd
 
     net.main-interface = "eth-main";

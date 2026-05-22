@@ -30,6 +30,7 @@
   ./gnome-extensions.nix
   ./hyprland.nix
   ./i2c.nix
+  ./initrd-ssh-unlock.nix
   ./image-gen.nix
   ./comfyui.nix
   ./kanata-super-remap.nix
@@ -84,7 +85,6 @@
   ./trezor.nix
   ./uhk-keyboard.nix
   ./virt-manager.nix
-  ./zfs-ssh-initrd.nix
   ./zfs.nix
   ./xkb.nix
   ./zsh.nix

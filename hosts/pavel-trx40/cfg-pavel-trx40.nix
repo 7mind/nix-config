@@ -35,12 +35,12 @@
     # rekeyed file lands under `private/secrets/rekeyed/pavel-trx40/`.
     host.email.enable = false;
 
-    # ZFS initrd unlock over SSH. The Realtek on-board NIC stays put
+    # Initrd unlock over SSH. The Realtek on-board NIC stays put
     # under its permanent MAC and is enslaved to a synthetic bridge in
     # both the initrd and the booted system so the rest of the
     # networking pipeline (containers, VLANs, …) has a stable handle.
-    zfs.initrd-unlock.enable = true;
-    zfs.initrd-unlock.macaddr = "00:e0:4c:75:00:9e";
+    initrd-unlock.enable = true;
+    initrd-unlock.macaddr = "00:e0:4c:75:00:9e";
     # bridge-slave auto-detected from net.main-interface
 
     net.mode = "systemd-networkd";

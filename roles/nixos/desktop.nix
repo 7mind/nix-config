@@ -54,7 +54,7 @@ in
         locale.ie.enable = lib.mkDefault false;
         security.sudo.wheel-permissive-rules = lib.mkDefault false;
         security.sudo.wheel-passwordless = lib.mkDefault false;
-        zfs.initrd-unlock.enable = lib.mkDefault false;
+        initrd-unlock.enable = lib.mkDefault false;
 
         environment.sane-defaults.enable = lib.mkDefault true;
         environment.linux.sane-defaults.enable = lib.mkDefault true;
