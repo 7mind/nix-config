@@ -16,6 +16,11 @@
 #   YOLO_HW_INTEL_GPU_ENABLE - "1" if smind.hw.intel.gpu.enable is set on the host (gates --gpu)
 #   YOLO_LLM_SSH_KEY_PATH    - path to an agenix-managed SSH private key to ro-bind into the sandbox
 #                              (set on llm-worker hosts so the llm user can use the key inside yolo)
+#   YOLO_GPU_DEFAULT         - "1" to default --gpu on (CLI --no-gpu opts out)
+#   YOLO_EXTRA_RO_PATHS      - newline-separated list of host paths to ro-bind (missing paths are skipped)
+#   YOLO_EXTRA_RW_PATHS      - newline-separated list of host paths to rw-bind (missing paths are skipped)
+#   YOLO_OLLAMA_MODELS_DIR   - host path to the ollama models directory (ro-bind); empty means no ollama on this host
+#   YOLO_EXTRA_PROMPT        - extra text appended to the claude system prompt (after the YOLO header)
 
 : "${YOLO_LLM_SANDBOX:?must be set}"
 : "${YOLO_NIX_LD:?must be set}"
@@ -25,13 +30,14 @@
 
 WORK_MODE=0
 MOBILE_MODE=0
-GPU_MODE=0
+GPU_MODE=${YOLO_GPU_DEFAULT:-0}
 ENV_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --work|-w) WORK_MODE=1; shift ;;
     --mobile) MOBILE_MODE=1; shift ;;
     --gpu) GPU_MODE=1; shift ;;
+    --no-gpu) GPU_MODE=0; shift ;;
     --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
     -*) echo "Unknown flag: $1" >&2; exit 1 ;;
     *) break ;;
@@ -48,7 +54,7 @@ if [[ $MOBILE_MODE -eq 1 ]]; then
 fi
 
 if [[ $# -eq 0 ]]; then
-  echo "Usage: yolo [--work] [--mobile] [--gpu] [--env KEY=VAL]... <claude|codex|copilot|gemini|vibe|opencode> [args...]" >&2
+  echo "Usage: yolo [--work] [--mobile] [--gpu|--no-gpu] [--env KEY=VAL]... <claude|codex|copilot|gemini|vibe|opencode> [args...]" >&2
   exit 1
 fi
 
@@ -123,6 +129,28 @@ if [[ $GPU_MODE -eq 1 ]]; then
   fi
 fi
 
+# Per-host extra bind paths (configured via Nix). The underlying llm-sandbox
+# wrapper already filters non-existent paths, so a host that doesn't have
+# the path simply contributes nothing.
+EXTRA_PATH_ARGS=()
+if [[ -n "${YOLO_EXTRA_RO_PATHS:-}" ]]; then
+  while IFS= read -r _p; do
+    [[ -n "$_p" ]] && EXTRA_PATH_ARGS+=(--ro "$_p")
+  done <<< "$YOLO_EXTRA_RO_PATHS"
+fi
+if [[ -n "${YOLO_EXTRA_RW_PATHS:-}" ]]; then
+  while IFS= read -r _p; do
+    [[ -n "$_p" ]] && EXTRA_PATH_ARGS+=(--rw "$_p")
+  done <<< "$YOLO_EXTRA_RW_PATHS"
+fi
+
+# Ollama models directory (read-only). Derived from services.ollama.models
+# at Nix-eval time; empty on hosts where ollama is not enabled.
+OLLAMA_ARGS=()
+if [[ -n "${YOLO_OLLAMA_MODELS_DIR:-}" ]]; then
+  OLLAMA_ARGS+=(--ro "$YOLO_OLLAMA_MODELS_DIR")
+fi
+
 LLM_SSH_KEY_ARGS=()
 if [[ -n "${YOLO_LLM_SSH_KEY_PATH:-}" ]]; then
   # Resolve symlinks so we bind the real decrypted file. bwrap follows
@@ -146,6 +174,8 @@ BASE_ARGS=(
   "${TMUX_BIND_ARGS[@]}"
   "${GPU_ARGS[@]}"
   "${LLM_SSH_KEY_ARGS[@]}"
+  "${EXTRA_PATH_ARGS[@]}"
+  "${OLLAMA_ARGS[@]}"
   --ro "${HOME}/.config/git"
   --ro "${HOME}/.config/direnv"
   --ro "${HOME}/.local/share/direnv"
@@ -155,18 +185,34 @@ BASE_ARGS=(
   "${ENV_ARGS[@]}"
 )
 
-# Expose the ollama model store read-only so sandboxed sessions can
-# llama-bench / load GGUF blobs without first sudo-copying them to
-# /tmp/exchange. --ro is a no-op if the path doesn't exist (handled by
-# llm-sandbox.sh), so this is safe on hosts that don't run ollama.
-BASE_ARGS+=(--ro /var/lib/ollama)
-
-# Expose /srv/nvme read-only on hosts that have it (bulk NVMe scratch /
-# dataset store). No-op when absent.
-BASE_ARGS+=(--ro /srv/nvme)
 
 EXTRA_ARGS=()
 EXEC_CMD=()
+
+# Compose the system prompt fragments delivered to agents that accept an
+# inline append (currently claude). Order: YOLO authorization → GPU
+# availability (if --gpu took effect) → Nix-configured extras.
+_yolo_prompt_base='YOLO mode is active. The user has pre-authorized destructive shell operations (rm, rm -rf, kill, git reset --hard, etc.) and will not be available to confirm. Proceed without asking for confirmation on such operations. Standard safety still applies to actions with broader blast radius (force-push to shared branches, deleting remote resources, sending external messages).'
+
+_yolo_prompt_gpu=""
+if [[ $GPU_MODE -eq 1 ]]; then
+  _gpu_vendors=()
+  [[ "${YOLO_HW_NVIDIA_ENABLE:-0}" == "1" ]] && _gpu_vendors+=("NVIDIA")
+  [[ "${YOLO_HW_AMD_GPU_ENABLE:-0}" == "1" ]] && _gpu_vendors+=("AMD")
+  [[ "${YOLO_HW_INTEL_GPU_ENABLE:-0}" == "1" ]] && _gpu_vendors+=("Intel")
+  if (( ${#_gpu_vendors[@]} > 0 )); then
+    _gpu_list=$(IFS=/; echo "${_gpu_vendors[*]}")
+    _yolo_prompt_gpu="GPU access is enabled inside this sandbox (${_gpu_list}). /dev/dri, /sys, and /run/opengl-driver are bound — you can run GPU-accelerated workloads (llama.cpp/SYCL/ROCm/CUDA, vulkan, level-zero, OpenCL) directly without leaving the sandbox."
+  fi
+fi
+
+_yolo_prompt_full="$_yolo_prompt_base"
+if [[ -n "$_yolo_prompt_gpu" ]]; then
+  _yolo_prompt_full+=$'\n\n'"$_yolo_prompt_gpu"
+fi
+if [[ -n "${YOLO_EXTRA_PROMPT:-}" ]]; then
+  _yolo_prompt_full+=$'\n\n'"$YOLO_EXTRA_PROMPT"
+fi
 
 ensure_copilot_config() {
   local config_dir="$1"
@@ -226,7 +272,7 @@ case "$SUBCMD" in
     EXEC_CMD=(
       claude
       --permission-mode bypassPermissions
-      --append-system-prompt 'YOLO mode is active. The user has pre-authorized destructive shell operations (rm, rm -rf, kill, git reset --hard, etc.) and will not be available to confirm. Proceed without asking for confirmation on such operations. Standard safety still applies to actions with broader blast radius (force-push to shared branches, deleting remote resources, sending external messages).'
+      --append-system-prompt "$_yolo_prompt_full"
       "${CMD_ARGS[@]}"
     )
     ;;

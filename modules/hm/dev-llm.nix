@@ -187,6 +187,47 @@ in
         (e.g. `GIT_SSH_COMMAND='ssh -i <path>'`).
       '';
     };
+
+    smind.hm.dev.llm.yolo.extraReadOnlyPaths = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      description = ''
+        Extra host paths to ro-bind into the yolo sandbox. Paths that don't
+        exist on the host are silently skipped (handled by llm-sandbox.sh).
+        Use this for per-host bulk storage (e.g. `/srv/nvme`) that should
+        be visible read-only to sandboxed agents.
+      '';
+    };
+
+    smind.hm.dev.llm.yolo.extraReadWritePaths = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      description = ''
+        Extra host paths to rw-bind into the yolo sandbox. Same skip-on-missing
+        semantics as `extraReadOnlyPaths`.
+      '';
+    };
+
+    smind.hm.dev.llm.yolo.gpuByDefault = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Default the `--gpu` flag on for `yolo` invocations on this host.
+        Users can still opt out with `--no-gpu`. Has no effect on hosts
+        with none of `smind.hw.{nvidia,amd.gpu,intel.gpu}.enable` set.
+      '';
+    };
+
+    smind.hm.dev.llm.yolo.extraPromptFragments = lib.mkOption {
+      type = lib.types.listOf lib.types.lines;
+      default = [ ];
+      description = ''
+        Extra text fragments appended (separated by blank lines) to the
+        claude `--append-system-prompt` after the YOLO authorization line.
+        Use for per-host context (e.g. "this is the home NAS, /srv/nvme
+        holds the photo library").
+      '';
+    };
   };
 
   config = lib.mkMerge [
@@ -555,6 +596,17 @@ in
           hwAmdGpuEnable = outerConfig.smind.hw.amd.gpu.enable or false;
           hwIntelGpuEnable = outerConfig.smind.hw.intel.gpu.enable or false;
           llmSshKeyPath = config.smind.hm.dev.llm.llmSshKeyPath;
+          gpuByDefault = config.smind.hm.dev.llm.yolo.gpuByDefault;
+          extraReadOnlyPaths = config.smind.hm.dev.llm.yolo.extraReadOnlyPaths;
+          extraReadWritePaths = config.smind.hm.dev.llm.yolo.extraReadWritePaths;
+          extraPromptFragments = config.smind.hm.dev.llm.yolo.extraPromptFragments;
+          # Bind the actual ollama models dir (services.ollama.models, default
+          # `${home}/models`) instead of the bare home, and only on hosts where
+          # ollama is enabled — saves binding an empty path elsewhere.
+          ollamaModelsDir =
+            if (outerConfig.services.ollama.enable or false)
+            then outerConfig.services.ollama.models
+            else null;
         })
       ];
     })
