@@ -56,6 +56,24 @@
             busybox
           ];
 
+          # Pull network-online.target into the initrd boot graph. Without
+          # something `wants`ing it, systemd-networkd-wait-online.service
+          # never runs (it is wantedBy=network-online.target, not
+          # initrd.target), so DHCP completion isn't waited on and the link
+          # may not be ready by the time the LUKS prompt resolves on the
+          # console — leaving SSH unreachable.
+          services.initrd-unlock-await-network = {
+            description = "Pull network-online.target into initrd";
+            wantedBy = [ "initrd.target" ];
+            after = [ "network-online.target" ];
+            wants = [ "network-online.target" ];
+            serviceConfig = {
+              Type = "oneshot";
+              RemainAfterExit = true;
+              ExecStart = "/bin/true";
+            };
+          };
+
           network = {
             enable = true;
             wait-online.enable = true;
