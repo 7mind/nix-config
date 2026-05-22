@@ -47,8 +47,12 @@ in
       nix.settings.trusted-users = [ "llm" ];
 
       smind = {
-        security.sudo.wheel-passwordless = lib.mkDefault true;
-        security.sudo.wheel-permissive-rules = lib.mkDefault true;
+        # Asserted (not mkDefault) — unattended sudo is the whole point
+        # of the role; deliberately override desktop.nix's defaults that
+        # turn these off on workstations. Use `lib.mkForce false` in the
+        # host config if you ever need to walk this back.
+        security.sudo.wheel-passwordless = true;
+        security.sudo.wheel-permissive-rules = true;
 
         # Device flashing & adb support so the LLM can program ESP32/Arduino
         # boards and talk to Android devices.
@@ -63,9 +67,11 @@ in
         description = "Unattended LLM agent operator";
         home = "/home/llm";
         group = "llm";
+        # `ssh-users` is only declared when smind.ssh.mode = "safe" (see
+        # modules/nixos/ssh.nix); skipping it on hosts that don't gate
+        # SSH by group avoids referencing a non-existent group.
         extraGroups = [
           "wheel"
-          "ssh-users"
           "podman"
           "ollama"
           "render"
@@ -73,7 +79,7 @@ in
           "dialout"
           "plugdev"
           "uucp"
-        ];
+        ] ++ lib.optional (config.smind.ssh.mode == "safe") "ssh-users";
         openssh.authorizedKeys.keys = cfg-const.ssh-keys-pavel;
       };
 
