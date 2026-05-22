@@ -161,6 +161,10 @@ BASE_ARGS=(
 # llm-sandbox.sh), so this is safe on hosts that don't run ollama.
 BASE_ARGS+=(--ro /var/lib/ollama)
 
+# Expose /srv/nvme read-only on hosts that have it (bulk NVMe scratch /
+# dataset store). No-op when absent.
+BASE_ARGS+=(--ro /srv/nvme)
+
 EXTRA_ARGS=()
 EXEC_CMD=()
 
