@@ -1695,11 +1695,11 @@
         "nixpkgs": "nixpkgs_7"
       },
       "locked": {
-        "lastModified": 1779536742,
-        "narHash": "sha256-B4Z0gUqOyn3gZFirDoD+k0ebzQXNUUth7ST5qW1HA6c=",
+        "lastModified": 1779538629,
+        "narHash": "sha256-FECMBEnB7Aat1eYV3bArlgpOJMLBxW4cGWR3uXBc+AQ=",
         "owner": "pshirshov",
         "repo": "zimt",
-        "rev": "84a6a950721f24445c1afac0ca76a082fe54453e",
+        "rev": "aa8abf47ce24974cebff59dd2f3d26003a06ec1b",
         "type": "github"
       },
       "original": {
