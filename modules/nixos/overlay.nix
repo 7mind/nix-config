@@ -122,7 +122,16 @@
 
         mqtt-controller-frontend =
           let
-            craneLib = (inputs.crane.mkLib pkgs).overrideToolchain (p:
+            # The frontend output is a WASM bundle + JS/CSS/HTML — fully
+            # architecture-independent. Pin its build pkgs to x86_64-linux so
+            # aarch64 hosts (raspi5m) reference the same closure instead of
+            # rebuilding it under emulation. The aarch64 mqtt-controller's
+            # postInstall just `cp -r`s the static dist directory in.
+            pkgsBuild = import inputs.nixpkgs {
+              system = "x86_64-linux";
+              overlays = [ inputs.rust-overlay.overlays.default ];
+            };
+            craneLib = (inputs.crane.mkLib pkgsBuild).overrideToolchain (p:
               p.rust-bin.stable.latest.minimal.override {
                 targets = [ "wasm32-unknown-unknown" ];
               }
@@ -139,7 +148,7 @@
           in
           craneLib.buildTrunkPackage (commonArgs // {
             inherit cargoArtifacts;
-            wasm-bindgen-cli = pkgs.wasm-bindgen-cli;
+            wasm-bindgen-cli = pkgsBuild.wasm-bindgen-cli;
             # trunk must run from the frontend crate directory so it can
             # find the [package] Cargo.toml. We cd there before trunk
             # runs and adjust the install path accordingly.
