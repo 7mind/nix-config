@@ -107,7 +107,8 @@
         sbctl
 
         # system info
-        fastfetch
+        macchina
+        hyfetch
         inxi
         lshw
         hwinfo
