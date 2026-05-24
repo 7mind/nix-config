@@ -51,7 +51,27 @@ TOML
 in
 {
   options.smind.infra.attic-cache = {
-    enable = lib.mkEnableOption "use attic binary cache on nas as a nix substituter";
+    enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Trust the attic cache's signing keys (substituter usage is gated
+        separately by `substituter.enable`). Defaults to `true` so every host
+        accepts SSH-pushed / `nix copy` paths signed by other hosts in the
+        fleet; turn it off only for hosts that must reject those signatures.
+      '';
+    };
+
+    substituter.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Add the attic server as a nix substituter. Requires `enable = true`.
+        Set to `false` on hosts that cannot reach the attic server directly
+        (e.g. Oracle Cloud hosts off the home LAN); they still benefit from
+        `enable = true` to accept signed paths pushed over SSH.
+      '';
+    };
 
     server-url = lib.mkOption {
       type = lib.types.str;
@@ -96,14 +116,17 @@ in
     {
       environment.systemPackages = [ pkgs.attic-client ];
 
+      nix.settings.trusted-public-keys = [ cfg.public-key cfg.push.signing-public-key ];
+    }
+
+    (lib.mkIf cfg.substituter.enable {
       nix.settings = {
         substituters = [ "${cfg.server-url}/${cfg.cache-name}" ];
-        trusted-public-keys = [ cfg.public-key cfg.push.signing-public-key ];
         # Fall back to building locally when attic is unreachable
         fallback = true;
         connect-timeout = 3;
       };
-    }
+    })
 
     (lib.mkIf cfg.push.enable {
       nix.settings = {

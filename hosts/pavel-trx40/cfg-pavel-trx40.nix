@@ -74,7 +74,6 @@
     # Build/work machine: keep nix-build infrastructure on, expose LLM
     # tooling for Claude workflows.
     infra.nix-build.enable = true;
-    infra.attic-cache.enable = true;
     llm.enable = true;
     llm.ollama.package = pkgs.ollama-vulkan;
   };

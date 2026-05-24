@@ -36,6 +36,7 @@ DO_LIST=false
 DO_ALLOW_SHORT_HOST=false
 DO_OFFLINE=false
 DO_RESOCK=true
+DO_CHECK_SIGS=true
 MESSAGE=""
 VERBOSE=false
 
@@ -65,6 +66,10 @@ Options:
                     Allow using short host name for remote switch when FQDN is missing
   --offline         Pass --offline to nix build (no network fetches)
   -nrs, --no-resock Skip SSH_AUTH_SOCK probing (keep whatever the shell set)
+  -ncs, --no-check-sigs
+                    Pass --no-check-sigs to nix copy when deploying to a
+                    remote host (useful when the target does not yet trust
+                    this host's signing key)
   -v, --verbose     Enable verbose output (set -x)
   -h, --help        Show this help message
 
@@ -257,6 +262,10 @@ parse_args() {
                 ;;
             -nrs|--no-resock)
                 DO_RESOCK=false
+                shift
+                ;;
+            -ncs|--no-check-sigs)
+                DO_CHECK_SIGS=false
                 shift
                 ;;
             -v|--verbose)
@@ -533,6 +542,11 @@ do_switch() {
     echo "==> ${verb}: ${HOSTS[*]}"
     add_all
 
+    local -a copy_args=()
+    if [[ "$DO_CHECK_SIGS" != "true" ]]; then
+        copy_args+=(--no-check-sigs)
+    fi
+
     for host in "${HOSTS[@]}"; do
         local platform fqn closure remote_target
         platform=$(get_host_attr "$host" "platform")
@@ -566,7 +580,7 @@ do_switch() {
                 if [[ "$THISHOST" == "$host" ]]; then
                     "${closure}/sw/bin/darwin-rebuild" switch --flake .
                 else
-                    nix copy --to "ssh-ng://${remote_target}" "${ROOTS}/${host}"
+                    nix copy "${copy_args[@]}" --to "ssh-ng://${remote_target}" "${ROOTS}/${host}"
                     ssh -t "${remote_target}" sudo -H --preserve-env=PATH env nix-env -p /nix/var/nix/profiles/system --set "$closure"
                     ssh -t "${remote_target}" "sudo ${closure}/sw/bin/darwin-rebuild" activate
                 fi
@@ -576,7 +590,7 @@ do_switch() {
                     sudo nix-env -p /nix/var/nix/profiles/system --set "$closure"
                     sudo /nix/var/nix/profiles/system/bin/switch-to-configuration "$action"
                 else
-                    nix copy --to "ssh-ng://root@${remote_target}" "${ROOTS}/${host}"
+                    nix copy "${copy_args[@]}" --to "ssh-ng://root@${remote_target}" "${ROOTS}/${host}"
                     ssh "root@${remote_target}" nix-env -p /nix/var/nix/profiles/system --set "$closure"
                     ssh "root@${remote_target}" /nix/var/nix/profiles/system/bin/switch-to-configuration "$action"
                 fi

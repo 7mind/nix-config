@@ -201,7 +201,6 @@
     ];
     containers.docker.enable = true;
     infra.nix-build.enable = true;
-    infra.attic-cache.enable = true;
 
     iperf.enable = true;
     iperf.protected.server.enable = false;
