@@ -872,7 +872,6 @@
       "original": {
         "owner": "braindefender",
         "repo": "nix-apple-fonts",
-        "rev": "6f1a4b74cb889c7bc28d378715c79b4d0b35f5b8",
         "type": "github"
       }
     },

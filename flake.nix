@@ -8,7 +8,7 @@
 
     flake-utils.url = "github:numtide/flake-utils";
 
-    lanzaboote.url = "github:nix-community/lanzaboote"; # was v0.4.1, updated for newer rust/crane
+    lanzaboote.url = "github:nix-community/lanzaboote";
     lanzaboote.inputs.nixpkgs.follows = "nixpkgs";
 
     crane.url = "github:ipetkov/crane";
@@ -56,7 +56,7 @@
     };
 
     nix-apple-fonts = {
-      url = "github:braindefender/nix-apple-fonts/6f1a4b74cb889c7bc28d378715c79b4d0b35f5b8";
+      url = "github:braindefender/nix-apple-fonts";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
