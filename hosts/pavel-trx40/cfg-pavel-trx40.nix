@@ -10,7 +10,7 @@
       # Threadripper 3970x: 32 cores / 64 threads. Leave a few jobs in
       # parallel to keep the box responsive while compiling.
       max-jobs = 2;
-      cores = 48;
+      cores = 32;
       allowed-users = [ "root" "pavel" ];
       trusted-users = [ "root" "pavel" ];
     };

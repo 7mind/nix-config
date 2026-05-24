@@ -61,6 +61,12 @@ in
         advanced.log_output = [ "console" "syslog" ];
         advanced.channel = 15;
         advanced.last_seen = "ISO_8601";
+        # Silence per-publish MQTT spam (one INFO line per device update,
+        # multiplied by OTA progress reports). Keep other namespaces at
+        # default INFO so device join/leave and startup remain visible.
+        advanced.log_namespaced_levels = {
+          "z2m:mqtt" = "warning";
+        };
       };
     };
 

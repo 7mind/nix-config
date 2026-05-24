@@ -20,7 +20,7 @@ let
         system = "x86_64-linux";
         protocol = "ssh-ng";
         sshUser = "root";
-        maxJobs = 2;
+        maxJobs = 3;
         sshKey = lib.mkIf ownerSecretsEnabled "${config.age.secrets.builder-key.path}";
         publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSUxqclA0bHIrV1NnTDNrNWVBNis0Q0dZbXR6NlVpdEltWSszUkFSYU0wcnkgcm9vdEBmcmVzaG5peAo=";
         # vm's x86 speedFactor is 2; the Threadripper benchmarks well
@@ -50,7 +50,7 @@ let
         system = "aarch64-linux";
         protocol = "ssh-ng";
         sshUser = "root";
-        maxJobs = 2;
+        maxJobs = 3;
         sshKey = lib.mkIf ownerSecretsEnabled "${config.age.secrets.builder-key.path}";
         publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSUxqclA0bHIrV1NnTDNrNWVBNis0Q0dZbXR6NlVpdEltWSszUkFSYU0wcnkgcm9vdEBmcmVzaG5peAo=";
         speedFactor = 10;

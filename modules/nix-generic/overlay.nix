@@ -91,25 +91,26 @@
         else
           prev.codex;
 
-      mistral-vibe = prev.mistral-vibe.overrideAttrs (old: {
-        nativeBuildInputs =
-          (old.nativeBuildInputs or [ ])
-          ++ [ prev.python3Packages.pythonRelaxDepsHook ];
-        pythonRelaxDeps = (old.pythonRelaxDeps or [ ]) ++ [ "cryptography" ];
-        propagatedBuildInputs =
-          (old.propagatedBuildInputs or [ ])
-          ++ (with prev.python3Packages; [
-            cachetools
-            markdownify
-          ]);
-        disabledTestPaths = (old.disabledTestPaths or [ ]) ++ [ "tests/e2e/" ];
-      });
-
       # Work around Python package regressions after nixpkgs update.
       pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
         (python-final: python-prev: {
           telethon = python-prev.telethon.overridePythonAttrs (_: {
             patches = [ ];
+          });
+
+          # mypy >=1.x changed --revealed-type output: `builtins.int` → `int`
+          # (PEP 585). eth-utils 6.0.0 tests still expect the old strings.
+          # Tests are purely about mypy output format, not eth-utils behaviour.
+          eth-utils = python-prev.eth-utils.overridePythonAttrs (old: {
+            disabledTests = (old.disabledTests or [ ]) ++ [
+              "test_type_inference"
+            ];
+          });
+
+          # jedi-language-server 0.46.0 pins jedi<0.20; nixpkgs is on 0.20.x.
+          # Minor jedi bump, API-compatible — relax the constraint.
+          jedi-language-server = python-prev.jedi-language-server.overridePythonAttrs (old: {
+            pythonRelaxDeps = (old.pythonRelaxDeps or [ ]) ++ [ "jedi" ];
           });
 
           # construct-classes = python-prev.construct-classes.overridePythonAttrs (old: {
