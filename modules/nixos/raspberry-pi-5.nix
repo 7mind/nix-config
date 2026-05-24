@@ -31,5 +31,6 @@
   smind = {
     zfs.enable = false;
     kernel.sane-defaults.enable = false;
+    hw.cpu.isArm = true;
   };
 }

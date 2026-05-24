@@ -109,7 +109,7 @@ in
   # '';
 
   smind = {
-    nix.nix-impl = "determinate";
+    # nix.nix-impl = "determinate"; # disabled globally: FlakeHub Cache 401 without auth
     age.enable = true;
     roles.desktop.generic-gnome = true;
     isLaptop = true;
