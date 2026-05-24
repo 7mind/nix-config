@@ -255,17 +255,6 @@ rec {
                   ollama-cuda    = prev.ollama-cuda.overrideAttrs    (_: ollamaBumpAttrs);
                   ollama-rocm    = prev.ollama-rocm.overrideAttrs    (_: ollamaBumpAttrs);
                   ollama-vulkan  = prev.ollama-vulkan.overrideAttrs  (_: ollamaBumpAttrs);
-                  vscode-marketplace = prev.vscode-marketplace // {
-                    anthropic = prev.vscode-marketplace.anthropic // {
-                      claude-code = prev.vscode-marketplace.anthropic.claude-code.overrideAttrs (old: {
-                        postInstall = ''
-                          mkdir -p "$out/$installPrefix/resources/native-binary"
-                          rm -f "$out/$installPrefix/resources/native-binary/claude"*
-                          ln -s "${final.claude-code}/bin/claude" "$out/$installPrefix/resources/native-binary/claude"
-                        '';
-                      });
-                    };
-                  };
                 })
               ];
             }
@@ -290,17 +279,6 @@ rec {
                 inputs.rust-overlay.overlays.default
                 (final: prev: {
                   claude-code = final.callPackage ./pkg/claude-code/package.nix { };
-                  vscode-marketplace = prev.vscode-marketplace // {
-                    anthropic = prev.vscode-marketplace.anthropic // {
-                      claude-code = prev.vscode-marketplace.anthropic.claude-code.overrideAttrs (old: {
-                        postInstall = ''
-                          mkdir -p "$out/$installPrefix/resources/native-binary"
-                          rm -f "$out/$installPrefix/resources/native-binary/claude"*
-                          ln -s "${final.claude-code}/bin/claude" "$out/$installPrefix/resources/native-binary/claude"
-                        '';
-                      });
-                    };
-                  };
                 })
               ];
             }

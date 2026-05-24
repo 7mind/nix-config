@@ -100,8 +100,6 @@ in
           ms-vscode.cmake-tools
           ms-vscode.makefile-tools
 
-          pkgs.vscode-marketplace.anthropic.claude-code
-
           twxs.cmake
 
           # https://github.com/VSCodium/vscodium/blob/master/docs/index.md#proprietary-extensions
