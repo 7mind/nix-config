@@ -7,7 +7,7 @@
   makeWrapper,
 }:
 let
-  gatewayVersion = "0.10.0";
+  gatewayVersion = "0.11.0";
 
   # Upstream library package. Not yet in nixpkgs, so we build it here.
   saic-ismart-client-ng = python3.pkgs.buildPythonPackage rec {
@@ -55,7 +55,7 @@ let
     owner = "SAIC-iSmart-API";
     repo = "saic-python-mqtt-gateway";
     rev = gatewayVersion;
-    hash = "sha256-+riwp740dCWBOMDDIeTlvB8466DiBbHXoY2zaR5PtLE=";
+    hash = "sha256-w6Ow6N2zXTlzMq8he4DXiVnx+Ae+fx0kLviULip3rys=";
   };
 in
 stdenvNoCC.mkDerivation {

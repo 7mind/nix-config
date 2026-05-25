@@ -127,6 +127,27 @@
         "type": "github"
       }
     },
+    "codegraph": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1779643764,
+        "narHash": "sha256-PxkoMUBBavZUg0CFKHVUWV1sJfndcCmGNSgbGptvl3w=",
+        "owner": "uxtechie",
+        "repo": "codegraph",
+        "rev": "b46fc464c680232806f9ef145bca5a5dcc719bd4",
+        "type": "github"
+      },
+      "original": {
+        "owner": "uxtechie",
+        "ref": "implement-nix-flake-support",
+        "repo": "codegraph",
+        "type": "github"
+      }
+    },
     "comfyui-nix": {
       "inputs": {
         "flake-parts": "flake-parts_2",
@@ -1279,6 +1300,7 @@
         "agenix-rekey": "agenix-rekey",
         "browservice": "browservice",
         "claude-code-sandbox": "claude-code-sandbox",
+        "codegraph": "codegraph",
         "comfyui-nix": "comfyui-nix",
         "crane": "crane",
         "darwin": "darwin",

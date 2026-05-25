@@ -151,6 +151,14 @@
     zimt = {
       url = "github:pshirshov/zimt";
     };
+
+    # CodeGraph — semantic code-intelligence MCP server for AI agents.
+    # Pinned to the open PR (colbymchenry/codegraph#331) that adds the
+    # flake; bump to upstream once it's merged.
+    codegraph = {
+      url = "github:uxtechie/codegraph/implement-nix-flake-support";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = inputs@{ self, ... }:

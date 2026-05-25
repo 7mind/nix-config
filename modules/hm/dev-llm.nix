@@ -16,6 +16,8 @@ let
     rev = "6a5c2ba53b734f3cdd8daacbd49f68f3e6c8c167";
     hash = "sha256-4kqtfdHlcg3YXWX1og9b5JuLgnB/3Nj5dFMe4Ryt7No=";
   };
+
+  codegraphPkg = inputs.codegraph.packages.${pkgs.stdenv.hostPlatform.system}.default;
   rootlessPodmanEnabled =
     cfg-meta.isLinux
     && (outerConfig.smind.containers.docker.enable or false)
@@ -245,8 +247,21 @@ in
         # AIDER_DARK_MODE = "true";
       };
 
+      # CodeGraph MCP server — declared once here and pulled into each
+      # agent CLI via its enableMcpIntegration option below. The server
+      # is started on-demand per project by the agent; building the
+      # per-project index is a manual `codegraph init -i` step.
+      programs.mcp = {
+        enable = true;
+        servers.codegraph = {
+          command = "${codegraphPkg}/bin/codegraph";
+          args = [ "serve" "--mcp" ];
+        };
+      };
+
       programs.claude-code = {
         enable = true;
+        enableMcpIntegration = true;
         # Bake DISABLE_AUTOUPDATER into the wrapper so it survives any
         # downstream wrappers (yolo, bubblewrap, fresh-env exec) and
         # prevents Claude Code from self-updating past the nix pin.
@@ -336,6 +351,7 @@ in
 
       programs.codex = {
         enable = true;
+        enableMcpIntegration = true;
         skills = llmPrompts.skills;
         context = claudeMemoryText;
         settings = {
@@ -352,6 +368,7 @@ in
 
       programs.gemini-cli = {
         enable = true;
+        enableMcpIntegration = true;
         # nix-instantiate --eval -E 'builtins.fromJSON (builtins.readFile ~/.gemini/settings.json)'
         settings = {
           defaultModel = "gemini-3-pro-preview";
@@ -418,6 +435,7 @@ in
 
       programs.opencode = {
         enable = true;
+        enableMcpIntegration = true;
         tui = {
           theme = "dark";
         };
@@ -577,6 +595,7 @@ in
         pkgs.github-copilot-cli
         pkgs.mistral-vibe
         pkgs.nodejs # required by claude-code plugins (.mjs scripts)
+        codegraphPkg # for `codegraph init -i` per-project bootstrap
       ]
       ++ lib.optionals cfg-meta.isDarwin [
         inputs.claude-code-sandbox.packages."${pkgs.stdenv.hostPlatform.system}".default
