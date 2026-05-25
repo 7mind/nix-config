@@ -138,7 +138,6 @@ rec {
                     doCheck = false;
                   };
                 in {
-                  claude-code = final.callPackage ./pkg/claude-code/package.nix { };
                   # Two overrides on intel-compute-runtime:
                   #
                   # (1) Bump 26.14.37833.4 → 26.18.38308.1 (published
@@ -277,9 +276,6 @@ rec {
             { nixpkgs.overlays = [
                 inputs.nix-vscode-extensions.overlays.default
                 inputs.rust-overlay.overlays.default
-                (final: prev: {
-                  claude-code = final.callPackage ./pkg/claude-code/package.nix { };
-                })
               ];
             }
           ];

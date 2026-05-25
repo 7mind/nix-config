@@ -211,6 +211,10 @@ in
       };
     };
 
+    # Suppress the per-endpoint "Monitored ... success=true" INFO spam in the
+    # journal; warnings and failures still surface.
+    systemd.services.gatus.environment.GATUS_LOG_LEVEL = "WARN";
+
     # Compose gatus's env file from one or more agenix secrets each service start.
     # All referenced secrets are world-readable (mode 0444), so gatus's static or
     # DynamicUser can read them without extra permission grants.
