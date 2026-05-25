@@ -1716,11 +1716,11 @@
         "nixpkgs": "nixpkgs_7"
       },
       "locked": {
-        "lastModified": 1779556705,
-        "narHash": "sha256-mqWJtRi7HoM0f1CgB0czB9AL5htWA3KcNUajW82jPWg=",
+        "lastModified": 1779740696,
+        "narHash": "sha256-gMb+soeF5XVjTT1p0J784NmFDp4G0kj/h4mVYXSgQ9Y=",
         "owner": "pshirshov",
         "repo": "zimt",
-        "rev": "075e3bb5acf299046b2611e1c36fe86dea51b951",
+        "rev": "6119f4d6034b29e7cfbc10513e354e19465dcc27",
         "type": "github"
       },
       "original": {
