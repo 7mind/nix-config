@@ -691,11 +691,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1779619690,
-        "narHash": "sha256-FPqHlBx+04PR2vMENLl9uW6suiFpNLdRp5l88tX3jRA=",
+        "lastModified": 1779625616,
+        "narHash": "sha256-DOr4CV49HCJHyM3AEQ0F5UB+n2RDoKe11tlp0O1iUTI=",
         "owner": "7mind",
         "repo": "kanata-switcher",
-        "rev": "ce170c277f2f6226713a57ee95b68652a3fe0571",
+        "rev": "a4f13a16f57df86122097a445354469c053ad249",
         "type": "github"
       },
       "original": {

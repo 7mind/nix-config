@@ -85,10 +85,23 @@ in
       description = "Name of the attic cache";
     };
 
-    public-key = lib.mkOption {
-      type = lib.types.str;
-      default = "main:EF5cnoxTpeY23deCWlU5ywj32Wf+nOL483aMq2OC14Q=";
-      description = "Public signing key of the attic cache";
+    legacy-public-keys = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [
+        # Pre-`nix-local-1`-unification server key — the auto-generated
+        # keypair attic used for the `main` cache before we pinned it to
+        # `nix-local-1`. Kept trusted so old NARs in the cache stay
+        # substitutable until they age out. Only one entry is meaningful:
+        # nix's signature verifier picks the FIRST trusted-public-key
+        # whose name matches a sig and silently shadows the rest, so
+        # listing multiple `main:` keys is pointless.
+        "main:Gge5eS7kanH8x7flmWuv1zFEA4aZ+RpBwkTKlphdgX4="
+      ];
+      description = ''
+        Legacy public keys of the attic cache. Trusted so NARs signed with
+        prior server-generated keypairs remain usable while they linger in
+        the store. New paths are signed with `signing-public-key`.
+      '';
     };
 
     push = {
@@ -116,7 +129,7 @@ in
     {
       environment.systemPackages = [ pkgs.attic-client ];
 
-      nix.settings.trusted-public-keys = [ cfg.public-key cfg.push.signing-public-key ];
+      nix.settings.trusted-public-keys = [ cfg.push.signing-public-key ] ++ cfg.legacy-public-keys;
     }
 
     (lib.mkIf cfg.substituter.enable {
