@@ -7,6 +7,7 @@ use crate::components::heating_card::HeatingCards;
 use crate::components::plug_card::PlugCards;
 use crate::components::room_card::RoomCards;
 use crate::components::shared::{JsonModal, LogModal};
+use crate::components::ws_indicator::WsIndicator;
 use crate::ws::WsState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,7 +97,7 @@ pub fn App() -> impl IntoView {
                     <TabButton tab=Tab::Plugs active=active_tab set_active=set_active_tab label="Plugs" />
                     <TabButton tab=Tab::Heating active=active_tab set_active=set_active_tab label="Heating" />
                 </div>
-                <ConnectionBadge ws=ws.clone() />
+                <WsIndicator ws=ws.clone() />
             </header>
             <div class="dashboard">
                 {move || match active_tab.get() {
@@ -144,15 +145,3 @@ fn TabButton(
     }
 }
 
-#[component]
-fn ConnectionBadge(ws: WsState) -> impl IntoView {
-    let connected = ws.connected;
-    view! {
-        <span class=move || {
-            if connected.get() { "connection-status connected" }
-            else { "connection-status disconnected" }
-        }>
-            {move || if connected.get() { "connected" } else { "disconnected" }}
-        </span>
-    }
-}

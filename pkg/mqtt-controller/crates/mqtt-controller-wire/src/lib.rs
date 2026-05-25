@@ -545,6 +545,18 @@ pub enum ClientMessage {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         limit: Option<u32>,
     },
+    /// Application-level liveness heartbeat. The server must echo a
+    /// `ServerMessage::Pong` with the same `nonce` so the client can
+    /// correlate this specific exchange (a missing pong proves *this*
+    /// channel is stuck even if other server traffic arrives).
+    Ping {
+        /// Random per-ping identifier. Lets the client time individual
+        /// exchanges and reject unsolicited or stale pongs.
+        nonce: String,
+        /// Client wall-clock time at send. Echoed verbatim by the server
+        /// so the client computes RTT without trusting the server clock.
+        client_ts_ms: i64,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -575,6 +587,16 @@ pub enum ServerMessage {
         entity: String,
         entries: Vec<LogEntryDto>,
         has_more: bool,
+    },
+    /// Reply to [`ClientMessage::Ping`].
+    Pong {
+        /// Echoes the client's nonce so the client can correlate.
+        nonce: String,
+        /// Echoes the client's send time so the client can compute RTT.
+        client_ts_ms: i64,
+        /// Server wall-clock time when the pong was prepared. Carried for
+        /// diagnostics (clock skew indicator); not relied on for liveness.
+        server_ts_ms: i64,
     },
 }
 
@@ -611,6 +633,10 @@ mod tests {
             },
             ClientMessage::TogglePlug {
                 device: "z2m-p-printer".into(),
+            },
+            ClientMessage::Ping {
+                nonce: "abc123".into(),
+                client_ts_ms: 1_700_000_000_000,
             },
         ];
         for msg in &msgs {

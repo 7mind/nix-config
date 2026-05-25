@@ -1,24 +1,55 @@
 //! axum HTTP/WebSocket server. Serves the Leptos frontend as static
 //! files and provides a WebSocket endpoint for real-time state and
 //! control.
+//!
+//! Connection-liveness model
+//! -------------------------
+//! The transport's `close` event is unreliable (Firefox WS bug, mobile
+//! NAT idle drops, IP changes), so liveness is established at the
+//! application layer:
+//!
+//! 1. **Client-driven heartbeat** — the browser sends `ClientMessage::
+//!    Ping { nonce, client_ts_ms }`; the server replies with
+//!    `ServerMessage::Pong { ... }` carrying the same nonce. RTT is
+//!    computed entirely from the echoed `client_ts_ms`, so no clock
+//!    sync between peers is assumed.
+//! 2. **Server-driven heartbeat** — every [`PING_INTERVAL`], the server
+//!    sends an RFC 6455 `Message::Ping(nonce)` frame. The browser
+//!    auto-replies with a `Message::Pong`. If two consecutive pings go
+//!    unanswered (the [`MAX_MISSED_PINGS`] budget), the writer task
+//!    closes the connection so the client's reconnect logic kicks in.
+//!    Nonces are correlated with a one-tick lookback (current OR
+//!    previous nonce accepted) to (a) reject unsolicited pongs allowed
+//!    by RFC 6455 §5.5.3, and (b) tolerate a tick rotation racing a
+//!    pong already in flight.
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use axum::extract::ws::{Message, WebSocket};
+use axum::extract::ws::{CloseFrame, Message, WebSocket};
 use axum::extract::{Request, State, WebSocketUpgrade};
 use axum::middleware;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::sync::{broadcast, mpsc, oneshot, Mutex};
+use tokio::time::{interval, Duration, MissedTickBehavior};
 use tower_http::services::ServeDir;
 use turso::Database;
 
 use mqtt_controller_wire::{ClientMessage, FullStateSnapshot, ServerMessage, TopologyInfo};
 
 use crate::audit::AuditWriterHandle;
+
+/// Server-driven heartbeat cadence. Cellular NATs drop idle 4-tuples
+/// after ~30s, so this must be well under that.
+const PING_INTERVAL: Duration = Duration::from_secs(15);
+
+/// Number of consecutive missed pings tolerated before the server closes
+/// the connection. One missed ping is normal under brief stalls (GC, a
+/// long event handler); two in a row means the client is genuinely gone.
+const MAX_MISSED_PINGS: u32 = 2;
 
 /// Command sent from a WebSocket handler to the daemon event loop.
 pub enum WsCommand {
@@ -106,6 +137,18 @@ async fn ws_handler(
     ws.on_upgrade(move |socket| handle_ws_connection(socket, state))
 }
 
+/// Heartbeat liveness tracking. The writer task generates nonces; the
+/// reader task clears `pending` on matching pongs. One-tick lookback
+/// (current OR previous) tolerates a nonce rotation racing an in-flight
+/// pong.
+#[derive(Default)]
+struct HeartbeatState {
+    current_nonce: Option<Vec<u8>>,
+    previous_nonce: Option<Vec<u8>>,
+    /// Number of consecutive pings sent without a matching pong.
+    missed: u32,
+}
+
 async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
     let (mut ws_tx, mut ws_rx) = socket.split();
     let mut broadcast_rx = state.broadcast_tx.subscribe();
@@ -122,14 +165,29 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
         }
     }
 
-    // Spawn writer task: merges broadcast messages and direct replies
-    // into the WebSocket send stream.
+    let heartbeat = Arc::new(Mutex::new(HeartbeatState::default()));
+
+    // Writer task: broadcast + direct ServerMessages, plus the server-
+    // side liveness heartbeat. Returns once the connection should close
+    // (peer gone, channel error, or heartbeat budget exhausted).
+    let writer_heartbeat = Arc::clone(&heartbeat);
     let write_handle = tokio::spawn(async move {
+        let mut hb_interval = interval(PING_INTERVAL);
+        // First tick fires immediately; consume it so we don't ping on
+        // connect (the snapshot we just sent is enough proof of life).
+        hb_interval.tick().await;
+        hb_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
         loop {
-            let msg = tokio::select! {
+            tokio::select! {
+                biased;
                 result = broadcast_rx.recv() => {
                     match result {
-                        Ok(msg) => msg,
+                        Ok(msg) => {
+                            if send_json(&mut ws_tx, &msg).await.is_err() {
+                                break;
+                            }
+                        }
                         Err(broadcast::error::RecvError::Lagged(n)) => {
                             tracing::warn!(skipped = n, "ws client lagged, skipping messages");
                             continue;
@@ -139,24 +197,82 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
                 }
                 result = direct_rx.recv() => {
                     match result {
-                        Some(msg) => msg,
+                        Some(msg) => {
+                            if send_json(&mut ws_tx, &msg).await.is_err() {
+                                break;
+                            }
+                        }
                         None => break,
                     }
                 }
-            };
-            if send_json(&mut ws_tx, &msg).await.is_err() {
-                break;
+                _ = hb_interval.tick() => {
+                    // Examine + advance the heartbeat state atomically:
+                    // if the previous nonce is still pending, count a
+                    // miss; otherwise rotate in a fresh nonce.
+                    let nonce = {
+                        let mut hb = writer_heartbeat.lock().await;
+                        if hb.current_nonce.is_some() {
+                            hb.missed = hb.missed.saturating_add(1);
+                            if hb.missed >= MAX_MISSED_PINGS {
+                                tracing::warn!(
+                                    missed = hb.missed,
+                                    "ws client did not respond to heartbeat, closing"
+                                );
+                                drop(hb);
+                                let _ = ws_tx
+                                    .send(Message::Close(Some(CloseFrame {
+                                        code: 1011,
+                                        reason: "heartbeat timeout".into(),
+                                    })))
+                                    .await;
+                                break;
+                            }
+                        }
+                        let new_nonce = make_nonce();
+                        hb.previous_nonce = hb.current_nonce.take();
+                        hb.current_nonce = Some(new_nonce.clone());
+                        new_nonce
+                    };
+                    if ws_tx
+                        .send(Message::Ping(nonce.into()))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
             }
         }
     });
 
-    // Reader loop: parse client messages and dispatch commands.
+    // Reader loop: parse client messages, dispatch commands, clear
+    // heartbeat state on matching pongs.
     while let Some(Ok(msg)) = ws_rx.next().await {
         match msg {
             Message::Text(text) => {
                 if let Ok(client_msg) = serde_json::from_str::<ClientMessage>(&text) {
                     handle_client_message(&state, client_msg, &direct_tx).await;
                 }
+            }
+            Message::Pong(bytes) => {
+                let echoed: &[u8] = &bytes;
+                let mut hb = heartbeat.lock().await;
+                let matches_current =
+                    hb.current_nonce.as_deref() == Some(echoed);
+                let matches_previous =
+                    hb.previous_nonce.as_deref() == Some(echoed);
+                if matches_current || matches_previous {
+                    // Pong correlated → both pending slots are answered.
+                    // Clearing both is the conservative thing: if the
+                    // pong matched `previous`, the in-flight `current`
+                    // counts as answered too (the client is alive).
+                    hb.current_nonce = None;
+                    hb.previous_nonce = None;
+                    hb.missed = 0;
+                }
+                // Unsolicited pongs (no matching nonce) are silently
+                // dropped per RFC 6455 §5.5.3 — they MUST NOT be used
+                // as proof of liveness.
             }
             Message::Close(_) => break,
             _ => {}
@@ -249,6 +365,22 @@ async fn handle_client_message(
                 }
             }
         }
+        ClientMessage::Ping {
+            nonce,
+            client_ts_ms,
+        } => {
+            // App-layer heartbeat from the client; reply immediately so
+            // the client can compute its own RTT and prove this exact
+            // channel is alive (not just *some* server traffic).
+            let server_ts_ms = chrono::Utc::now().timestamp_millis();
+            let _ = direct_tx
+                .send(ServerMessage::Pong {
+                    nonce,
+                    client_ts_ms,
+                    server_ts_ms,
+                })
+                .await;
+        }
     }
 }
 
@@ -278,8 +410,15 @@ async fn cache_control(request: Request, next: middleware::Next) -> Response {
     response
 }
 
-use futures_util::{SinkExt, StreamExt};
+/// 16-byte heartbeat nonce. UUID v4's randomness is more than enough;
+/// the wire encoding is the raw 16 bytes (RFC 6455 ping payloads can be
+/// any bytes up to 125, so we don't need string encoding).
+fn make_nonce() -> Vec<u8> {
+    uuid::Uuid::new_v4().as_bytes().to_vec()
+}
+
 use futures_util::stream::SplitSink;
+use futures_util::{SinkExt, StreamExt};
 
 async fn send_json(
     tx: &mut SplitSink<WebSocket, Message>,

@@ -2380,6 +2380,7 @@ dependencies = [
  "mqtt-controller-wire",
  "serde",
  "serde_json",
+ "uuid",
  "wasm-bindgen",
  "web-sys",
 ]
