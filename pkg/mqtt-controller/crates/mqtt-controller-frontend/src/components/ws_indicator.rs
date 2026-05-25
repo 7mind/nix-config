@@ -13,7 +13,7 @@ use leptos::reactive::owner::LocalStorage;
 
 use crate::ws::{
     ConnState, ConnectionStats, ManagerStats, ReconnectScheduled, WidgetState, WsState,
-    CONNECT_TIMEOUT_MS, PONG_TIMEOUT_MS, STALE_GRACE_PERIOD_MS,
+    CONNECT_TIMEOUT_MS, STALE_GRACE_PERIOD_MS,
 };
 
 /// Compact circular indicator with countdown ring. The ring is rendered
@@ -117,19 +117,10 @@ fn compute_ring_remaining(stats: &ManagerStats, now: i64) -> Option<f64> {
     }
     match stats.widget {
         WidgetState::Alive => {
-            // Most-recent ping's pong deadline, if one is outstanding.
-            // We don't track per-ping deadlines individually; the best
-            // visible approximation is "time since active conn's most
-            // recent transition into ALIVE", capped at PONG_TIMEOUT.
-            let active = stats.connections.iter().find(|c| c.is_active)?;
-            if active.in_flight_pings == 0 {
-                return None;
-            }
-            fraction(
-                active.state_since_ms,
-                active.state_since_ms + PONG_TIMEOUT_MS as i64,
-                now,
-            )
+            // Steady state — no countdown to show. The pulsing dot
+            // (CSS animation) already signals "alive"; depleting a
+            // ring continuously would just be alarming noise.
+            None
         }
         WidgetState::Stale => {
             let stale = stats
