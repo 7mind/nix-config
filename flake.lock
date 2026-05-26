@@ -1281,11 +1281,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1776211334,
-        "narHash": "sha256-5cOp2/k+YdcQ8ET+Pb29fuAU7CVYRqQg+ZRVH1ZCPIM=",
+        "lastModified": 1779786514,
+        "narHash": "sha256-0UoUzuYyEUUAH0RBvbw7oGh5rEow0bXwPBmeJ0LjXu4=",
         "owner": "pshirshov",
         "repo": "mqtt-qendercore",
-        "rev": "2d34263e5393cbfa1644748826d137c74b653afd",
+        "rev": "33776e311ccdbb38c39a4768a5ac0927f2198edb",
         "type": "github"
       },
       "original": {
@@ -1716,11 +1716,11 @@
         "nixpkgs": "nixpkgs_7"
       },
       "locked": {
-        "lastModified": 1779756201,
-        "narHash": "sha256-tbJ+wiwqwozsbZmvOJ+rBBWGUgi6ZLzS0E3D7ImbQzM=",
+        "lastModified": 1779786408,
+        "narHash": "sha256-35DCogVi55HkuBceMp+sU5MYcCK5ekPMr8h9qgo542Y=",
         "owner": "pshirshov",
         "repo": "zimt",
-        "rev": "1d281f255c3e7bb892a2cb6cbe24e833825bd65d",
+        "rev": "a4d574bd583ddec77d6c54aed5a51a434fad05b0",
         "type": "github"
       },
       "original": {
