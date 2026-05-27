@@ -54,7 +54,7 @@ if [[ $MOBILE_MODE -eq 1 ]]; then
 fi
 
 if [[ $# -eq 0 ]]; then
-  echo "Usage: yolo [--work] [--mobile] [--gpu|--no-gpu] [--env KEY=VAL]... <claude|codex|copilot|gemini|vibe|opencode> [args...]" >&2
+  echo "Usage: yolo [--work] [--mobile] [--gpu|--no-gpu] [--env KEY=VAL]... <claude|codex|copilot|gemini|vibe|opencode|shell|cmd> [args...]" >&2
   exit 1
 fi
 
@@ -214,6 +214,53 @@ if [[ -n "${YOLO_EXTRA_PROMPT:-}" ]]; then
   _yolo_prompt_full+=$'\n\n'"$YOLO_EXTRA_PROMPT"
 fi
 
+# Append claude state binds to EXTRA_ARGS, honoring $WORK_MODE.
+# Mirrors the logic of the `claude` subcommand's claude bind block.
+add_claude_binds() {
+  if [[ $WORK_MODE -eq 1 ]]; then
+    mkdir -p "${HOME}/.claude-work" "${HOME}/.claude-work-home" "${HOME}/.config/claude-work"
+    touch "${HOME}/.claude-work-home/.claude.json"
+    EXTRA_ARGS+=(
+      --bind "${HOME}/.claude-work,${HOME}/.claude"
+      --bind "${HOME}/.claude-work-home/.claude.json,${HOME}/.claude.json"
+      --bind "${HOME}/.config/claude-work,${HOME}/.config/claude"
+      --ro-bind "${HOME}/.claude/skills,${HOME}/.claude/skills"
+      --ro-bind "${HOME}/.claude/plugins,${HOME}/.claude/plugins"
+    )
+  else
+    EXTRA_ARGS+=(
+      --rw "${HOME}/.claude"
+      --rw "${HOME}/.claude.json"
+      --rw "${HOME}/.config/claude"
+    )
+  fi
+}
+
+# Append codex state binds to EXTRA_ARGS, honoring $WORK_MODE.
+# Mirrors the logic of the `codex` subcommand's codex bind block.
+add_codex_binds() {
+  if [[ $WORK_MODE -eq 1 ]]; then
+    mkdir -p "${HOME}/.codex-work"
+    local item src
+    for item in config.toml AGENTS.md; do
+      src="${HOME}/.codex/$item"
+      if [[ -e "$src" ]]; then
+        ln -sfn "$(readlink -f "$src")" "${HOME}/.codex-work/$item"
+      fi
+    done
+    EXTRA_ARGS+=(
+      --rw "${HOME}/.codex-work"
+      --ro-bind "${HOME}/.codex/skills,${HOME}/.codex-work/skills"
+      --env "CODEX_HOME=${HOME}/.codex-work"
+    )
+  else
+    EXTRA_ARGS+=(
+      --rw "${HOME}/.codex"
+      --rw "${HOME}/.config/codex"
+    )
+  fi
+}
+
 ensure_copilot_config() {
   local config_dir="$1"
   local trusted_dir="$2"
@@ -367,9 +414,50 @@ case "$SUBCMD" in
     EXEC_CMD=(opencode "${CMD_ARGS[@]}")
     ;;
 
+  shell)
+    add_claude_binds
+    add_codex_binds
+    _user_shell="${SHELL:-/bin/sh}"
+    _shell_name="$(basename "$_user_shell")"
+    case "$_shell_name" in
+      zsh)
+        # Bind zsh rc files read-only; deliberately omit history files.
+        # The llm-sandbox layer skips paths that don't exist on the host.
+        for _f in .zshrc .zshenv .zprofile .zlogin .zlogout; do
+          EXTRA_ARGS+=(--ro "${HOME}/$_f")
+        done
+        if [[ -n "${ZDOTDIR:-}" ]]; then
+          EXTRA_ARGS+=(--ro "$ZDOTDIR")
+        fi
+        # Redirect history to an ephemeral tmpfs path inside the sandbox so
+        # the shell can write/read freely without touching the real history.
+        EXTRA_ARGS+=(--env "HISTFILE=/tmp/.zsh_history")
+        ;;
+      bash)
+        for _f in .bashrc .bash_profile .bash_login .profile .inputrc; do
+          EXTRA_ARGS+=(--ro "${HOME}/$_f")
+        done
+        EXTRA_ARGS+=(--env "HISTFILE=/tmp/.bash_history")
+        ;;
+      fish)
+        EXTRA_ARGS+=(--ro "${HOME}/.config/fish")
+        ;;
+    esac
+    EXEC_CMD=("$_user_shell" "${CMD_ARGS[@]}")
+    ;;
+
+  cmd)
+    if [[ ${#CMD_ARGS[@]} -eq 0 ]]; then
+      echo "Usage: yolo [flags...] cmd <program> [args...]" >&2; exit 1
+    fi
+    add_claude_binds
+    add_codex_binds
+    EXEC_CMD=("${CMD_ARGS[@]}")
+    ;;
+
   *)
     echo "Unknown tool: $SUBCMD" >&2
-    echo "Supported: claude, codex, copilot, gemini, vibe, opencode" >&2
+    echo "Supported: claude, codex, copilot, gemini, vibe, opencode, shell, cmd" >&2
     exit 1
     ;;
 esac

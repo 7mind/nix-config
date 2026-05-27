@@ -786,6 +786,39 @@ abstraction.
 
 ### Outer loop — goal-to-deliverable
 
+**G0. Carryover audit (when the session resumes from a compacted
+context).** If this invocation is a continuation rather than a
+fresh ask, do NOT trust the carryover summary's "open follow-ups"
+/ "deferred items" lists at face value. The summary is a snapshot
+from the moment of compaction; ledger writes between that moment
+and now are not back-propagated into it, and lists generated
+early in the original session may not reflect work the later
+cycles already closed.
+
+Recognition signals that this turn is a continuation: the first
+user-turn content reads as a third-person recap of prior cycles;
+it names ledger entries, PR IDs, or defects you have no memory
+of spawning; or it matches the harness's compaction header /
+"Previous conversation summary" framing.
+
+When recognized, before planning any cycle:
+
+1. Open `./tasks.md` and `./defects.md` (and their archives if
+   the summary names defects whose milestone is closed).
+2. For each follow-up the summary names, verify its current
+   status in the ledger. Drop anything `[x] resolved`. Verify
+   the cited source location still exists and the cited
+   behaviour still holds.
+3. Reconcile silently when the discrepancies are small; if more
+   than two follow-ups in the summary are stale, raise an
+   algedonic flag to the user — the upstream summary discipline
+   failed and the lapse is worth surfacing, not just patching
+   over.
+
+This is the S3\* discipline applied to the carryover snapshot
+itself. Skipping G0 makes you plan cycles for work that is
+already done; the cost is one full audit pass before discovery.
+
 **G1. Receive and clarify the goal (S5 → S4).** The user gives
 you the goal. If it has implicit ambiguity (multiple readings,
 missing scope boundary, undefined success criterion), do bounded
@@ -818,8 +851,16 @@ the ambiguities via [[question-batch]].
 **G4. Compress and deliver (S3 → S5).** When the cycle's ledger
 entries are drained (all `[x]` and archived), write the session
 log and a one-screen user-facing summary per the variety budget
-above. Return control to the user. The session ends here unless
-the user gives a follow-up goal.
+above. The session log MUST include a "Resolved this session"
+subsection enumerating each defect ID + closing commit (e.g.
+`PR-M12-03-D01 → commit abc1234`); this is what G0 of the *next*
+session reads when reconciling the inherited carryover snapshot,
+so the lookup is O(grep) instead of O(re-audit). This complements
+rather than replaces the per-milestone defect archive — the
+archive is the canonical record, the session-log subsection gives
+G0 a session-local index so it does not need to know which
+milestone owns the defect. Return control to the user. The
+session ends here unless the user gives a follow-up goal.
 
 ### Inner loop — driving one ledger entry
 
