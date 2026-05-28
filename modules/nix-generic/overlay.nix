@@ -14,6 +14,94 @@
       #   };
       # });
 
+      # claude-code: pin to a local package built from the per-platform native
+      # tarballs published on npm (@anthropic-ai/claude-code-<platform>). The
+      # nixpkgs version lags upstream by days; we bump on demand via
+      # pkg/claude-code/update.sh.
+      claude-code = final.callPackage ../../pkg/claude-code/package.nix { };
+
+      # codex: pin to the latest GitHub-released static binary. Using the
+      # release artefact (vs nixpkgs' rust build) skips a multi-minute Cargo
+      # vendor build and tracks alpha tags closely. Bump `version` + the four
+      # `hash` entries below; see prior commit 0226c10c for a from-source
+      # alternative if the binary release is missing for some target.
+      codex =
+        let
+          version = "0.135.0";
+          binaryAssets = {
+            aarch64-darwin = {
+              asset = "codex-aarch64-apple-darwin.tar.gz";
+              hash = "sha256-v+5SmujraFIUyKq2YdjWtDmzI2XSy/nVBSHNaZbUszw=";
+            };
+            aarch64-linux = {
+              asset = "codex-aarch64-unknown-linux-musl.tar.gz";
+              hash = "sha256-VovOHVk+8l/99VSTaahgYIVlIpRkalxJYVR6iU6i920=";
+            };
+            x86_64-darwin = {
+              asset = "codex-x86_64-apple-darwin.tar.gz";
+              hash = "sha256-fiavDEUU7mXG+DdJhLQrb+P3z2lzK2IwX4Xywny9xuU=";
+            };
+            x86_64-linux = {
+              asset = "codex-x86_64-unknown-linux-musl.tar.gz";
+              hash = "sha256-oV59rWV9pKDhIO7eKVVv7m1Q6MkZdZzC7Lo8mQmTY+I=";
+            };
+          };
+          system = prev.stdenv.hostPlatform.system;
+        in
+        if prev.lib.hasAttr system binaryAssets then
+          let
+            binaryAsset = binaryAssets.${system};
+          in
+          prev.stdenvNoCC.mkDerivation {
+            pname = "codex";
+            inherit version;
+
+            src = prev.fetchurl {
+              url = "https://github.com/openai/codex/releases/download/rust-v${version}/${binaryAsset.asset}";
+              hash = binaryAsset.hash;
+            };
+
+            nativeBuildInputs = [
+              prev.installShellFiles
+              prev.makeBinaryWrapper
+            ];
+
+            dontUnpack = true;
+            dontConfigure = true;
+            dontBuild = true;
+
+            installPhase = ''
+              runHook preInstall
+              tar -xzf "$src"
+              install -Dm755 codex-* "$out/bin/codex"
+              runHook postInstall
+            '';
+
+            postInstall = prev.lib.optionalString (prev.stdenv.buildPlatform.canExecute prev.stdenv.hostPlatform) ''
+              installShellCompletion --cmd codex \
+                --bash <($out/bin/codex completion bash) \
+                --fish <($out/bin/codex completion fish) \
+                --zsh <($out/bin/codex completion zsh)
+            '';
+
+            postFixup = ''
+              wrapProgram "$out/bin/codex" --prefix PATH : ${
+                prev.lib.makeBinPath ([ prev.ripgrep ] ++ prev.lib.optionals prev.stdenv.hostPlatform.isLinux [ prev.bubblewrap ])
+              }
+            '';
+
+            doInstallCheck = prev.stdenv.buildPlatform.canExecute prev.stdenv.hostPlatform;
+            nativeInstallCheckInputs = [ prev.versionCheckHook ];
+
+            meta = prev.codex.meta // {
+              mainProgram = "codex";
+            };
+
+            passthru = prev.codex.passthru or { };
+          }
+        else
+          prev.codex;
+
       # ripgrep's `misc::compressed_{brotli,lz4,zstd}` integration tests fail
       # with exit 2 / empty stderr when an aarch64 build runs under qemu-user
       # binfmt on an x86_64 remote builder (nix sees buildPlatform ==
