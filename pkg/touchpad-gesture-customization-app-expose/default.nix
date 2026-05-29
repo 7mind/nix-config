@@ -1,4 +1,12 @@
 # Updating this package:
+#
+#   Easy path:  ./update.sh   (run from anywhere)
+#               then verify:  ./verify-configs --verbose "$HOSTNAME"
+#
+# The script automates the manual recipe below. Keep the two in sync — if you
+# change one, change the other.
+#
+# Manual recipe:
 # 1. Find the latest upstream commit:
 #    git ls-remote https://github.com/7mind/touchpad-gesture-customization-app-expose.git HEAD
 # 2. Update `version` to 0-unstable-YYYY-MM-DD using that commit's date and set `rev`.
