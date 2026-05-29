@@ -246,7 +246,9 @@ add_claude_binds() {
   if [[ -n "$PROFILE" ]]; then
     local A; A="$(profile_dir claude)"
     mkdir -p "$A/home" "$A/config"
-    touch "$A/home.json"
+    # claude requires .claude.json to be valid JSON; an empty file aborts it
+    # with a parse error. Seed an empty object only when missing/empty.
+    [[ -s "$A/home.json" ]] || printf '{}\n' > "$A/home.json"
     EXTRA_ARGS+=(
       --bind "$A/home,${HOME}/.claude"
       --bind "$A/home.json,${HOME}/.claude.json"
@@ -395,7 +397,15 @@ ensure_copilot_config() {
       ' > "$tmp_config"
   fi
 
-  mv "$tmp_config" "$config_file"
+  # Write only when the result differs from what is already on disk. Because
+  # add_copilot_binds runs on every yolo launch (so copilot is usable as a
+  # secondary agent), this keeps non-copilot launches from rewriting the file
+  # or bumping its mtime once $PWD is already trusted and defaults are applied.
+  if [[ -f "$config_file" ]] && cmp -s "$tmp_config" "$config_file"; then
+    rm -f "$tmp_config"
+  else
+    mv "$tmp_config" "$config_file"
+  fi
 }
 
 case "$SUBCMD" in
