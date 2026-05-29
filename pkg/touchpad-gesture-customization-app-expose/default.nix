@@ -17,14 +17,14 @@
 
 buildNpmPackage rec {
   pname = "gnome-shell-extension-touchpad-gesture-customization-app-expose";
-  version = "0-unstable-2026-05-15";
+  version = "0-unstable-2026-05-29";
 
   uuid = "touchpad-gesture-customization@coooolapps.com";
 
   src = fetchFromGitHub {
     owner = "7mind";
     repo = "touchpad-gesture-customization-app-expose";
-    rev = "75f628e8ff37c8031b6ed60e185c86df47e69f33";
+    rev = "a30c893db37e23b7360773ad6a45504711bedbc8";
     hash = "sha256-HV7aq0CeVaxvaB+ah7WnLFEuvAghNP1r14ZgfI3643U=";
   };
 
