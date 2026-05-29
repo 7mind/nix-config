@@ -28,13 +28,23 @@
 : "${YOLO_COPILOT_DEFAULT_CONFIG:?must be set}"
 : "${YOLO_COPILOT_BIN:?must be set}"
 
-WORK_MODE=0
+# PROFILE selects an isolated config namespace. Empty means the default
+# profile: agents read their real home dirs (~/.claude, ~/.codex, ...).
+# A non-empty NAME backs every agent's config with ~/.config/yolo/NAME/<agent>,
+# bound onto the standard in-sandbox paths so agents need no profile-specific
+# env. `--work`/`-w` is a backward-compatible alias for `--profile work`.
+PROFILE=""
 MOBILE_MODE=0
 GPU_MODE=${YOLO_GPU_DEFAULT:-0}
 ENV_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --work|-w) WORK_MODE=1; shift ;;
+    --profile|-p)
+      if [[ $# -lt 2 || -z "$2" ]]; then
+        echo "Error: $1 requires a profile name" >&2; exit 1
+      fi
+      PROFILE="$2"; shift 2 ;;
+    --work|-w) PROFILE="work"; shift ;;
     --mobile) MOBILE_MODE=1; shift ;;
     --gpu) GPU_MODE=1; shift ;;
     --no-gpu) GPU_MODE=0; shift ;;
@@ -43,6 +53,16 @@ while [[ $# -gt 0 ]]; do
     *) break ;;
   esac
 done
+
+# Guard against path traversal / nesting: a profile name maps directly into a
+# filesystem path under ~/.config/yolo, so restrict it to a safe charset.
+if [[ -n "$PROFILE" && ( ! "$PROFILE" =~ ^[A-Za-z0-9._-]+$ || "$PROFILE" == "." || "$PROFILE" == ".." ) ]]; then
+  echo "Error: invalid profile name '$PROFILE' (allowed: letters, digits, '.', '_', '-'; not '.' or '..')" >&2
+  exit 1
+fi
+
+# Host-side backing directory for an agent within the active named profile.
+profile_dir() { printf '%s/.config/yolo/%s/%s' "${HOME}" "${PROFILE}" "$1"; }
 
 if [[ $MOBILE_MODE -eq 1 ]]; then
   if [[ -n "${TMUX:-}" ]]; then
@@ -54,7 +74,7 @@ if [[ $MOBILE_MODE -eq 1 ]]; then
 fi
 
 if [[ $# -eq 0 ]]; then
-  echo "Usage: yolo [--work] [--mobile] [--gpu|--no-gpu] [--env KEY=VAL]... <claude|codex|copilot|gemini|vibe|opencode|shell|cmd> [args...]" >&2
+  echo "Usage: yolo [--profile NAME|-p NAME] [--work] [--mobile] [--gpu|--no-gpu] [--env KEY=VAL]... <claude|codex|copilot|gemini|vibe|opencode|shell|cmd> [args...]" >&2
   exit 1
 fi
 
@@ -214,16 +234,23 @@ if [[ -n "${YOLO_EXTRA_PROMPT:-}" ]]; then
   _yolo_prompt_full+=$'\n\n'"$YOLO_EXTRA_PROMPT"
 fi
 
-# Append claude state binds to EXTRA_ARGS, honoring $WORK_MODE.
-# Mirrors the logic of the `claude` subcommand's claude bind block.
+# For named profiles, each agent's config is backed by a dir under
+# ~/.config/yolo/<profile>/<agent>/ and bound onto the agent's standard
+# in-sandbox path, so inside the sandbox every tool reads its usual location.
+# The default profile (empty $PROFILE) binds the real home dirs directly.
+# Nix-managed, profile-independent assets (skills/plugins/extensions, codex
+# config) are shared read-only from the main profile.
+
+# claude: ~/.claude (state), ~/.claude.json (auth), ~/.config/claude (settings).
 add_claude_binds() {
-  if [[ $WORK_MODE -eq 1 ]]; then
-    mkdir -p "${HOME}/.claude-work" "${HOME}/.claude-work-home" "${HOME}/.config/claude-work"
-    touch "${HOME}/.claude-work-home/.claude.json"
+  if [[ -n "$PROFILE" ]]; then
+    local A; A="$(profile_dir claude)"
+    mkdir -p "$A/home" "$A/config"
+    touch "$A/home.json"
     EXTRA_ARGS+=(
-      --bind "${HOME}/.claude-work,${HOME}/.claude"
-      --bind "${HOME}/.claude-work-home/.claude.json,${HOME}/.claude.json"
-      --bind "${HOME}/.config/claude-work,${HOME}/.config/claude"
+      --bind "$A/home,${HOME}/.claude"
+      --bind "$A/home.json,${HOME}/.claude.json"
+      --bind "$A/config,${HOME}/.config/claude"
       --ro-bind "${HOME}/.claude/skills,${HOME}/.claude/skills"
       --ro-bind "${HOME}/.claude/plugins,${HOME}/.claude/plugins"
     )
@@ -236,29 +263,107 @@ add_claude_binds() {
   fi
 }
 
-# Append codex state binds to EXTRA_ARGS, honoring $WORK_MODE.
-# Mirrors the logic of the `codex` subcommand's codex bind block.
+# codex: ~/.codex (CODEX_HOME default) + ~/.config/codex. Shared read-only from
+# the main profile: config.toml, AGENTS.md, skills.
 add_codex_binds() {
-  if [[ $WORK_MODE -eq 1 ]]; then
-    mkdir -p "${HOME}/.codex-work"
-    local item src
-    for item in config.toml AGENTS.md; do
-      src="${HOME}/.codex/$item"
-      if [[ -e "$src" ]]; then
-        ln -sfn "$(readlink -f "$src")" "${HOME}/.codex-work/$item"
-      fi
-    done
+  if [[ -n "$PROFILE" ]]; then
+    local A item; A="$(profile_dir codex)"
+    mkdir -p "$A/home" "$A/config"
     EXTRA_ARGS+=(
-      --rw "${HOME}/.codex-work"
-      --ro-bind "${HOME}/.codex/skills,${HOME}/.codex-work/skills"
-      --env "CODEX_HOME=${HOME}/.codex-work"
+      --bind "$A/home,${HOME}/.codex"
+      --bind "$A/config,${HOME}/.config/codex"
     )
+    for item in config.toml AGENTS.md skills; do
+      EXTRA_ARGS+=(--ro-bind "${HOME}/.codex/$item,${HOME}/.codex/$item")
+    done
   else
     EXTRA_ARGS+=(
       --rw "${HOME}/.codex"
       --rw "${HOME}/.config/codex"
     )
   fi
+}
+
+# gemini: ~/.gemini. Shared read-only from main: extensions, skills.
+add_gemini_binds() {
+  if [[ -n "$PROFILE" ]]; then
+    local A; A="$(profile_dir gemini)"
+    mkdir -p "$A/home"
+    EXTRA_ARGS+=(
+      --bind "$A/home,${HOME}/.gemini"
+      --ro-bind "${HOME}/.gemini/extensions,${HOME}/.gemini/extensions"
+      --ro-bind "${HOME}/.gemini/skills,${HOME}/.gemini/skills"
+    )
+  else
+    EXTRA_ARGS+=(--rw "${HOME}/.gemini")
+  fi
+}
+
+# vibe: ~/.vibe (config) + ~/.local/share/vibe (data).
+add_vibe_binds() {
+  if [[ -n "$PROFILE" ]]; then
+    local A; A="$(profile_dir vibe)"
+    mkdir -p "$A/config" "$A/data"
+    EXTRA_ARGS+=(
+      --bind "$A/config,${HOME}/.vibe"
+      --bind "$A/data,${HOME}/.local/share/vibe"
+    )
+  else
+    mkdir -p "${HOME}/.vibe" "${HOME}/.local/share/vibe"
+    EXTRA_ARGS+=(
+      --rw "${HOME}/.vibe"
+      --rw "${HOME}/.local/share/vibe"
+    )
+  fi
+}
+
+# opencode: ~/.config/opencode (config) + ~/.local/share/opencode (data).
+add_opencode_binds() {
+  if [[ -n "$PROFILE" ]]; then
+    local A; A="$(profile_dir opencode)"
+    mkdir -p "$A/config" "$A/data"
+    EXTRA_ARGS+=(
+      --bind "$A/config,${HOME}/.config/opencode"
+      --bind "$A/data,${HOME}/.local/share/opencode"
+    )
+  else
+    EXTRA_ARGS+=(
+      --rw "${HOME}/.config/opencode"
+      --rw "${HOME}/.local/share/opencode"
+    )
+  fi
+}
+
+# copilot: backed by ~/.copilot (in-sandbox), seeded on the host side. Sets the
+# global COPILOT_CONFIG_DIR (the in-sandbox path) consumed by the `copilot`
+# subcommand, and seeds config (trusted folder + defaults) on the host backing
+# dir so copilot is usable as a secondary agent launched from another tool.
+add_copilot_binds() {
+  local host_dir
+  if [[ -n "$PROFILE" ]]; then
+    local A; A="$(profile_dir copilot)"
+    mkdir -p "$A/home"
+    host_dir="$A/home"
+    EXTRA_ARGS+=(--bind "$A/home,${HOME}/.copilot")
+  else
+    host_dir="${HOME}/.copilot"
+    EXTRA_ARGS+=(--rw "${HOME}/.copilot")
+  fi
+  EXTRA_ARGS+=(--ro "${HOME}/.config/gh")
+  ensure_copilot_config "$host_dir" "${PWD}"
+  COPILOT_CONFIG_DIR="${HOME}/.copilot"
+}
+
+# Bind every supported agent's config so that whichever tool is launched can
+# in turn drive any of the others (e.g. claude shelling out to codex/gemini),
+# each scoped to the active $PROFILE.
+add_all_agent_binds() {
+  add_claude_binds
+  add_codex_binds
+  add_gemini_binds
+  add_copilot_binds
+  add_vibe_binds
+  add_opencode_binds
 }
 
 ensure_copilot_config() {
@@ -295,27 +400,7 @@ ensure_copilot_config() {
 
 case "$SUBCMD" in
   claude)
-    if [[ $WORK_MODE -eq 1 ]]; then
-      mkdir -p "${HOME}/.claude-work" "${HOME}/.claude-work-home" "${HOME}/.config/claude-work"
-      touch "${HOME}/.claude-work-home/.claude.json"
-      EXTRA_ARGS+=(
-        --bind "${HOME}/.claude-work,${HOME}/.claude"
-        --bind "${HOME}/.claude-work-home/.claude.json,${HOME}/.claude.json"
-        --bind "${HOME}/.config/claude-work,${HOME}/.config/claude"
-        --ro-bind "${HOME}/.claude/skills,${HOME}/.claude/skills"
-        --ro-bind "${HOME}/.claude/plugins,${HOME}/.claude/plugins"
-      )
-    else
-      EXTRA_ARGS+=(
-        --rw "${HOME}/.claude"
-        --rw "${HOME}/.claude.json"
-        --rw "${HOME}/.config/claude"
-      )
-    fi
-    EXTRA_ARGS+=(
-      --rw "${HOME}/.codex"
-      --rw "${HOME}/.config/codex"
-    )
+    add_all_agent_binds
     EXEC_CMD=(
       claude
       --permission-mode bypassPermissions
@@ -325,42 +410,12 @@ case "$SUBCMD" in
     ;;
 
   codex)
-    if [[ $WORK_MODE -eq 1 ]]; then
-      mkdir -p "${HOME}/.codex-work"
-      # Mirror shared config files into the work dir by symlinking to their
-      # resolved nix-store targets (stable inside sandbox via the /nix/store
-      # ro-bind). skills/ is a regular dir, so ro-bind it directly.
-      for item in config.toml AGENTS.md; do
-        src="${HOME}/.codex/$item"
-        if [[ -e "$src" ]]; then
-          ln -sfn "$(readlink -f "$src")" "${HOME}/.codex-work/$item"
-        fi
-      done
-      EXTRA_ARGS+=(
-        --rw "${HOME}/.codex-work"
-        --ro-bind "${HOME}/.codex/skills,${HOME}/.codex-work/skills"
-        --env "CODEX_HOME=${HOME}/.codex-work"
-      )
-    else
-      EXTRA_ARGS+=(
-        --rw "${HOME}/.codex"
-        --rw "${HOME}/.config/codex"
-      )
-    fi
+    add_all_agent_binds
     EXEC_CMD=(codex --dangerously-bypass-approvals-and-sandbox --search "${CMD_ARGS[@]}")
     ;;
 
   copilot)
-    if [[ $WORK_MODE -eq 1 ]]; then
-      COPILOT_CONFIG_DIR="${HOME}/.copilot-work"
-      EXTRA_ARGS+=(--rw "${HOME}/.copilot-work")
-    else
-      COPILOT_CONFIG_DIR="${HOME}/.copilot"
-      EXTRA_ARGS+=(--rw "${HOME}/.copilot")
-    fi
-    EXTRA_ARGS+=(--ro "${HOME}/.config/gh")
-
-    ensure_copilot_config "$COPILOT_CONFIG_DIR" "${PWD}"
+    add_all_agent_binds
 
     copilot_args=(--config-dir "$COPILOT_CONFIG_DIR")
     case "${CMD_ARGS[0]-}" in
@@ -379,44 +434,22 @@ case "$SUBCMD" in
     ;;
 
   gemini)
-    if [[ $WORK_MODE -eq 1 ]]; then
-      EXTRA_ARGS+=(
-        --bind "${HOME}/.gemini-work,${HOME}/.gemini"
-        --ro-bind "${HOME}/.gemini/extensions,${HOME}/.gemini/extensions"
-        --ro-bind "${HOME}/.gemini/skills,${HOME}/.gemini/skills"
-      )
-    else
-      EXTRA_ARGS+=(--rw "${HOME}/.gemini")
-    fi
+    add_all_agent_binds
     EXEC_CMD=(gemini --yolo "${CMD_ARGS[@]}")
     ;;
 
   vibe)
-    if [[ $WORK_MODE -eq 1 ]]; then
-      echo "Error: --work is not supported for vibe" >&2; exit 1
-    fi
-    mkdir -p "${HOME}/.vibe" "${HOME}/.local/share/vibe"
-    EXTRA_ARGS+=(
-      --rw "${HOME}/.vibe"
-      --rw "${HOME}/.local/share/vibe"
-    )
+    add_all_agent_binds
     EXEC_CMD=(vibe --agent auto-approve "${CMD_ARGS[@]}")
     ;;
 
   opencode)
-    if [[ $WORK_MODE -eq 1 ]]; then
-      echo "Error: --work is not supported for opencode" >&2; exit 1
-    fi
-    EXTRA_ARGS+=(
-      --rw "${HOME}/.config/opencode"
-      --rw "${HOME}/.local/share/opencode"
-    )
+    add_all_agent_binds
     EXEC_CMD=(opencode "${CMD_ARGS[@]}")
     ;;
 
   shell)
-    add_claude_binds
-    add_codex_binds
+    add_all_agent_binds
     _user_shell="${SHELL:-/bin/sh}"
     _shell_name="$(basename "$_user_shell")"
     case "$_shell_name" in
@@ -450,8 +483,7 @@ case "$SUBCMD" in
     if [[ ${#CMD_ARGS[@]} -eq 0 ]]; then
       echo "Usage: yolo [flags...] cmd <program> [args...]" >&2; exit 1
     fi
-    add_claude_binds
-    add_codex_binds
+    add_all_agent_binds
     EXEC_CMD=("${CMD_ARGS[@]}")
     ;;
 
