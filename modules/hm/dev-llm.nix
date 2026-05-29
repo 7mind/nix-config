@@ -289,7 +289,7 @@ in
           };
           includeCoAuthoredBy = config.smind.hm.dev.llm.coAuthored.enable;
           effortLevel = "high";
-          model = "claude-opus-4-7[1m]";
+          model = "claude-opus-4-8[1m]";
           spinnerVerbs = {
             mode = "replace";
             verbs = [ "Working" ];
