@@ -271,14 +271,24 @@ add_codex_binds() {
   if [[ -n "$PROFILE" ]]; then
     local A item; A="$(profile_dir codex)"
     mkdir -p "$A/home" "$A/config"
+    # Materialize the profile's ~/.codex/config.toml as a writable copy of the
+    # main (HM) config with $PWD pre-trusted; bound in via $A/home below. The
+    # host ~/.codex is left untouched in profile mode.
+    ensure_codex_config "$A/home/config.toml" "${HOME}/.codex/config.toml" "${PWD}"
     EXTRA_ARGS+=(
       --bind "$A/home,${HOME}/.codex"
       --bind "$A/config,${HOME}/.config/codex"
     )
-    for item in config.toml AGENTS.md skills; do
+    # config.toml now comes from $A/home (writable, trusted); only the remaining
+    # HM-managed assets are shared read-only from the main profile.
+    for item in AGENTS.md skills; do
       EXTRA_ARGS+=(--ro-bind "${HOME}/.codex/$item,${HOME}/.codex/$item")
     done
   else
+    # Default profile shares the real ~/.codex: replace the immutable HM
+    # config.toml symlink in place with a writable, $PWD-trusted copy so codex
+    # finds the project trusted and never needs the failing trust write.
+    ensure_codex_config "${HOME}/.codex/config.toml" "${HOME}/.codex/config.toml" "${PWD}"
     EXTRA_ARGS+=(
       --rw "${HOME}/.codex"
       --rw "${HOME}/.config/codex"
@@ -368,6 +378,48 @@ add_all_agent_binds() {
   add_opencode_binds
 }
 
+# codex gates its interactive directory-trust screen on persisted trust read
+# from ~/.codex/config.toml (projects."<cwd>".trust_level == "trusted"), which it
+# reads from the file early — a CLI `-c` override does NOT feed the gate. It
+# persists trust on accept via an atomic "config/batchWrite". Our config.toml is
+# an immutable Home-Manager nix-store symlink, so codex can neither see the
+# project trusted nor write trust ("Failed to set trust … config/batchWrite
+# failed"). bwrap also cannot bind a writable file over a symlink path, so we
+# materialize a real, writable config.toml = (HM base) + a trust table for $PWD.
+#
+# In the default profile out_file == base_file == ~/.codex/config.toml, so this
+# replaces the HM symlink on the host with a writable copy. That is self-healing:
+# a home-manager rebuild restores the symlink, and the next launch re-creates the
+# writable copy. In a named profile out_file is the profile's own backing file,
+# so the host ~/.codex is untouched. Mirrors the copilot pre-trust.
+#   $1 = out_file  (writable config.toml to produce / bind into the sandbox)
+#   $2 = base_file (HM config.toml to copy settings from; a store symlink)
+#   $3 = trusted_dir ($PWD)
+ensure_codex_config() {
+  local out_file="$1" base_file="$2" trusted_dir="$3"
+  local header tmp
+  header="[projects.\"${trusted_dir}\"]"
+
+  # Idempotent: a real (non-symlink) out_file that already trusts $PWD is done —
+  # avoids rewriting on every launch into an already-trusted directory.
+  if [[ -f "$out_file" && ! -L "$out_file" ]] && grep -qF "$header" "$out_file"; then
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$out_file")"
+  tmp="$(mktemp)"
+  # Capture the base config (cat follows the HM store symlink) before any
+  # replacement, so the in-place out_file == base_file case keeps prior content.
+  [[ -e "$base_file" ]] && cat -- "$base_file" > "$tmp" 2>/dev/null
+  # Append the trust table only when absent. A fresh [projects."<dir>"] table is
+  # always valid to append: TOML headers are absolute and the base never has it.
+  grep -qF "$header" "$tmp" 2>/dev/null \
+    || printf '\n%s\ntrust_level = "trusted"\n' "$header" >> "$tmp"
+  rm -f "$out_file"          # drop the immutable HM symlink (or a stale copy)
+  mv "$tmp" "$out_file"
+  chmod u+w "$out_file"
+}
+
 ensure_copilot_config() {
   local config_dir="$1"
   local trusted_dir="$2"
@@ -421,20 +473,7 @@ case "$SUBCMD" in
 
   codex)
     add_all_agent_binds
-    # codex records per-project trust as projects."<cwd>".trust_level in
-    # config.toml and persists it via its "config/batchWrite" op. Under this
-    # setup ~/.codex/config.toml is an immutable Home-Manager nix-store symlink,
-    # so accepting the trust prompt fails with "Failed to set trust … config/
-    # batchWrite failed". Inject the trust as a CLI config override (codex -c,
-    # whose value is parsed as TOML and overrides what would load from
-    # config.toml) so $PWD is already trusted in the effective config and codex
-    # never needs that write. Mirrors how we pre-trust $PWD for copilot, using
-    # codex's native override since its config.toml is not writable.
-    EXEC_CMD=(
-      codex --dangerously-bypass-approvals-and-sandbox --search
-      -c "projects.\"${PWD}\".trust_level=\"trusted\""
-      "${CMD_ARGS[@]}"
-    )
+    EXEC_CMD=(codex --dangerously-bypass-approvals-and-sandbox --search "${CMD_ARGS[@]}")
     ;;
 
   copilot)
