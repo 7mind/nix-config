@@ -421,7 +421,20 @@ case "$SUBCMD" in
 
   codex)
     add_all_agent_binds
-    EXEC_CMD=(codex --dangerously-bypass-approvals-and-sandbox --search "${CMD_ARGS[@]}")
+    # codex records per-project trust as projects."<cwd>".trust_level in
+    # config.toml and persists it via its "config/batchWrite" op. Under this
+    # setup ~/.codex/config.toml is an immutable Home-Manager nix-store symlink,
+    # so accepting the trust prompt fails with "Failed to set trust … config/
+    # batchWrite failed". Inject the trust as a CLI config override (codex -c,
+    # whose value is parsed as TOML and overrides what would load from
+    # config.toml) so $PWD is already trusted in the effective config and codex
+    # never needs that write. Mirrors how we pre-trust $PWD for copilot, using
+    # codex's native override since its config.toml is not writable.
+    EXEC_CMD=(
+      codex --dangerously-bypass-approvals-and-sandbox --search
+      -c "projects.\"${PWD}\".trust_level=\"trusted\""
+      "${CMD_ARGS[@]}"
+    )
     ;;
 
   copilot)
