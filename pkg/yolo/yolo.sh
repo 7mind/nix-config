@@ -5,6 +5,7 @@
 #   YOLO_LLM_SANDBOX            - path to llm-sandbox binary
 #   YOLO_NIX_LD                 - path to nix-ld binary (bound as /lib64/ld-linux-x86-64.so.2)
 #   YOLO_JQ                     - path to jq binary
+#   YOLO_CODEGRAPH_BIN          - path to codegraph binary (per-project index bootstrap)
 #   YOLO_COPILOT_DEFAULT_CONFIG - path to copilot default config JSON
 #   YOLO_COPILOT_BIN            - path to copilot binary
 #
@@ -25,6 +26,7 @@
 : "${YOLO_LLM_SANDBOX:?must be set}"
 : "${YOLO_NIX_LD:?must be set}"
 : "${YOLO_JQ:?must be set}"
+: "${YOLO_CODEGRAPH_BIN:?must be set}"
 : "${YOLO_COPILOT_DEFAULT_CONFIG:?must be set}"
 : "${YOLO_COPILOT_BIN:?must be set}"
 
@@ -36,6 +38,8 @@
 PROFILE=""
 MOBILE_MODE=0
 GPU_MODE=${YOLO_GPU_DEFAULT:-0}
+# CodeGraph per-project index bootstrap is on by default; --no-cg opts out.
+CG_MODE=1
 ENV_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -48,6 +52,7 @@ while [[ $# -gt 0 ]]; do
     --mobile) MOBILE_MODE=1; shift ;;
     --gpu) GPU_MODE=1; shift ;;
     --no-gpu) GPU_MODE=0; shift ;;
+    --no-cg) CG_MODE=0; shift ;;
     --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
     -*) echo "Unknown flag: $1" >&2; exit 1 ;;
     *) break ;;
@@ -74,7 +79,7 @@ if [[ $MOBILE_MODE -eq 1 ]]; then
 fi
 
 if [[ $# -eq 0 ]]; then
-  echo "Usage: yolo [--profile NAME|-p NAME] [--work] [--mobile] [--gpu|--no-gpu] [--env KEY=VAL]... <claude|codex|copilot|gemini|vibe|opencode|shell|cmd> [args...]" >&2
+  echo "Usage: yolo [--profile NAME|-p NAME] [--work] [--mobile] [--gpu|--no-gpu] [--no-cg] [--env KEY=VAL]... <claude|codex|copilot|gemini|vibe|opencode|shell|cmd> [args...]" >&2
   exit 1
 fi
 
@@ -459,6 +464,50 @@ ensure_copilot_config() {
     mv "$tmp_config" "$config_file"
   fi
 }
+
+# CodeGraph per-project index bootstrap. The codegraph MCP server (wired into
+# every agent CLI) reads .codegraph/codegraph.db in the project root, but never
+# creates it — building the per-project index is an explicit step. On the first
+# agent launch in a project we initialize and index so the agent's codegraph_*
+# tools work immediately; later launches find a populated DB and skip in one
+# cheap `status` call. The on-host index lives in $PWD (rw-bound into the
+# sandbox) and is shared with the in-sandbox `serve` process. --no-cg opts out.
+#
+# `codegraph status --json` reports {"initialized":false} when no DB exists.
+# Two partial states also need indexing: a bare `init` (no -i) leaves the DB
+# initialized with fileCount==0, and `init -i` refuses to re-index an already
+# initialized project. So we drive init and index as separate steps keyed off
+# (initialized, fileCount) rather than relying on `init -i`'s one-shot.
+maybe_init_codegraph() {
+  [[ $CG_MODE -eq 1 ]] || return 0
+  [[ -x "$YOLO_CODEGRAPH_BIN" ]] || return 0
+
+  local initialized file_count
+  read -r initialized file_count < <(
+    "$YOLO_CODEGRAPH_BIN" status --json 2>/dev/null \
+      | "$YOLO_JQ" -r '"\(.initialized // false) \(.fileCount // 0)"' 2>/dev/null
+  )
+
+  if [[ "$initialized" == "true" && "${file_count:-0}" -gt 0 ]]; then
+    return 0
+  fi
+
+  echo "yolo: building CodeGraph index for ${PWD} (one-time; pass --no-cg to skip)…" >&2
+  if [[ "$initialized" != "true" ]]; then
+    if ! "$YOLO_CODEGRAPH_BIN" init >&2; then
+      echo "warning: codegraph init failed; launching without a code index" >&2
+      return 0
+    fi
+  fi
+  "$YOLO_CODEGRAPH_BIN" index >&2 \
+    || echo "warning: codegraph index failed; launching without a code index" >&2
+}
+
+# Agent subcommands run an MCP-enabled CLI that can use the codegraph server;
+# shell/cmd do not, so they skip the index bootstrap.
+case "$SUBCMD" in
+  claude|codex|copilot|gemini|vibe|opencode) maybe_init_codegraph ;;
+esac
 
 case "$SUBCMD" in
   claude)

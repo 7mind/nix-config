@@ -241,7 +241,7 @@
       fractal = cfg-flakes.fractal.fractal-tray.overrideAttrs (old: {
               cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
                 inherit (old) src;
-                hash = "sha256-uULj/9ixqq9cGg7U1m4QnfTl6Hvpjx0nJPjWvF2rW2M=";
+                hash = "sha256-pC3kTRO3FSaA4IAdfYwnW6oeQXVc4dj7SmMxzw9SVjA=";
               };
             });
 

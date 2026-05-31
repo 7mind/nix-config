@@ -609,6 +609,7 @@ in
 
         (pkgs.callPackage "${cfg-meta.paths.pkg}/yolo/default.nix" {
           inherit copilotConfig;
+          codegraph = codegraphPkg;
           podmanSocketPath = if rootlessPodmanEnabled then rootlessPodmanSocketPath else null;
           podmanSocketUri = if rootlessPodmanEnabled then rootlessPodmanSocketUri else null;
           hwNvidiaEnable = outerConfig.smind.hw.nvidia.enable or false;
