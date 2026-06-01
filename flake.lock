@@ -749,6 +749,29 @@
         "type": "github"
       }
     },
+    "ledger": {
+      "inputs": {
+        "flake-utils": [
+          "flake-utils"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1780336826,
+        "narHash": "sha256-5fZ0B+IFlG4JyTqfLjgbagLqD92f75pAXJkKITPErjo=",
+        "owner": "pshirshov",
+        "repo": "cq",
+        "rev": "b5f588d11381e574f1c857350a26b8f809ce52d1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pshirshov",
+        "repo": "cq",
+        "type": "github"
+      }
+    },
     "mac-app-util": {
       "inputs": {
         "cl-nix-lite": "cl-nix-lite",
@@ -1310,6 +1333,7 @@
         "home-manager": "home-manager",
         "kanata-switcher": "kanata-switcher",
         "lanzaboote": "lanzaboote",
+        "ledger": "ledger",
         "mac-app-util": "mac-app-util",
         "mqtt-spc": "mqtt-spc",
         "niri": "niri",

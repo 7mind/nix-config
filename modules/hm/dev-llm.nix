@@ -47,7 +47,40 @@ let
   # (Copilot, Vibe), a pre-composed context file from the package is used instead.
   llmPrompts = pkgs.callPackage "${cfg-meta.paths.pkg}/llm-prompts/default.nix" { };
 
+  # The ledger flake (markdown-ledger MCP project, github:pshirshov/cq).
+  ledgerPkg = inputs.ledger.packages.${pkgs.stdenv.hostPlatform.system}.ledger-mcp;
+  ledgerAssets = inputs.ledger.llmAssets;
+
+  # The in-repo llm-prompts package now emits the canonical llmAssets bundle
+  # directly ({ skills; commands; agents; context = [ baseContext ]; }), so
+  # it is a first-class bundle contributor symmetric with ledger.llmAssets —
+  # no manual reassembly here.
+
+  # Aggregate every contributed asset bundle into one merged view. Mirrors
+  # the memorySections list-contribution idiom: any module/flake appends a
+  # bundle to smind.hm.dev.llm.assetBundles and the materializer below fans
+  # it into every agent. Later bundles win on key collisions (`//`).
+  assetBundles = config.smind.hm.dev.llm.assetBundles;
+  mergeAttrField = field: lib.foldl' (acc: b: acc // b.${field}) { } assetBundles;
+  mergedSkills = mergeAttrField "skills";
+  mergedCommands = mergeAttrField "commands";
+  mergedAgents = mergeAttrField "agents";
+  mergedContext = lib.concatMap (b: b.context) assetBundles;
+
   claudeMemoryText = lib.concatStringsSep "\n\n" config.smind.hm.dev.llm.memorySections;
+
+  # Wiring common to every skill-aware harness: enable it, feed the shared
+  # programs.mcp registry, install the merged skill set, and the shared
+  # memory text. Spread with `//` into each programs.<harness> block (no key
+  # overlap with the harness-specific options). gemini-cli takes the first
+  # three but supplies its own structured `context`, so it spreads
+  # `sharedAgentWiring` minus `context`.
+  sharedAgentWiring = {
+    enable = true;
+    enableMcpIntegration = true;
+    skills = mergedSkills;
+    context = claudeMemoryText;
+  };
 
   # SessionStart hook: surfaces hostname and sandbox state to the agent on
   # every session boot. Claude Code's harness-injected environment block
@@ -165,6 +198,43 @@ in
       description = "Sections used to build Claude/Codex/Gemini memory text.";
     };
 
+    smind.hm.dev.llm.assetBundles = lib.mkOption {
+      type = lib.types.listOf (
+        lib.types.submodule {
+          options = {
+            skills = lib.mkOption {
+              type = lib.types.attrsOf lib.types.lines;
+              default = { };
+              description = "name -> SKILL.md content ('---\\nmeta---\\n\\ncontent').";
+            };
+            commands = lib.mkOption {
+              type = lib.types.attrsOf lib.types.lines;
+              default = { };
+              description = "key '<ns>/<name>' -> markdown body (slash command /<ns>:<name>).";
+            };
+            agents = lib.mkOption {
+              type = lib.types.attrsOf lib.types.lines;
+              default = { };
+              description = "name -> subagent definition (with name/description/tools frontmatter).";
+            };
+            context = lib.mkOption {
+              type = lib.types.listOf lib.types.lines;
+              default = [ ];
+              description = "CLAUDE.md/AGENTS.md memory fragments.";
+            };
+          };
+        }
+      );
+      default = [ ];
+      description = ''
+        Contributed LLM asset bundles (cross-repo llmAssets shape). Any
+        module or flake appends a bundle here; a single materializer fans
+        every asset type (skills, commands, agents, context) into every
+        agent's filesystem layout globally. Mirrors the memorySections
+        list-contribution idiom.
+      '';
+    };
+
     smind.hm.dev.llm.coAuthored.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -239,7 +309,13 @@ in
       );
       smind.hm.dev.llm.opencodeDefaultModel =
         lib.mkDefault config.smind.hm.dev.llm.opencodeOllamaModelName;
-      smind.hm.dev.llm.memorySections = lib.mkBefore [ llmPrompts.baseContext ];
+      # Base context (and any other bundle context fragments) flow in via the
+      # asset bundles; mkBefore keeps them ahead of host/user-specific
+      # sections appended elsewhere with mkAfter.
+      smind.hm.dev.llm.memorySections = lib.mkBefore mergedContext;
+      # In-repo prompts first (base), ledger after (may override on key
+      # collisions). External modules append further bundles elsewhere.
+      smind.hm.dev.llm.assetBundles = lib.mkBefore [ llmPrompts.llmAssets ledgerAssets ];
     }
     (lib.mkIf config.smind.hm.dev.llm.enable {
       home.sessionVariables = {
@@ -257,11 +333,16 @@ in
           command = "${codegraphPkg}/bin/codegraph";
           args = [ "serve" "--mcp" ];
         };
+        # markdown-ledger MCP server. stdio transport; --cwd defaults to the
+        # agent's process CWD, so one global server serves a per-project
+        # ledger. Pass "--http" "PORT" instead for a shared HTTP instance.
+        servers.ledger = {
+          command = "${ledgerPkg}/bin/ledger-mcp";
+          args = [ ];
+        };
       };
 
-      programs.claude-code = {
-        enable = true;
-        enableMcpIntegration = true;
+      programs.claude-code = sharedAgentWiring // {
         # Bake DISABLE_AUTOUPDATER into the wrapper so it survives any
         # downstream wrappers (yolo, bubblewrap, fresh-env exec) and
         # prevents Claude Code from self-updating past the nix pin.
@@ -274,6 +355,11 @@ in
           '';
         };
         plugins = [ "${codexPluginCc}/plugins/codex" ];
+        # Bundle-contributed commands/agents via the native options: keys
+        # like "plan/advance" land at ~/.claude/commands/plan/advance.md
+        # (slash command /plan:advance); agents at ~/.claude/agents/<name>.md.
+        commands = mergedCommands;
+        agents = mergedAgents;
         settings = {
           alwaysThinkingEnabled = true;
           theme = "dark";
@@ -345,15 +431,9 @@ in
             '';
           };
         };
-        skills = llmPrompts.skills;
-        context = claudeMemoryText;
       };
 
-      programs.codex = {
-        enable = true;
-        enableMcpIntegration = true;
-        skills = llmPrompts.skills;
-        context = claudeMemoryText;
+      programs.codex = sharedAgentWiring // {
         settings = {
           model = "gpt-5.5";
           model_reasoning_effort = "xhigh";
@@ -366,9 +446,7 @@ in
 
       home.file.".codex/config.toml".force = true;
 
-      programs.gemini-cli = {
-        enable = true;
-        enableMcpIntegration = true;
+      programs.gemini-cli = (removeAttrs sharedAgentWiring [ "context" ]) // {
         # nix-instantiate --eval -E 'builtins.fromJSON (builtins.readFile ~/.gemini/settings.json)'
         settings = {
           defaultModel = "gemini-3-pro-preview";
@@ -405,7 +483,6 @@ in
             "CLAUDE.md"
           ];
         };
-        skills = llmPrompts.skills;
         context = {
           AGENTS = claudeMemoryText;
         };
@@ -433,9 +510,7 @@ in
       home.file.".vibe/prompts/default_with_custom_instructions.md".source =
         llmPrompts.contextWithEnvFile;
 
-      programs.opencode = {
-        enable = true;
-        enableMcpIntegration = true;
+      programs.opencode = sharedAgentWiring // {
         tui = {
           theme = "dark";
         };
@@ -585,8 +660,19 @@ in
             doom_loop = "allow";
           };
         };
-        skills = llmPrompts.skills;
-        context = claudeMemoryText;
+      };
+
+      programs.pi = sharedAgentWiring // {
+        # Pi is BYOK/multi-model; default it to the same primary model as
+        # claude-code. The `pi` binary is not packaged in nixpkgs, so no
+        # `package` is set — config (settings.json, AGENTS.md, skills/) is
+        # managed but no CLI is installed until a package is wired in.
+        settings = {
+          theme = "dark";
+          defaultProvider = "anthropic";
+          defaultModel = "claude-opus-4-8";
+          defaultThinkingLevel = "high";
+        };
       };
 
       # Linux-only: bubblewrap sandbox and yolo wrapper script
@@ -629,6 +715,20 @@ in
             else null;
         })
       ];
+    })
+    (lib.mkIf config.smind.hm.dev.llm.enable {
+      # Codex exposes no native commands/agents option (unlike claude-code),
+      # so deliver merged commands as ~/.codex/prompts/<name>.md slash-prompts.
+      # Kept in a separate mkMerge element because the block above sets
+      # `home.file."<path>"` via attrpaths, which cannot coexist with a
+      # dynamic `home.file = <attrs>` in the same attribute set.
+      # baseNameOf strips the "<ns>/" prefix ("plan/advance" ->
+      # prompts/advance.md); cross-namespace basename collisions would clash.
+      # Codex agents have no canonical markdown home and are intentionally
+      # not materialized for Codex (Claude receives them via its agents option).
+      home.file = lib.mapAttrs' (
+        key: body: lib.nameValuePair ".codex/prompts/${baseNameOf key}.md" { text = body; }
+      ) mergedCommands;
     })
   ];
 }

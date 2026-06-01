@@ -159,6 +159,14 @@
       url = "github:uxtechie/codegraph/implement-nix-flake-support";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # markdown-ledger MCP server + extensible LLM prompt/skill assets
+    # (ledger.packages.<system>.ledger-mcp, ledger.llmAssets).
+    ledger = {
+      url = "github:pshirshov/cq";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
+    };
   };
 
   outputs = inputs@{ self, ... }:
