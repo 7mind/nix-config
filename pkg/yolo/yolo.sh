@@ -40,6 +40,10 @@ MOBILE_MODE=0
 GPU_MODE=${YOLO_GPU_DEFAULT:-0}
 # CodeGraph per-project index bootstrap is on by default; --no-cg opts out.
 CG_MODE=1
+# Audio (PipeWire/Pulse socket) is exposed by default so agents can play
+# sound (e.g. completion notifications, TTS); --no-audio opts out. Binds
+# self-skip on hosts without the sockets (headless), so this is a no-op there.
+AUDIO_MODE=1
 ENV_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -53,6 +57,8 @@ while [[ $# -gt 0 ]]; do
     --gpu) GPU_MODE=1; shift ;;
     --no-gpu) GPU_MODE=0; shift ;;
     --no-cg) CG_MODE=0; shift ;;
+    --audio) AUDIO_MODE=1; shift ;;
+    --no-audio) AUDIO_MODE=0; shift ;;
     --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
     -*) echo "Unknown flag: $1" >&2; exit 1 ;;
     *) break ;;
@@ -79,7 +85,7 @@ if [[ $MOBILE_MODE -eq 1 ]]; then
 fi
 
 if [[ $# -eq 0 ]]; then
-  echo "Usage: yolo [--profile NAME|-p NAME] [--work] [--mobile] [--gpu|--no-gpu] [--no-cg] [--env KEY=VAL]... <claude|codex|copilot|vibe|opencode|pi|shell|cmd> [args...]" >&2
+  echo "Usage: yolo [--profile NAME|-p NAME] [--work] [--mobile] [--gpu|--no-gpu] [--no-cg] [--audio|--no-audio] [--env KEY=VAL]... <claude|codex|copilot|vibe|opencode|pi|shell|cmd> [args...]" >&2
   exit 1
 fi
 
@@ -176,6 +182,21 @@ if [[ -n "${YOLO_OLLAMA_MODELS_DIR:-}" ]]; then
   OLLAMA_ARGS+=(--ro "$YOLO_OLLAMA_MODELS_DIR")
 fi
 
+# Audio: expose the PipeWire native socket and the PulseAudio-compat socket
+# (covers pw-play / paplay / mpv / ffplay etc.) so agents can play sound. Both
+# sockets are bidirectional, so this also permits capture. The sockets are
+# bound read-write at their host paths; the llm-sandbox layer skips any that
+# don't exist (headless hosts). Not binding /dev/snd on purpose: PipeWire owns
+# the devices, so socket routing is the correct path. --no-audio disables.
+AUDIO_ARGS=()
+if [[ $AUDIO_MODE -eq 1 ]]; then
+  _xrd="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+  AUDIO_ARGS+=(--rw "$_xrd/pipewire-0")
+  AUDIO_ARGS+=(--rw "$_xrd/pulse/native")
+  AUDIO_ARGS+=(--ro "${HOME}/.config/pulse/cookie")
+  AUDIO_ARGS+=(--env "PULSE_SERVER=unix:$_xrd/pulse/native")
+fi
+
 LLM_SSH_KEY_ARGS=()
 if [[ -n "${YOLO_LLM_SSH_KEY_PATH:-}" ]]; then
   # Resolve symlinks so we bind the real decrypted file. bwrap follows
@@ -198,6 +219,7 @@ BASE_ARGS=(
   "${SOCKET_ARGS[@]}"
   "${TMUX_BIND_ARGS[@]}"
   "${GPU_ARGS[@]}"
+  "${AUDIO_ARGS[@]}"
   "${LLM_SSH_KEY_ARGS[@]}"
   "${EXTRA_PATH_ARGS[@]}"
   "${OLLAMA_ARGS[@]}"
@@ -363,6 +385,14 @@ add_copilot_binds() {
 # so bind that read-only too.
 add_pi_binds() {
   EXTRA_ARGS+=(--ro "${HOME}/.config/mcp")
+  # Provider + web-search API keys: agenix secret files, read-only. The pi
+  # wrapper (piWrapped) reads /run/agenix/<name> at launch. Missing files are
+  # skipped by the llm-sandbox layer (hosts without these secrets).
+  for _sec in openrouter vercel exa brave firecrawl; do
+    EXTRA_ARGS+=(--ro "/run/agenix/$_sec")
+  done
+  # rpiv-web-tools writable config (provider selection / SearXNG URL).
+  EXTRA_ARGS+=(--rw "${HOME}/.config/rpiv-web-tools")
   if [[ -n "$PROFILE" ]]; then
     local A item; A="$(profile_dir pi)"
     mkdir -p "$A/home/agent"

@@ -110,6 +110,47 @@ let
   mergedAgents = mergeAttrField "agents";
   mergedContext = lib.concatMap (b: b.context) assetBundles;
 
+  # Pi: vendored 0.78.0 formula (nixpkgs lags at 0.75.x, whose Codex/ChatGPT
+  # subscription token exchange is broken). Bump procedure: edit version +
+  # rerun the two fake-hash builds in pkg/pi-coding-agent/package.nix.
+  piBase = pkgs.callPackage "${cfg-meta.paths.pkg}/pi-coding-agent/package.nix" { };
+
+  # Secret-keyed env injected into Pi at launch from agenix secret files (read
+  # only if present, so hosts without them degrade gracefully). Keeps tokens
+  # out of the Nix store and the at-rest environment — they live only in pi's
+  # process env at runtime. var -> agenix secret name under /run/agenix.
+  piSecretEnv = {
+    OPENROUTER_API_KEY = "openrouter";
+    AI_GATEWAY_API_KEY = "vercel"; # Vercel AI Gateway
+    EXA_API_KEY = "exa";
+    BRAVE_SEARCH_API_KEY = "brave";
+    FIRECRAWL_API_KEY = "firecrawl";
+  };
+  piSecretsPrelude = lib.concatStringsSep "\n" (
+    lib.mapAttrsToList (
+      var: secret: ''[ -r /run/agenix/${secret} ] && export ${var}="$(cat /run/agenix/${secret})"''
+    ) piSecretEnv
+  );
+  piWrapped = pkgs.symlinkJoin {
+    name = "pi-coding-agent-wrapped";
+    paths = [ piBase ];
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      wrapProgram $out/bin/pi \
+        --run ${lib.escapeShellArg piSecretsPrelude} \
+        --set-default SEARXNG_URL https://searx.web.7mind.io
+    '';
+  };
+
+  # Default rpiv-web-tools config: route web search through our own SearXNG.
+  # Seeded as a writable copy (not a store symlink) so the tool's own
+  # `/web-tools` command and runtime persistence keep working. API keys are
+  # NOT stored here — they come from the env injected by piWrapped.
+  rpivWebToolsConfig = jsonFormat.generate "rpiv-web-tools-config.json" {
+    provider = "searxng";
+    baseUrls.searxng = "https://searx.web.7mind.io";
+  };
+
   claudeMemoryText = lib.concatStringsSep "\n\n" config.smind.hm.dev.llm.memorySections;
 
   # Wiring common to every skill-aware harness: enable it, feed the shared
@@ -646,18 +687,37 @@ in
       };
 
       programs.pi = sharedAgentWiring // {
-        # nixpkgs `pi-coding-agent` (0.75.x; upstream latest is ~0.78). Bump
-        # rides in with nixpkgs; vendor a custom build only if it falls far
-        # behind. Pi is BYOK/multi-model; default it to the same primary model
-        # as claude-code.
-        package = pkgs.pi-coding-agent;
+        # Vendored Pi 0.78.0 wrapped to inject provider/search API keys from
+        # agenix secrets at launch (see piWrapped/piSecretEnv). Default model is
+        # GPT-5.5 at max reasoning via the Codex/ChatGPT subscription (OAuth via
+        # `pi` /login; no API key needed for the default).
+        package = piWrapped;
         settings = {
           theme = "dark";
-          defaultProvider = "anthropic";
-          defaultModel = "claude-opus-4-8";
-          defaultThinkingLevel = "high";
+          # GPT-5.5 via the openai provider, authed by the ChatGPT/Codex
+          # subscription OAuth (`pi` /login → "ChatGPT Plus/Pro (Codex
+          # Subscription)"). gpt-5.5 is also offered by openrouter/vercel, so we
+          # pin the provider to force the subscription path.
+          defaultProvider = "openai";
+          defaultModel = "gpt-5.5";
+          defaultThinkingLevel = "xhigh";
+          # rpiv web search/fetch extension; API keys come from the env injected
+          # by piWrapped, default search backend is SearXNG (config seeded at
+          # ~/.config/rpiv-web-tools/config.json below).
+          packages = [ "npm:@juicesharp/rpiv-web-tools" ];
         };
       };
+
+      # Seed a writable rpiv-web-tools config (SearXNG default) once, leaving it
+      # user/tool-writable thereafter. Replaces an HM store symlink if present.
+      home.activation.rpivWebToolsConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        _rpiv_cfg="${config.home.homeDirectory}/.config/rpiv-web-tools/config.json"
+        if [ ! -e "$_rpiv_cfg" ] || [ -L "$_rpiv_cfg" ]; then
+          run mkdir -p "$(dirname "$_rpiv_cfg")"
+          run rm -f "$_rpiv_cfg"
+          run install -m600 ${rpivWebToolsConfig} "$_rpiv_cfg"
+        fi
+      '';
 
       # Linux-only: bubblewrap sandbox and yolo wrapper script
       home.packages = [
