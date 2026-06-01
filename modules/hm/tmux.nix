@@ -29,6 +29,16 @@
         # Truecolor: GNOME Terminal (VTE) typically reports TERM=xterm-256color
         set -as terminal-features ",xterm*:RGB:sync"
 
+        # Extended (CSI u / "fixterms") keys: let applications distinguish
+        # modified keys that legacy terminals collapse — Shift+Enter / Ctrl+Enter
+        # vs plain Enter, Ctrl+I vs Tab, etc. Needed by agent TUIs (e.g. pi,
+        # which uses Shift+Enter for a newline vs Enter to send). `on` forwards
+        # them to apps that request the mode; :extkeys advertises the capability
+        # upstream. The outer terminal must also support it (ghostty/kitty/
+        # wezterm do).
+        set -g extended-keys on
+        set -as terminal-features ",xterm*:extkeys"
+
         # Skip catppuccin window format — we set our own after the plugin loads.
         set -g @catppuccin_window_status_style "none"
 

@@ -694,12 +694,14 @@ in
         package = piWrapped;
         settings = {
           theme = "dark";
-          # GPT-5.5 via the openai provider, authed by the ChatGPT/Codex
-          # subscription OAuth (`pi` /login → "ChatGPT Plus/Pro (Codex
-          # Subscription)"). gpt-5.5 is also offered by openrouter/vercel, so we
-          # pin the provider to force the subscription path.
-          defaultProvider = "openai";
-          defaultModel = "gpt-5.5";
+          # ChatGPT Plus/Pro (Codex) subscription via OAuth (`pi` /login). The
+          # subscription provider id is "openai-codex" and it serves the
+          # gpt-*-codex models (NOT the API "gpt-5.5", which needs an OpenAI API
+          # key). `xhigh` reasoning is only supported on codex-max models, so we
+          # default to the codex-max flagship for "max reasoning". The api-key
+          # `openai`/openrouter/vercel providers stay available via injected env.
+          defaultProvider = "openai-codex";
+          defaultModel = "gpt-5.1-codex-max";
           defaultThinkingLevel = "xhigh";
           # rpiv web search/fetch extension; API keys come from the env injected
           # by piWrapped, default search backend is SearXNG (config seeded at
