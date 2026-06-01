@@ -217,6 +217,8 @@
                 color-scheme = "prefer-dark";
                 enable-hot-corners = config.smind.desktop.gnome.hot-corners.enable;
                 show-battery-percentage = true;
+                # Ghostty 1.3+ respects this; compiled schema default is false
+                gtk-enable-primary-paste = true;
               };
               "org/gnome/mutter" = {
                 dynamic-workspaces = false;
