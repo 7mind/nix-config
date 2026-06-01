@@ -759,11 +759,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1780336826,
-        "narHash": "sha256-5fZ0B+IFlG4JyTqfLjgbagLqD92f75pAXJkKITPErjo=",
+        "lastModified": 1780353089,
+        "narHash": "sha256-NHnTkCt/ZEhmwXbUlXIP3b/EEOjImLsVOF424nSmhYc=",
         "owner": "pshirshov",
         "repo": "cq",
-        "rev": "b5f588d11381e574f1c857350a26b8f809ce52d1",
+        "rev": "5fbf8437125241c1159e32c3c9420570f9aa5017",
         "type": "github"
       },
       "original": {
