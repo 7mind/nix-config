@@ -32,10 +32,6 @@ llm_label_from_text() {
       printf '%s\n' "codex"
       return 0
       ;;
-    *gemini*)
-      printf '%s\n' "gemini"
-      return 0
-      ;;
   esac
 
   return 1
@@ -223,7 +219,7 @@ show_menu() {
   collect_candidates
 
   if [[ "${#candidate_rows[@]}" -eq 0 ]]; then
-    tmux display-message "No unattached Claude/Codex/Gemini processes found."
+    tmux display-message "No unattached Claude/Codex processes found."
     return
   fi
 

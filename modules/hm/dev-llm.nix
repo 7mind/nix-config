@@ -18,6 +18,49 @@ let
   };
 
   codegraphPkg = inputs.codegraph.packages.${pkgs.stdenv.hostPlatform.system}.default;
+
+  # nixpkgs' claude-code runs its inner binary via `exec ld.so --library-path … inner`,
+  # so Node's process.execPath is the dynamic loader. Claude exports that as
+  # CLAUDE_CODE_EXECPATH, and the grep/find shims it writes into its shell snapshot
+  # then invoke `ld.so -G …` / `ld.so -S …` → "error while loading shared libraries: -G".
+  # Make the inner binary self-contained (real glibc interp + rpath, taken from the
+  # wrapper's own --library-path so the glibc always matches) and exec it DIRECTLY, so
+  # execPath is the real binary and the bundled ugrep/bfs multiplex (keyed on argv0)
+  # works. Verified: `exec -a ugrep <inner> -G …` greps correctly once run directly.
+  claudeExecpathFixed = pkgs.claude-code.overrideAttrs (old: {
+    nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ pkgs.patchelf ];
+    postFixup = (old.postFixup or "") + ''
+      inner="$out/libexec/claude-code/claude"
+      if [ ! -e "$inner" ]; then
+        echo "claudeExecpathFixed: inner binary missing at $inner" >&2; exit 1
+      fi
+      wrapper=""
+      for w in "$out"/bin/*; do
+        if [ -f "$w" ] && grep -qE 'ld-linux.*libexec/claude-code/claude' "$w"; then
+          wrapper="$w"; break
+        fi
+      done
+      if [ -z "$wrapper" ]; then
+        echo "claudeExecpathFixed: no loader-indirection wrapper found" >&2; exit 1
+      fi
+      glibclib="$(grep -oE '/nix/store/[^ "]*-glibc-[^ "]*/lib' "$wrapper" | head -1)"
+      if [ -z "$glibclib" ]; then
+        echo "claudeExecpathFixed: could not determine glibc lib path" >&2; exit 1
+      fi
+      patchelf --set-interpreter "$glibclib/ld-linux-x86-64.so.2" --set-rpath "$glibclib" "$inner"
+      for w in "$out"/bin/*; do
+        [ -f "$w" ] && grep -qE 'ld-linux.*libexec/claude-code/claude' "$w" || continue
+        grep -v -E '^exec .*ld-linux.*libexec/claude-code/claude' "$w" > "$w.tmp"
+        printf 'exec -a "$0" %s "$@"\n' "$inner" >> "$w.tmp"
+        chmod --reference="$w" "$w.tmp" 2>/dev/null || chmod +x "$w.tmp"
+        mv "$w.tmp" "$w"
+        if grep -qE 'ld-linux.*libexec/claude-code/claude' "$w"; then
+          echo "claudeExecpathFixed: failed to rewrite $w" >&2; exit 1
+        fi
+      done
+    '';
+  });
+
   rootlessPodmanEnabled =
     cfg-meta.isLinux
     && (outerConfig.smind.containers.docker.enable or false)
@@ -43,7 +86,7 @@ let
 
   # Prompt content and validated skill files live in pkg/llm-prompts/.
   # Environment guidance is delivered as a skill for agents that support skills
-  # (Claude Code, Codex, Gemini CLI, OpenCode). For agents without skill support
+  # (Claude Code, Codex, OpenCode, Pi). For agents without skill support
   # (Copilot, Vibe), a pre-composed context file from the package is used instead.
   llmPrompts = pkgs.callPackage "${cfg-meta.paths.pkg}/llm-prompts/default.nix" { };
 
@@ -72,9 +115,7 @@ let
   # Wiring common to every skill-aware harness: enable it, feed the shared
   # programs.mcp registry, install the merged skill set, and the shared
   # memory text. Spread with `//` into each programs.<harness> block (no key
-  # overlap with the harness-specific options). gemini-cli takes the first
-  # three but supplies its own structured `context`, so it spreads
-  # `sharedAgentWiring` minus `context`.
+  # overlap with the harness-specific options).
   sharedAgentWiring = {
     enable = true;
     enableMcpIntegration = true;
@@ -195,7 +236,7 @@ in
     smind.hm.dev.llm.memorySections = lib.mkOption {
       type = lib.types.listOf lib.types.lines;
       default = [ ];
-      description = "Sections used to build Claude/Codex/Gemini memory text.";
+      description = "Sections used to build Claude/Codex memory text.";
     };
 
     smind.hm.dev.llm.assetBundles = lib.mkOption {
@@ -348,7 +389,7 @@ in
         # prevents Claude Code from self-updating past the nix pin.
         package = pkgs.symlinkJoin {
           name = "claude-code-no-autoupdate";
-          paths = [ pkgs.claude-code ];
+          paths = [ claudeExecpathFixed ];
           nativeBuildInputs = [ pkgs.makeWrapper ];
           postBuild = ''
             wrapProgram $out/bin/claude --set-default DISABLE_AUTOUPDATER 1
@@ -446,51 +487,6 @@ in
 
       home.file.".codex/config.toml".force = true;
 
-      programs.gemini-cli = (removeAttrs sharedAgentWiring [ "context" ]) // {
-        # nix-instantiate --eval -E 'builtins.fromJSON (builtins.readFile ~/.gemini/settings.json)'
-        settings = {
-          defaultModel = "gemini-3-pro-preview";
-          general = {
-            previewFeatures = true;
-          };
-          output = {
-            format = "text";
-          };
-          security = {
-            auth = {
-              selectedType = "oauth-personal";
-            };
-          };
-          tools = {
-            autoAccept = true;
-            shell = {
-              showColor = true;
-            };
-          };
-          ui = {
-            footer = {
-              hideContextPercentage = false;
-            };
-            showCitations = true;
-            showLineNumbers = true;
-            showMemoryUsage = true;
-            showModelInfoInChat = true;
-          };
-          context.fileName = [
-            "AGENTS.md"
-            "CONTEXT.md"
-            "GEMINI.md"
-            "CLAUDE.md"
-          ];
-        };
-        context = {
-          AGENTS = claudeMemoryText;
-        };
-      };
-
-      home.file.".gemini-work/settings.json".source = config.home.file.".gemini/settings.json".source;
-      home.file.".gemini-work/AGENTS.md".source = config.home.file.".gemini/AGENTS.md".source;
-
       home.file.".claude-work/settings.json".source =
         config.home.file."${config.programs.claude-code.configDir}/settings.json".source;
       home.file.".claude-work/CLAUDE.md".source =
@@ -540,7 +536,6 @@ in
           # web = {
           #   enable = true;
           # };
-          plugin = [ "opencode-gemini-auth@latest" ];
           formatter = {
             nixfmt = {
               command = [ "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt" "$FILE" ];
@@ -573,18 +568,6 @@ in
               };
             };
 
-            google = {
-              models = {
-                "gemini-3.1-pro-preview" = {
-                  options = {
-                    thinkingConfig = {
-                      thinkingLevel = "high";
-                      includeThoughts = true;
-                    };
-                  };
-                };
-              };
-            };
             openai = {
               models = {
                 "gpt-5.4" = {
@@ -663,10 +646,11 @@ in
       };
 
       programs.pi = sharedAgentWiring // {
-        # Pi is BYOK/multi-model; default it to the same primary model as
-        # claude-code. The `pi` binary is not packaged in nixpkgs, so no
-        # `package` is set — config (settings.json, AGENTS.md, skills/) is
-        # managed but no CLI is installed until a package is wired in.
+        # nixpkgs `pi-coding-agent` (0.75.x; upstream latest is ~0.78). Bump
+        # rides in with nixpkgs; vendor a custom build only if it falls far
+        # behind. Pi is BYOK/multi-model; default it to the same primary model
+        # as claude-code.
+        package = pkgs.pi-coding-agent;
         settings = {
           theme = "dark";
           defaultProvider = "anthropic";

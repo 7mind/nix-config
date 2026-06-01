@@ -79,7 +79,7 @@ if [[ $MOBILE_MODE -eq 1 ]]; then
 fi
 
 if [[ $# -eq 0 ]]; then
-  echo "Usage: yolo [--profile NAME|-p NAME] [--work] [--mobile] [--gpu|--no-gpu] [--no-cg] [--env KEY=VAL]... <claude|codex|copilot|gemini|vibe|opencode|shell|cmd> [args...]" >&2
+  echo "Usage: yolo [--profile NAME|-p NAME] [--work] [--mobile] [--gpu|--no-gpu] [--no-cg] [--env KEY=VAL]... <claude|codex|copilot|vibe|opencode|pi|shell|cmd> [args...]" >&2
   exit 1
 fi
 
@@ -301,21 +301,6 @@ add_codex_binds() {
   fi
 }
 
-# gemini: ~/.gemini. Shared read-only from main: extensions, skills.
-add_gemini_binds() {
-  if [[ -n "$PROFILE" ]]; then
-    local A; A="$(profile_dir gemini)"
-    mkdir -p "$A/home"
-    EXTRA_ARGS+=(
-      --bind "$A/home,${HOME}/.gemini"
-      --ro-bind "${HOME}/.gemini/extensions,${HOME}/.gemini/extensions"
-      --ro-bind "${HOME}/.gemini/skills,${HOME}/.gemini/skills"
-    )
-  else
-    EXTRA_ARGS+=(--rw "${HOME}/.gemini")
-  fi
-}
-
 # vibe: ~/.vibe (config) + ~/.local/share/vibe (data).
 add_vibe_binds() {
   if [[ -n "$PROFILE" ]]; then
@@ -371,16 +356,37 @@ add_copilot_binds() {
   COPILOT_CONFIG_DIR="${HOME}/.copilot"
 }
 
+# pi: ~/.pi (state + ~/.pi/agent config). HM-managed assets (settings.json,
+# AGENTS.md, skills, optional extensions) are shared read-only from the main
+# profile, like codex. Pi has no built-in MCP — its pi-mcp-adapter package
+# reads the shared registry at ~/.config/mcp/mcp.json (written by programs.mcp),
+# so bind that read-only too.
+add_pi_binds() {
+  EXTRA_ARGS+=(--ro "${HOME}/.config/mcp")
+  if [[ -n "$PROFILE" ]]; then
+    local A item; A="$(profile_dir pi)"
+    mkdir -p "$A/home/agent"
+    EXTRA_ARGS+=(--bind "$A/home,${HOME}/.pi")
+    # Share the HM-managed (read-only, store-symlinked) assets from the main
+    # profile; non-existent paths are filtered by the llm-sandbox layer.
+    for item in agent/settings.json agent/AGENTS.md agent/skills agent/extensions; do
+      EXTRA_ARGS+=(--ro-bind "${HOME}/.pi/$item,${HOME}/.pi/$item")
+    done
+  else
+    EXTRA_ARGS+=(--rw "${HOME}/.pi")
+  fi
+}
+
 # Bind every supported agent's config so that whichever tool is launched can
-# in turn drive any of the others (e.g. claude shelling out to codex/gemini),
+# in turn drive any of the others (e.g. claude shelling out to codex/opencode),
 # each scoped to the active $PROFILE.
 add_all_agent_binds() {
   add_claude_binds
   add_codex_binds
-  add_gemini_binds
   add_copilot_binds
   add_vibe_binds
   add_opencode_binds
+  add_pi_binds
 }
 
 # codex gates its interactive directory-trust screen on persisted trust read
@@ -488,7 +494,13 @@ maybe_init_codegraph() {
       | "$YOLO_JQ" -r '"\(.initialized // false) \(.fileCount // 0)"' 2>/dev/null
   )
 
+  # DB already exists and is populated: refresh it incrementally so the agent
+  # sees changes made since the last index, then proceed. `sync` diffs against
+  # the last index and is cheap; a failure is non-fatal (use the stale index).
   if [[ "$initialized" == "true" && "${file_count:-0}" -gt 0 ]]; then
+    echo "yolo: syncing CodeGraph index for ${PWD}…" >&2
+    "$YOLO_CODEGRAPH_BIN" sync >&2 \
+      || echo "warning: codegraph sync failed; continuing with the existing index" >&2
     return 0
   fi
 
@@ -506,7 +518,7 @@ maybe_init_codegraph() {
 # Agent subcommands run an MCP-enabled CLI that can use the codegraph server;
 # shell/cmd do not, so they skip the index bootstrap.
 case "$SUBCMD" in
-  claude|codex|copilot|gemini|vibe|opencode) maybe_init_codegraph ;;
+  claude|codex|copilot|vibe|opencode|pi) maybe_init_codegraph ;;
 esac
 
 case "$SUBCMD" in
@@ -544,11 +556,6 @@ case "$SUBCMD" in
     EXEC_CMD=("$YOLO_COPILOT_BIN" "${copilot_args[@]}" "${CMD_ARGS[@]}")
     ;;
 
-  gemini)
-    add_all_agent_binds
-    EXEC_CMD=(gemini --yolo "${CMD_ARGS[@]}")
-    ;;
-
   vibe)
     add_all_agent_binds
     EXEC_CMD=(vibe --agent auto-approve "${CMD_ARGS[@]}")
@@ -557,6 +564,19 @@ case "$SUBCMD" in
   opencode)
     add_all_agent_binds
     EXEC_CMD=(opencode "${CMD_ARGS[@]}")
+    ;;
+
+  pi)
+    add_all_agent_binds
+    # Pi has no permission popups by design, so no auto-approve flag is needed.
+    # It supports --append-system-prompt (append, like claude); --system-prompt
+    # would *replace* pi's default. Deliver the same dynamically-composed yolo
+    # authorization prompt used for claude.
+    EXEC_CMD=(
+      pi
+      --append-system-prompt "$_yolo_prompt_full"
+      "${CMD_ARGS[@]}"
+    )
     ;;
 
   shell)
@@ -600,7 +620,7 @@ case "$SUBCMD" in
 
   *)
     echo "Unknown tool: $SUBCMD" >&2
-    echo "Supported: claude, codex, copilot, gemini, vibe, opencode, shell, cmd" >&2
+    echo "Supported: claude, codex, copilot, vibe, opencode, pi, shell, cmd" >&2
     exit 1
     ;;
 esac
