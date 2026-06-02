@@ -738,6 +738,11 @@ in
             "npm:@gotgenes/pi-anthropic-auth"
             "npm:pi-xai"
           ];
+          extensions = [
+            # For grok-* requests, keep xAI's native server-side web_search and
+            # remove only the rpiv-web-tools client function of the same name.
+            "${cfg-meta.paths.pkg}/pi-extensions/drop-client-web-search-for-grok.ts"
+          ];
         };
       };
 

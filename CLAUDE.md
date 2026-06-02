@@ -2,14 +2,14 @@
 
 ## Building and Testing
 
-When you've added a new feature or performed a refactoring, run verification build for the current host (substitute the hostname reported by the SessionStart hook — `$HOSTNAME` is bash-only and is empty under zsh, the user's login shell):
+After a trivial change concerning exactly one host, verifying just that host is enough (substitute the hostname reported by the SessionStart hook — `$HOSTNAME` is bash-only and is empty under zsh, the user's login shell):
 
 ```bash
 # Build the current host (replace HOSTNAME with the actual short hostname, e.g. vm, pavel-am5, pavel-fw)
 ./verify-configs --verbose HOSTNAME
 ```
 
-When changing shared modules, check all hosts:
+After significant changes that may affect many hosts (for example shared modules, roles, overlays, package definitions, or refactorings), it's a good idea to use `./verify-configs` to check all hosts:
 
 ```bash
 # Build all hosts
