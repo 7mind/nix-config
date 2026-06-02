@@ -91,8 +91,16 @@ let
   llmPrompts = pkgs.callPackage "${cfg-meta.paths.pkg}/llm-prompts/default.nix" { };
 
   # The ledger flake (markdown-ledger MCP project, github:pshirshov/cq).
-  ledgerPkg = inputs.ledger.packages.${pkgs.stdenv.hostPlatform.system}.ledger-mcp;
+  ledgerPkgs = inputs.ledger.packages.${pkgs.stdenv.hostPlatform.system};
+  ledgerPkg = ledgerPkgs.ledger-mcp;
   ledgerAssets = inputs.ledger.llmAssets;
+  # The ledger-* CLI tools (ledger-mcp/ledger-tui/ledger-web) put on PATH so
+  # the agents (and the user) can drive the ledger directly, not only via MCP.
+  ledgerTools = [
+    ledgerPkgs.ledger-mcp
+    ledgerPkgs.ledger-tui
+    ledgerPkgs.ledger-web
+  ];
 
   # The in-repo llm-prompts package now emits the canonical llmAssets bundle
   # directly ({ skills; commands; agents; context = [ baseContext ]; }), so
@@ -753,6 +761,7 @@ in
         pkgs.nodejs # required by claude-code plugins (.mjs scripts)
         codegraphPkg # for `codegraph init -i` per-project bootstrap
       ]
+      ++ ledgerTools
       ++ lib.optionals cfg-meta.isDarwin [
         inputs.claude-code-sandbox.packages."${pkgs.stdenv.hostPlatform.system}".default
       ]
