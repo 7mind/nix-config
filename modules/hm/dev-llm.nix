@@ -709,21 +709,19 @@ in
 
       programs.pi = sharedAgentWiring // {
         # Vendored Pi 0.78.0 wrapped to inject provider/search API keys from
-        # agenix secrets at launch (see piWrapped/piSecretEnv). Default model is
-        # GPT-5.5 at max reasoning via the Codex/ChatGPT subscription (OAuth via
-        # `pi` /login; no API key needed for the default).
+        # agenix secrets at launch (see piWrapped/piSecretEnv).
         package = piWrapped;
         settings = {
           theme = "dark";
-          # ChatGPT Plus/Pro (Codex) subscription via OAuth (`pi` /login). The
-          # subscription provider id is "openai-codex" and it serves the
-          # gpt-*-codex models (NOT the API "gpt-5.5", which needs an OpenAI API
-          # key). `xhigh` reasoning is only supported on codex-max models, so we
-          # default to the codex-max flagship for "max reasoning". The api-key
-          # `openai`/openrouter/vercel providers stay available via injected env.
-          defaultProvider = "openai-codex";
-          defaultModel = "gpt-5.1-codex-max";
-          defaultThinkingLevel = "xhigh";
+          # Default to the xAI Grok Build (Coding Plan) provider + model via the
+          # pi-xai extension. This uses the Responses API with Grok's highest
+          # (internal) reasoning effort; `grok-build` does not accept an explicit
+          # reasoningEffort / defaultThinkingLevel parameter (it always reasons
+          # at maximum depth). Authenticate once with `/login grok-build` (OAuth).
+          # Other providers (openai-codex, openai, openrouter, ...) remain
+          # available and can be selected at runtime or via env/API keys.
+          defaultProvider = "grok-build";
+          defaultModel = "grok-build";
           # Pi packages (installed from npm on first run):
           # - rpiv-web-tools: web search/fetch (keys via piWrapped env, SearXNG
           #   default; config seeded at ~/.config/rpiv-web-tools/config.json).
