@@ -730,13 +730,13 @@ in
           # - pi-anthropic-auth: improves Claude Pro/Max OAuth compatibility;
           #   activates only on Anthropic OAuth, passes everything else through
           #   (use `/login anthropic`).
-          # - pi-xai-oauth: adds the xAI OAuth provider (`xai-auth`) with Grok
+          # - pi-xai: adds the xAI OAuth provider (`xai-auth`) with Grok
           #   models/tools (use `/login xai-auth`). pi-mcp-adapter is added
           #   separately by enableMcpIntegration.
           packages = [
             "npm:@juicesharp/rpiv-web-tools"
             "npm:@gotgenes/pi-anthropic-auth"
-            "npm:pi-xai-oauth"
+            "npm:pi-xai"
           ];
         };
       };
