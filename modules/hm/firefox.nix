@@ -369,8 +369,9 @@ in
           # https://gitlab.com/kira-bruneau/home-config/-/blob/main/package/firefox/default.nix
           search = {
             force = true;
-            default = "ecosia";
+            default = "searxng";
             order = [
+              "searxng"
               "ecosia"
               "ddg"
               "google"
@@ -387,6 +388,22 @@ in
               "hf"
             ];
             engines = {
+              # Self-hosted SearXNG (LAN/VPN + oauth). Default search engine.
+              searxng = {
+                name = "SearXNG";
+                urls = [{
+                  template = "https://searx.net.7mind.io/search";
+                  params = [
+                    {
+                      name = "q";
+                      value = "{searchTerms}";
+                    }
+                  ];
+                }];
+                icon = "https://searx.net.7mind.io/favicon.ico";
+                definedAliases = [ "@s" ];
+              };
+
               "bing".metaData.hidden = true;
               "ebay".metaData.hidden = true;
               "google".metaData.alias = "@g";
