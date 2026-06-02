@@ -716,10 +716,17 @@ in
           defaultProvider = "openai-codex";
           defaultModel = "gpt-5.1-codex-max";
           defaultThinkingLevel = "xhigh";
-          # rpiv web search/fetch extension; API keys come from the env injected
-          # by piWrapped, default search backend is SearXNG (config seeded at
-          # ~/.config/rpiv-web-tools/config.json below).
-          packages = [ "npm:@juicesharp/rpiv-web-tools" ];
+          # Pi packages (installed from npm on first run):
+          # - rpiv-web-tools: web search/fetch (keys via piWrapped env, SearXNG
+          #   default; config seeded at ~/.config/rpiv-web-tools/config.json).
+          # - pi-anthropic-auth: improves Claude Pro/Max OAuth compatibility;
+          #   activates only on Anthropic OAuth, passes everything else through
+          #   (use `/login anthropic`). pi-mcp-adapter is added separately by
+          #   enableMcpIntegration.
+          packages = [
+            "npm:@juicesharp/rpiv-web-tools"
+            "npm:@gotgenes/pi-anthropic-auth"
+          ];
         };
       };
 
