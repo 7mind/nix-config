@@ -32,8 +32,8 @@ buildNpmPackage rec {
   src = fetchFromGitHub {
     owner = "7mind";
     repo = "touchpad-gesture-customization-app-expose";
-    rev = "1cee5d616eacc2ae9def00fc1db13cb2011f5c6f";
-    hash = "sha256-4aj15wQEztsi3T/l46RnNcPNTVtcDcP0taCfjrqCoWE=";
+    rev = "8ce5a55f9d143d5063d6dd1e54ee5307842e140b";
+    hash = "sha256-CcbMRCIPdpKeuVUwsoJDUlT3PoW+DqtTWaKs8Bo589M=";
   };
 
   npmDepsHash = "sha256-aAuXYDDuKwHqCtEXJkEetPhp4OxRFPxcxRXJLWSTJzM=";
