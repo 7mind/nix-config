@@ -370,9 +370,11 @@ ledgers:
         planned:
           - building
           - abandoned
+          - planning
         building:
           - done
           - abandoned
+          - planning
         done: []
         abandoned: []
   - name: reviews
@@ -384,6 +386,9 @@ ledgers:
         - go-ahead
         - revise
       fields:
+        summary:
+          type: string
+          required: false
         new_questions:
           type: string[]
           required: false

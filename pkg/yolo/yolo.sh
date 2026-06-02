@@ -295,6 +295,15 @@ add_claude_binds() {
       --bind "$A/config,${HOME}/.config/claude"
       --ro-bind "${HOME}/.claude/skills,${HOME}/.claude/skills"
       --ro-bind "${HOME}/.claude/plugins,${HOME}/.claude/plugins"
+      # commands/ + agents/ are HM-managed (programs.claude-code.{commands,
+      # agents}) and carry the ledger-flake slash commands (plan:start, …)
+      # and subagents. settings.json + CLAUDE.md are likewise HM-managed and
+      # profile-independent. All four are masked by the $A/home bind above,
+      # so re-share them read-only from the main profile.
+      --ro-bind "${HOME}/.claude/commands,${HOME}/.claude/commands"
+      --ro-bind "${HOME}/.claude/agents,${HOME}/.claude/agents"
+      --ro-bind "${HOME}/.claude/settings.json,${HOME}/.claude/settings.json"
+      --ro-bind "${HOME}/.claude/CLAUDE.md,${HOME}/.claude/CLAUDE.md"
     )
   else
     EXTRA_ARGS+=(
