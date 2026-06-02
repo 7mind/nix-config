@@ -116,6 +116,16 @@ let
   mergedSkills = mergeAttrField "skills";
   mergedCommands = mergeAttrField "commands";
   mergedAgents = mergeAttrField "agents";
+
+  # Command bundles key entries as "<ns>/<name>" (e.g. "plan/advance").
+  # Slash-prompt harnesses (Pi, Codex) discover templates from a flat,
+  # non-recursive directory and derive the command name from the filename
+  # stem, so "/" must be folded into a separator that survives as one token.
+  # ":" matches Claude's namespaced slash commands (/plan:advance) and keeps
+  # distinct keys distinct (plain baseNameOf collapses plan/advance,
+  # implement/advance, investigate/advance onto one "advance.md").
+  # Pi's harness applies the same transform internally (see mk-agent-harness).
+  commandKeyToStem = key: lib.replaceStrings [ "/" ] [ ":" ] key;
   mergedContext = lib.concatMap (b: b.context) assetBundles;
 
   # Pi: vendored 0.78.0 formula (nixpkgs lags at 0.75.x, whose Codex/ChatGPT
@@ -421,6 +431,28 @@ in
       smind.hm.dev.llm.assetBundles = lib.mkBefore [ llmPrompts.llmAssets ledgerAssets ];
     }
     (lib.mkIf config.smind.hm.dev.llm.enable {
+      # commandKeyToStem ("/"→":") is injective only while no two bundle keys
+      # share a stem. Fail-fast if a future bundle introduces a collision
+      # (e.g. "a/b" and "a:b"), which would otherwise silently overwrite one
+      # slash-prompt for Pi and Codex.
+      assertions =
+        let
+          keys = builtins.attrNames mergedCommands;
+          stemOf = lib.groupBy commandKeyToStem keys;
+          collisions = lib.filterAttrs (_stem: ks: lib.length ks > 1) stemOf;
+        in
+        [
+          {
+            assertion = collisions == { };
+            message =
+              "smind.hm.dev.llm: command bundle keys collide after commandKeyToStem "
+              + "('/'→':'): "
+              + lib.concatStringsSep "; " (
+                lib.mapAttrsToList (stem: ks: "${stem} ⇐ ${lib.concatStringsSep ", " ks}") collisions
+              );
+          }
+        ];
+
       home.sessionVariables = {
         OPENCODE_ENABLE_EXA = "1";
         # AIDER_DARK_MODE = "true";
@@ -711,6 +743,11 @@ in
         # Vendored Pi 0.78.0 wrapped to inject provider/search API keys from
         # agenix secrets at launch (see piWrapped/piSecretEnv).
         package = piWrapped;
+        # Deliver ledger (and other bundle) "commands" (plan/* etc.) as
+        # Pi prompt templates. The harness materializes keys like
+        # "plan/advance" as prompts/plan:advance.md so that /plan:advance
+        # works exactly as it does for Claude (/plan:advance) and Codex.
+        promptTemplates = mergedCommands;
         settings = {
           theme = "dark";
           # Default to the xAI Grok Build (Coding Plan) provider + model via the
@@ -722,6 +759,15 @@ in
           # available and can be selected at runtime or via env/API keys.
           defaultProvider = "grok-build";
           defaultModel = "grok-build";
+          # Requested via user: terminal progress (OSC 9;4) opt-in (off by default in 0.78+),
+          # steering/follow-up delivery modes, hide reasoning, and disable install telemetry.
+          terminal = {
+            showTerminalProgress = true;
+          };
+          steeringMode = "all";
+          followUpMode = "all";
+          hideThinkingBlock = true;
+          enableInstallTelemetry = false;
           # Pi packages (installed from npm on first run):
           # - rpiv-web-tools: web search/fetch (keys via piWrapped env, SearXNG
           #   default; config seeded at ~/.config/rpiv-web-tools/config.json).
@@ -803,16 +849,20 @@ in
     })
     (lib.mkIf config.smind.hm.dev.llm.enable {
       # Codex exposes no native commands/agents option (unlike claude-code),
-      # so deliver merged commands as ~/.codex/prompts/<name>.md slash-prompts.
+      # so deliver merged commands as ~/.codex/prompts/<stem>.md slash-prompts.
       # Kept in a separate mkMerge element because the block above sets
       # `home.file."<path>"` via attrpaths, which cannot coexist with a
       # dynamic `home.file = <attrs>` in the same attribute set.
-      # baseNameOf strips the "<ns>/" prefix ("plan/advance" ->
-      # prompts/advance.md); cross-namespace basename collisions would clash.
+      # Keys use "<ns>/<name>" (e.g. "plan/advance"). commandKeyToStem turns
+      # "/" into ":" so the file is plan:advance.md; Codex namespaces
+      # ~/.codex/prompts/*.md under its own "prompts:" prefix, so this surfaces
+      # as the slash prompt /prompts:plan:advance (the prompt name is the file
+      # stem verbatim — Codex applies no character filtering). Sharing
+      # commandKeyToStem with Pi's harness keeps the two deliveries in lockstep.
       # Codex agents have no canonical markdown home and are intentionally
       # not materialized for Codex (Claude receives them via its agents option).
       home.file = lib.mapAttrs' (
-        key: body: lib.nameValuePair ".codex/prompts/${baseNameOf key}.md" { text = body; }
+        key: body: lib.nameValuePair ".codex/prompts/${commandKeyToStem key}.md" { text = body; }
       ) mergedCommands;
     })
   ];

@@ -38,6 +38,7 @@
         # wezterm do).
         set -g extended-keys on
         set -as terminal-features ",xterm*:extkeys"
+        set -g extended-keys-format csi-u
 
         # Skip catppuccin window format — we set our own after the plugin loads.
         set -g @catppuccin_window_status_style "none"

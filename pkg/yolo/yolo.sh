@@ -97,6 +97,25 @@ fi
 # Host-side backing directory for an agent within the active named profile.
 profile_dir() { printf '%s/.config/yolo/%s/%s' "${HOME}" "${PROFILE}" "$1"; }
 
+# A profile's writable home is bound onto the agent's real home dir, then the
+# HM-managed assets (settings.json, CLAUDE.md, skills, ...) are re-shared
+# read-only on top via --ro-bind. bwrap creates each --ro-bind destination by
+# following whatever entry already exists at that path. Earlier yolo revisions
+# left absolute-store symlinks at those paths in the profile home; pointing
+# into a home-manager generation that later gets garbage-collected, they dangle
+# and bwrap aborts the whole launch with
+#   Can't create file at <dest>: No such file or directory
+# Drop any leftover symlink at the re-shared leaves so bwrap creates fresh
+# mountpoints. An agent's genuine writable state at these exact leaves is never
+# a symlink, so this only clears stale re-share artifacts.
+clear_reshare_leftovers() {
+  local base="$1"; shift
+  local leaf
+  for leaf in "$@"; do
+    [[ -L "$base/$leaf" ]] && rm -f "$base/$leaf"
+  done
+}
+
 if [[ $MOBILE_MODE -eq 1 ]]; then
   if [[ -n "${TMUX:-}" ]]; then
     tmux set-window-option window-size manual
@@ -308,6 +327,7 @@ add_claude_binds() {
   if [[ -n "$PROFILE" ]]; then
     local A; A="$(profile_dir claude)"
     mkdir -p "$A/home" "$A/config"
+    clear_reshare_leftovers "$A/home" skills plugins commands agents settings.json CLAUDE.md
     # claude requires .claude.json to be valid JSON; an empty file aborts it
     # with a parse error. Seed an empty object only when missing/empty.
     [[ -s "$A/home.json" ]] || printf '{}\n' > "$A/home.json"
@@ -346,6 +366,7 @@ add_codex_binds() {
     # main (HM) config with $PWD pre-trusted; bound in via $A/home below. The
     # host ~/.codex is left untouched in profile mode.
     ensure_codex_config "$A/home/config.toml" "${HOME}/.codex/config.toml" "${PWD}"
+    clear_reshare_leftovers "$A/home" AGENTS.md skills
     EXTRA_ARGS+=(
       --bind "$A/home,${HOME}/.codex"
       --bind "$A/config,${HOME}/.config/codex"
@@ -440,6 +461,7 @@ add_pi_binds() {
   if [[ -n "$PROFILE" ]]; then
     local A item; A="$(profile_dir pi)"
     mkdir -p "$A/home/agent"
+    clear_reshare_leftovers "$A/home" agent/settings.json agent/AGENTS.md agent/skills agent/extensions agent/mcp.json
     EXTRA_ARGS+=(--bind "$A/home,${HOME}/.pi")
     # Share the HM-managed (read-only, store-symlinked) assets from the main
     # profile; non-existent paths are filtered by the llm-sandbox layer.

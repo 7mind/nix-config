@@ -32,6 +32,11 @@ in
       settingsFile = "settings.json";
       contextFile = "AGENTS.md";
       skillsSubdir = "skills";
+      # Ledger (and other) command bundles provide keys like "plan/advance".
+      # Materialise as prompts/plan:advance.md so Pi's prompt-template
+      # discovery turns them into invocable /plan:advance slash commands
+      # (matching the frontmatter description/argument-hint format).
+      promptTemplatesSubdir = "prompts";
     })
 
     (

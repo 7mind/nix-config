@@ -40,6 +40,11 @@ spec@{
   contextFile ? null,
   # Subdirectory holding skills (e.g. "skills"). null disables `skills`.
   skillsSubdir ? null,
+  # Subdirectory holding prompt templates / slash commands (e.g. "prompts" for Pi).
+  # null disables. Keys like "plan/advance" are materialized with "/" → ":"
+  # in the filename (plan:advance.md) so that discovery produces usable
+  # namespaced template names matching other harnesses.
+  promptTemplatesSubdir ? null,
 }:
 { config, lib, pkgs, ... }:
 let
@@ -69,6 +74,19 @@ let
       lib.nameValuePair "${cfg.configDir}/${skillsSubdir}/${skillName}/SKILL.md" (
         if isPathLikeContent content then { source = content; } else { text = content; }
       );
+
+  mkPromptTemplateEntry =
+    tmplKey: content:
+    let
+      # Sanitize key for filename while preserving namespace intent.
+      # "plan/advance" → "plan:advance.md" → template name "plan:advance"
+      # (matches Claude /plan:advance and ledger command keys).
+      fileStem = lib.replaceStrings [ "/" ] [ ":" ] tmplKey;
+      path = "${cfg.configDir}/${promptTemplatesSubdir}/${fileStem}.md";
+    in
+    lib.nameValuePair path (
+      if isPathLikeContent content then { source = content; } else { text = content; }
+    );
 in
 {
   options.programs.${name} = {
@@ -139,6 +157,28 @@ in
             wholesale into {file}`${skillsSubdir}/`.
           '';
     };
+
+    promptTemplates = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.oneOf [
+          lib.types.lines
+          lib.types.path
+          lib.types.str
+        ]
+      );
+      default = { };
+      description =
+        if promptTemplatesSubdir == null then
+          "Unused for ${prettyName}."
+        else
+          ''
+            Prompt templates (slash-command bodies) for ${prettyName}.
+            Keys are "<ns>/<name>" (e.g. "plan/advance"). Materialised as
+            .md files under {file}`${promptTemplatesSubdir}/` using a
+            namespaced stem ("plan:advance.md"). Matches the shape produced
+            by asset bundles (ledger etc.).
+          '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -178,6 +218,9 @@ in
             })
             (lib.optionalAttrs (builtins.isAttrs cfg.skills) (lib.mapAttrs' mkSkillEntry cfg.skills))
           ]
+        ))
+        (lib.optionalAttrs (promptTemplatesSubdir != null) (
+          lib.mapAttrs' mkPromptTemplateEntry cfg.promptTemplates
         ))
       ];
     };
