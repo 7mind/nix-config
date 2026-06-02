@@ -236,9 +236,14 @@ BASE_ARGS=(
 EXTRA_ARGS=()
 EXEC_CMD=()
 
-# Compose the system prompt fragments delivered to agents that accept an
-# inline append (currently claude). Order: YOLO authorization → GPU
-# availability (if --gpu took effect) → Nix-configured extras.
+# Compose the system prompt fragments delivered to agents that accept an inline
+# append. Two variants:
+#   _yolo_prompt_full  = YOLO authorization + GPU availability + Nix extras
+#                        (for agents with a permission/confirmation system, e.g.
+#                        claude — the authorization tells them not to prompt).
+#   _yolo_prompt_extra = GPU availability + Nix extras only (no authorization)
+#                        for agents with no permission system, where the "don't
+#                        ask for confirmation" text is meaningless (e.g. pi).
 _yolo_prompt_base='YOLO mode is active. The user has pre-authorized destructive shell operations (rm, rm -rf, kill, git reset --hard, etc.) and will not be available to confirm. Proceed without asking for confirmation on such operations. Standard safety still applies to actions with broader blast radius (force-push to shared branches, deleting remote resources, sending external messages).'
 
 _yolo_prompt_gpu=""
@@ -253,12 +258,20 @@ if [[ $GPU_MODE -eq 1 ]]; then
   fi
 fi
 
-_yolo_prompt_full="$_yolo_prompt_base"
+# Non-authorization fragments (GPU + extras), joined with blank lines.
+_yolo_prompt_extra=""
 if [[ -n "$_yolo_prompt_gpu" ]]; then
-  _yolo_prompt_full+=$'\n\n'"$_yolo_prompt_gpu"
+  _yolo_prompt_extra="$_yolo_prompt_gpu"
 fi
 if [[ -n "${YOLO_EXTRA_PROMPT:-}" ]]; then
-  _yolo_prompt_full+=$'\n\n'"$YOLO_EXTRA_PROMPT"
+  [[ -n "$_yolo_prompt_extra" ]] && _yolo_prompt_extra+=$'\n\n'
+  _yolo_prompt_extra+="$YOLO_EXTRA_PROMPT"
+fi
+
+# Full prompt = authorization + the non-auth fragments.
+_yolo_prompt_full="$_yolo_prompt_base"
+if [[ -n "$_yolo_prompt_extra" ]]; then
+  _yolo_prompt_full+=$'\n\n'"$_yolo_prompt_extra"
 fi
 
 # For named profiles, each agent's config is backed by a dir under
@@ -399,7 +412,7 @@ add_pi_binds() {
     EXTRA_ARGS+=(--bind "$A/home,${HOME}/.pi")
     # Share the HM-managed (read-only, store-symlinked) assets from the main
     # profile; non-existent paths are filtered by the llm-sandbox layer.
-    for item in agent/settings.json agent/AGENTS.md agent/skills agent/extensions; do
+    for item in agent/settings.json agent/AGENTS.md agent/skills agent/extensions agent/mcp.json; do
       EXTRA_ARGS+=(--ro-bind "${HOME}/.pi/$item,${HOME}/.pi/$item")
     done
   else
@@ -598,15 +611,13 @@ case "$SUBCMD" in
 
   pi)
     add_all_agent_binds
-    # Pi has no permission popups by design, so no auto-approve flag is needed.
-    # It supports --append-system-prompt (append, like claude); --system-prompt
-    # would *replace* pi's default. Deliver the same dynamically-composed yolo
-    # authorization prompt used for claude.
-    EXEC_CMD=(
-      pi
-      --append-system-prompt "$_yolo_prompt_full"
-      "${CMD_ARGS[@]}"
-    )
+    # Pi has no permission/confirmation system by design, so the YOLO
+    # "don't ask for confirmation" authorization is meaningless to it. Only
+    # append the non-authorization context (GPU availability, host extras), and
+    # only when there is any.
+    pi_prompt_args=()
+    [[ -n "$_yolo_prompt_extra" ]] && pi_prompt_args+=(--append-system-prompt "$_yolo_prompt_extra")
+    EXEC_CMD=(pi "${pi_prompt_args[@]}" "${CMD_ARGS[@]}")
     ;;
 
   shell)

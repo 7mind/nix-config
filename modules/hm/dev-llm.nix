@@ -151,6 +151,19 @@ let
     baseUrls.searxng = "https://searx.web.7mind.io";
   };
 
+  # Pi has no native MCP; pi-mcp-adapter (in settings.packages via
+  # enableMcpIntegration) auto-reads ~/.config/mcp/mcp.json — but servers there
+  # are lazy (connect on first tool call). This Pi-only override (higher
+  # precedence than the shared file) re-declares the same servers with
+  # lifecycle="keep-alive" so Pi connects them at startup and auto-reconnects.
+  # Kept out of the shared programs.mcp registry so the `lifecycle` key doesn't
+  # leak into claude/codex's transformed MCP configs.
+  piMcpJson = jsonFormat.generate "pi-mcp.json" {
+    mcpServers = lib.mapAttrs (_name: server: server // { lifecycle = "keep-alive"; }) (
+      config.programs.mcp.servers
+    );
+  };
+
   claudeMemoryText = lib.concatStringsSep "\n\n" config.smind.hm.dev.llm.memorySections;
 
   # Wiring common to every skill-aware harness: enable it, feed the shared
@@ -709,6 +722,10 @@ in
           packages = [ "npm:@juicesharp/rpiv-web-tools" ];
         };
       };
+
+      # Pi-specific MCP override: codegraph + ledger pinned keep-alive so Pi's
+      # pi-mcp-adapter connects them at startup (see piMcpJson).
+      home.file.".pi/agent/mcp.json".source = piMcpJson;
 
       # Seed a writable rpiv-web-tools config (SearXNG default) once, leaving it
       # user/tool-writable thereafter. Replaces an HM store symlink if present.
