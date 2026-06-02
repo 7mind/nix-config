@@ -38,6 +38,10 @@
 PROFILE=""
 MOBILE_MODE=0
 GPU_MODE=${YOLO_GPU_DEFAULT:-0}
+# Refuse to launch with $PWD == $HOME by default: BASE_ARGS binds $PWD
+# read-write, so running from the home directory would mount the entire home
+# (credentials, keys, history) into the sandbox. --unsafe-share-home overrides.
+UNSAFE_SHARE_HOME=0
 # CodeGraph per-project index bootstrap is on by default; --no-cg opts out.
 CG_MODE=1
 # Audio (PipeWire/Pulse socket) is exposed by default so agents can play
@@ -59,6 +63,7 @@ while [[ $# -gt 0 ]]; do
     --no-cg) CG_MODE=0; shift ;;
     --audio) AUDIO_MODE=1; shift ;;
     --no-audio) AUDIO_MODE=0; shift ;;
+    --unsafe-share-home) UNSAFE_SHARE_HOME=1; shift ;;
     --env) ENV_ARGS+=(--env "$2"); shift 2 ;;
     -*) echo "Unknown flag: $1" >&2; exit 1 ;;
     *) break ;;
@@ -69,6 +74,23 @@ done
 # filesystem path under ~/.config/yolo, so restrict it to a safe charset.
 if [[ -n "$PROFILE" && ( ! "$PROFILE" =~ ^[A-Za-z0-9._-]+$ || "$PROFILE" == "." || "$PROFILE" == ".." ) ]]; then
   echo "Error: invalid profile name '$PROFILE' (allowed: letters, digits, '.', '_', '-'; not '.' or '..')" >&2
+  exit 1
+fi
+
+# Fail-safe: refuse to run with the working directory equal to $HOME. BASE_ARGS
+# binds $PWD read-write into the sandbox, so launching from the home directory
+# would mount the entire home — every credential, SSH/agenix key, and shell
+# history — read-write, defeating the per-tool config isolation this wrapper
+# exists to provide. Compare canonical paths so symlinked or trailing-slash
+# forms still match. --unsafe-share-home opts out.
+_pwd_real="$(readlink -f -- "${PWD}" 2>/dev/null || printf '%s' "${PWD}")"
+_home_real="$(readlink -f -- "${HOME}" 2>/dev/null || printf '%s' "${HOME}")"
+if [[ "$_pwd_real" == "$_home_real" && $UNSAFE_SHARE_HOME -ne 1 ]]; then
+  echo "Error: refusing to run yolo from \$HOME ($_home_real)." >&2
+  echo "       \$PWD is bound read-write into the sandbox, so this would expose your" >&2
+  echo "       entire home directory (credentials, keys, history) and defeat profile" >&2
+  echo "       isolation. cd into a project subdirectory, or pass --unsafe-share-home" >&2
+  echo "       to override." >&2
   exit 1
 fi
 
@@ -85,7 +107,7 @@ if [[ $MOBILE_MODE -eq 1 ]]; then
 fi
 
 if [[ $# -eq 0 ]]; then
-  echo "Usage: yolo [--profile NAME|-p NAME] [--work] [--mobile] [--gpu|--no-gpu] [--no-cg] [--audio|--no-audio] [--env KEY=VAL]... <claude|codex|copilot|vibe|opencode|pi|shell|cmd> [args...]" >&2
+  echo "Usage: yolo [--profile NAME|-p NAME] [--work] [--mobile] [--gpu|--no-gpu] [--no-cg] [--audio|--no-audio] [--unsafe-share-home] [--env KEY=VAL]... <claude|codex|copilot|vibe|opencode|pi|shell|cmd> [args...]" >&2
   exit 1
 fi
 
