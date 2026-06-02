@@ -68,6 +68,22 @@ in
               version with e.g. {command}`"npm:pi-mcp-adapter@1.2.3"`.
             '';
           };
+
+          appendSystemPrompt = lib.mkOption {
+            type = lib.types.either lib.types.lines lib.types.path;
+            default = "";
+            description = ''
+              Content appended verbatim to Pi's built-in system prompt,
+              written to {file}`APPEND_SYSTEM.md` in
+              {option}`programs.pi.configDir` (Pi auto-discovers it there).
+              Unlike {option}`programs.pi.context` (AGENTS.md, loaded as
+              {var}`<project_context>`), this lands *inside* the system
+              prompt and therefore carries higher authority. Use it for
+              global, repo-agnostic behavioural rules; keep project-specific
+              facts in {option}`programs.pi.context`. Either inline content
+              or a path. Empty string disables the file.
+            '';
+          };
         };
 
         config = lib.mkIf cfg.enable (lib.mkMerge [
@@ -81,6 +97,13 @@ in
               source = cfg.extensionsDir;
               recursive = true;
             };
+          })
+          (lib.mkIf (cfg.appendSystemPrompt != "") {
+            home.file."${cfg.configDir}/APPEND_SYSTEM.md" =
+              if lib.isPath cfg.appendSystemPrompt then
+                { source = cfg.appendSystemPrompt; }
+              else
+                { text = cfg.appendSystemPrompt; };
           })
         ]);
       }
