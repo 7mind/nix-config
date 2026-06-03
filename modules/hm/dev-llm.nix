@@ -133,6 +133,11 @@ let
   # rerun the two fake-hash builds in pkg/pi-coding-agent/package.nix.
   piBase = pkgs.callPackage "${cfg-meta.paths.pkg}/pi-coding-agent/package.nix" { };
 
+  # Vendored pi-xai with the Grok Build context window patched 128k->256k (the
+  # upstream extension hardcodes a stale 131072). Referenced as a local-path
+  # package below instead of "npm:pi-xai". See pkg/pi-xai-patched/package.nix.
+  piXaiPatched = pkgs.callPackage "${cfg-meta.paths.pkg}/pi-xai-patched/package.nix" { };
+
   # Secret-keyed env injected into Pi at launch from agenix secret files (read
   # only if present, so hosts without them degrade gracefully). Keeps tokens
   # out of the Nix store and the at-rest environment — they live only in pi's
@@ -837,13 +842,16 @@ in
           # - pi-anthropic-auth: improves Claude Pro/Max OAuth compatibility;
           #   activates only on Anthropic OAuth, passes everything else through
           #   (use `/login anthropic`).
-          # - pi-xai: adds the xAI OAuth provider (`xai-auth`) with Grok
-          #   models/tools (use `/login xai-auth`). pi-mcp-adapter is added
-          #   separately by enableMcpIntegration.
+          # - pi-xai: adds the xAI OAuth provider (`grok-build`) with Grok
+          #   models/tools (use `/login grok-build`). pi-mcp-adapter is added
+          #   separately by enableMcpIntegration. Vendored from a local store
+          #   path (piXaiPatched) rather than "npm:pi-xai" so the Grok Build
+          #   context window reads 256k instead of the stale hardcoded 128k;
+          #   Pi npm-installs the local package + its typebox dep on launch.
           packages = [
             "npm:@juicesharp/rpiv-web-tools"
             "npm:@gotgenes/pi-anthropic-auth"
-            "npm:pi-xai"
+            "${piXaiPatched}"
           ];
           extensions = [
             # For grok-* requests, keep xAI's native server-side web_search and

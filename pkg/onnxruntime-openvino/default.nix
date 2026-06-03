@@ -117,6 +117,25 @@ buildPythonPackage {
     packaging
   ];
 
+  # The default `pythonRuntimeDepsCheckHook` (now appended automatically by
+  # buildPythonPackage) resolves each consumer's `Requires-Dist: onnxruntime`
+  # through `importlib.metadata.distribution("onnxruntime")`, which matches the
+  # installed `.dist-info` directory name. This PyPI wheel installs as the
+  # distribution `onnxruntime-openvino`, so any consumer that lists plain
+  # `onnxruntime` as a *base* dependency (insightface, rapidocr) fails the
+  # check with "onnxruntime not installed". Re-label the dist-info as
+  # `onnxruntime` so this wheel is a complete drop-in replacement at the
+  # distribution-metadata level, not only at the `import onnxruntime` level.
+  # (immich-machine-learning lists onnxruntime only under extras — markers the
+  # hook skips — so it is unaffected either way.)
+  postInstall = ''
+    distInfo=$(echo "$out"/lib/python*/site-packages/onnxruntime_openvino-${version}.dist-info)
+    mv "$distInfo" "''${distInfo/onnxruntime_openvino-/onnxruntime-}"
+    substituteInPlace \
+      "$out"/lib/python*/site-packages/onnxruntime-${version}.dist-info/METADATA \
+      --replace-fail "Name: onnxruntime-openvino" "Name: onnxruntime"
+  '';
+
   # Append /run/opengl-driver/lib (host's GPU userspace) to the RUNPATH
   # of every bundled .so, so dlopen("libze_loader.so.1") at runtime
   # resolves against the live driver stack — same trick nixpkgs uses
