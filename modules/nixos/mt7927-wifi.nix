@@ -7,15 +7,25 @@
 # rather than silently ship a stale, mis-built driver — at which point check
 # whether mainline (wifi: mt76: mt7925: add MT7927 support) has landed and this
 # module can be dropped entirely.
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, cfg-meta, ... }:
 
 let
   cfg = config.smind.hw.mt7927;
   kernel = config.boot.kernelPackages.kernel;
   kernelMM = lib.versions.majorMinor kernel.version;
 
+  # ASUS driver ZIP, vendored in the private submodule. Imported via
+  # `builtins.path` so this firmware derivation rehashes only when the ZIP
+  # bytes change — not on every unrelated edit anywhere in the repo (same
+  # trap the immich rapidocr override documents).
+  zipName = "DRV_WiFi_MTK_MT7925_MT7927_TP_W11_64_V5603998_20250709R.zip";
+  driverZip = builtins.path {
+    path = "${cfg-meta.paths.private}/pkg/mt7927-firmware/${zipName}";
+    name = zipName;
+  };
+
   mt76 = pkgs.callPackage ../../pkg/mt7927/mt76-module.nix { inherit kernel; };
-  firmware = pkgs.callPackage ../../pkg/mt7927/firmware.nix { };
+  firmware = pkgs.callPackage ../../pkg/mt7927/firmware.nix { inherit driverZip; };
 in
 {
   options.smind.hw.mt7927.enable = lib.mkEnableOption ''
