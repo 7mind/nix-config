@@ -9,6 +9,7 @@
     # "fluffychat-linux-1.23.0"
     # "olm-3.2.16"
     "python3.13-ecdsa-0.19.1"
+    "electron-39.8.10" # bitwarden-desktop dependency, EOL upstream
   ];
 
   nix = {
