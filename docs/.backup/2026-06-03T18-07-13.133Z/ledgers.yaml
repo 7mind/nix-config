@@ -42,13 +42,12 @@ ledgers:
       statusValues:
         - open
         - wip
-        - root-caused
-        - inconclusive
+        - blocked
         - resolved
-        - wontfix
+        - abandoned
       terminalStatuses:
         - resolved
-        - wontfix
+        - abandoned
       fields:
         headline:
           type: string
@@ -90,22 +89,20 @@ ledgers:
       transitions:
         open:
           - wip
+          - blocked
           - resolved
-          - wontfix
+          - abandoned
         wip:
-          - root-caused
-          - inconclusive
+          - blocked
           - resolved
-          - wontfix
-        root-caused:
+          - abandoned
+        blocked:
+          - open
+          - wip
           - resolved
-          - wontfix
-          - wip
-        inconclusive:
-          - wip
-          - wontfix
+          - abandoned
         resolved: []
-        wontfix: []
+        abandoned: []
   - name: tasks
     schema:
       statusValues:
