@@ -1,0 +1,39 @@
+wifi: mt76: mt7925: add MT7927 chip ID helpers
+
+The MediaTek MT7927 (Filogic 380) combo chip uses MT7927 WiFi silicon
+that is architecturally compatible with MT7925. Extend is_mt7925() to
+match chip ID 0x7927, and add is_mt7927() for code paths that need
+MT7927-specific handling.
+
+Also add 0x7927 to is_mt76_fw_txp() to match MT7925's TXP format.
+
+Tested-by: Marcin FM <marcin@lgic.pl>
+Tested-by: Cristian-Florin Radoi <radoi.chris@gmail.com>
+Tested-by: George Salukvadze <giosal90@gmail.com>
+Tested-by: Evgeny Kapusta <3193631@gmail.com>
+Tested-by: Samu Toljamo <samu.toljamo@gmail.com>
+Tested-by: Ariel Rosenfeld <ariel.rosenfeld.750@gmail.com>
+Tested-by: Chapuis Dario <chapuisdario4@gmail.com>
+Tested-by: Thibaut François <tibo@humeurlibre.fr>
+Tested-by: 张旭涵 <Loong.0x00@gmail.com>
+Signed-off-by: Javier Tia <floss@jetm.me>
+
+2381456d4ecf353880918fbdaecf0aaaa27a13a9
+diff --git a/mt76_connac.h b/mt76_connac.h
+index 2deee83..bce95de 100644
+--- a/mt76_connac.h
++++ b/mt76_connac.h
+@@ -176,3 +176,8 @@ static inline bool is_mt7925(struct mt76_dev *dev)
+ {
+-	return mt76_chip(dev) == 0x7925;
++	return mt76_chip(dev) == 0x7925 || mt76_chip(dev) == 0x7927;
++}
++
++static inline bool is_mt7927(struct mt76_dev *dev)
++{
++	return mt76_chip(dev) == 0x7927;
+ }
+@@ -286,2 +291,3 @@ static inline bool is_mt76_fw_txp(struct mt76_dev *dev)
+ 	case 0x7925:
++	case 0x7927:
+ 	case 0x7663:

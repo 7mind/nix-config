@@ -48,6 +48,7 @@
   ./matter-mqtt-bridge.nix
   ./mosquitto.nix
   ./mqtt-controller.nix
+  ./mt7927-wifi.nix
   ./mouse.nix
   ./networking-desktop.nix
   ./networking.nix
