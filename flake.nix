@@ -81,12 +81,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    claude-code-sandbox = {
-      url = "github:neko-kai/claude-code-sandbox";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.flake-utils.follows = "flake-utils";
-    };
-
     browservice = {
       url = "github:pshirshov/browservice";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -152,17 +146,11 @@
       url = "github:pshirshov/zimt";
     };
 
-    # CodeGraph — semantic code-intelligence MCP server for AI agents.
-    # Pinned to the open PR (colbymchenry/codegraph#331) that adds the
-    # flake; bump to upstream once it's merged.
-    codegraph = {
-      url = "github:uxtechie/codegraph/implement-nix-flake-support";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    # markdown-ledger MCP server + extensible LLM prompt/skill assets
-    # (ledger.packages.<system>.ledger-mcp, ledger.llmAssets).
-    ledger = {
+    # cq — markdown-ledger MCP server, the LLM prompt/skill assets, AND the
+    # extracted LLM coding-agent harness (Claude/Codex/Pi + yolo sandbox):
+    # cq.packages.<system>.{ledger-mcp,claude-code,codex,yolo,llm-prompts,...},
+    # cq.llmAssets, cq.homeManagerModules.dev-llm.
+    cq = {
       url = "github:7mind/cq";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";

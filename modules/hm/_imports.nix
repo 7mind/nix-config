@@ -10,7 +10,7 @@
   ./dev-jetbrains.nix
   ./dev-git.nix
   ./dev-llm.nix
-  ./programs-pi.nix
+  ./dev-opencode.nix
   ./dev-cs.nix
   ./dev-scala.nix
   ./electron-wrappers.nix
