@@ -163,7 +163,7 @@
     # markdown-ledger MCP server + extensible LLM prompt/skill assets
     # (ledger.packages.<system>.ledger-mcp, ledger.llmAssets).
     ledger = {
-      url = "github:pshirshov/cq";
+      url = "github:7mind/cq";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
     };
