@@ -16,10 +16,11 @@ let
 
   tomlFormat = pkgs.formats.toml { };
 
-  # llm-prompts' pre-composed context (skills folded in) for agents without
-  # skill support (Copilot, Vibe). Sourced from the cq flake's package output.
+  # Pre-composed context (general context + environment skill folded in) for
+  # agents without skill support (Copilot, Vibe). The cq flake's
+  # llm-context-with-env output IS the file (its store path).
   contextWithEnvFile =
-    inputs.cq.packages.${pkgs.stdenv.hostPlatform.system}.llm-prompts + "/context-with-env.md";
+    inputs.cq.packages.${pkgs.stdenv.hostPlatform.system}.llm-context-with-env;
 
   # Shared harness wiring, reconstructed from the cq module's merged views so
   # opencode gets the same skills + memory text + MCP servers as claude/codex/pi.
@@ -65,7 +66,7 @@ in
         # AIDER_DARK_MODE = "true";
       };
 
-      # Copilot does not support skills — uses pre-composed context from llm-prompts package
+      # Copilot does not support skills — uses pre-composed context (cq llm-context-with-env)
       home.file.".copilot/copilot-instructions.md".source = contextWithEnvFile;
 
       home.file.".copilot-work/copilot-instructions.md".source =
@@ -75,7 +76,7 @@ in
         system_prompt_id = "default_with_custom_instructions";
       };
 
-      # Vibe does not support skills — uses pre-composed context from llm-prompts package
+      # Vibe does not support skills — uses pre-composed context (cq llm-context-with-env)
       home.file.".vibe/prompts/default_with_custom_instructions.md".source =
         contextWithEnvFile;
 

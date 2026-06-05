@@ -176,11 +176,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1780617112,
-        "narHash": "sha256-wLw3I2vFQMxEJ5pGiaZ/AovSj9HD/KMIhyHog4/Un+U=",
+        "lastModified": 1780649900,
+        "narHash": "sha256-mZiP+sUpmyVYDBNdS7wEWMWSbX8D0sx366dhpN9rh6M=",
         "owner": "7mind",
         "repo": "cq",
-        "rev": "16fee40dc64a6b57edaa76a57b74b27ad2d96a2a",
+        "rev": "2e273b58feddd5b5c11f7ab45a0e57b3ec1cd02a",
         "type": "github"
       },
       "original": {
@@ -1338,11 +1338,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1779786514,
-        "narHash": "sha256-0UoUzuYyEUUAH0RBvbw7oGh5rEow0bXwPBmeJ0LjXu4=",
+        "lastModified": 1780651237,
+        "narHash": "sha256-mNv9wVPIClhODPDSwEmnW1bAugjj+v83tEef5F3PYJw=",
         "owner": "pshirshov",
         "repo": "mqtt-qendercore",
-        "rev": "33776e311ccdbb38c39a4768a5ac0927f2198edb",
+        "rev": "acedabb6543b0dfbeaa442319d2474c4161643b7",
         "type": "github"
       },
       "original": {
