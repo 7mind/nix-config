@@ -118,22 +118,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # ComfyUI with pre-built wheels (CUDA/ROCm/XPU). Used on vm (Arc Pro B70
-    # XPU), pavel-am5 (W7900 ROCm), pavel-fw (5070 CUDA).
-    # Deliberately NO `inputs.nixpkgs.follows` — the overlay vendors Python
-    # deps (gradio, comfyui-manager, facexlib, timm, mss) whose nixpkgs
-    # versions drift past the wheels' compatibility window after ~2026-04-23.
-    # Its own flake.lock-pinned nixpkgs keeps us on the maintainer-tested
-    # snapshot; `nix flake update` picks up new wheels when upstream bumps.
-    comfyui-nix = {
-      url = "github:utensils/comfyui-nix";
-    };
-
     # zimt — multi-model image-gen REPL + web UI, pre-built per backend
-    # (xpu/cuda/rocm/cpu). Used on vm (Arc Pro B70, XPU). Like comfyui-nix,
-    # deliberately does NOT follow our nixpkgs: it vendors pip wheels
-    # (torch+IPEX, diffusers, transformers, fastapi …) whose compatibility
-    # window tracks zimt's own pinned nixpkgs; drifting breaks the wheel build.
+    # (xpu/cuda/rocm/cpu). Used on vm (Arc Pro B70, XPU). Deliberately does
+    # NOT follow our nixpkgs: it vendors pip wheels (torch+IPEX, diffusers,
+    # transformers, fastapi …) whose compatibility window tracks zimt's own
+    # pinned nixpkgs; drifting breaks the wheel build.
     zimt = {
       url = "github:pshirshov/zimt";
     };

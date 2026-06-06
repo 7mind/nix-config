@@ -158,13 +158,6 @@ in
       };
     };
 
-    networking.firewall = {
-      allowedTCPPorts = [
-        8188 # comfyui
-        8189 # comfyui
-      ];
-    };
-
   };
 
 }

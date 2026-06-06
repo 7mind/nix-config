@@ -105,9 +105,6 @@ rec {
             inputs.determinate.nixosModules.default
             inputs.kanata-switcher.nixosModules.default
             inputs.noctalia.nixosModules.default
-            # `services.comfyui`. Always imported; mkIf cfg.enable-gated,
-            # so it costs nothing on hosts that don't enable it.
-            inputs.comfyui-nix.nixosModules.default
 
             { nixpkgs.overlays = [
                 inputs.nix-vscode-extensions.overlays.default
