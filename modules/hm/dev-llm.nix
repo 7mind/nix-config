@@ -19,6 +19,12 @@ in
   imports = [ inputs.cq.homeManagerModules.dev-llm ];
 
   config = lib.mkIf cfg.enable {
+    # Register the codegraph + ledger MCP tools directly in Pi instead of
+    # behind pi-mcp-adapter's mcp() proxy, so all their tools load eagerly
+    # into context. Scoped to these two servers (not `true`) so a future
+    # verbose MCP server stays proxied.
+    smind.hm.dev.llm.pi.mcpDirectTools = [ "codegraph" "ledger" ];
+
     # GPU hardware flags for the yolo `--gpu` sandbox bind.
     smind.hm.dev.llm.yolo.gpu = {
       nvidiaEnable = outerConfig.smind.hw.nvidia.enable or false;
