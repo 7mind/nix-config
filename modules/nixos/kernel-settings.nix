@@ -15,7 +15,8 @@
     };
   };
 
-  config = lib.mkIf config.smind.kernel.sane-defaults.enable {
+  config = lib.mkMerge [
+    (lib.mkIf config.smind.kernel.sane-defaults.enable {
     boot = {
       kernelPackages = lib.mkDefault cfg-packages.linux-kernel;
 
@@ -68,5 +69,23 @@
     };
 
     services.fwupd.enable = config.smind.hw.fwupd.enable;
-  };
+    })
+
+    # fwupd-refresh.service runs `fwupdmgr refresh` as the session-less
+    # `fwupd-refresh` user. refresh-remote/update-metadata default to auth_admin
+    # for a subject with no active session, and fwupd's shipped polkit rule only
+    # grants update-internal — so the timer fails with "Failed to obtain auth".
+    # Authorize that system user for the metadata refresh.
+    (lib.mkIf config.services.fwupd.enable {
+      security.polkit.extraConfig = ''
+        polkit.addRule(function(action, subject) {
+          if ((action.id == "org.freedesktop.fwupd.refresh-remote" ||
+               action.id == "org.freedesktop.fwupd.update-metadata") &&
+              subject.user == "fwupd-refresh") {
+            return polkit.Result.YES;
+          }
+        });
+      '';
+    })
+  ];
 }
