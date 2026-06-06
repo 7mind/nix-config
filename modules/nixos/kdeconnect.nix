@@ -3,7 +3,6 @@
 let
   cfg = config.smind.kdeconnect;
 
-  # Priority-based backend selection
   # Priority: KDE > GNOME
   selectedBackend =
     if cfg.backend != "auto" then cfg.backend
@@ -11,7 +10,6 @@ let
     else if config.smind.desktop.gnome.enable then "gsconnect"
     else "none";
 
-  # Check if multiple desktops are enabled
   enabledDesktops = lib.filter (x: x != null) [
     (if config.smind.desktop.kde.enable then "KDE" else null)
     (if config.smind.desktop.gnome.enable then "GNOME" else null)
@@ -51,7 +49,6 @@ in
   };
 
   config = lib.mkMerge [
-    # Info message for multiple desktops
     {
       warnings = lib.optionals (cfg.enable && hasMultipleDesktops && cfg.backend == "auto") [
         ''
@@ -79,7 +76,7 @@ in
       programs.kdeconnect.package = lib.mkForce pkgs.gnomeExtensions.gsconnect;
     })
 
-    (lib.mkIf (cfg.enable && selectedBackend == "kde-connect-kde") {
+    (lib.mkIf (cfg.enable && selectedBackend == "kdeconnect-kde") {
       programs.kdeconnect.package = pkgs.kdePackages.kdeconnect-kde;
     })
   ];
