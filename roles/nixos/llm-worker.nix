@@ -35,14 +35,12 @@ in
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
     {
-      # Permit the llm user to talk to the nix daemon (required for HM
-      # activation, `nix build`, `nix shell`, etc.). Hosts that lock down
-      # `nix.settings.allowed-users` to a closed list (e.g. pavel-trx40)
-      # would otherwise reject the llm user's daemon connection and the
-      # home-manager-llm.service activation fails at first run with
-      # "cannot open connection to remote store 'daemon': Connection reset
-      # by peer". `llm` already has passwordless sudo via wheel, so
-      # promoting to trusted-users is no additional elevation.
+      # Permit the llm user to talk to the nix daemon (HM activation,
+      # `nix build`, etc.). Hosts that close `allowed-users` to a list
+      # (e.g. pavel-trx40) otherwise reject it and home-manager-llm.service
+      # fails at first run with "cannot open connection to remote store
+      # 'daemon': Connection reset by peer". `llm` already has passwordless
+      # sudo via wheel, so trusted-users is no additional elevation.
       nix.settings.allowed-users = [ "llm" ];
       nix.settings.trusted-users = [ "llm" ];
 

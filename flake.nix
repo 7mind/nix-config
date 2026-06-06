@@ -118,30 +118,22 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # ComfyUI packaged with pre-built wheels for CUDA / ROCm / Intel XPU.
-    # Used on vm (Arc Pro B70 via XPU/oneAPI), pavel-am5 (W7900 via ROCm),
-    # and pavel-fw (5070 via CUDA).
-    #
-    # We deliberately do NOT set `inputs.nixpkgs.follows = "nixpkgs"` here —
-    # the flake's overlay vendors Python deps (gradio, comfyui-manager,
-    # facexlib, timm, mss) whose nixpkgs versions drift past the wheels'
-    # compatibility window on commits after ~2026-04-23. Letting comfyui-nix
-    # use its own `flake.lock`-pinned nixpkgs keeps us on the snapshot the
-    # upstream maintainer tested the wheels against (currently nixos-unstable
-    # `c0b0e0fd` / 2025-12-28). When comfyui-nix bumps its lock with new
-    # wheels, our `nix flake update` picks it up; until then we sit on a
-    # known-good closure.
+    # ComfyUI with pre-built wheels (CUDA/ROCm/XPU). Used on vm (Arc Pro B70
+    # XPU), pavel-am5 (W7900 ROCm), pavel-fw (5070 CUDA).
+    # Deliberately NO `inputs.nixpkgs.follows` — the overlay vendors Python
+    # deps (gradio, comfyui-manager, facexlib, timm, mss) whose nixpkgs
+    # versions drift past the wheels' compatibility window after ~2026-04-23.
+    # Its own flake.lock-pinned nixpkgs keeps us on the maintainer-tested
+    # snapshot; `nix flake update` picks up new wheels when upstream bumps.
     comfyui-nix = {
       url = "github:utensils/comfyui-nix";
     };
 
-    # zimt — multi-model image-generation REPL + web UI, pre-built per
-    # backend (xpu / cuda / rocm / cpu). Used on vm (Arc Pro B70 via the
-    # XPU backend). Like comfyui-nix, we deliberately do NOT make zimt
-    # follow our nixpkgs: the flake vendors a large stack of pip wheels
-    # (torch+IPEX, diffusers, transformers, fastapi …) whose
-    # compatibility window tracks zimt's own pinned nixpkgs commit.
-    # Letting it drift onto our nixpkgs would break the wheel build.
+    # zimt — multi-model image-gen REPL + web UI, pre-built per backend
+    # (xpu/cuda/rocm/cpu). Used on vm (Arc Pro B70, XPU). Like comfyui-nix,
+    # deliberately does NOT follow our nixpkgs: it vendors pip wheels
+    # (torch+IPEX, diffusers, transformers, fastapi …) whose compatibility
+    # window tracks zimt's own pinned nixpkgs; drifting breaks the wheel build.
     zimt = {
       url = "github:pshirshov/zimt";
     };

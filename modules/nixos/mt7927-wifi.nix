@@ -1,12 +1,8 @@
-# MediaTek MT7927 (Filogic 380) WiFi 7 + Bluetooth enablement.
-#
-# The chip (PCI 14c3:7927, internally MT6639) has no mainline support as of
-# linux 7.0.x. This wires in jetm's out-of-tree mt76/btusb patch set as an
-# extraModulePackage plus the user-supplied firmware. Both are pinned to the
-# 7.0 patch base; the assertion below makes a future kernel bump fail loudly
-# rather than silently ship a stale, mis-built driver — at which point check
-# whether mainline (wifi: mt76: mt7925: add MT7927 support) has landed and this
-# module can be dropped entirely.
+# MediaTek MT7927 (Filogic 380, PCI 14c3:7927, internally MT6639) WiFi 7 +
+# Bluetooth. No mainline support as of linux 7.0.x; wires in jetm's out-of-tree
+# mt76/btusb patch set + firmware, pinned to the 7.0 patch base. The assertion
+# below fails loudly on a kernel bump. Drop this module once mainline
+# (wifi: mt76: mt7925: add MT7927 support) has landed.
 { config, lib, pkgs, cfg-meta, ... }:
 
 let
@@ -14,10 +10,8 @@ let
   kernel = config.boot.kernelPackages.kernel;
   kernelMM = lib.versions.majorMinor kernel.version;
 
-  # ASUS driver ZIP, vendored in the private submodule. Imported via
-  # `builtins.path` so this firmware derivation rehashes only when the ZIP
-  # bytes change — not on every unrelated edit anywhere in the repo (same
-  # trap the immich rapidocr override documents).
+  # ASUS driver ZIP, vendored in the private submodule. `builtins.path` so the
+  # firmware derivation rehashes only when the ZIP bytes change.
   zipName = "DRV_WiFi_MTK_MT7925_MT7927_TP_W11_64_V5603998_20250709R.zip";
   driverZip = builtins.path {
     path = "${cfg-meta.paths.private}/pkg/mt7927-firmware/${zipName}";

@@ -41,7 +41,6 @@ in
   };
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
-    # --- Base Framework laptop support ---
     {
       environment.systemPackages = with pkgs; [
         fw-ectool # Framework EC tool for fan control, battery charge limit, etc.
@@ -70,8 +69,6 @@ in
         });
       '';
     }
-
-    # --- Kernel params ---
 
     (lib.mkIf cfg.adaptive-backlight-disable {
       boot.kernelParams = [ "amdgpu.abmlevel=0" ];

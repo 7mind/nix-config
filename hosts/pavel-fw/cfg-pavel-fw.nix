@@ -26,8 +26,6 @@ in
     hostPubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILVhIJvhBhZBZwwW+XNYWLRn5wL+ecMkWRYcuqmJVq1r";
   };
 
-  # --- Framework 16 AMD (Strix Point) specific configuration ---
-
   boot.kernelParams = [
     #"usbcore.autosuspend=-1"
   ];
@@ -44,7 +42,7 @@ in
   };
 
   environment.systemPackages = [
-    pkgs.powertop # Power consumption analysis
+    pkgs.powertop
 
     (pkgs.writeShellScriptBin "tpm-enroll-luks" ''
       set -euo pipefail
@@ -198,17 +196,15 @@ in
     ];
     llm.ollama.customContextLength = 131072;
 
-    # ComfyUI on the 5070 (Blackwell) via CUDA. comfyui-nix's prebuilt
-    # wheel supports Pascal→Blackwell in a single closure, so no
-    # `cudaCapabilities` tuning needed. Listens on 0.0.0.0:8188 — for a
-    # laptop you may want to override `services.comfyui.listenAddress`
-    # to "127.0.0.1" and `openFirewall = false`.
+    # ComfyUI on the 5070 (Blackwell) via CUDA. The prebuilt wheel covers
+    # Pascal→Blackwell in one closure, so no `cudaCapabilities` tuning.
+    # Listens on 0.0.0.0:8188 — on a laptop consider overriding
+    # `services.comfyui.listenAddress` to "127.0.0.1" and `openFirewall = false`.
     services.comfyui.enable = true;
     services.comfyui.gpuSupport = "cuda";
 
     gaming.steam.enable = true;
 
-    # Virtualization
     vm.virt-manager = {
       enable = true;
       gpuPassthrough = {
@@ -217,7 +213,6 @@ in
       };
     };
 
-    # Use lanzaboote for secure boot
     bootloader.systemd-boot.enable = false;
     bootloader.lanzaboote.enable = true;
 
@@ -240,7 +235,6 @@ in
   networking.hostName = cfg-meta.hostname;
   networking.useDHCP = false;
 
-  # Firewall
   networking.firewall = {
     enable = true;
     allowedTCPPorts = [ ];

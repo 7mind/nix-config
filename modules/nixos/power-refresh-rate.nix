@@ -105,7 +105,6 @@ in
 
     # GNOME/Wayland refresh rate switching
     (lib.mkIf (cfg.enable && config.smind.desktop.gnome.enable) {
-      # Path unit watches for trigger file changes
       systemd.user.paths.auto-refresh-rate-gnome = {
         description = "Watch for power state changes to update refresh rate";
         wantedBy = [ "gnome-session.target" ];
@@ -117,7 +116,6 @@ in
         };
       };
 
-      # Oneshot service applies correct refresh rate
       systemd.user.services.auto-refresh-rate-gnome = {
         description = "Apply display refresh rate based on power state (GNOME)";
         serviceConfig = {
@@ -126,7 +124,6 @@ in
         };
       };
 
-      # Apply on login
       systemd.user.services.auto-refresh-rate-gnome-init = {
         description = "Set initial display refresh rate based on power state (GNOME)";
         wantedBy = [ "gnome-session.target" ];
@@ -143,7 +140,6 @@ in
     (lib.mkIf (cfg.enable && config.smind.desktop.cosmic.enable) {
       environment.systemPackages = [ pkgs.wlr-randr ];
 
-      # Path unit watches for trigger file changes
       systemd.user.paths.auto-refresh-rate-cosmic = {
         description = "Watch for power state changes to update refresh rate";
         wantedBy = [ "cosmic-session.target" ];
@@ -155,7 +151,6 @@ in
         };
       };
 
-      # Oneshot service applies correct refresh rate
       systemd.user.services.auto-refresh-rate-cosmic = {
         description = "Apply display refresh rate based on power state (COSMIC)";
         serviceConfig = {
@@ -164,7 +159,6 @@ in
         };
       };
 
-      # Apply on login
       systemd.user.services.auto-refresh-rate-cosmic-init = {
         description = "Set initial display refresh rate based on power state (COSMIC)";
         wantedBy = [ "cosmic-session.target" ];

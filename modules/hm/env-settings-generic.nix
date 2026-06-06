@@ -29,8 +29,6 @@
         keyringEnabled = keyringCfg.enable;
         sshAgent = keyringCfg.sshAgent or "standalone";
       in
-      # If keyring is not enabled, always use standalone ssh-agent
-      # Otherwise, only use it if keyring explicitly sets sshAgent = "standalone"
       !keyringEnabled || sshAgent == "standalone"
     );
 

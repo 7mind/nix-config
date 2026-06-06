@@ -286,8 +286,7 @@ stdenv.mkDerivation (finalAttrs: {
     (lib.cmakeBool "LLAMA_CURL"         true)
   ];
 
-  # ggml-sycl needs C++17, which intel-llvm's clang defaults to. Some upstream
-  # warnings get promoted to errors with -Wall in newer Clang; loosen if so.
+  # Some upstream warnings get promoted to errors with -Wall in newer Clang.
   env.NIX_CFLAGS_COMPILE = lib.concatStringsSep " " [
     "-Wno-error=deprecated-declarations"
     # intel/llvm's Clang ships a libc++ that conflicts with libstdc++'s
@@ -349,7 +348,6 @@ stdenv.mkDerivation (finalAttrs: {
   # SIGSEGVs on L0 for reasons specific to ollama-runner's child
   # process model, not ggml-sycl. See pkg/ollama-sycl/default.nix.
 
-  # llama.cpp's CMake install puts binaries in $out/bin/ already; nothing to do.
   meta = with lib; {
     description = "llama.cpp built with the SYCL backend (Intel Arc / Battlemage)";
     homepage    = "https://github.com/ggml-org/llama.cpp";

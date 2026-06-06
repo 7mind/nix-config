@@ -47,7 +47,6 @@
 
     security.polkit.enable = true;
 
-    # Polkit authentication agent
     systemd.user.services.polkit-gnome-authentication-agent-sway = {
       description = "polkit-gnome-authentication-agent-sway";
       wantedBy = [ "sway-session.target" ];

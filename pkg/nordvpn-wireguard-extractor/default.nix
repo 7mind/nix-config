@@ -16,8 +16,6 @@ python3.pkgs.buildPythonApplication {
     python3.pkgs.wheel
   ];
 
-  # This package has no external dependencies, so we don't need to specify them.
-
   meta = with lib; {
     description = "A script to extract NordVPN WireGuard configurations.";
     homepage = "https://gist.github.com/pshirshov/80acc5f94d259b9c3a05680ba606bae8";

@@ -14,7 +14,6 @@ main() {
     MODE_IDX=2
   fi
 
-  # Build gdctl command with all displays
   local args=""
   while IFS=: read -r display mode_ac mode_battery is_primary; do
     [ -z "$display" ] && continue

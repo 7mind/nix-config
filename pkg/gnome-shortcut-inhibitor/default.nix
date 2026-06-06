@@ -25,7 +25,6 @@ stdenv.mkDerivation rec {
   };
   passthru = {
     extensionPortalSlug = pname;
-    # Store the extension's UUID, because we might need it at some places
     extensionUuid = uuid;
   };
 }

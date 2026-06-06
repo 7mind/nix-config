@@ -41,7 +41,6 @@
 
     security.polkit.enable = true;
 
-    # Polkit authentication agent
     systemd.user.services.polkit-gnome-authentication-agent-niri = {
       description = "polkit-gnome-authentication-agent-niri";
       wantedBy = [ "niri.service" ];

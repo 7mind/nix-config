@@ -1,20 +1,11 @@
 { config, lib, pkgs, ... }:
 
-# Unified MQTT lighting controller. Replaces both:
-#
-#   * the bento `mqtt-automation` systemd service (runtime rule engine)
-#   * the python `hue-setup` oneShot (z2m group/scene provisioning)
-#
-# Two systemd units share one binary (`mqtt-controller`), wired so the
-# provisioner runs first on every config change and the daemon starts
-# only after a successful provision pass:
-#
+# Unified MQTT lighting controller (replaces bento `mqtt-automation` rule
+# engine + python `hue-setup` z2m provisioner). One binary, two units:
 #   mqtt-controller-provision.service  (oneshot, after z2m + mosquitto)
-#   mqtt-controller.service             (long-running, after provision)
-#
-# Both consume the same JSON config rendered from
-# `smind.services.mqtt-controller.config` — host modules drop a single
-# attrset there matching the `Config` schema in
+#   mqtt-controller.service            (long-running, after provision)
+# Both consume one JSON config rendered from
+# `smind.services.mqtt-controller.config`, matching the `Config` schema in
 # `pkg/mqtt-controller/src/config/mod.rs`.
 
 let
@@ -253,10 +244,7 @@ in
       mergedConfig = cfg.config // locationAttr // auditLogAttr;
       configFile = yaml.generate "mqtt-controller.json" mergedConfig;
 
-      # The `--verbose` flag is the global one (clap `global = true`), so it
-      # has to come BEFORE the subcommand on the command line. The provision
-      # subcommand inherits it for free since clap parses globals at any
-      # depth.
+      # `--verbose` is a clap global flag, so it must precede the subcommand.
       commonArgs = lib.concatStringsSep " " [
         "--config ${configFile}"
         "--mqtt-host ${cfg.mqtt.host}"
@@ -271,8 +259,7 @@ in
       networking.firewall.allowedTCPPorts =
         lib.optionals (cfg.web.enable && cfg.web.openFirewall) [ cfg.web.port ];
 
-      # Provisioner: oneshot, runs after z2m is up. Re-runs whenever the
-      # rendered JSON changes (via restartTriggers on the config file).
+      # Provisioner: re-runs whenever the rendered JSON changes (restartTriggers).
       systemd.services.mqtt-controller-provision = {
         description = "Apply declarative zigbee2mqtt groups + scenes from Nix config";
         wantedBy = [ "multi-user.target" ];
@@ -288,10 +275,8 @@ in
             --z2m-ws-url ${z2mWsUrl}
         '';
         unitConfig = {
-          # When the provisioner is active, ensure the daemon is
-          # running. If the provisioner fails on first boot and only
-          # succeeds on a later retry, Upholds re-queues a start job
-          # for the daemon automatically.
+          # Re-queues a daemon start job once the provisioner succeeds,
+          # covering the case where provision only succeeds on a later retry.
           Upholds = "mqtt-controller.service";
         };
         serviceConfig = {
@@ -304,16 +289,11 @@ in
         };
       };
 
-      # Force provisioner: same as the oneshot above, but with
-      # `--force-options` so it rewrites every per-device option even
-      # if z2m reports them as already applied. Escape hatch for
-      # devices whose reported state diverges from the physical state
-      # (e.g. Sonoff `inching_control`, `overload_protection`).
-      #
-      # NOT wanted by any target — run on demand:
-      #
-      #   sudo systemctl start mqtt-controller-force-provision.service
-      #   sudo journalctl -u mqtt-controller-force-provision.service -f
+      # Force provisioner: adds `--force-options` to rewrite every per-device
+      # option even when z2m reports it already applied. Escape hatch for
+      # devices whose reported state diverges from physical state (e.g. Sonoff
+      # `inching_control`, `overload_protection`). Not wanted by any target;
+      # run on demand: systemctl start mqtt-controller-force-provision.service
       systemd.services.mqtt-controller-force-provision = {
         description = "Force-rewrite zigbee2mqtt device options (bypasses state-cache dedup)";
         after = [ "zigbee2mqtt.service" "mosquitto.service" "network-online.target" ];
@@ -333,8 +313,8 @@ in
         };
       };
 
-      # Long-running daemon. Starts only after the provisioner has
-      # succeeded so its first state-refresh sees the right groups.
+      # Daemon. Starts only after the provisioner succeeds so its first
+      # state-refresh sees the right groups.
       systemd.services.mqtt-controller = {
         description = "MQTT lighting runtime controller (replaces bento mqtt-automation)";
         wantedBy = [ "multi-user.target" ];
@@ -349,17 +329,14 @@ in
         environment = {
           TZ = cfg.timezone;
         };
-        # `--verbose` is on by default for now: every command the
-        # daemon publishes is logged in human-readable form with the
-        # state-machine branch that produced it. Drop the flag here
-        # once the runtime is stable to quiet the logs back down to
-        # warnings/errors only.
+        # `--verbose` on for now: logs every published command with its
+        # state-machine branch. Drop once the runtime is stable.
         script = let
           z2mPort = config.smind.services.zigbee2mqtt.port;
           z2mWsUrl = "ws://localhost:${toString z2mPort}/api";
-          # zwave-js-server is embedded in ZJS-UI on port 3000 (firewall
-          # already opened in modules/nixos/zwave.nix). Plain WebSocket
-          # + JSON-RPC — see src/daemon/zwave_server.rs.
+          # zwave-js-server embedded in ZJS-UI on port 3000 (firewall opened in
+          # modules/nixos/zwave.nix). WebSocket + JSON-RPC, see
+          # src/daemon/zwave_server.rs.
           zwaveWsUrl = "ws://localhost:3000";
         in ''
           exec ${cfg.package}/bin/mqtt-controller --verbose daemon ${commonArgs} \
@@ -375,10 +352,8 @@ in
           RestartSec = 5;
           LoadCredential = "mqtt-password:${cfg.mqtt.passwordFile}";
           DynamicUser = true;
-          # The audit log lives under /var/lib/mqtt-controller; systemd
-          # creates and chowns this dir to the dynamic user. Always
-          # set, regardless of `auditLog.enable`, so toggling the
-          # option later does not require a service-config change.
+          # Audit log lives here; set unconditionally so toggling
+          # `auditLog.enable` needs no service-config change.
           StateDirectory = "mqtt-controller";
           StateDirectoryMode = "0750";
         };

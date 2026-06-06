@@ -9,10 +9,8 @@
 {
   nixpkgs.overlays = [
     (final: prev: {
-      # Standalone ghostty terminfo derivation that avoids building the full
-      # ghostty GUI app (which pulls in gtk4, libadwaita, gstreamer, etc.).
-      # Parses the terminfo definition from ghostty's Zig source and compiles
-      # it with tic.
+      # Standalone ghostty terminfo, avoiding the full GUI app (gtk4, libadwaita,
+      # gstreamer, ...). Parses the terminfo from ghostty's Zig source, tic-compiles.
       ghostty-terminfo =
         prev.runCommand "ghostty-terminfo-${prev.ghostty.version}"
           {
@@ -122,11 +120,9 @@
 
         mqtt-controller-frontend =
           let
-            # The frontend output is a WASM bundle + JS/CSS/HTML — fully
-            # architecture-independent. Pin its build pkgs to x86_64-linux so
-            # aarch64 hosts (raspi5m) reference the same closure instead of
-            # rebuilding it under emulation. The aarch64 mqtt-controller's
-            # postInstall just `cp -r`s the static dist directory in.
+            # Frontend output (WASM + JS/CSS/HTML) is arch-independent. Pin build
+            # pkgs to x86_64-linux so aarch64 hosts (raspi5m) reuse the same closure
+            # instead of rebuilding under emulation; their postInstall just cp -r's it.
             pkgsBuild = import inputs.nixpkgs {
               system = "x86_64-linux";
               overlays = [ inputs.rust-overlay.overlays.default ];
@@ -149,9 +145,8 @@
           craneLib.buildTrunkPackage (commonArgs // {
             inherit cargoArtifacts;
             wasm-bindgen-cli = pkgsBuild.wasm-bindgen-cli;
-            # trunk must run from the frontend crate directory so it can
-            # find the [package] Cargo.toml. We cd there before trunk
-            # runs and adjust the install path accordingly.
+            # trunk must run from the frontend crate dir to find its [package]
+            # Cargo.toml; cd there and adjust the install path accordingly.
             preBuild = "cd crates/mqtt-controller-frontend";
             trunkIndexPath = "./index.html";
             installPhaseCommand = "cp -r dist $out";
@@ -196,17 +191,13 @@
         zigbee-mqtt-import = pkgs.callPackage "${cfg-meta.paths.pkg}/zigbee-mqtt-import/default.nix" { };
         linux-3-finger-drag = pkgs.callPackage "${cfg-meta.paths.pkg}/linux-3-finger-drag/default.nix" { };
 
-        # Workaround for NAS-WR01ZE bit-31 firmware bug (zwave-js/zwave-js#2692).
-        # The device randomly sets bit 31 in 4-byte meter report mantissa,
-        # causing values near -21,474,836 instead of small positive numbers.
-        # We mask off the MSB when the parsed meter value is implausibly negative.
+        # Workaround for NAS-WR01ZE bit-31 firmware bug (zwave-js/zwave-js#2692):
+        # device randomly sets bit 31 in the 4-byte meter report mantissa, giving
+        # values near -21,474,836 instead of small positives; mask the MSB when the
+        # parsed value is implausibly negative.
         # Pin zwave-js-ui to 11.16.0 (ahead of our nixpkgs pin) for:
         #   - zwave-js 15.22.1: targetValue optimistic update fix
         #   - zwave-js 15.22.5: pollValue delay fix
-        # Workaround for NAS-WR01ZE bit-31 firmware bug (zwave-js/zwave-js#2692).
-        # The device randomly sets bit 31 in 4-byte meter report mantissa,
-        # causing values near -21,474,836 instead of small positive numbers.
-        # We mask off the MSB when the parsed meter value is implausibly negative.
         zwave-js-ui =
           let
             pinnedVersion = "11.16.0";
@@ -349,8 +340,8 @@
 
         nix-apple-fonts = (
           cfg-flakes.nix-apple-fonts.default.overrideAttrs (drv: {
-            # override install script to put fonts into /share/fonts, not /usr/share/fonts - where they don't work.
-            # FIXME: notify upstream / submit PR?
+            # Install fonts into /share/fonts, not /usr/share/fonts where they
+            # don't work. FIXME: notify upstream / submit PR?
             installPhase = ''
               runHook preInstall
               mkdir -p $out/share/fonts/opentype

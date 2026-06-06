@@ -11,11 +11,9 @@
     smind.zfs.email.enable = lib.mkEnableOption "ZFS mailer";
   };
 
-  # boot.zfs.forceImportRoot is set in
-  # modules/nixos/env-settings-linux.nix (the generic-linux-module)
-  # so it covers PXE seed systems too — those don't import this
-  # smind.zfs module but they do import the linux-module. One source
-  # of truth.
+  # boot.zfs.forceImportRoot is set in modules/nixos/env-settings-linux.nix
+  # (the generic-linux-module), so PXE seed systems get it too — they import
+  # the linux-module but not this smind.zfs module. One source of truth.
   config = lib.mkIf config.smind.zfs.enable {
     assertions = [
       ({

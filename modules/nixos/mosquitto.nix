@@ -28,8 +28,8 @@ in
     services.mosquitto = {
       enable = true;
       settings = {
-        # Allow large retained messages (z2m bridge/devices can be ~200KB+).
-        message_size_limit = 0; # 0 = unlimited (mosquitto default, explicit)
+        # 0 = unlimited; z2m retained messages can exceed ~200KB.
+        message_size_limit = 0;
       };
       listeners = [
         {

@@ -200,20 +200,16 @@ in
           modesetting.enable = true;
           nvidiaSettings = true;
 
-          # PRIME-specific power management: only safe under PRIME
-          # offload, where the dGPU genuinely sleeps when idle. On a
-          # non-PRIME machine (pure compute or dual-dGPU) the runtime
-          # PM path is irrelevant and would only add wake latency.
+          # PRIME-only: runtime PM is safe only under offload where the dGPU
+          # sleeps when idle; elsewhere it only adds wake latency.
           powerManagement.enable = cfg.prime.enable;
           powerManagement.finegrained = cfg.prime.enable;
         } // lib.optionalAttrs cfg.prime.enable {
           prime = {
             offload = {
               enable = true;
-              # We provide our own `nvidia-offload` below that pre-warms
-              # the dGPU with `nvidia-smi` before exec'ing the workload.
-              # The upstream-generated script doesn't have a hook for
-              # extra setup, so we disable it and replace by name.
+              # Disabled so we can replace it with our own `nvidia-offload`
+              # below (pre-warms the dGPU; upstream script has no setup hook).
               enableOffloadCmd = false;
             };
             amdgpuBusId = cfg.amdgpuBusId;
@@ -225,33 +221,23 @@ in
 
         boot.kernelModules = lib.mkIf cfg.prime.enable [ "vfio-pci" ];
 
-        # Enable NVIDIA RTD3 (Runtime D3) power management
-        # 0x02 = Fine-grained power management, allows GPU to power down when idle
-        # NVreg_PreserveVideoMemoryAllocations=1 is REQUIRED for suspend/resume
-        # NVreg_TemporaryFilePath sets where VRAM is saved during suspend
-        # (PRIME-only: these knobs are part of the dGPU-sleep story.)
+        # NVIDIA RTD3 (PRIME-only). 0x02 = fine-grained PM (power down when
+        # idle); PreserveVideoMemoryAllocations=1 is REQUIRED for suspend/resume;
+        # TemporaryFilePath is where VRAM is saved during suspend.
         boot.extraModprobeConfig = lib.mkIf cfg.prime.enable ''
           options nvidia NVreg_DynamicPowerManagement=0x02
           options nvidia NVreg_PreserveVideoMemoryAllocations=1
           options nvidia NVreg_TemporaryFilePath=/var/tmp
         '';
 
-        # NVIDIA suspend/resume/hibernate is handled by nixpkgs' hardware.nvidia module:
-        # - With kernelSuspendNotifier (driver 595+, open modules): kernel handles it directly
+        # NVIDIA suspend/resume/hibernate handled by nixpkgs' hardware.nvidia:
+        # - With kernelSuspendNotifier (driver 595+, open modules): kernel handles it
         # - Without: nixpkgs creates systemd services with nvidia-sleep.sh ExecStart
-        #
-        # When kernelSuspendNotifier is true, nixpkgs correctly skips creating
-        # nvidia-suspend/resume/hibernate services. However, stale systemd state
-        # from previous generations (that had these services) can persist in memory
-        # across nixos-rebuild switch. systemd 259 creates empty stubs for referenced
-        # but missing units and then rejects them (no ExecStart), blocking suspend.
-        # Provide explicit no-op services as a safety net.
         systemd.services = lib.mkMerge [
-          # When kernelSuspendNotifier is true, nixpkgs correctly skips creating
-          # nvidia-suspend/resume/hibernate services. However, stale systemd state
-          # from previous generations (that had these services) can persist in memory
-          # across nixos-rebuild switch. systemd 259 creates empty stubs for referenced
-          # but missing units and then rejects them (no ExecStart), blocking suspend.
+          # With kernelSuspendNotifier, nixpkgs skips creating these services,
+          # but stale systemd state from prior generations can persist across
+          # nixos-rebuild switch. systemd 259 creates empty stubs for referenced-
+          # but-missing units then rejects them (no ExecStart), blocking suspend.
           # Provide explicit no-op services as a safety net.
           (lib.mkIf config.hardware.nvidia.powerManagement.kernelSuspendNotifier (
             let
@@ -277,20 +263,15 @@ in
           gpuBindVfio
           gpuBindNvidia
 
-          # Replacement for the upstream-generated `nvidia-offload` (we
-          # disabled enableOffloadCmd above). Same env vars as the
-          # upstream script (nixpkgs/nixos/modules/hardware/video/nvidia.nix
-          # — verbatim copy as of nixpkgs 24.x; sanity-check on bumps),
-          # plus a `nvidia-smi` pre-warm at the top.
-          #
-          # Why pre-warm: under PRIME offload + finegrained PM the dGPU
-          # sits in D3cold when idle. NVENC's capability probe (run
-          # early in OBS startup, also in ffmpeg/blender/etc.) has a
-          # tight timeout and fails on the first launch if the GPU is
-          # still waking up or `nvidia_uvm` hasn't been modprobe'd yet.
-          # The nvidia-smi call lifts the GPU to D0 and forces
-          # nvidia_uvm to load — costs ~300ms, eliminates the "first
-          # OBS launch shows no NVENC" symptom.
+          # Replacement for upstream `nvidia-offload` (enableOffloadCmd disabled
+          # above). Same env vars as the upstream script
+          # (nixpkgs/nixos/modules/hardware/video/nvidia.nix — verbatim copy as of
+          # nixpkgs 24.x; sanity-check on bumps), plus an `nvidia-smi` pre-warm.
+          # Pre-warm: under PRIME offload + finegrained PM the dGPU sits in D3cold
+          # when idle, and NVENC's capability probe (early in OBS/ffmpeg/blender
+          # startup) has a tight timeout that fails on first launch before the GPU
+          # wakes / `nvidia_uvm` loads. nvidia-smi lifts it to D0 and forces
+          # nvidia_uvm load — ~300ms, fixes "first OBS launch shows no NVENC".
           (pkgs.writeShellScriptBin "nvidia-offload" ''
             nvidia-smi >/dev/null 2>&1 || true
             export __NV_PRIME_RENDER_OFFLOAD=1
@@ -301,15 +282,12 @@ in
           '')
         ];
 
-        # Force session to use AMD iGPU by default
-        # This allows NVIDIA GPU to power down via RTD3 when not in use
-        # Use nvidia-offload for explicit GPU workloads
+        # Default session to AMD iGPU so the dGPU can power down via RTD3;
+        # use nvidia-offload for explicit GPU workloads.
         environment.sessionVariables = lib.mkIf cfg.prime.enable {
-          # Default to Mesa/AMD for OpenGL
           __GLX_VENDOR_LIBRARY_NAME = "mesa";
-          # Don't set VK_DRIVER_FILES - let Vulkan discover drivers automatically
-          # nvidia-offload uses __VK_LAYER_NV_optimus to select NVIDIA for Vulkan
-          # Ensure EGL uses Mesa
+          # Don't set VK_DRIVER_FILES - Vulkan auto-discovers; nvidia-offload
+          # uses __VK_LAYER_NV_optimus to select NVIDIA for Vulkan.
           __EGL_VENDOR_LIBRARY_FILENAMES = "/run/opengl-driver/share/glvnd/egl_vendor.d/50_mesa.json";
         };
       };
@@ -326,9 +304,8 @@ in
         # proper suspend support for newer GPUs and can cause s2idle crashes
         boot.blacklistedKernelModules = [ "nouveau" ];
 
-        # Disable nvidia suspend/resume/hibernate — nixpkgs creates these via
-        # hardware.nvidia.powerManagement; force-disabling them here prevents
-        # empty-ExecStart services from blocking suspend in the no-nvidia specialisation.
+        # Force-disable nvidia suspend/resume/hibernate so empty-ExecStart
+        # services don't block suspend in the no-nvidia specialisation.
         hardware.nvidia.powerManagement.kernelSuspendNotifier = lib.mkForce false;
         systemd.services.nvidia-suspend.enable = lib.mkForce false;
         systemd.services.nvidia-resume.enable = lib.mkForce false;

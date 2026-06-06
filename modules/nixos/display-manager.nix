@@ -1,7 +1,6 @@
 { config, lib, pkgs, ... }:
 
 let
-  # Priority-based backend selection
   # Priority: KDE > GNOME > COSMIC > Hyprland > Sway > Niri
   selectedBackend =
     if config.smind.display-manager != "auto" then config.smind.display-manager
@@ -13,7 +12,6 @@ let
     else if config.smind.desktop.niri.enable then "greetd"
     else "none";
 
-  # Count enabled desktops
   enabledDesktops = lib.filter (x: x != null) [
     (if config.smind.desktop.kde.enable then "KDE" else null)
     (if config.smind.desktop.gnome.enable then "GNOME" else null)
@@ -58,7 +56,6 @@ in
   };
 
   config = lib.mkMerge [
-    # Info message for multiple desktops
     {
       warnings = lib.optionals (hasMultipleDesktops && config.smind.display-manager == "auto") [
         ''
@@ -78,7 +75,6 @@ in
       ];
     }
 
-    # Auto-login configuration
     (lib.mkIf config.smind.auto-login.enable {
       assertions = [{
         assertion = config.smind.auto-login.user != "";
@@ -91,7 +87,6 @@ in
       };
     })
 
-    # GDM configuration
     (lib.mkIf (selectedBackend == "gdm") {
       services.displayManager.gdm.enable = true;
 
@@ -146,21 +141,17 @@ in
       ];
     })
 
-    # Plasma Login Manager configuration
     (lib.mkIf (selectedBackend == "plasma-login-manager") {
       services.displayManager.plasma-login-manager.enable = true;
     })
 
-    # COSMIC greeter configuration
     (lib.mkIf (selectedBackend == "cosmic-greeter") {
       services.displayManager.cosmic-greeter.enable = true;
     })
 
-    # greetd configuration
     (lib.mkIf (selectedBackend == "greetd") {
       services.greetd =
         let
-          # Determine default session command based on enabled compositor
           defaultGreetdSession =
             if config.smind.desktop.hyprland.enable then "Hyprland"
             else if config.smind.desktop.niri.enable then "niri-session"
@@ -176,7 +167,6 @@ in
         };
     })
 
-    # x11
     (lib.mkIf (config.smind.x11.enable) {
       services.xserver.enable = true;
       services.xserver.desktopManager.xterm.enable = false;

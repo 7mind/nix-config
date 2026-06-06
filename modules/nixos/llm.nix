@@ -8,7 +8,6 @@ in
 
     smind.llm.ollama.package = lib.mkOption {
       type = lib.types.package;
-      # default = pkgs.ollama-rocm;
       default = pkgs.ollama-rocm;
       description = "Ollama package to use (ollama-rocm, ollama-vulkan, ollama-cuda, ollama-cpu)";
     };
@@ -109,7 +108,6 @@ in
 
     };
 
-    # Custom Ollama models with specific parameters
     systemd.services.ollama-custom-models = {
       description = "Create custom Ollama models with specific parameters";
       after = [ "ollama.service" ];

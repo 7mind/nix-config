@@ -62,10 +62,9 @@
     # `nixpkgs.config.rocmSupport` globally (see modules/nixos/rocm.nix).
     hw.amd.gpu.enable = true;
 
-    # ESP32 / Arduino USB-TTY flashing. No IDE on a headless build
-    # machine; the module's value is the CH340 udev rule and the
-    # `dialout` group on `pavel`. CP210x, FTDI, and CDC-ACM are
-    # already handled by upstream nixpkgs rules.
+    # ESP32 / Arduino USB-TTY flashing. No IDE on this headless box; the
+    # module just adds the CH340 udev rule and `dialout` to `pavel`
+    # (CP210x/FTDI/CDC-ACM already covered by upstream nixpkgs rules).
     dev.arduino.users = [ "pavel" ];
 
     bootloader.systemd-boot.enable = true;

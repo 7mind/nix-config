@@ -21,7 +21,6 @@
       ];
     };
 
-    # Enable kanata for Mac-style keyboard shortcuts (same as GNOME)
     smind.keyboard.super-remap.enable = lib.mkDefault true;
     # FIXME: temporarily disabled — cosmic-settings-daemon 1.0.8 fails to build
     # (duplicate dbus-settings-bindings source in Cargo.lock)
@@ -37,9 +36,8 @@
 
     security.polkit.enable = true;
 
-    # Polkit authentication agent - cosmic-osd should handle this but has NixOS issues
-    # Using polkit_gnome as a reliable fallback for apps like virt-manager
-    # Only start in COSMIC sessions - GNOME Shell has its own built-in polkit agent
+    # polkit_gnome fallback: cosmic-osd should handle this but has NixOS issues.
+    # COSMIC-session-only (GNOME Shell has its own polkit agent).
     systemd.user.services.polkit-gnome-authentication-agent-cosmic = {
       description = "polkit-gnome-authentication-agent-cosmic";
       wantedBy = [ "graphical-session.target" ];
@@ -55,7 +53,6 @@
       };
     };
 
-    # Keyring and SSH agent via shared module
     # Include GDM PAM services for when COSMIC is selected from GDM session picker
     smind.security.keyring = {
       enable = true;

@@ -58,11 +58,10 @@ in
       };
     };
 
-    # On laptops, dynamically toggle the LAN-over-Tailscale ip rule based on
-    # whether we're on the home network. When away, Tailscale subnet routing is
-    # needed to reach home LAN; when at home, the local gateway should be preferred
-    # so that traffic to other local subnets (e.g. 192.168.13.0/24) doesn't get
-    # routed through a Tailscale peer advertising 192.168.0.0/16.
+    # On laptops, toggle the LAN-over-Tailscale ip rule by location. Away:
+    # Tailscale subnet routing reaches home LAN. Home: prefer the local gateway
+    # so traffic to other local subnets (e.g. 192.168.13.0/24) isn't routed
+    # through a Tailscale peer advertising 192.168.0.0/16.
     networking.networkmanager.dispatcherScripts = lib.mkIf (config.smind.isLaptop && config.smind.net.mode == "networkmanager") [
       {
         type = "basic";

@@ -57,18 +57,13 @@
     #   ROCM_HOME = "${pkgs.rocmPackages.rocmPath}";
     # };
 
-    # Enable all power management features EXCEPT GFXOFF on desktops.
-    # GFXOFF causes system hangs when GPU enters idle/power-saving state, especially
-    # on RDNA3 (RX 7000 series). The GPU fails to disable gfxoff during reset attempts,
-    # leading to soft lockups in amdgpu-reset-dev workqueue.
-    #
-    # Known issue - not fixed as of kernel 6.18 (Jan 2026):
+    # All PowerPlay features except GFXOFF (PP_GFXOFF_MASK, bit 15) on desktops:
+    # GFXOFF causes hangs on idle, especially RDNA3 (RX 7000) — soft lockups in
+    # amdgpu-reset-dev workqueue. Not fixed as of kernel 6.18 (Jan 2026).
+    # Laptops keep defaults for battery life.
     # - https://gist.github.com/danielrosehill/6a531b079906f160911a87dea50e1507
     # - https://community.frame.work/t/linux-stability-patch-coming-to-kernel-6-18/75885
     # - https://wiki.archlinux.org/title/AMDGPU#Boot_parameter
-    #
-    # 0xffff7fff = all PowerPlay features except PP_GFXOFF_MASK (bit 15)
-    # Laptops keep default behavior for battery life.
     boot.kernelParams = lib.optionals (!config.smind.isLaptop) [
       "amdgpu.ppfeaturemask=0xffff7fff"
     ];
@@ -87,10 +82,8 @@
     ] ++ (if config.smind.hw.amd.rocm.enable then [
       rocmPackages.rocminfo
       rocmPackages.rocm-smi
-      # `amd-smi` is AMD's next-gen replacement for `rocm-smi`; ROCm
-      # 7.x ships both, with rocm-smi in long-term-deprecation mode.
-      # Keep both on PATH while scripts/muscle-memory still reach for
-      # the old name.
+      # amd-smi replaces rocm-smi (ROCm 7.x ships both, rocm-smi deprecated).
+      # Keep both on PATH while scripts still use the old name.
       rocmPackages.amdsmi
 
       # zluda # broken

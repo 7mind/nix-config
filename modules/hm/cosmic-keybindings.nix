@@ -105,7 +105,6 @@ in
   };
 
   config = lib.mkMerge [
-    # Mouse configuration - applies when COSMIC is enabled
     (lib.mkIf cosmicEnabled {
       xdg.configFile."cosmic/com.system76.CosmicComp/v1/input_default".text =
         let
@@ -134,13 +133,10 @@ in
         '';
     })
 
-    # Keybindings and other settings - applies when minimal-keybindings is enabled
     (lib.mkIf config.smind.hm.desktop.cosmic.minimal-keybindings {
-      # Dark mode setting
       xdg.configFile."cosmic/com.system76.CosmicTheme.Mode/v1/is_dark".text =
         if config.smind.hm.desktop.cosmic.dark-mode then "true" else "false";
 
-      # Keyboard layout configuration
       xdg.configFile."cosmic/com.system76.CosmicComp/v1/xkb_config".text =
         let
           xkbLib = outerConfig.lib.xkb;
@@ -158,7 +154,6 @@ in
           )
         '';
 
-      # Touchpad configuration with natural scrolling
       xdg.configFile."cosmic/com.system76.CosmicComp/v1/input_touchpad".text = ''
         (
             state: Enabled,
@@ -178,7 +173,6 @@ in
         )
       '';
 
-      # Interface density (Comfortable, Compact, Spacious)
       xdg.configFile."cosmic/com.system76.CosmicTk/v1/interface_density".text =
         config.smind.hm.desktop.cosmic.interface-density;
 
@@ -190,38 +184,26 @@ in
       xdg.configFile."cosmic/com.system76.CosmicTheme.Light/v1/roundness".text =
         config.smind.hm.desktop.cosmic.roundness;
 
-      # Active window hint size
       xdg.configFile."cosmic/com.system76.CosmicComp/v1/active_hint".text =
         toString config.smind.hm.desktop.cosmic.active-hint-size;
-      # COSMIC keybindings are stored in:
-      # ~/.config/cosmic/com.system76.CosmicSettings.Shortcuts/v1/custom
-      #
-      # The format is RON (Rusty Object Notation):
-      # {
-      #   (modifiers: [Super], key: "q"): Close,
-      #   ...
-      # }
+      # RON (Rusty Object Notation) format, e.g. (modifiers: [Super], key: "q"): Close
 
       xdg.configFile."cosmic/com.system76.CosmicSettings.Shortcuts/v1/custom".text =
         let
-          # Helper to generate RON keybinding entries
-          # Modifiers: Super, Alt, Ctrl, Shift
+          # RON keybinding helpers. Modifiers: Super, Alt, Ctrl, Shift
           kb = mods: key: action: "(modifiers: [${lib.concatStringsSep ", " mods}], key: \"${key}\"): ${action}";
           disable = mods: key: "(modifiers: [${lib.concatStringsSep ", " mods}], key: \"${key}\"): Disable";
-          # Modifier-only binding (no key field) - for Super alone, etc.
+          # Modifier-only binding (no key field), e.g. Super alone
           modOnly = mods: action: "(modifiers: [${lib.concatStringsSep ", " mods}]): ${action}";
           disableMod = mods: "(modifiers: [${lib.concatStringsSep ", " mods}]): Disable";
 
-          # Hotkey modifier configuration
           hotkeyMod = config.smind.hm.desktop.cosmic.hotkey-modifier;
 
-          # Modifier(s) based on configuration
           hotkeyMods =
             if hotkeyMod == "super" then [ "Super" ]
             else if hotkeyMod == "ctrl" then [ "Ctrl" ]
             else [ "Ctrl" "Super" ]; # super+ctrl
 
-          # Generate keybindings with configured modifier
           kbHotkey = key: action: kb hotkeyMods key action;
           disableHotkeyShift = key: disable ([ "Shift" ] ++ hotkeyMods) key;
 

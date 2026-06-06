@@ -1,9 +1,8 @@
 { lib, config, cfg-meta, pkgs, ... }:
 let
-  # Settings applied to every host that enables systemd-resolved, regardless
-  # of net.mode. Negative caching is disabled globally so that disappearing-
-  # then-reappearing DHCP hostnames (containers, dynamic peers) resolve on
-  # the next query instead of waiting for the SOA MINIMUM TTL.
+  # Applied wherever systemd-resolved runs, regardless of net.mode. Negative
+  # caching off so disappearing-then-reappearing DHCP hostnames (containers,
+  # dynamic peers) resolve on the next query, not after the SOA MINIMUM TTL.
   resolvedGlobalSettings = {
     Resolve = {
       Cache = "no-negative";
@@ -120,21 +119,16 @@ in
 
   config = lib.mkMerge [
     {
-      # Apply Cache=no-negative everywhere systemd-resolved runs, even when
-      # smind.net.mode is "none" and the host hand-rolls its own networking.
+      # Applies even when net.mode is "none" and the host hand-rolls networking.
       services.resolved.settings = resolvedGlobalSettings;
     }
 
-    # SSDP/UPnP firewall support — applies regardless of smind.net.mode so
-    # NetworkManager hosts get it too. Inbound SSDP M-SEARCH responses are
-    # unicast from the IGD (e.g. 192.168.10.1:1900 → client:<eph>) and have
-    # no conntrack association with the multicast M-SEARCH the client sent,
-    # so without an explicit accept rule nixos-fw drops them.
-    #
-    # The ipset-based trick records (saddr,sport) of every outbound SSDP
-    # multicast and accepts inbound packets whose (daddr,dport) matches
-    # within a 3-second window. The accept must target the `nixos-fw` chain
-    # (not raw INPUT), otherwise nixos-fw rejects the packet first.
+    # SSDP/UPnP firewall support (all net.modes). Inbound SSDP M-SEARCH
+    # responses are unicast from the IGD with no conntrack association to the
+    # client's multicast M-SEARCH, so nixos-fw drops them. The ipset trick
+    # records (saddr,sport) of outbound SSDP multicast and accepts inbound
+    # packets matching (daddr,dport) within 3s. The accept must target the
+    # `nixos-fw` chain, not raw INPUT, or nixos-fw rejects first.
     # Refs:
     #   https://serverfault.com/a/911286/9166
     #   https://github.com/NixOS/nixpkgs/issues/161328

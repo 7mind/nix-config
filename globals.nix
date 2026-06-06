@@ -87,7 +87,7 @@ rec {
         isDarwin = pkgs.lib.hasSuffix "-darwin" arch;
         state-version-system = if isLinux then cfg-const.state-version-nixpkgs else cfg-const.state-version-darwin;
 
-        # module inclusions trigger rebuilds we would like to avoid, so here is a dirty workaround
+        # dirty workaround: module inclusions trigger rebuilds we want to avoid
         generic-linux-module = import ./modules/nixos/env-settings-linux.nix;
       };
 
@@ -105,9 +105,8 @@ rec {
             inputs.determinate.nixosModules.default
             inputs.kanata-switcher.nixosModules.default
             inputs.noctalia.nixosModules.default
-            # `services.comfyui` lives here. Always-imported; the module
-            # is `lib.mkIf cfg.enable`-gated, so it costs nothing on
-            # hosts that don't enable it.
+            # `services.comfyui`. Always imported; mkIf cfg.enable-gated,
+            # so it costs nothing on hosts that don't enable it.
             inputs.comfyui-nix.nixosModules.default
 
             { nixpkgs.overlays = [
@@ -116,8 +115,7 @@ rec {
                 (final: prev:
                 let
                   # Shared override attrs for the ollama 0.21.0 → 0.24.0
-                  # bump (referenced four times below for each
-                  # accelerated variant: stock + cuda + rocm + vulkan).
+                  # bump (applied to all four variants: stock/cuda/rocm/vulkan).
                   ollamaBumpAttrs = {
                     version = "0.24.0";
                     src = prev.fetchFromGitHub {
@@ -126,45 +124,33 @@ rec {
                       tag = "v0.24.0";
                       hash = "sha256-cSZtbF0oUI7a++baTipF6OUu+w8tBpILzE0Wm1Y6wUk=";
                     };
-                    # 0.23.0 added a `cmd/launch` test that npm-installs
-                    # `@ollama/pi-web-search` — fails in the nix
-                    # sandbox (no network). nixpkgs upstream's checkFlags
-                    # only `-skip`s the 0.21.0-era tests by name.
-                    # Disable Go-side checks entirely; the
-                    # `versionCheckHook` (run via doInstallCheck=true,
-                    # inherited from upstream) still verifies the
-                    # built binary actually runs and reports its
-                    # version.
+                    # 0.23.0's `cmd/launch` test npm-installs
+                    # `@ollama/pi-web-search` — fails in the sandbox (no
+                    # network), and upstream checkFlags only -skip the
+                    # 0.21.0-era tests by name. Disable Go-side checks; the
+                    # inherited versionCheckHook (doInstallCheck=true) still
+                    # verifies the built binary runs and reports its version.
                     doCheck = false;
                   };
                 in {
                   # Two overrides on intel-compute-runtime:
-                  #
-                  # (1) Bump 26.14.37833.4 → 26.18.38308.1 (published
-                  #     2026-05-12). gmmlib in nixpkgs is already 22.10.0
-                  #     (the pairing 26.18 ships with), so no companion
-                  #     bump is needed. Drop this once nixpkgs bumps past
-                  #     26.18.
-                  #
+                  # (1) Bump 26.14.37833.4 → 26.18.38308.1 (2026-05-12).
+                  #     nixpkgs gmmlib is already 22.10.0 (the 26.18 pairing),
+                  #     so no companion bump. Drop once nixpkgs passes 26.18.
                   # (2) Patch intel-graphics-compiler into the RPATH of the
-                  #     Level Zero driver `libze_intel_gpu.so.1` (the
-                  #     `drivers` split output). Upstream nixpkgs'
-                  #     `postFixup` only fixes RPATH on the OpenCL ICD
-                  #     (`libigdrcl.so`); the L0 driver is left without
-                  #     IGC on any search path, so NEO's runtime dlopen of
-                  #     `libigdfcl.so.2` / `libigc.so.2` during eager
-                  #     device init fails, and NEO's `abortUnrecoverable`
-                  #     routes that through `gmm_helper/resource_info.cpp:15`.
-                  #     This is the abort that has been mis-attributed to
-                  #     `intel/compute-runtime#922` on this host since at
-                  #     least 2026-02 — verified by checking that the same
-                  #     `libze_intel_gpu.so.1` (both 26.14 and 26.18)
-                  #     yields a clean `zeInit = 0x0`, device enumeration,
-                  #     and 1 MiB device+host USM allocations the moment
-                  #     `${intel-graphics-compiler}/lib` is on
-                  #     `LD_LIBRARY_PATH`. Closing the packaging gap here
-                  #     unbricks Level Zero on Battlemage without any of
-                  #     the OpenCL-UR-bypass shimming this repo grew.
+                  #     Level Zero driver `libze_intel_gpu.so.1` (`drivers`
+                  #     split output). Upstream postFixup only fixes RPATH on
+                  #     the OpenCL ICD (`libigdrcl.so`), leaving the L0 driver
+                  #     without IGC on any search path; NEO's runtime dlopen of
+                  #     `libigdfcl.so.2`/`libigc.so.2` during eager device init
+                  #     then fails via `abortUnrecoverable`
+                  #     (`gmm_helper/resource_info.cpp:15`). This abort was
+                  #     mis-attributed to `intel/compute-runtime#922` on this
+                  #     host since ~2026-02 — verified: putting
+                  #     `${intel-graphics-compiler}/lib` on LD_LIBRARY_PATH
+                  #     yields clean `zeInit = 0x0`, device enumeration, and
+                  #     USM allocations. Closing this packaging gap unbricks
+                  #     Level Zero on Battlemage.
                   intel-compute-runtime = (prev.intel-compute-runtime.overrideAttrs (oldAttrs: rec {
                     version = "26.18.38308.1";
                     src = prev.fetchFromGitHub {
@@ -188,16 +174,15 @@ rec {
                       done
                     '';
                   }));
-                  # The upstream nixpkgs `intel-llvm` (PR #470035, merged
-                  # April 2026) has a packaging bug: its top-level merged
-                  # output is built via symlinkJoin + __structuredAttrs = true,
-                  # which silently produces an empty $out (the lndir loop
-                  # references $pathsPath that structuredAttrs doesn't
-                  # populate the legacy way). Override to disable
-                  # structuredAttrs on the merge step so $paths becomes a
-                  # plain shell variable again. Verified by running
+                  # nixpkgs `intel-llvm` (PR #470035, merged April 2026)
+                  # packaging bug: its merged output uses symlinkJoin +
+                  # __structuredAttrs = true, which silently produces an empty
+                  # $out (the lndir loop references $pathsPath that
+                  # structuredAttrs doesn't populate the legacy way). Disable
+                  # structuredAttrs on the merge step so $paths is a plain
+                  # shell variable again. Verify:
                   # `ls $(nix eval --raw nixpkgs#intel-llvm.outPath)/bin`
-                  # before/after — should list clang/clang++/clang-22 etc.
+                  # should list clang/clang++/clang-22 etc.
                   intel-llvm = prev.intel-llvm.overrideAttrs (old: {
                     __structuredAttrs = false;
                     paths = builtins.toString old.paths;
@@ -229,27 +214,17 @@ rec {
                   # `ollama` for go-side tooling versions.
                   ollama-sycl = final.callPackage ./pkg/ollama-sycl/default.nix { };
 
-                  # Bump every flavor of stock nixpkgs ollama from the
-                  # currently-pinned 0.21.0 to 0.23.0 — nixpkgs hasn't
-                  # bumped yet but upstream is on 0.23.0 since 2026-05-03.
-                  # We need this so:
-                  #   - The host-side `ollama` CLI on `vm` matches the
-                  #     in-container `ollama-sycl` server (no
-                  #     "client version is 0.21.0" warning).
-                  #   - Other hosts (pavel-am5/pavel-fw using
-                  #     ollama-vulkan, kai-am5 using ollama-rocm,
-                  #     kai-fw using ollama-vulkan) all get the same
-                  #     fixes ollama-sycl gets.
-                  # NOTE: `ollama`, `ollama-cuda`, `ollama-rocm`,
-                  # `ollama-vulkan` are *separate* callPackage
-                  # instantiations of the same package.nix with
-                  # different `acceleration` arguments — overriding
-                  # `ollama` does NOT propagate to the accelerated
-                  # variants (each variant gets its own fixed-output
-                  # derivation). Override every variant inline.
-                  # vendorHash unchanged — go.mod/go.sum stable across
-                  # the 39 commits between 0.21.0 and 0.23.0
-                  # (or proxyVendor=true makes it invariant).
+                  # Bump every stock nixpkgs ollama flavor from pinned
+                  # 0.21.0 to 0.23.0 (upstream since 2026-05-03, nixpkgs
+                  # not yet). Needed so vm's host-side `ollama` CLI matches
+                  # the in-container `ollama-sycl` server (no version warning)
+                  # and other hosts get the same fixes.
+                  # NOTE: `ollama`/`ollama-cuda`/`ollama-rocm`/`ollama-vulkan`
+                  # are *separate* callPackage instantiations of one
+                  # package.nix with different `acceleration` args — overriding
+                  # `ollama` does NOT propagate. Override each variant inline.
+                  # vendorHash unchanged — go.mod/go.sum stable across the 39
+                  # commits 0.21.0→0.23.0.
                   ollama         = prev.ollama.overrideAttrs         (_: ollamaBumpAttrs);
                   ollama-cuda    = prev.ollama-cuda.overrideAttrs    (_: ollamaBumpAttrs);
                   ollama-rocm    = prev.ollama-rocm.overrideAttrs    (_: ollamaBumpAttrs);

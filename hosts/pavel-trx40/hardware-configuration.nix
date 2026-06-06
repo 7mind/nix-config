@@ -19,10 +19,9 @@
   # desktop-class box.
   boot.kernelParams = [ "pcie_aspm=off" ];
 
-  # ZFS root layout preserved from the previous install on this machine.
-  # The pool name and dataset paths must match what already exists on
-  # disk; only adjust UUIDs/devices below if the partitions are
-  # re-created.
+  # ZFS root layout preserved from the previous install — pool name and
+  # dataset paths must match on-disk; only adjust UUIDs/devices if the
+  # partitions are re-created.
   fileSystems."/" = {
     device = "zroot/root";
     fsType = "zfs";
@@ -44,12 +43,10 @@
     options = [ "fmask=0022" "dmask=0022" ];
   };
 
-  # Random-key encrypted swap on the Samsung 970 EVO Plus. The disk is
-  # ephemeral by design: dm-crypt opens it with a fresh /dev/urandom key
-  # at every boot and mkswap runs on the resulting mapper, so there is
-  # no persistent on-disk state to manage. `nofail` keeps a missing or
-  # failed disk from blocking boot; the 32G zd0 zvol swap remains as a
-  # lower-priority fallback.
+  # Random-key encrypted swap on the Samsung 970 EVO Plus — ephemeral by
+  # design: dm-crypt opens it with a fresh /dev/urandom key each boot, so
+  # no persistent state. `nofail` keeps a missing/failed disk from blocking
+  # boot; the 32G zd0 zvol swap remains as a lower-priority fallback.
   swapDevices = [
     {
       device = "/dev/disk/by-id/nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0R971112P-part1";

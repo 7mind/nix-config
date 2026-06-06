@@ -14,7 +14,6 @@ main() {
     MODE_IDX=2
   fi
 
-  # Process each configured display
   while IFS=: read -r display mode_ac mode_battery; do
     [ -z "$display" ] && continue
     if [ "$MODE_IDX" = "1" ]; then

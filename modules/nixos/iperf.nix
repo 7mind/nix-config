@@ -24,10 +24,10 @@ in
   config = lib.mkIf config.smind.iperf.enable {
     networking.firewall = {
       allowedTCPPorts = [
-        5201 # iperf
+        5201
       ];
       allowedUDPPorts = [
-        5201 # iperf
+        5201
       ];
     };
 

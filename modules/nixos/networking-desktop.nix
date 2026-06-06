@@ -38,10 +38,9 @@
         wireless.enable = true;
       };
 
-      # NetworkManager does not manage ethernet on desktops, so GIO's default
-      # networkmanager monitor reports no connectivity. Use the base monitor instead.
-      # On laptops NM manages all interfaces, so the default monitor works correctly
-      # and is needed for captive portal detection.
+      # On desktops NM does not manage ethernet, so its GIO monitor reports no
+      # connectivity; use the base monitor. On laptops NM manages everything, so
+      # the networkmanager monitor works and is needed for captive-portal detection.
       environment.sessionVariables.GIO_USE_NETWORK_MONITOR =
         if config.smind.isLaptop then "networkmanager" else "base";
 

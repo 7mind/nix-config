@@ -1,13 +1,9 @@
-# Thin consumer wrapper around the extracted LLM coding-agent harness
-# (`inputs.cq.homeManagerModules.dev-llm`, formerly this file's body — see
-# 7mind/cq nix/hm/dev-llm.nix). It imports that portable module and wires
-# THIS host's hardware/local facts (GPU flags, rootless-Podman socket, ollama
-# models dir) from the NixOS system config (`outerConfig`), which the portable
-# module cannot reference.
-#
-# Opencode / Copilot / Vibe and the local-model provider config stayed behind
-# in ./dev-opencode.nix; the Pi harness module moved into the cq module's own
-# imports (so ./programs-pi.nix is gone from ./_imports.nix).
+# Thin consumer wrapper around the portable LLM coding-agent harness
+# (inputs.cq.homeManagerModules.dev-llm, see 7mind/cq nix/hm/dev-llm.nix). Imports
+# that module and wires THIS host's facts (GPU flags, rootless-Podman socket,
+# ollama models dir) from the NixOS system config (outerConfig), which the
+# portable module cannot reference.
+# Opencode/Copilot/Vibe and local-model provider config live in ./dev-opencode.nix.
 { config, lib, cfg-meta, outerConfig, inputs, ... }:
 let
   cfg = config.smind.hm.dev.llm;

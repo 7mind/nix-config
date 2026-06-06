@@ -49,10 +49,8 @@ in
         homeassistant.enabled = true;
         homeassistant.experimental_event_entities = true;
         permit_join = false;
-        # Availability tracking: z2m pings devices periodically and
-        # publishes online/offline status. Helps detect devices that
-        # drop off the Zigbee network (especially mains-powered ones
-        # like wall thermostats that should always be reachable).
+        # Availability tracking: z2m pings devices and publishes online/offline
+        # status, to detect mains-powered devices dropping off the network.
         availability = {
           enabled = true;
           active.timeout = 10;   # minutes — mains-powered routers
@@ -61,9 +59,8 @@ in
         advanced.log_output = [ "console" "syslog" ];
         advanced.channel = 15;
         advanced.last_seen = "ISO_8601";
-        # Silence per-publish MQTT spam (one INFO line per device update,
-        # multiplied by OTA progress reports). Keep other namespaces at
-        # default INFO so device join/leave and startup remain visible.
+        # Silence per-publish MQTT spam (one INFO line per device update);
+        # other namespaces stay at INFO so join/leave and startup stay visible.
         advanced.log_namespaced_levels = {
           "z2m:mqtt" = "warning";
         };

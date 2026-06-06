@@ -28,8 +28,7 @@ in
       logLevel = cfg.logLevel;
     };
 
-    # UDP 5540 = Matter operational traffic on the fabric.
-    # UDP 5353 = mDNS, used to discover commissioned devices.
+    # 5540 = Matter fabric operational traffic; 5353 = mDNS device discovery.
     networking.firewall.allowedUDPPorts = [ 5540 5353 ];
   };
 }

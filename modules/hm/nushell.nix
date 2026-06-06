@@ -8,9 +8,8 @@
   config = lib.mkIf config.smind.hm.nushell.enable {
     programs.nushell = {
       enable = true;
-      # The config.nu can be anywhere you want if you like to edit your Nushell with Nu
+      # Alternative: point configFile.source at an external config.nu
       # configFile.source = ./.../config.nu;
-      # for editing directly to config.nu
       extraConfig = ''
         let carapace_completer = {|spans|
           carapace $spans.0 nushell ...$spans | from json

@@ -99,7 +99,6 @@ in
       systemd.targets.hybrid-sleep.enable = true;
       systemd.targets.suspend-then-hibernate.enable = true;
 
-      # Configure delay for suspend-then-hibernate
       systemd.sleep.settings.Sleep.HibernateDelaySec = cfg.hibernateDelaySec;
     })
 
@@ -107,8 +106,8 @@ in
     (lib.mkIf (cfg.enable && cfg.powerButton != null) {
       services.logind.settings.Login.HandlePowerKey = cfg.powerButton;
 
-      # Deny gsd-media-keys from inhibiting power/suspend/hibernate keys
-      # so logind can handle them directly (requires systemd 256+ with PR #33838 fix)
+      # Deny gsd-media-keys from inhibiting power/suspend/hibernate keys so
+      # logind handles them directly (needs systemd 256+ with PR #33838 fix).
       security.polkit.extraConfig = ''
         polkit.addRule(function(action, subject) {
           if (action.id == "org.freedesktop.login1.inhibit-handle-power-key" ||

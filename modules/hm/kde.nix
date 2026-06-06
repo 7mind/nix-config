@@ -1,7 +1,7 @@
 { config, lib, outerConfig, cfg-meta, pkgs, ... }:
 
-# This module configures KDE PowerDevil settings based on system-level options.
-# Only applies on Linux where plasma-manager is available.
+# KDE/Plasma user settings (theme, fonts, xkb, mouse, power, keybindings) driven
+# by system-level options. Linux-only, where plasma-manager is available.
 
 let
   defaultGtkTheme = "Breeze-Dark";
@@ -310,7 +310,6 @@ lib.optionalAttrs cfg-meta.isLinux {
       programs.plasma.powerdevil.AC.autoSuspend.action = "nothing";
     })
 
-    # XKB keyboard layout configuration
     (lib.mkIf (config.smind.hm.desktop.kde.xkb.layouts != [ ]) {
       programs.plasma.input.keyboard =
         let

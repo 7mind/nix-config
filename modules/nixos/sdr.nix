@@ -27,9 +27,7 @@ in
       # gnuradio  # disabled: pyqtgraph 0.14.0 SVG exporter tests fail (upstream bug)
     ];
 
-    # Add user to 'plugdev' group if they want to use rtl-sdr without root
-    # NixOS's hardware.rtl-sdr.enable usually handles udev rules and may use 'rtlsdr' group
-    # but some tools expect 'plugdev'. Let's ensure the user is in the right group.
+    # hardware.rtl-sdr.enable uses the 'rtlsdr' group, but some tools expect 'plugdev'.
     users.groups.plugdev = { };
   };
 }

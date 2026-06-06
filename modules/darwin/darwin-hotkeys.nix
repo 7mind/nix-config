@@ -54,7 +54,7 @@ let
   appleSymbolicHotkeysSettings = lib.listToAttrs (
     map
       (id: {
-        name = builtins.toString id; # Hotkey ID as a string key
+        name = builtins.toString id;
         value = { enabled = false; };
       })
       uniqueSortedHotkeyIntegerIdsToDisable

@@ -1,13 +1,9 @@
-# Opencode + Copilot + Vibe agents and the local-model (ollama) provider
-# wiring. Split out of dev-llm.nix when the Claude / Codex / Pi harness and the
-# shared infrastructure moved to the cq flake
-# (inputs.cq.homeManagerModules.dev-llm). These agents and the local-model
-# knobs stay host-side because they are tied to this machine's ollama / local
-# models and host language servers.
-#
-# Consumes the cq module's shared surface: the read-only merged asset views
-# (smind.hm.dev.llm.merged.{skills,memoryText}), the coAuthored toggle, and the
-# programs.mcp registry it declares (opencode reads it via enableMcpIntegration).
+# Opencode + Copilot + Vibe agents and the local-model (ollama) provider wiring.
+# Stays host-side (vs the cq flake, inputs.cq.homeManagerModules.dev-llm) because
+# it is tied to this machine's ollama/local models and host language servers.
+# Consumes the cq module's shared surface: merged asset views
+# (smind.hm.dev.llm.merged.{skills,memoryText}) and the programs.mcp registry
+# (opencode reads it via enableMcpIntegration).
 { config, lib, pkgs, inputs, outerConfig, ... }:
 let
   cfg = config.smind.hm.dev.llm;

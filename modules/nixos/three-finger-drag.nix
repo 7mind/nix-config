@@ -9,15 +9,12 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # udev rule to grant access to /dev/uinput for input group
     services.udev.extraRules = ''
       KERNEL=="uinput", GROUP="input", MODE="0660", TAG+="uaccess"
     '';
 
-    # Ensure uinput kernel module is loaded
     boot.kernelModules = [ "uinput" ];
 
-    # User service — runs per-user in graphical session
     systemd.user.services.linux-3-finger-drag = {
       description = "Three-finger drag gestures for Linux";
       wantedBy = [ "graphical-session.target" ];

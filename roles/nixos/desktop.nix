@@ -28,15 +28,14 @@ in
   };
 
   config = lib.mkMerge [
-    # Common desktop settings (shared by all desktop roles)
     (lib.mkIf isDesktopRole {
-      # Disable IBus - not needed and causes issues on Wayland (especially COSMIC)
-      # GNOME enables it by default, but we don't use CJK input methods
+      # GNOME enables IBus by default; disable it — we use no CJK input
+      # methods and it causes issues on Wayland (especially COSMIC).
       i18n.inputMethod.enable = false;
 
-      # Kill session processes (GUI apps) on logout
-      # This does NOT affect systemd user services or lingering - only session-scoped processes
-      # Disabled: breaks mosh-server (killed when SSH session ends). TODO: replace with GDM PostSession hook
+      # Kill session-scoped GUI processes on logout (not user services/lingering).
+      # Disabled: breaks mosh-server (killed when SSH session ends).
+      # TODO: replace with GDM PostSession hook
       # services.logind.settings.Login.KillUserProcesses = true;
 
       # Disable automatic suspend on idle for non-laptop desktops
@@ -94,7 +93,6 @@ in
       };
     })
 
-    # GNOME-specific settings
     (lib.mkIf config.smind.roles.desktop.generic-gnome {
       smind = {
         desktop.gnome.enable = lib.mkDefault true;
@@ -103,14 +101,12 @@ in
       };
     })
 
-    # KDE-specific settings
     (lib.mkIf config.smind.roles.desktop.generic-kde {
       smind.desktop.kde.enable = lib.mkDefault true;
       smind.desktop.kde.mime.enable = true;
       smind.desktop.kde.kde-gtk-config.enable = true;
     })
 
-    # COSMIC-specific settings
     (lib.mkIf config.smind.roles.desktop.generic-cosmic {
       smind.desktop.cosmic.enable = lib.mkDefault true;
     })
