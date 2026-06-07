@@ -9,7 +9,7 @@
     roles.server = true;
 
     # Headless build box, but still want the agent CLIs (claude-code,
-    # codex, opencode, yolo wrapper, …). The full bundle
+    # codex, yolo wrapper, …). The full bundle
     # normally rides in via roles.desktop; enable it directly here.
     dev.llm.enable = true;
   };

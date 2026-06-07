@@ -3,7 +3,6 @@
 # that module and wires THIS host's facts (GPU flags, rootless-Podman socket,
 # ollama models dir) from the NixOS system config (outerConfig), which the
 # portable module cannot reference.
-# Opencode/Copilot/Vibe and local-model provider config live in ./dev-opencode.nix.
 { config, lib, cfg-meta, outerConfig, inputs, ... }:
 let
   cfg = config.smind.hm.dev.llm;
