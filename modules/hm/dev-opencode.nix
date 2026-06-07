@@ -59,7 +59,6 @@ in
     (lib.mkIf cfg.enable {
       home.sessionVariables = {
         OPENCODE_ENABLE_EXA = "1";
-        # AIDER_DARK_MODE = "true";
       };
 
       # Copilot does not support skills — uses pre-composed context (cq llm-context-with-env)

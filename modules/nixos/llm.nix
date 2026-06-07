@@ -4,7 +4,7 @@ let
 in
 {
   options = {
-    smind.llm.enable = lib.mkEnableOption "LLM tools (Ollama, aider, Claude Code)";
+    smind.llm.enable = lib.mkEnableOption "LLM tools (Ollama, Claude Code)";
 
     smind.llm.ollama.package = lib.mkOption {
       type = lib.types.package;
@@ -63,11 +63,6 @@ in
       # jan
       # alpaca
     ];
-
-    environment.variables = {
-      OLLAMA_API_BASE = "http://127.0.0.1:11434";
-    };
-
 
     services.ollama = {
       enable = true;
