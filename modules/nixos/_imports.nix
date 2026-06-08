@@ -1,4 +1,5 @@
 [
+  ./adguard.nix
   ./alien-filesystems.nix
   ./amnezia-vpn.nix
   ./attic-cache-tmpfiles.nix
