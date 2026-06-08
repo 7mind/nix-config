@@ -40,6 +40,13 @@ in
     # verbose MCP server stays proxied.
     smind.hm.dev.llm.pi.mcpDirectTools = [ "codegraph" "ledger" ];
 
+    # Default Pi to maximum reasoning depth. Merges into the cq-managed
+    # programs.pi.settings (which sets defaultProvider/model but not this).
+    # Pi clamps the level per model's thinkingLevelMap, so it is safe: the
+    # pinned grok-build default already always reasons at max and ignores it;
+    # the xhigh default takes effect for other providers selected at runtime.
+    programs.pi.settings.defaultThinkingLevel = "xhigh";
+
     # GPU passthrough for the yolo sandbox, wired from this host's detected GPU
     # vendor(s) (cq no longer builds this in; the `--gpu`/`--no-gpu`/`--no-dev`
     # CLI flags are gone — GPU is bound statically whenever a vendor is present,
