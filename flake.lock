@@ -157,11 +157,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1780878020,
-        "narHash": "sha256-D3QLC8CDX4A6esTVx8R0c9NyAwkRfVrWRvZjJg+lieI=",
+        "lastModified": 1780880414,
+        "narHash": "sha256-j9uWm47iXstjf/Mvxgq8mk9pcUuodh1RMj4qn40kfrs=",
         "owner": "7mind",
         "repo": "cq",
-        "rev": "ce386c5b6919c45abe522714c51a7673305dd6ac",
+        "rev": "ffbe208fb6bb86b5d2aabe047b87736a2910aaf7",
         "type": "github"
       },
       "original": {
