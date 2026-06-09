@@ -1718,11 +1718,11 @@
         "nixpkgs": "nixpkgs_7"
       },
       "locked": {
-        "lastModified": 1780159742,
-        "narHash": "sha256-izBNsSJ3xeVS8SW+SrVwxOmX3L7b+4EFGuvWPXwI9tI=",
+        "lastModified": 1781019623,
+        "narHash": "sha256-s8g5X9mr1G6gTL40M++jaHEzLYvA55Wmyqn3L4PS26g=",
         "owner": "pshirshov",
         "repo": "zimt",
-        "rev": "8284037fe26a14ba56e37c1989930347d771e887",
+        "rev": "946e0f48eb82566881bbb6b2fb23f58349a2895e",
         "type": "github"
       },
       "original": {
