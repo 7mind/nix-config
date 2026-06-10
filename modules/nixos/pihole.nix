@@ -73,6 +73,49 @@ in
         '';
       };
 
+      conditionalForwarding = lib.mkOption {
+        type = lib.types.listOf (lib.types.submodule {
+          options = {
+            enable = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+              description = "Whether this conditional-forwarding entry is active.";
+            };
+            ipRange = lib.mkOption {
+              type = lib.types.str;
+              description = "Reverse zone in CIDR, e.g. \"192.168.10.0/24\".";
+              example = "192.168.10.0/24";
+            };
+            target = lib.mkOption {
+              type = lib.types.str;
+              description = "Server to forward to, optionally with #port, e.g. \"192.168.10.1\".";
+              example = "192.168.10.1";
+            };
+            domain = lib.mkOption {
+              type = lib.types.str;
+              default = "";
+              description = ''
+                Optional forward domain. When set, forward lookups for this
+                domain AND its subdomains are also sent to `target`
+                (dnsmasq `server=/<domain>/<target>`).
+              '';
+              example = "7mind.io";
+            };
+          };
+        });
+        default = [ ];
+        description = ''
+          Conditional forwarding (Pi-hole revServers / dnsmasq rev-server).
+          Each entry forwards reverse PTR lookups for `ipRange` to `target`,
+          and — if `domain` is set — also forwards forward lookups for `domain`
+          and its subdomains to `target`. A rev-server route takes precedence
+          over `bogusPriv` for the zone it covers (dnsmasq >= 2.77), so private
+          reverse names resolve while `bogusPriv` still protects every range not
+          listed here; there is no need to disable `bogusPriv`.
+        '';
+        example = [{ ipRange = "192.168.10.0/24"; target = "192.168.10.1"; domain = "7mind.io"; }];
+      };
+
       webPasswordHash = lib.mkOption {
         type = lib.types.str;
         default = "";
@@ -109,6 +152,12 @@ in
         dns = {
           listeningMode = "NONE"; # bind is driven manually below — see `interfaces`.
           upstreams = cfg.upstreams;
+          # Conditional forwarding. bogusPriv is intentionally left at its
+          # default (true); rev-server routes win over it for the listed zones.
+          revServers = map
+            (e: "${lib.boolToString e.enable},${e.ipRange},${e.target}"
+              + lib.optionalString (e.domain != "") ",${e.domain}")
+            cfg.conditionalForwarding;
         };
 
         # No DHCP server: Pi-hole is DNS-only here.

@@ -112,6 +112,12 @@ let
     # Supermicro BMC — self-signed cert; landing page redirects (302).
     (mkHttp { name = "Supermicro BMC";   group = "network"; url = "https://sm.home.7mind.io/"; insecure = true; status = "== any(200, 302)"; })
 
+    # ── DNS (Pi-hole, dual instances) ───────────────────────────────────────
+    # Probe each Pi-hole's web admin (:3001). The endpoint list is shared by
+    # both gatus instances, so each monitor probes both resolvers.
+    (mkHttp { name = "Pi-hole (raspi5m)"; group = "network"; url = "http://raspi5m.home.7mind.io:3001/"; })
+    (mkHttp { name = "Pi-hole (raspi5l)"; group = "network"; url = "http://raspi5l.home.7mind.io:3001/"; })
+
     # No tor probe — its traffic is isolated from the host network, so a TCP
     # probe from gatus would only show false negatives. Tor's own self-test
     # (logged via the tor relay) is the right monitor for that.
