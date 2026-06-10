@@ -115,8 +115,21 @@ in
         dhcp.active = false;
 
         # Manual multi-interface bind (see the `interfaces` option doc).
+        # `except-interface=lo` is REQUIRED: with `interface=`, dnsmasq always
+        # auto-adds the loopback interface (dnsmasq.8), so it would try to bind
+        # [::1]:53 — which systemd-resolved's stub listener already holds — and
+        # the failed bind is fatal ("FAILED to start up"), taking the whole DNS
+        # listener down. Excluding lo leaves resolved's 127.0.0.53 / [::1] alone.
         misc.dnsmasq_lines =
-          (map (i: "interface=${i}") cfg.interfaces) ++ [ "bind-dynamic" ];
+          (map (i: "interface=${i}") cfg.interfaces)
+          ++ [ "except-interface=lo" "bind-dynamic" ];
+
+        # The upstream module hardens the unit with ProtectSystem=strict but
+        # provisions no writable runtime dir, so FTL cannot write its default
+        # /run/pihole-FTL.pid ("Permission denied"). Point it at a systemd-
+        # managed RuntimeDirectory (created writable for User=pihole, cleared on
+        # stop) — see the RuntimeDirectory override below.
+        files.pid = "/run/pihole-FTL/pihole-FTL.pid";
 
         webserver.api = {
           # Ephemeral CLI password so the lists setup script can authenticate
@@ -132,6 +145,9 @@ in
       enable = true;
       ports = [ (toString cfg.webPort) ];
     };
+
+    # Writable /run/pihole-FTL for the PID file (see settings.files.pid above).
+    systemd.services.pihole-ftl.serviceConfig.RuntimeDirectory = "pihole-FTL";
 
     # Expose DNS (53 tcp+udp) and the web UI only on the chosen interfaces.
     networking.firewall.interfaces = lib.genAttrs cfg.interfaces (_: {
