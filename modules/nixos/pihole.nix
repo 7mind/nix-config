@@ -178,9 +178,17 @@ in
         # [::1]:53 — which systemd-resolved's stub listener already holds — and
         # the failed bind is fatal ("FAILED to start up"), taking the whole DNS
         # listener down. Excluding lo leaves resolved's 127.0.0.53 / [::1] alone.
+        #
+        # `no-hosts` is REQUIRED too: dnsmasq reads /etc/hosts by default, and
+        # NixOS writes the host's own FQDN there as a loopback entry
+        # (127.0.0.2 <host>.<domain>). Served to the LAN, that makes every
+        # client resolve this host to 127.0.0.2, and a local /etc/hosts hit
+        # beats conditional forwarding. A network resolver must not export its
+        # loopback hosts; with no-hosts the name is forwarded to the router
+        # instead. Pi-hole's own local records use `dns.hosts`, not /etc/hosts.
         misc.dnsmasq_lines =
           (map (i: "interface=${i}") cfg.interfaces)
-          ++ [ "except-interface=lo" "bind-dynamic" ];
+          ++ [ "except-interface=lo" "bind-dynamic" "no-hosts" ];
 
         # The upstream module hardens the unit with ProtectSystem=strict but
         # provisions no writable runtime dir, so FTL cannot write its default
