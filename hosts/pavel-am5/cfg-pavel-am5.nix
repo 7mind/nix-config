@@ -87,11 +87,9 @@
     };
 
     networks = {
-      "20-${config.smind.net.main-bridge}" = {
-        ipv6AcceptRAConfig = {
-          Token = "::0020";
-        };
-      };
+      # Stable IPv6 suffix for br-main now comes from smind.net.ipv6Token
+      # (set to ::0051 in the private cfg), so the hand-rolled Token here was
+      # dropped to avoid a conflicting definition.
 
       "20-eth-tmp" = {
         name = "eth-tmp";

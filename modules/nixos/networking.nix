@@ -54,6 +54,20 @@ in
       description = "";
     };
 
+    smind.net.ipv6Token = lib.mkOption {
+      type = lib.types.str;
+      default = "";
+      description = ''
+        Stable IPv6 interface identifier (the low 64 bits) for the main
+        bridge/interface, set as the systemd-networkd [IPv6AcceptRA] Token=.
+        When non-empty, the SLAAC address derived from the router-advertised
+        prefix uses this fixed suffix instead of one derived from the MAC or a
+        random value, so the host keeps a predictable IPv6 address across boots
+        and hardware changes. Written in IPv6 suffix notation, e.g. "::0250".
+      '';
+      example = "::0250";
+    };
+
     smind.net.bridge.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -77,6 +91,18 @@ in
             type = lib.types.str;
             default = "";
             description = "MAC address for the VLAN interface. When empty, inherits from the parent interface.";
+          };
+          ipv6Token = lib.mkOption {
+            type = lib.types.str;
+            default = "";
+            description = ''
+              Stable IPv6 interface identifier (the low 64 bits) for this
+              VLAN's L3 interface (the bridge when bridge.enable = true, else
+              the VLAN sub-interface), set as the [IPv6AcceptRA] Token=. When
+              non-empty, the SLAAC address keeps this fixed suffix across boots.
+              Written in IPv6 suffix notation, e.g. "::0250".
+            '';
+            example = "::0250";
           };
           dhcp = lib.mkOption {
             type = lib.types.bool;
@@ -262,12 +288,14 @@ in
                   Hostname = hostname;
                   UseRoutes = false;
                 };
+              } // lib.optionalAttrs (vlan.ipv6Token != "") {
+                ipv6AcceptRAConfig.Token = vlan.ipv6Token;
               }
             )
           ) cfg.vlans;
 
           vlanBridgeNetworks = lib.mapAttrs' (name: vlan:
-            lib.nameValuePair "31-${vlan.bridge.name}" {
+            lib.nameValuePair "31-${vlan.bridge.name}" ({
               name = vlan.bridge.name;
               DHCP = if vlan.dhcp then "yes" else "no";
               linkConfig.RequiredForOnline = "no";
@@ -280,7 +308,9 @@ in
                 Hostname = hostname;
                 UseRoutes = false;
               };
-            }
+            } // lib.optionalAttrs (vlan.ipv6Token != "") {
+              ipv6AcceptRAConfig.Token = vlan.ipv6Token;
+            })
           ) (lib.filterAttrs (_: v: v.bridge.enable) cfg.vlans);
 
           vlanNames = lib.mapAttrsToList (name: _: "vlan-${name}") cfg.vlans;
@@ -304,6 +334,8 @@ in
               Hostname = hostname-v6;
               UseDomains = true;
             };
+          } // lib.optionalAttrs (cfg.ipv6Token != "") {
+            ipv6AcceptRAConfig.Token = cfg.ipv6Token;
           };
         in
         {

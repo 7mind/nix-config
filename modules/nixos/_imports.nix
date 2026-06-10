@@ -52,6 +52,7 @@
   ./mouse.nix
   ./networking-desktop.nix
   ./networking.nix
+  ./pihole.nix
   ./noctalia.nix
   ./nvidia-hybrid.nix
   ./nix-ld.nix
