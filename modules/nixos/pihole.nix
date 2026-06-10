@@ -61,10 +61,19 @@ in
 
       lists = lib.mkOption {
         type = lib.types.listOf (lib.types.attrsOf lib.types.anything);
+        # HaGeZi Pro (balanced ad/tracker/privacy, low false positives) plus the
+        # orthogonal Threat Intelligence Feeds (malware/phishing/scam) — the one
+        # stacking HaGeZi recommends. Deliberately NOT combined with other big
+        # meta-lists (OISD/StevenBlack): redundant, and each adds false-positive
+        # surface.
         default = [
           {
-            url = "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts";
-            description = "Steven Black's unified adlist";
+            url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/domains/pro.txt";
+            description = "HaGeZi Pro — ads/trackers/privacy";
+          }
+          {
+            url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/domains/tif.txt";
+            description = "HaGeZi Threat Intelligence Feeds";
           }
         ];
         description = ''
