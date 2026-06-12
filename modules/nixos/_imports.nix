@@ -1,6 +1,7 @@
 [
   ./adguard.nix
   ./alien-filesystems.nix
+  ./networkd-routes-to-dns.nix
   ./amnezia-vpn.nix
   ./attic-cache-tmpfiles.nix
   ./audio.nix
