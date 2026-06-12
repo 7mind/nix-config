@@ -77,7 +77,7 @@ in
     })
 
     (lib.mkIf (cfg.enable && selectedBackend == "kdeconnect-kde") {
-      programs.kdeconnect.package = pkgs.kdePackages.kdeconnect-kde;
+      programs.kdeconnect.package = lib.mkForce pkgs.kdePackages.kdeconnect-kde;
     })
   ];
 }
