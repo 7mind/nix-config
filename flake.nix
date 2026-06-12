@@ -106,6 +106,12 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    touchpad-gesture-customization-app-expose = {
+      url = "github:7mind/touchpad-gesture-customization-app-expose";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
+    };
+
     noctalia = {
       url = "github:noctalia-dev/noctalia-shell";
       inputs.nixpkgs.follows = "nixpkgs";

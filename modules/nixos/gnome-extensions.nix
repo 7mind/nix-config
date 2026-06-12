@@ -123,14 +123,23 @@ in
             "org/gnome/shell/extensions/run-or-raise" = {
               dbus = true;
             };
-          } ++ lib.optional (extCfg.touchpad-gesture-customization.enable && extCfg.touchpad-gesture-customization.remap-3-to-4) {
-            # Move GNOME's default 3-finger swipe gestures to 4-finger,
-            # freeing 3-finger input for linux-3-finger-drag
-            "org/gnome/shell/extensions/touchpad-gesture-customization" = {
-              vertical-swipe-3-fingers-gesture = "NONE";
-              horizontal-swipe-3-fingers-gesture = "NONE";
-              pinch-3-finger-gesture = "NONE";
-            };
+          } ++ lib.optional extCfg.touchpad-gesture-customization.enable {
+            "org/gnome/shell/extensions/touchpad-gesture-customization" =
+              {
+                # Turn on the app-expose gesture this fork adds: a downward
+                # swipe opens the application overview (app spread). Exactly one
+                # vertical swipe must drive overview navigation — use 4-finger
+                # so 3-finger stays free for linux-3-finger-drag.
+                overview-navigation-states = "APPLICATION_OVERVIEW_ON_DOWN";
+                vertical-swipe-4-fingers-gesture = "OVERVIEW_NAVIGATION";
+              }
+              # Move GNOME's default 3-finger swipe gestures to NONE, freeing
+              # 3-finger input for linux-3-finger-drag.
+              // lib.optionalAttrs extCfg.touchpad-gesture-customization.remap-3-to-4 {
+                vertical-swipe-3-fingers-gesture = "NONE";
+                horizontal-swipe-3-fingers-gesture = "NONE";
+                pinch-3-finger-gesture = "NONE";
+              };
           } ++ lib.optional (extCfg.dash-to-dock.enable && extCfg.dash-to-dock.unity-like-config.enable) {
             "org/gnome/shell/extensions/dash-to-dock" = {
               dock-position = "LEFT";

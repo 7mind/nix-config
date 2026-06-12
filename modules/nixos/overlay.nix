@@ -89,8 +89,7 @@
             { };
 
         gnome-shell-extension-touchpad-gesture-customization-app-expose =
-          pkgs.callPackage "${cfg-meta.paths.pkg}/touchpad-gesture-customization-app-expose/default.nix"
-            { };
+          inputs.touchpad-gesture-customization-app-expose.packages.${super.system}.default;
 
         menlo = pkgs.callPackage "${cfg-meta.paths.pkg}/menlo/menlo.nix" { };
 

@@ -33,6 +33,13 @@
   space-cadet-left-shift (t! tap-hold-eager S-9 lsft)
   space-cadet-right-shift (t! tap-hold-eager S-0 rsft)
   common-remap-escape C-A-M-tab
+  ;; Meh modifier chord, omitting the primary command modifier so it stays an
+  ;; unbound chord. Outside the super-swap (terminal) layer Ctrl is primary, so
+  ;; Meh = Super+Shift+Alt; inside it Super is primary (and editors bind
+  ;; Ctrl+Shift+Alt natively), so Meh = Ctrl+Shift+Alt.
+  meh (switch
+        ((base-layer terminal)) (multi lctl lsft lalt) break
+        () (multi lmet lsft lalt) break)
 )
 
 (defvirtualkeys

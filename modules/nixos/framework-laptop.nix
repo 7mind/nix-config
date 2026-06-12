@@ -6,10 +6,14 @@ let
   macLikeModifiersRemapCommands = ''
     # Framework Laptop 13 keyboard table and scan code examples:
     # https://github.com/rs-gh-asdf/framework-system/blob/af23ae7bf5cfbcb20bf2d3799a281ccf01ca40c6/EXAMPLES.md
-    # Framework EC firmware defines SCANCODE_FN = 0x00ff.
     # The Framework 13 matrix places physical left ctrl at row 1 col 12 and physical fn at row 2 col 2.
     # Remap both positions directly so the layout does not depend on the BIOS ctrl/fn swap setting.
-    ${frameworkToolExecutable} --remap-key 1 12 0x00ff
+    # Physical left ctrl emits set-2 F24 (0x005f) instead of the EC-internal Fn (SCANCODE_FN =
+    # 0x00ff, which the EC consumes and never sends to the host). Kanata implements the Fn layer
+    # on KEY_F24: tap = language switch, hold = KEY_FN + EC-Fn-layer emulation
+    # (see private/users/kai/kanata/kanata-framework13.kbd). 0x0057 (F23) is avoided because the
+    # EC Copilot-key chord injects it.
+    ${frameworkToolExecutable} --remap-key 1 12 0x005f
     # physical fn -> lmeta
     ${frameworkToolExecutable} --remap-key 2 2 0xe01f
     # lmeta -> lalt

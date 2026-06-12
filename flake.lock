@@ -157,11 +157,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1781238787,
-        "narHash": "sha256-oMGhwdroZlPbCDpdhfeudDcSaQJvSd7VmRPh42CTcUI=",
+        "lastModified": 1781286091,
+        "narHash": "sha256-xNdC1sVN48jEMHUoY63L1wn6iAx70wpZi1ISVRsIx1I=",
         "owner": "7mind",
         "repo": "cq",
-        "rev": "69da5909613c7ada0ff4220619e066d2c55b7ed4",
+        "rev": "96ac237ae2afd701ff665ddba08bdb393147e5d8",
         "type": "github"
       },
       "original": {
@@ -1331,6 +1331,7 @@
         "qendercore-adapter": "qendercore-adapter",
         "rust-overlay": "rust-overlay_3",
         "smind": "smind",
+        "touchpad-gesture-customization-app-expose": "touchpad-gesture-customization-app-expose",
         "vicinae-extensions": "vicinae-extensions",
         "zimt": "zimt"
       }
@@ -1588,6 +1589,29 @@
       "original": {
         "owner": "nix-systems",
         "repo": "default",
+        "type": "github"
+      }
+    },
+    "touchpad-gesture-customization-app-expose": {
+      "inputs": {
+        "flake-utils": [
+          "flake-utils"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1780941685,
+        "narHash": "sha256-xUc5zpojF5vBWRLSUcagjeK6Ow9KRhcHIRseOnMTSjc=",
+        "owner": "7mind",
+        "repo": "touchpad-gesture-customization-app-expose",
+        "rev": "2a4daa028a1c3839adcd48c49d8b942c99ac33ec",
+        "type": "github"
+      },
+      "original": {
+        "owner": "7mind",
+        "repo": "touchpad-gesture-customization-app-expose",
         "type": "github"
       }
     },

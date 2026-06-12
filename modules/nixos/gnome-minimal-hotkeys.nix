@@ -158,7 +158,7 @@
                 increase-text-size = empty;
                 keyboard-brightness-down = empty;
                 keyboard-brightness-down-static = empty;
-                keyboard-brightness-toggle = empty;
+                keyboard-brightness-toggle = [ "XF86KbdLightOnOff" ];
                 keyboard-brightness-toggle-static = empty;
                 keyboard-brightness-up = empty;
                 keyboard-brightness-up-static = empty;
