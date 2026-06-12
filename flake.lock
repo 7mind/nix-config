@@ -314,6 +314,26 @@
         "type": "github"
       }
     },
+    "ecoflow-mqtt": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1781282540,
+        "narHash": "sha256-vNqHYOc21bZ54Qp6xpsnnoeJiltfEQZw1yJD8W4dUmA=",
+        "owner": "pshirshov",
+        "repo": "ecoflow-mqtt",
+        "rev": "d454f4d4a976ffd38a51efa5f4ce3dad7a33002d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pshirshov",
+        "repo": "ecoflow-mqtt",
+        "type": "github"
+      }
+    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -1292,6 +1312,7 @@
         "crane": "crane",
         "darwin": "darwin",
         "determinate": "determinate",
+        "ecoflow-mqtt": "ecoflow-mqtt",
         "flake-utils": "flake-utils_3",
         "fractal": "fractal",
         "home-manager": "home-manager",

@@ -80,6 +80,9 @@ let
     (mkHttp { name = "RS485 gateway";  group = "iot-devices"; url = "http://rs485.iot-lan.7mind.io/"; status = "== any(200, 401)"; })
     # Printer's web UI redirects (301).
     (mkHttp { name = "Printer";        group = "iot-devices"; url = "http://printer.iot-lan.7mind.io/"; status = "== any(200, 301)"; })
+    # Traccar GPS server on raspi5m. /api/server returns public server config
+    # (200) without auth, so it probes the app without needing credentials.
+    (mkHttp { name = "Traccar";        group = "iot-devices"; url = "http://raspi5m.home.7mind.io:8082/api/server"; })
 
     # ── energy (Victron Cerbo subsystem) ────────────────────────────────────
     (mkHttp { name = "Energy Driver";   group = "energy"; url = "http://victron.iot-lan.7mind.io:8910/"; })

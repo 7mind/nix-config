@@ -227,6 +227,14 @@
             '';
           });
 
+      # Traccar wraps its JVM with the FULL openjdk, which runtime-depends on
+      # gtk+3 (AWT/Swing) and so drags wayland + libX11 into the closure. The
+      # GPS server is headless and never touches AWT, so point the wrapper at
+      # the headless JDK — drops gtk3/wayland/X11 entirely (only raspi5m uses it).
+      traccar = super.traccar.override {
+        pkgs = super // { openjdk = super.openjdk_headless; };
+      };
+
       fractal = cfg-flakes.fractal.fractal-tray.overrideAttrs (old: {
               cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
                 inherit (old) src;

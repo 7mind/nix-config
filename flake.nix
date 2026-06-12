@@ -55,6 +55,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    ecoflow-mqtt = {
+      url = "github:pshirshov/ecoflow-mqtt";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     nix-apple-fonts = {
       url = "github:braindefender/nix-apple-fonts";
       inputs.nixpkgs.follows = "nixpkgs";

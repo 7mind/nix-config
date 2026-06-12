@@ -71,6 +71,9 @@ ledgers:
         sessionLogs:
           type: string[]
           required: false
+        rawLogs:
+          type: string[]
+          required: false
         sourceRefs:
           type: string[]
           required: false
@@ -145,6 +148,9 @@ ledgers:
         sessionLogs:
           type: string[]
           required: false
+        rawLogs:
+          type: string[]
+          required: false
         sourceRefs:
           type: string[]
           required: false
@@ -208,6 +214,9 @@ ledgers:
           type: string[]
           required: false
         sessionLogs:
+          type: string[]
+          required: false
+        rawLogs:
           type: string[]
           required: false
         sourceRefs:
@@ -373,6 +382,9 @@ ledgers:
         sessionLogs:
           type: string[]
           required: false
+        rawLogs:
+          type: string[]
+          required: false
       idPrefix: G
       transitions:
         clarifying:
@@ -422,6 +434,9 @@ ledgers:
         sessionLogs:
           type: string[]
           required: false
+        rawLogs:
+          type: string[]
+          required: false
       idPrefix: R
       transitions:
         go-ahead: []
@@ -457,6 +472,9 @@ ledgers:
           type: string[]
           required: false
         sessionLogs:
+          type: string[]
+          required: false
+        rawLogs:
           type: string[]
           required: false
         tags:
