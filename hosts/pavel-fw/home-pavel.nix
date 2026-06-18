@@ -42,6 +42,14 @@
     };
   };
 
+  home.packages = with pkgs; [
+    wineWowPackages.stable # Wine (32+64-bit) — provides the `wine` binary
+    winetricks
+    umu-launcher # run Proton as a standalone Wine outside Steam
+    protontricks # manage Proton prefixes (winetricks for Proton)
+    protonup-qt # GUI to install/manage Proton-GE versions
+  ];
+
   smind.hm = {
     vscodium.fontSize = 14;
     ghostty.fontSize = 11;
