@@ -1,5 +1,17 @@
 { config, lib, ... }:
 
+let
+  # WORDCHARS presets selected by smind.hm.zsh.wordchars; any unrecognised
+  # value is used verbatim as the WORDCHARS string.
+  wordcharsPresets = {
+    "default" = "*?_-.[]~=&;!#$%^(){}<>";  # zsh's built-in default
+    "no-hash" = "*?_-.[]~=&;!$%^(){}<>";   # zsh default with '#' as a word boundary
+    "empty" = "";                          # bash-like: only alphanumerics delimit words
+  };
+  wordcharsValue =
+    wordcharsPresets.${config.smind.hm.zsh.wordchars}
+      or config.smind.hm.zsh.wordchars;
+in
 {
   options = {
     smind.hm.zsh.enable = lib.mkEnableOption "Zsh shell integrations";
@@ -12,6 +24,20 @@
       type = lib.types.bool;
       default = true;
       description = "IntelliJ terminal Cmd+Left/Right for beginning/end of line";
+    };
+    smind.hm.zsh.wordchars = lib.mkOption {
+      type = lib.types.str;
+      default = "no-hash";
+      example = "empty";
+      description = ''
+        Selects zsh's WORDCHARS, which punctuation counts as part of a word
+        for word motions (forward-word, backward-kill-word, etc.). Recognised
+        sentinels:
+          "default" - zsh's built-in WORDCHARS (includes '#')
+          "no-hash" - zsh default, but '#' acts as a word boundary
+          "empty"   - only alphanumerics delimit words (bash-like boundaries)
+        Any other value is used verbatim as the WORDCHARS string.
+      '';
     };
   };
 
@@ -58,9 +84,18 @@
           # Uncomment if networking.domain is set and Ghostty splits open in ~ instead of CWD:
           # HOST=''${HOST%%.*}
 
-          # alt+backspace deletes by word, symbols in this list ARE word parts
-          #export WORDCHARS='*?_-.[]~=&;!#$%^(){}<>'
-          export WORDCHARS='*?_-.[]~=&;!$%^(){}<>'
+          # alt+backspace deletes by word; punctuation in WORDCHARS counts as
+          # word parts. Value chosen by the smind.hm.zsh.wordchars option.
+          export WORDCHARS='${wordcharsValue}'
+
+          # Ctrl-W: whitespace-delimited kill, like bash unix-word-rubout.
+          # Alt-Backspace stays backward-kill-word (honours WORDCHARS above).
+          # The *-match widgets are separate autoloadable functions; they must
+          # be explicitly zle -N'd (select-word-style does NOT register them).
+          autoload -Uz backward-kill-word-match match-words-by-style
+          zle -N backward-kill-word-match
+          zstyle ':zle:backward-kill-word-match' word-style whitespace
+          bindkey "^W" backward-kill-word-match
 
           # enable carapace
           setopt menucomplete
