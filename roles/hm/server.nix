@@ -1,4 +1,4 @@
-{ config, lib, ... }:
+{ config, lib, pkgs, cfg-meta, ... }:
 
 {
   options = {
@@ -16,5 +16,8 @@
 
       cleanups.enable = lib.mkDefault true;
     };
+
+    # Oracle Cloud Infrastructure CLI (Linux only).
+    home.packages = lib.optional (!cfg-meta.isDarwin) pkgs.oci-cli;
   };
 }
