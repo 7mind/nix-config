@@ -86,6 +86,20 @@ in
         ELECTRON_OZONE_PLATFORM_HINT = "wayland";
 
         NIXOS_OZONE_WL = lib.mkIf config.smind.desktop.wayland.session-variables.nixos-ozone-wl.enable "1";
+
+        # Make the common GTK / desktop GSettings schemas discoverable
+        # session-wide. Bare Wayland WMs (niri, sway, hyprland) ship no DE that
+        # registers these, so Qt-only apps that reach for a GTK file chooser
+        # (AmneziaVPN, Shotcut, ...) abort with
+        # "GLib-GIO-ERROR: Settings schema 'org.gtk.Settings.FileChooser' is not
+        # installed". Additive: wrapped GTK apps keep their own dirs and GIO
+        # merges all entries, so this never shadows a DE's own schemas.
+        GSETTINGS_SCHEMA_DIR = lib.concatMapStringsSep ":" (
+          p: "${p}/share/gsettings-schemas/${p.name}/glib-2.0/schemas"
+        ) [
+          pkgs.gtk3
+          pkgs.gsettings-desktop-schemas
+        ];
       };
     })
   ];

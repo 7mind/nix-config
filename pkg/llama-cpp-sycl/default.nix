@@ -62,48 +62,36 @@ stdenv.mkDerivation (finalAttrs: {
   # SSM_SCAN) and other newer architectures load-crash on L0 because
   # the sched routes ops to SYCL that have no implementation and no
   # gating in device_supports_op.
-  version = "ad09224";
+  # Bumped ad09224 (2026-05-07) → b9509 / 6f3a9f3d (449 commits ahead): the
+  # exact llama.cpp commit nixpkgs ollama 0.30 vendors via FetchContent
+  # (identical src hash), so ollama-sycl can plant this package's
+  # libggml-sycl.so against an ABI-matched ggml-base.
+  version = "b9509";
 
   src = fetchFromGitHub {
     owner = "ggml-org";
     repo = "llama.cpp";
-    rev = "ad092246587b16299291056a78bf6f73f636f114";
-    hash = "sha256-lr51w3GfbiCqqzqFLvtxwa8a+fwoRAGiXEc45bPQKrU=";
+    rev = "6f3a9f3dee3c27545371044a3a38005721ac8a8e";
+    hash = "sha256-bO1ucb/+vidj/EYzNCssotjte9NlVLdjC794jToNNeM=";
   };
 
-  # Hal9000AIML/arc-pro-b70-ubuntu-gpu-speedup-bugfixes cherry-picks,
-  # 8 SYCL-backend patches against this exact base. Apply order is
-  # significant — see the README in that repo for the rationale.
-  # We deliberately skip the kit's two Vulkan patches and the
-  # in-progress fattn-tla skeleton; this build is SYCL-only.
-  patches = [
-    ./patches/0001-SYCL-Add-BF16-support-to-GET_ROWS-operation.patch
-    # 0002 (fused MoE mul_mat_vec_q for TG) upstreamed in ad09224 —
-    # `ggml_sycl_mul_mat_id_mmvq_fused` is at ggml-sycl.cpp:3825.
-    # Re-applying causes a redefinition compile error.  Dropped.
-    # 0003 (use native subgroup size for K-quant DMMV) is effectively
-    # obsolete: ad09224 now ships the q4_k/q6_k reorder kernel
-    # templates AND their SYCL wrappers AND the dispatch sites. The
-    # only thing 0003 still contributed was a QK_WARP_SIZE→WARP_SIZE
-    # micro-optimization on B70 (wave16 native), but applying the
-    # patch's kernel-defining hunks now produces redefinition errors.
-    # Dropped wholesale.  Files under patches/ retained for reference.
-    ./patches/0004-sycl-route-small-f32-matmuls-to-oneMKL-bypass-oneDNN.patch
-    # Patches 0005, 0006, 0007, 0008 (reorder OOM fallback +
-    # GGML_SYCL_HOST_MEM_FALLBACK CMake option + Q8_0 reorder
-    # dequantize) are all in upstream ad09224 — sycl_reorder_temp_buffer
-    # RAII, dequantize_mul_mat_vec_q8_0_sycl_reorder, and the CMake
-    # `if (GGML_SYCL_HOST_MEM_FALLBACK)` block all present. Dropped.
-    # Previous patch 0009 (PR #22035 reorder MMVQ unaligned-vocab
-    # assert) was in commit 788fcbc5, before ad09224. Also dropped.
-    # Source files still under patches/ for reference + ollama-sycl
-    # which references patches/0009 and patches/0010 by path.
-    # Patch 0010 (ggml-sycl/convert.cpp BF16 `__INTEL_LLVM_COMPILER`
-    # gate drop) is upstreamed in ad09224 — the proprietary-compiler
-    # guard was removed and bf16 falls through to
-    # `convert_unary_sycl<sycl::ext::oneapi::bfloat16>` directly.
-    # Dropped; file kept on disk for reference / ollama-sycl.
-  ];
+  # Hal9000AIML/arc-pro-b70-ubuntu-gpu-speedup-bugfixes cherry-picks.
+  # As of b9509 ALL of them are upstream in ggml-org/llama.cpp:
+  #   - 0001 (BF16 GET_ROWS) — present; re-applying detects a reversed
+  #     patch (the getrows.cpp / ggml-sycl.cpp hunks are already merged).
+  #   - 0002 (fused MoE mul_mat_vec_q), 0003 (native subgroup K-quant
+  #     DMMV), 0005-0008 (reorder OOM fallback + HOST_MEM_FALLBACK +
+  #     Q8_0 reorder dequant) — upstream since ad09224.
+  #   - 0004 (route small f32 matmuls to oneMKL, bypass oneDNN) — now
+  #     upstream at b9509 (also detected as reversed). Dropped.
+  #   - 0009 (MMVQ unaligned-vocab assert, PR #22035), 0010 (convert.cpp
+  #     BF16 __INTEL_LLVM_COMPILER gate drop) — upstream pre-ad09224.
+  # The only out-of-tree fixes left are the intel-llvm@2025-11-14
+  # IMF/IGC environment workarounds in postPatch below (not upstreamable:
+  # they target our open-source DPC++ snapshot, not llama.cpp itself).
+  # Patch files retained under ./patches/ for reference and because
+  # ollama-sycl referenced 0009/0010 by path historically.
+  patches = [ ];
 
   # intel-llvm in nativeBuildInputs so its bin/clang(++) is on $PATH and
   # the (now-fixed) merged output is in the build closure.

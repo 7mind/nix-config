@@ -33,7 +33,6 @@
   ./hyprland.nix
   ./i2c.nix
   ./initrd-ssh-unlock.nix
-  ./image-gen.nix
   ./kanata-super-remap.nix
   ./kde.nix
   ./niri.nix

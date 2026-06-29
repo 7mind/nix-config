@@ -28,7 +28,8 @@ in
       }
     ];
 
-    services.noctalia-shell.enable = true;
-    services.noctalia-shell.target = lib.mkIf config.smind.desktop.niri.enable (lib.mkDefault "niri.service");
+    programs.noctalia.enable = true;
+    programs.noctalia.systemd.enable = true;
+    programs.noctalia.systemd.target = lib.mkIf config.smind.desktop.niri.enable (lib.mkDefault "niri.service");
   };
 }

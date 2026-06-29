@@ -10,7 +10,6 @@ in
 
   nixpkgs.config.permittedInsecurePackages = [
     "python3.13-ecdsa-0.19.1" # trezor dependency, CVE-2024-23342
-    "electron-39.8.10" # bitwarden-desktop dependency, EOL upstream
   ];
 
   nix = {

@@ -43,6 +43,11 @@ VERBOSE=false
 # Cache for host metadata
 declare -A HOST_META
 
+# Per-host remote address overrides (host -> ssh target), set via
+# --host-override HOST=ADDR (repeatable). Takes precedence over the
+# configured FQDN when deploying to a remote host.
+declare -A HOST_OVERRIDES
+
 usage() {
     cat <<EOF
 Usage: $(basename "$0") [OPTIONS] [HOST...]
@@ -64,6 +69,10 @@ Options:
   -l, --list        List known hosts and exit
   --allow-short-host
                     Allow using short host name for remote switch when FQDN is missing
+  --host-override HOST=ADDR
+                    Override the remote deploy address for HOST (repeatable).
+                    Takes precedence over the configured FQDN; only affects
+                    remote switch/boot (nix copy + ssh), not the build.
   --offline         Pass --offline to nix build (no network fetches)
   -nrs, --no-resock Skip SSH_AUTH_SOCK probing (keep whatever the shell set)
   -ncs, --no-check-sigs
@@ -87,6 +96,10 @@ Examples:
   $(basename "$0") -r -s            # Update flake, build, and switch
   $(basename "$0") pavel-fw -s --allow-short-host
                               # Remote switch via short host name when no FQDN is defined
+  $(basename "$0") pavel-fw -n -s --host-override pavel-fw=192.100.100.25
+                              # Build + switch pavel-fw, deploying to a specific address
+  $(basename "$0") +infra -s --host-override o1=10.0.0.1 --host-override o2=10.0.0.2
+                              # Deploy a group with per-host address overrides
   $(basename "$0") -n               # Build without git operations
 EOF
     exit 0
@@ -205,6 +218,21 @@ list_hosts() {
     exit 0
 }
 
+add_host_override() {
+    local spec="$1"
+    if [[ "$spec" != *=* ]]; then
+        echo "Error: --host-override expects HOST=ADDRESS, got '$spec'" >&2
+        exit 1
+    fi
+    local h="${spec%%=*}"
+    local addr="${spec#*=}"
+    if [[ -z "$h" || -z "$addr" ]]; then
+        echo "Error: --host-override expects non-empty HOST=ADDRESS, got '$spec'" >&2
+        exit 1
+    fi
+    HOST_OVERRIDES["$h"]="$addr"
+}
+
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -256,6 +284,14 @@ parse_args() {
                 DO_ALLOW_SHORT_HOST=true
                 shift
                 ;;
+            --host-override)
+                add_host_override "$2"
+                shift 2
+                ;;
+            --host-override=*)
+                add_host_override "${1#*=}"
+                shift
+                ;;
             --offline)
                 DO_OFFLINE=true
                 shift
@@ -304,6 +340,25 @@ validate_hosts() {
             echo "Error: Unknown host '$host'" >&2
             echo "Use --list to see known hosts." >&2
             exit 1
+        fi
+    done
+}
+
+validate_overrides() {
+    # Run after host expansion: override keys must be known hosts, and
+    # warn (don't fail) if an override targets a host not being deployed.
+    for h in "${!HOST_OVERRIDES[@]}"; do
+        if [[ -z "${HOST_META[$h]}" ]]; then
+            echo "Error: --host-override for unknown host '$h'" >&2
+            echo "Use --list to see known hosts." >&2
+            exit 1
+        fi
+        local found=false
+        for th in "${HOSTS[@]}"; do
+            [[ "$th" == "$h" ]] && found=true && break
+        done
+        if [[ "$found" != "true" ]]; then
+            echo "Warning: --host-override '$h=${HOST_OVERRIDES[$h]}' given but '$h' is not in the target host list; it will be ignored" >&2
         fi
     done
 }
@@ -556,7 +611,15 @@ do_switch() {
         # null fqn means local deployment
         [[ "$fqn" == "null" || -z "$fqn" ]] && fqn=""
 
-        remote_target="$fqn"
+        # --host-override HOST=ADDR wins over the configured FQDN for the
+        # remote ssh/nix-copy target. Only meaningful for remote deploys
+        # (THISHOST != host); a local switch ignores the address entirely.
+        if [[ -n "${HOST_OVERRIDES[$host]:-}" ]]; then
+            remote_target="${HOST_OVERRIDES[$host]}"
+            [[ "$THISHOST" != "$host" ]] && echo "    Using override address for $host: ${remote_target}"
+        else
+            remote_target="$fqn"
+        fi
         if [[ "$THISHOST" != "$host" && -z "$remote_target" ]]; then
             if [[ "$DO_ALLOW_SHORT_HOST" == "true" ]]; then
                 remote_target="$host"
@@ -617,6 +680,7 @@ main() {
     load_host_meta
     expand_host_specifiers
     validate_hosts
+    validate_overrides
 
     do_refresh
     do_rekey

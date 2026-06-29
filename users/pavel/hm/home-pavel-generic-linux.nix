@@ -101,8 +101,6 @@
   ++ [
     fractal
 
-    bitwarden-desktop
-
     visualvm
 
     vlc

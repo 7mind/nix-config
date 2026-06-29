@@ -105,8 +105,6 @@
 
         saic-mqtt-gateway = pkgs.callPackage "${cfg-meta.paths.pkg}/saic-mqtt-gateway/default.nix" { };
 
-        sdcpp-webui = pkgs.callPackage "${cfg-meta.paths.pkg}/sdcpp-webui/default.nix" { };
-
         hoymiles-mqtt-bridge = pkgs.callPackage "${cfg-meta.paths.pkg}/hoymiles-mqtt-bridge/default.nix" { };
 
         enocean-mqtt = pkgs.callPackage "${cfg-meta.paths.pkg}/enocean-mqtt/default.nix" { };
@@ -315,20 +313,9 @@
           '';
         });
 
-        # Shotcut uses GTK file chooser via Qt portal integration and crashes
-        # when GTK schemas are not discoverable in XDG_DATA_DIRS.
-        shotcut = super.shotcut.overrideAttrs (old: {
-          nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ super.makeWrapper ];
-          postFixup =
-            let
-              gtk3Schemas = "${super.gtk3}/share/gsettings-schemas/${super.gtk3.name}";
-            in
-            (old.postFixup or "")
-            + ''
-              wrapProgram $out/bin/shotcut \
-                --prefix XDG_DATA_DIRS : "${gtk3Schemas}"
-            '';
-        });
+        # NOTE: the GTK-file-chooser GSettings schema crash (Shotcut, AmneziaVPN,
+        # ...) is fixed globally via GSETTINGS_SCHEMA_DIR in
+        # modules/nixos/env-settings-linux-desktop.nix, not per-package here.
 
         arduino-ide = super.arduino-ide.overrideAttrs (old: {
           buildCommand = (old.buildCommand or "") + ''

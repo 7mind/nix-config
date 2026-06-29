@@ -9,7 +9,6 @@
     # "fluffychat-linux-1.23.0"
     # "olm-3.2.16"
     "python3.13-ecdsa-0.19.1"
-    "electron-39.8.10" # bitwarden-desktop dependency, EOL upstream
   ];
 
   # Onboard MediaTek MT7927 (Filogic 380) WiFi 7 + BT — out-of-tree driver +

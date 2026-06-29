@@ -109,27 +109,7 @@ rec {
             { nixpkgs.overlays = [
                 inputs.nix-vscode-extensions.overlays.default
                 inputs.rust-overlay.overlays.default
-                (final: prev:
-                let
-                  # Shared override attrs for the ollama 0.21.0 → 0.24.0
-                  # bump (applied to all four variants: stock/cuda/rocm/vulkan).
-                  ollamaBumpAttrs = {
-                    version = "0.24.0";
-                    src = prev.fetchFromGitHub {
-                      owner = "ollama";
-                      repo = "ollama";
-                      tag = "v0.24.0";
-                      hash = "sha256-cSZtbF0oUI7a++baTipF6OUu+w8tBpILzE0Wm1Y6wUk=";
-                    };
-                    # 0.23.0's `cmd/launch` test npm-installs
-                    # `@ollama/pi-web-search` — fails in the sandbox (no
-                    # network), and upstream checkFlags only -skip the
-                    # 0.21.0-era tests by name. Disable Go-side checks; the
-                    # inherited versionCheckHook (doInstallCheck=true) still
-                    # verifies the built binary runs and reports its version.
-                    doCheck = false;
-                  };
-                in {
+                (final: prev: {
                   # Two overrides on intel-compute-runtime:
                   # (1) Bump 26.14.37833.4 → 26.18.38308.1 (2026-05-12).
                   #     nixpkgs gmmlib is already 22.10.0 (the 26.18 pairing),
@@ -211,21 +191,12 @@ rec {
                   # `ollama` for go-side tooling versions.
                   ollama-sycl = final.callPackage ./pkg/ollama-sycl/default.nix { };
 
-                  # Bump every stock nixpkgs ollama flavor from pinned
-                  # 0.21.0 to 0.23.0 (upstream since 2026-05-03, nixpkgs
-                  # not yet). Needed so vm's host-side `ollama` CLI matches
-                  # the in-container `ollama-sycl` server (no version warning)
-                  # and other hosts get the same fixes.
-                  # NOTE: `ollama`/`ollama-cuda`/`ollama-rocm`/`ollama-vulkan`
-                  # are *separate* callPackage instantiations of one
-                  # package.nix with different `acceleration` args — overriding
-                  # `ollama` does NOT propagate. Override each variant inline.
-                  # vendorHash unchanged — go.mod/go.sum stable across the 39
-                  # commits 0.21.0→0.23.0.
-                  ollama         = prev.ollama.overrideAttrs         (_: ollamaBumpAttrs);
-                  ollama-cuda    = prev.ollama-cuda.overrideAttrs    (_: ollamaBumpAttrs);
-                  ollama-rocm    = prev.ollama-rocm.overrideAttrs    (_: ollamaBumpAttrs);
-                  ollama-vulkan  = prev.ollama-vulkan.overrideAttrs  (_: ollamaBumpAttrs);
+                  # Stock ollama flavors (ollama/-cuda/-rocm/-vulkan) ride
+                  # nixpkgs' own version (0.30.7), matching the in-container
+                  # ollama-sycl server. The former 0.24.0 pin is retired: clean
+                  # ollama < 0.30 lacks `llama/compat/`, which nixpkgs' postPatch
+                  # (apply-patch.cmake, FetchContent llama.cpp) now requires —
+                  # pinning back to 0.24.0 broke every flavor's patchPhase.
                 })
               ];
             }
