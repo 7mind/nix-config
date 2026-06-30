@@ -1,15 +1,13 @@
-# Check if system is on AC power
-# Returns 0 if on AC, 1 if on battery
+# Determine AC state for refresh-rate switching.
+#
+# Honors the USB-PD charger policy via REFRESH_AC_MIN_WATTS (embedded by
+# default.nix): empty => any Mains adapter online; a wattage => require an
+# unconstrained mains charger of at least that many watts (so low-power
+# adapters / powerbanks keep the battery refresh rate). The actual detection
+# (on_ac_power) comes from charger-detect.sh, prepended ahead of this file.
 
 set -euo pipefail
 
 is_on_ac() {
-  for supply in /sys/class/power_supply/*/; do
-    if [ -f "$supply/type" ] && [ "$(cat "$supply/type")" = "Mains" ]; then
-      if [ -f "$supply/online" ] && [ "$(cat "$supply/online")" = "1" ]; then
-        return 0
-      fi
-    fi
-  done
-  return 1
+  on_ac_power "${REFRESH_AC_MIN_WATTS:-}"
 }

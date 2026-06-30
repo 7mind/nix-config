@@ -24,11 +24,31 @@ let
   refreshRateScripts = import ../../pkg/power-refresh-rate {
     inherit pkgs lib;
     inherit gnomeDisplayConfigLines cosmicDisplayConfigLines;
+    minWatts = cfg.acChargerMinWatts;
   };
 in
 {
   options.smind.power-management.auto-refresh-rate = {
     enable = lib.mkEnableOption "automatic display refresh rate switching based on AC/battery status (GNOME/COSMIC Wayland)";
+
+    acChargerMinWatts = lib.mkOption {
+      type = lib.types.nullOr lib.types.ints.positive;
+      default = config.smind.power-management.acChargerMinWatts;
+      defaultText = lib.literalExpression "config.smind.power-management.acChargerMinWatts";
+      example = 60;
+      description = ''
+        Charger wattage policy for the "AC" refresh-rate mode, mirroring
+        `smind.power-management.acChargerMinWatts` and inheriting its value by
+        default (so one knob gates both the power profile and the refresh rate).
+
+        When null, the AC mode is used whenever any Mains adapter is online.
+        When set to a wattage, the AC mode is used only on an unconstrained
+        mains charger (not a powerbank) advertising at least that many watts;
+        low-power adapters and powerbanks keep the battery (lower) refresh rate.
+        Set explicitly to null here to opt out while keeping the power-profile
+        policy.
+      '';
+    };
 
     displays = lib.mkOption {
       type = lib.types.attrsOf (lib.types.submodule {
@@ -100,6 +120,8 @@ in
     (lib.mkIf cfg.enable {
       services.udev.extraRules = ''
         SUBSYSTEM=="power_supply", ATTR{type}=="Mains", ACTION=="change", RUN+="${refreshRateScripts.triggerRefreshRateUpdate}"
+      '' + lib.optionalString (cfg.acChargerMinWatts != null) ''
+        SUBSYSTEM=="power_supply", ATTR{type}=="USB", ACTION=="change", RUN+="${refreshRateScripts.triggerRefreshRateUpdate}"
       '';
     })
 
