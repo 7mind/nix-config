@@ -116,6 +116,9 @@ in
     dev.wireshark.users = [ "pavel" ];
 
     power-management.enable = true;
+    # performance only on an unconstrained mains charger >= 60W; powerbanks
+    # (any wattage) and weak chargers stay on power-saver.
+    power-management.acChargerMinWatts = 60;
     power-management.auto-refresh-rate = {
       enable = true;
       displays."eDP-1" = {
