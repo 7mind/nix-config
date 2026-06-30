@@ -208,6 +208,18 @@ Verify after launch — the instance's `launch-options.firmware` must read
   Nix profile is only sourced for login shells. Symlink
   `/nix/var/nix/profiles/system/sw/bin/{nix,nix-store,nix-env}` into
   `/usr/bin` first. (Only relevant if you ever go the infect route.)
+- **`instance terminate --wait-for-state` is a footgun.** Instance terminate is
+  a *work-request* operation: valid `--wait-for-state` values are
+  `ACCEPTED|IN_PROGRESS|FAILED|SUCCEEDED` — **NOT `TERMINATED`**. Passing
+  `--wait-for-state TERMINATED` makes the whole command error out silently
+  (it just prints OCI's "try interactive mode" footer) and the instance is
+  **never terminated**. We leaked SIX running A1 instances + six boot volumes
+  (≈660 GB, well over the 200 GB free cap) this way before noticing. Use
+  `--wait-for-state SUCCEEDED`, or omit the flag (it returns a work-request id).
+  **Always re-list instances + boot volumes after a deploy** and delete strays —
+  `--preserve-boot-volume false` only deletes the volume *if the terminate
+  actually succeeds*. Boot-volume *delete* (a lifecycle resource, not a
+  work-request) does take `--wait-for-state TERMINATED`.
 - **Boot-volume CLI quirks.** `oci compute boot-volume-attachment list`
   requires `--compartment-id`. Online-resize the boot volume
   (`oci bv boot-volume update --size-in-gbs 100`) before the host's first boot;
