@@ -122,7 +122,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi/main";
+    # Track `develop`: the latest release (= `main`) predates nixpkgs 26.11's
+    # removal of `stdenv.hostPlatform.linux-kernel`, so its bootloader module
+    # aborts evaluation with `attribute 'linux-kernel' missing` / `buildDTBs
+    # missing` on our unstable (26.11) nixpkgs. `develop` carries the 26.11
+    # compatibility fixes (PRs #198, #199). Move back to a pinned release once
+    # one ships with those changes.
+    nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi/develop";
 
     fractal = {
       url = "git+https://gitlab.gnome.org/pshirshov/fractal.git?ref=wip/full-patchset";

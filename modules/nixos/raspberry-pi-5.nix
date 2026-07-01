@@ -1,4 +1,4 @@
-{ inputs, lib, ... }:
+{ inputs, lib, pkgs, ... }:
 
 {
   imports = [
@@ -6,6 +6,33 @@
     inputs.nixos-raspberrypi.nixosModules.raspberry-pi-5.page-size-16k
     inputs.nixos-raspberrypi.nixosModules.raspberry-pi-5.bluetooth
   ];
+
+  # nixpkgs 26.11 removed `stdenv.hostPlatform.linux-kernel` and now sources the
+  # kernel image name (`kernelFile`) and DTB flag (`hardware.deviceTree.enable`)
+  # from `target`/`buildDTBs` passthru attrs on the kernel derivation instead.
+  # nixos-raspberrypi `develop` reads those attrs on nixpkgs >= 26.11, but its
+  # kernel is built from the flake's own pinned (pre-removal) nixpkgs, which does
+  # not attach them — so evaluation aborts with `attribute 'target'/'buildDTBs'
+  # missing`. Re-attach the canonical aarch64 values. These are eval-only: the
+  # derivation and its out-path are unchanged, so the upstream-cached kernel is
+  # reused (no rebuild). Drop once nixos-raspberrypi's pinned nixpkgs provides
+  # these passthru attrs itself.
+  boot.kernelPackages =
+    let
+      kp = inputs.nixos-raspberrypi.packages.${pkgs.stdenv.hostPlatform.system}.linuxPackages_rpi5;
+    in
+    lib.mkForce (kp.extend (_: super: {
+      # overrideAttrs (not //): boot.kernelPackages' own apply re-runs
+      # `kernel.override`, which rebuilds the derivation and would drop plain
+      # attrs; overrideAttrs composes through `.override`, so the passthru
+      # survives. passthru-only change keeps the out-path (no rebuild).
+      kernel = super.kernel.overrideAttrs (old: {
+        passthru = (old.passthru or { }) // {
+          target = "Image";
+          buildDTBs = true;
+        };
+      });
+    }));
 
   nixpkgs.overlays = [
     inputs.nixos-raspberrypi.overlays.vendor-pkgs

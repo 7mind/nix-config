@@ -157,11 +157,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1782680359,
-        "narHash": "sha256-Oi6VT6KsgingifA8vBnI5w/8TzFn7ciGs8y3apG7PHQ=",
+        "lastModified": 1782924262,
+        "narHash": "sha256-7CwemTLwudvspLwjrX7GUdK746NDudTfPfbfFiDnNq8=",
         "owner": "7mind",
         "repo": "cq",
-        "rev": "cb3e0b78b6c1f90ddb5d93020f60a31ed42d43d3",
+        "rev": "f4d8d0ed56c4a7c92ef11c13589bde1e11040c6e",
         "type": "github"
       },
       "original": {
@@ -974,16 +974,16 @@
         "nixpkgs": "nixpkgs_5"
       },
       "locked": {
-        "lastModified": 1779023229,
-        "narHash": "sha256-MInilg7B/06c34SwOuGSBho4l0H1EZcmvxTkSWCs5pE=",
+        "lastModified": 1782695075,
+        "narHash": "sha256-5iq0GYHY2psXKV1cAO1m+JKQ8LO92Z3J9K/hLaB1K0k=",
         "owner": "nvmd",
         "repo": "nixos-raspberrypi",
-        "rev": "06c6e3513e1ee64b651913193fc6ac38aa4963f5",
+        "rev": "597dbde70eb78afde13cc5ad75773d22d078d24c",
         "type": "github"
       },
       "original": {
         "owner": "nvmd",
-        "ref": "main",
+        "ref": "develop",
         "repo": "nixos-raspberrypi",
         "type": "github"
       }
@@ -1098,11 +1098,11 @@
     },
     "nixpkgs_5": {
       "locked": {
-        "lastModified": 1778737229,
-        "narHash": "sha256-6xWoytx8jFW4PF1GjRm/i/53trbpKGfz6zjzQGBr4cI=",
+        "lastModified": 1782651437,
+        "narHash": "sha256-10srBgrJz7JOWzS1KG5BhrwHCUPTcPqZgwNKo5N9YE4=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "d7a713c0b7e47c908258e71cba7a2d77cc8d71d5",
+        "rev": "0a47451dbe2082a660b88a79a83efdc8d85de445",
         "type": "github"
       },
       "original": {
