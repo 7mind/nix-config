@@ -110,11 +110,11 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1776637476,
-        "narHash": "sha256-Zs9FxUa3FSOOuf8TUlRDebum3fwT0cZm9aIiX8QNwKI=",
+        "lastModified": 1782222298,
+        "narHash": "sha256-Ztn9zl0Q8Pbj0mVwYsaofyWRLv4fpEGIJnHMTfUAgtY=",
         "owner": "neko-kai",
         "repo": "claude-code-sandbox",
-        "rev": "f3f631273a96fd87d57af7bd999c1e5717a3f553",
+        "rev": "705c572558328c2612e65722b3cdf814fe1d97a5",
         "type": "github"
       },
       "original": {
@@ -157,11 +157,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1783352407,
-        "narHash": "sha256-y/ttpABdnl25G8i1enTKE8V1tuA5OAEFlW6TmH1OZes=",
+        "lastModified": 1783368669,
+        "narHash": "sha256-85pkYrJN7alZGspUNoTrUosN8My3abKZvoSH2ihinC4=",
         "owner": "7mind",
         "repo": "cq",
-        "rev": "3391a23e867f1e79fa7bc337bb576b630ad271ae",
+        "rev": "2f8d03df1609d1130cfce1a2a38cd1bc731f41b9",
         "type": "github"
       },
       "original": {
