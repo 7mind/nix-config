@@ -124,23 +124,17 @@
       }
     },
     "codegraph": {
-      "inputs": {
-        "nixpkgs": [
-          "cq",
-          "nixpkgs"
-        ]
-      },
+      "flake": false,
       "locked": {
-        "lastModified": 1779643764,
-        "narHash": "sha256-PxkoMUBBavZUg0CFKHVUWV1sJfndcCmGNSgbGptvl3w=",
-        "owner": "uxtechie",
+        "lastModified": 1783365981,
+        "narHash": "sha256-sqwCKuuOnO06RkKJqdPaLf3NhTDnCX7Tq54ivDtDfiU=",
+        "owner": "colbymchenry",
         "repo": "codegraph",
-        "rev": "b46fc464c680232806f9ef145bca5a5dcc719bd4",
+        "rev": "6ea65246a5ef9c5280a21f49f286e2549bde1fef",
         "type": "github"
       },
       "original": {
-        "owner": "uxtechie",
-        "ref": "implement-nix-flake-support",
+        "owner": "colbymchenry",
         "repo": "codegraph",
         "type": "github"
       }
@@ -157,11 +151,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1783368669,
-        "narHash": "sha256-85pkYrJN7alZGspUNoTrUosN8My3abKZvoSH2ihinC4=",
+        "lastModified": 1783371982,
+        "narHash": "sha256-MJzBA5VctOWn4aBv4cKszvWImuYEYDDUdG8RiwHnU7E=",
         "owner": "7mind",
         "repo": "cq",
-        "rev": "2f8d03df1609d1130cfce1a2a38cd1bc731f41b9",
+        "rev": "2c64d87ac9a89f554a3e37cba45ff7b067fcbb84",
         "type": "github"
       },
       "original": {
