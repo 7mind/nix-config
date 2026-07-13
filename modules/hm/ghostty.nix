@@ -274,7 +274,8 @@ in
 
           # Essential defaults to keep
           "super+shift+comma=reload_config"
-          "super+plus=increase_font_size:1"
+          "super+==increase_font_size:1"
+          "super++=increase_font_size:1"
           "super+minus=decrease_font_size:1"
           "super+zero=reset_font_size"
         ] ++ lib.optionals config.smind.hm.ghostty.ctrl-tab-navigation [
@@ -288,7 +289,8 @@ in
           "ctrl+n=new_window"
           "ctrl+w=close_surface"
           "ctrl+shift+comma=reload_config"
-          "ctrl+plus=increase_font_size:1"
+          "ctrl+==increase_font_size:1"
+          "ctrl++=increase_font_size:1"
           "ctrl+minus=decrease_font_size:1"
           "ctrl+zero=reset_font_size"
         ] ++ (
