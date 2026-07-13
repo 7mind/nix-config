@@ -224,7 +224,13 @@ rec {
           ];
 
           hm-modules = [
-
+            inputs.mac-app-util.homeManagerModules.default
+            # nix-darwin runs HM activation through sudo→launchctl asuser→sudo -u user.
+            # TCC doesn't associate that process chain with the terminal emulator, so both the
+            # App Management permission check and the rsync copyApps itself fail.
+            # mac-app-util already handles Spotlight/Launchpad visibility via trampolines,
+            # so copyApps is redundant.
+            { targets.darwin.copyApps.enable = false; }
           ];
         };
 

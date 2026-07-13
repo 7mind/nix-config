@@ -5,6 +5,7 @@ set -xe
 ROOTS=/nix/var/nix/gcroots/my-builds
 HOST="$(hostname -s)"
 CLOSURE_OUT_PATH="${ROOTS}/${HOST}"
+
 function workdir() {
     ORIGIN="$(cd "$(dirname "$0")" && pwd)"
     pushd .
@@ -19,8 +20,8 @@ function add_all() {
 workdir
 add_all
 
-git add .
-git submodule foreach git add .
+git submodule foreach git commit -am "autosave" || true
+git commit -am "autosave" || true
 
 rm -f ~/.config/VSCodium/User/*.hmbak
 
@@ -29,8 +30,5 @@ nix build ".?submodules=1#darwinConfigurations.${HOST}.system" \
     --extra-experimental-features 'nix-command flakes'
 sudo -H --preserve-env=PATH env nix-env -p /nix/var/nix/profiles/system --set "${CLOSURE_OUT_PATH}"
 sudo /nix/var/nix/profiles/system/sw/bin/darwin-rebuild activate
-
-git submodule foreach git commit -am "autosave" || true
-git commit -am "autosave" || true
 
 popd

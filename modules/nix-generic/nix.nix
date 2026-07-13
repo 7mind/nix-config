@@ -1,4 +1,5 @@
 { pkgs, lib, config, options, ... }:
+# Before enabling nix-impl = "determinate" on macOS, run Determinate Nix installer
 let
   lixPkgSet = pkgs0: pkgs0.lixPackageSets.latest;
   hasDeterminateOption = options ? determinate && options.determinate ? enable;
