@@ -9,7 +9,7 @@
   config = {
     security.sudo.extraRules =
       let
-        profile = "/etc/profiles/per-user/*/bin/journalctl";
+        profile = "/etc/profiles/per-user/*/bin";
         global = "/run/current-system/sw/bin";
         binaries = [
           "/nix/var/nix/profiles/system/bin/switch-to-configuration"
