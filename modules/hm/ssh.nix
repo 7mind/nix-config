@@ -14,7 +14,7 @@
       enable = true;
       enableDefaultConfig = false;
       settings."*" = {
-        AddKeysToAgent = lib.mkIf cfg-meta.isLinux "yes";
+        AddKeysToAgent = "yes";
         IgnoreUnknown = "UseKeychain";
         UseKeychain = "yes";
       };
