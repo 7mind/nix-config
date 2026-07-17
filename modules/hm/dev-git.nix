@@ -3,6 +3,15 @@
 {
   options = {
     smind.hm.dev.git.enable = lib.mkEnableOption "Git with lazygit, tig, and custom config";
+    smind.hm.dev.git.rewriteGithubToSsh = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Rewrite https://github.com/ URLs to git@github.com: so fetches and
+        clones authenticate over SSH instead of prompting for HTTPS
+        credentials. Disable on hosts without an SSH key registered on GitHub.
+      '';
+    };
     smind.hm.dev.git.credentialHelper = lib.mkOption {
       type = lib.types.str;
       default = "${pkgs.gitFull}/bin/git-credential-libsecret";
@@ -33,6 +42,11 @@
         };
 
         credential = { helper = config.smind.hm.dev.git.credentialHelper; };
+
+        # Fetch GitHub over SSH even when a remote is configured with an HTTPS URL.
+        url = lib.mkIf config.smind.hm.dev.git.rewriteGithubToSsh {
+          "git@github.com:" = { insteadOf = "https://github.com/"; };
+        };
 
         core = {
           reloadindex = true;
