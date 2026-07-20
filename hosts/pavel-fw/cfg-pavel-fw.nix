@@ -159,7 +159,7 @@ in
     hw.nvidia = {
       enable = true;
       open = true; # RTX 50 series (Blackwell) requires open kernel modules
-      package = config.boot.kernelPackages.nvidiaPackages.beta; # 590.x beta - may have GSP fix for mobile Blackwell
+      package = config.boot.kernelPackages.nvidiaPackages.stable;
       specialisation.enable = true;
       specialisation.defaultWithGpu = true; # Default boots with NVIDIA, "no-nvidia" specialisation for AMD-only
       # PCI IDs from lspci -Dnn

@@ -113,8 +113,9 @@
       enable = lib.mkDefault (!config.smind.hm.environment.television.enable && !config.smind.hm.roles.desktop);
       enableZshIntegration = true;
       defaultCommand = "fd .$HOME";
-      fileWidgetCommand = "$FZF_DEFAULT_COMMAND";
-      changeDirWidgetCommand = "fd -t d . $HOME";
+      fileWidget.command = "$FZF_DEFAULT_COMMAND";
+      changeDirWidget.command = "fd -t d . $HOME";
+      historyWidget.command = lib.mkIf config.programs.atuin.enable "";
       defaultOptions = [
         "--layout=reverse"
         "--border"

@@ -98,7 +98,6 @@ rec {
 
           flake-modules = smind-nixos-imports ++ [
             inputs.lanzaboote.nixosModules.lanzaboote
-            inputs.nix-apple-fonts.nixosModules
             inputs.home-manager.nixosModules.home-manager
             inputs.agenix.nixosModules.default
             inputs.agenix-rekey.nixosModules.default
@@ -160,7 +159,24 @@ rec {
                   # shell variable again. Verify:
                   # `ls $(nix eval --raw nixpkgs#intel-llvm.outPath)/bin`
                   # should list clang/clang++/clang-22 etc.
-                  intel-llvm = prev.intel-llvm.overrideAttrs (old: {
+                  intel-llvm = (prev.intel-llvm.overrideScope (_: intelPrev: {
+                    unwrapped = (intelPrev.unwrapped.override {
+                      wrapCC = cc: prev.wrapCC (cc.overrideAttrs (old: {
+                        passthru = (old.passthru or { }) // { langCC = true; };
+                      }));
+                    }).overrideAttrs (old: {
+                      # LLVM detects x86_64-pc-linux-gnu from GCC, but Nix's
+                      # compiler wrapper targets x86_64-unknown-linux-gnu.
+                      # Libdevice passes LLVM's detected triple explicitly,
+                      # which prevents the wrapper from adding libstdc++
+                      # include paths.
+                      cmakeFlags = old.cmakeFlags ++ [
+                        (prev.lib.cmakeFeature "LLVM_HOST_TRIPLE" prev.stdenv.hostPlatform.config)
+                        (prev.lib.cmakeFeature "LLVM_DEFAULT_TARGET_TRIPLE" prev.stdenv.hostPlatform.config)
+                      ];
+                      passthru = old.passthru // { langCC = true; };
+                    });
+                  })).overrideAttrs (old: {
                     __structuredAttrs = false;
                     paths = builtins.toString old.paths;
                     # The buildCommand still references `$pathsPath` (it
@@ -240,8 +256,87 @@ rec {
         pylontech = inputs.pylontech.packages."${arch}";
         qendercore-adapter = inputs.qendercore-adapter;
         mqtt-spc = inputs.mqtt-spc;
-        nix-apple-fonts = inputs.nix-apple-fonts.packages."${arch}";
-        browservice = inputs.browservice;
+        nix-apple-fonts.default = pkgs.callPackage "${inputs.nix-apple-fonts}/packages/apple-fonts/default.nix" {
+          inputs = { };
+          xorg.mkfontscale = pkgs.mkfontscale;
+        };
+        browservice.packages.${arch}.default =
+          let
+            original = inputs.browservice.packages.${arch}.default;
+            runtimeLibs = with pkgs; [
+              libx11
+              libxcomposite
+              libxcursor
+              libxdamage
+              libxext
+              libxfixes
+              libxi
+              libxrandr
+              libxrender
+              libxscrnsaver
+              libxtst
+              libxcb
+              libxshmfence
+              libxkbcommon
+              gtk3
+              glib
+              pango
+              cairo
+              gdk-pixbuf
+              atk
+              at-spi2-atk
+              at-spi2-core
+              dbus
+              alsa-lib
+              cups
+              libdrm
+              mesa
+              libGL
+              libGLU
+              expat
+              nspr
+              nss
+              udev
+              libgbm
+              fontconfig
+              freetype
+              zlib
+              bzip2
+            ];
+            cefDllWrapper = original.cefDllWrapper.overrideAttrs (_: {
+              buildInputs = runtimeLibs;
+            });
+          in
+          original.overrideAttrs (_: {
+            buildInputs = (with pkgs; [
+              pango
+              libx11
+              libxcb
+              poco
+              libjpeg
+              zlib
+              openssl
+            ]) ++ runtimeLibs;
+            preBuild = ''
+              mkdir -p cef/{Release,Resources,include,releasebuild/libcef_dll_wrapper}
+              cp -r ${cefDllWrapper}/Release/* cef/Release/
+              cp -r ${cefDllWrapper}/Resources/* cef/Resources/
+              cp -r ${cefDllWrapper}/include/* cef/include/
+              cp ${cefDllWrapper}/lib/libcef_dll_wrapper.a cef/releasebuild/libcef_dll_wrapper/
+
+              pushd viceplugins/retrojsvice
+              mkdir -p gen
+              python3 gen_html_cpp.py > gen/html.cpp
+              popd
+            '';
+            postFixup = ''
+              patchelf --set-rpath "$out/lib:${pkgs.lib.makeLibraryPath runtimeLibs}" $out/bin/browservice-unwrapped
+              if [ -f $out/lib/chrome-sandbox ]; then
+                chmod 755 $out/lib/chrome-sandbox
+              fi
+            '';
+            passthru.cefDllWrapper = cefDllWrapper;
+          });
         fractal = inputs.fractal.packages."${arch}";
       };
 

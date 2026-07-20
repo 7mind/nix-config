@@ -3,15 +3,14 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 SECRETS_DIR="$REPO_ROOT/private/secrets/generic"
-CONTAINERS_DIR="$REPO_ROOT/private/hosts/vm/containers"
 
 # Profile definitions
 declare -A PROFILE_PEERS_FILE
 declare -A PROFILE_SECRETS_PREFIX
 declare -A PROFILE_SUBNET
 
-PROFILE_PEERS_FILE[pg]="$CONTAINERS_DIR/pg-awg-peers.json"
-PROFILE_PEERS_FILE[7mind]="$CONTAINERS_DIR/7mind-awg-peers.json"
+PROFILE_PEERS_FILE[pg]="$REPO_ROOT/private/hosts/raspi5l/containers/pg-awg-peers.json"
+PROFILE_PEERS_FILE[7mind]="$REPO_ROOT/private/hosts/raspi5m/containers/7mind-awg-peers.json"
 
 PROFILE_SECRETS_PREFIX[pg]="awg"
 PROFILE_SECRETS_PREFIX[7mind]="7mind-awg"

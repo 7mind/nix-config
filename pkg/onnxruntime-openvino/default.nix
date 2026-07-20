@@ -23,10 +23,9 @@
 #
 # Wheel selection:
 #   - 1.24.1 is the latest PyPI release (uploaded 2026-02-26).
-#   - We pick the cp313 wheel because the pinned nixpkgs default
-#     `pkgs.python3` is 3.13. If the python default ever bumps, swap the
-#     `wheels` entry below — the cp311/cp312 SHAs are kept commented for
-#     quick switching.
+#   - Intel publishes wheels through CPython 3.13 only, so consumers must
+#     use `python313` until a CPython 3.14 wheel becomes available. The
+#     cp311/cp312 SHAs are kept commented for quick switching.
 #
 # Runtime requirements (provided by hardware.graphics.extraPackages on
 # the consuming host/container — see private/hosts/vm/containers/immich.nix):
@@ -42,6 +41,7 @@
   fetchurl,
   buildPythonPackage,
   pythonOlder,
+  pythonAtLeast,
   autoPatchelfHook,
   addDriverRunpath,
 
@@ -83,7 +83,7 @@ buildPythonPackage {
   # x86_64 — no aarch64, no macOS, no other CPython versions. Fail the
   # build loudly rather than silently fall back to the CPU-only stock
   # onnxruntime (which would then claim providers without OpenVINO).
-  disabled = pythonOlder "3.13";
+  disabled = pythonOlder "3.13" || pythonAtLeast "3.14";
 
   src = fetchurl wheels."313";
 

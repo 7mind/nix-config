@@ -27,7 +27,7 @@ let
   # (cq dropped the dedicated ollamaModelsDir option — it was only a ro bind).
   ollamaModelsDir =
     if (outerConfig.services.ollama.enable or false)
-    then outerConfig.services.ollama.models
+    then outerConfig.services.ollama.modelsDir
     else null;
 in
 {

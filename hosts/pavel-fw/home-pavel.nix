@@ -43,7 +43,7 @@
   };
 
   home.packages = with pkgs; [
-    wineWowPackages.stable # Wine (32+64-bit) — provides the `wine` binary
+    wineWow64Packages.stable # Wine (32+64-bit) — provides the `wine` binary
     winetricks
     umu-launcher # run Proton as a standalone Wine outside Steam
     protontricks # manage Proton prefixes (winetricks for Proton)

@@ -1,7 +1,7 @@
 # MediaTek MT7927 (Filogic 380, PCI 14c3:7927, internally MT6639) WiFi 7 +
-# Bluetooth. No mainline support as of linux 7.0.x; wires in jetm's out-of-tree
-# mt76/btusb patch set + firmware, pinned to the 7.0 patch base. The assertion
-# below fails loudly on a kernel bump. Drop this module once mainline
+# Bluetooth. No mainline support as of linux 7.1.x; wires in jetm's out-of-tree
+# v2.13-1 mt76/btusb patch set + firmware, based on Linux 7.1.3 and carrying
+# compatibility shims for Linux 7.0. Drop this module once mainline
 # (wifi: mt76: mt7925: add MT7927 support) has landed.
 { config, lib, pkgs, cfg-meta, ... }:
 
@@ -31,9 +31,9 @@ in
   config = lib.mkIf cfg.enable {
     assertions = [
       {
-        assertion = kernelMM == "7.0";
+        assertion = lib.elem kernelMM [ "7.0" "7.1" ];
         message =
-          "smind.hw.mt7927: the vendored mt76 patch set targets linux 7.0, "
+          "smind.hw.mt7927: the vendored mt76 patch set supports linux 7.0 and 7.1, "
           + "but the kernel is ${kernel.version}. Re-validate the patches "
           + "(pkg/mt7927) against the new kernel, or drop this module if "
           + "MT7927 support has reached mainline.";

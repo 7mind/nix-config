@@ -50,7 +50,6 @@ in
       stable-diffusion-cpp-rocm
 
       #llama-cpp-rocm
-      mistral-rs
 
       # terminal clients
       gollama
