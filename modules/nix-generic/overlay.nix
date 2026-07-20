@@ -9,11 +9,7 @@
           url = "https://github.com/Kitware/VTK/commit/2395603fdddc40c29efc64c632ae98225ca2a58e.patch";
           hash = "sha256-Gcnt1JXWPkhfNLhtk9SXYqx/0cLkjO4xiRfR8YiaY8I=";
         };
-        overrideVtkDependencies = vtk: vtk.override {
-          gdal = final.gdalMinimal;
-          pdal = final.pdal;
-        };
-        patchVtk = vtk: (overrideVtkDependencies vtk).overrideAttrs (old: {
+        patchVtk = vtk: vtk.overrideAttrs (old: {
           patches = (old.patches or [ ]) ++ [ vtkGdalConstPatch ];
         });
       in
@@ -48,43 +44,24 @@
         ];
       });
 
-      # Backport nixpkgs #540826. The test writes its .gmac cache through the
-      # netCDF driver, which the minimal build intentionally omits.
-      gdalMinimal = prev.gdalMinimal.overrideAttrs (old: {
-        disabledTests = (old.disabledTests or [ ]) ++ [
-          "test_zarr_read_simple_sharding"
-        ];
-      });
-
-      # PDAL 2.9.3 predates GDAL 3.13's const-qualified metadata API.
-      pdal = prev.pdal.overrideAttrs (old: {
+      # CGAL 6.2 emits a non-null-terminated .debug_gdb_scripts section, which
+      # LLVM 21's linker rejects during OpenSCAD's ThinLTO link.
+      cgal = prev.cgal.overrideAttrs (old: {
         patches = (old.patches or [ ]) ++ [
           (prev.fetchpatch {
-            url = "https://github.com/PDAL/PDAL/commit/eb7220a2447c5b3d208d7ef0a76c61a17a5b21da.patch";
-            hash = "sha256-WJ7PeCkSl+S+qURa1X3Z6D6LiPpvIXWmEap4XcYq9bk=";
+            name = "cgal-gdb-autoload-null-termination.patch";
+            url = "https://github.com/CGAL/cgal/commit/eb2257df4da4c52c75fe384e803d9a6376057b8a.patch";
+            stripLen = 1;
+            hash = "sha256-3YMYX3/Ioiwk10ixNTRdYGNWrO5q7S9hDHOTcJRXBAk=";
           })
         ];
       });
 
-      # VTK creates private minimal GDAL and PDAL packages, so pass the patched
-      # packages explicitly rather than relying on top-level propagation.
       vtk = patchVtk prev.vtk;
 
       # Work around Python package regressions after nixpkgs update.
       pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
         (python-final: python-prev: {
-          # FreeCAD uses the Python-enabled VTK variant, which has its own
-          # private minimal GDAL and PDAL packages.
-          vtk = overrideVtkDependencies python-prev.vtk;
-
-          telethon = python-prev.telethon.overridePythonAttrs (old: {
-            disabled = false;
-            patches = [ ];
-            disabledTests = (old.disabledTests or [ ]) ++ [
-              "test_sync_acontext"
-            ];
-          });
-
           # web3's test-only py-evm dependency is archived and disabled on
           # Python 3.14. Trezor needs web3 at runtime, not its EVM test backend.
           # pyunormalize remains a declared runtime dependency in its wheel.
@@ -92,21 +69,6 @@
             dependencies = old.dependencies ++ [ python-final.pyunormalize ];
             doCheck = false;
             nativeCheckInputs = [ ];
-          });
-
-          # mypy >=1.x changed --revealed-type output: `builtins.int` → `int`
-          # (PEP 585). eth-utils 6.0.0 tests still expect the old strings.
-          # Tests are purely about mypy output format, not eth-utils behaviour.
-          eth-utils = python-prev.eth-utils.overridePythonAttrs (old: {
-            disabledTests = (old.disabledTests or [ ]) ++ [
-              "test_type_inference"
-            ];
-          });
-
-          # jedi-language-server 0.46.0 pins jedi<0.20; nixpkgs is on 0.20.x.
-          # Minor jedi bump, API-compatible — relax the constraint.
-          jedi-language-server = python-prev.jedi-language-server.overridePythonAttrs (old: {
-            pythonRelaxDeps = (old.pythonRelaxDeps or [ ]) ++ [ "jedi" ];
           });
 
           # construct-classes = python-prev.construct-classes.overridePythonAttrs (old: {
