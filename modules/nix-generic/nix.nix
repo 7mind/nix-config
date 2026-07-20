@@ -25,6 +25,20 @@ in
   };
 
   config = lib.mkMerge [
+    {
+      # nixos-raspberrypi's binary cache. The flake input declares this in its
+      # own `nixConfig`, but nix ignores `nixConfig` from inputs (only the root
+      # flake's is honored), so wire it in explicitly. Applied fleet-wide, not
+      # just on the pi hosts: it is harmless on other architectures (nothing
+      # matches there), and the trusted key lets any host accept pi paths that
+      # were built/signed elsewhere (e.g. cross-built or copied via attic).
+      # Merges with the default substituters and the attic cache; the list
+      # options append, so this does not clobber other substituter settings.
+      nix.settings = {
+        substituters = [ "https://nixos-raspberrypi.cachix.org" ];
+        trusted-public-keys = [ "nixos-raspberrypi.cachix.org-1:4iMO9LXa8BqhU+Rpg6LQKiGa2lsNh/j2oiYLNOQ5sPI=" ];
+      };
+    }
     (lib.optionalAttrs hasDeterminateOption {
       determinate.enable = isDeterminate;
     })

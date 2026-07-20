@@ -41,18 +41,6 @@
     # and unnecessary on a headless server.
   ];
 
-  # Pull the upstream-built kernel and vendor packages from nixos-raspberrypi's
-  # binary cache instead of compiling them locally. The flake input declares
-  # this cache in its own `nixConfig`, but nix ignores `nixConfig` from inputs
-  # (only the root flake's is honored) — so wire it in explicitly here, scoped
-  # to the hosts that actually consume those out-paths. Merges with the default
-  # substituters and the attic cache; connect-timeout is intentionally left to
-  # the attic module to avoid a conflicting single-value assignment.
-  nix.settings = {
-    substituters = [ "https://nixos-raspberrypi.cachix.org" ];
-    trusted-public-keys = [ "nixos-raspberrypi.cachix.org-1:4iMO9LXa8BqhU+Rpg6LQKiGa2lsNh/j2oiYLNOQ5sPI=" ];
-  };
-
   # Recommended by nixos-raspberrypi for new RPi 5 installs
   boot.loader.raspberry-pi.bootloader = "kernel";
 
