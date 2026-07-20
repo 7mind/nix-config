@@ -46,6 +46,7 @@ let
   ++ lib.optional extCfg.dash-to-dock.enable pkgs.gnomeExtensions.dash-to-dock
   ++ lib.optional extCfg.dash2dock-lite.enable pkgs.gnomeExtensions.dash2dock-lite
   ++ lib.optional extCfg.no-overview.enable pkgs.gnomeExtensions.no-overview
+  ++ lib.optional extCfg.classic-app-switcher.enable pkgs.gnomeExtensions.classic-app-switcher
   ++ lib.optional extCfg.touchpad-gesture-customization.enable pkgs.gnome-shell-extension-touchpad-gesture-customization-app-expose
   ++ lib.optional hibernateCfg.enable hibernateExtensionPatched
   ++ lib.optional config.smind.desktop.gnome.sticky-keys.enable gnomeExtensions.keyboard-modifiers-status
@@ -80,6 +81,7 @@ in
       };
       dash2dock-lite.enable = lib.mkEnableOption "dash2dock-lite extension" // { default = false; };
       no-overview.enable = lib.mkEnableOption "no-overview extension - skip overview on login" // { default = false; };
+      classic-app-switcher.enable = lib.mkEnableOption "Classic App Switcher extension" // { default = false; };
       touchpad-gesture-customization = {
         enable = lib.mkEnableOption "Touchpad Gesture Customization — remap touchpad gestures" // {
           default = config.smind.three-finger-drag.enable;
