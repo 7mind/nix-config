@@ -72,6 +72,19 @@
         then prev.polkit.override { doCheck = false; }
         else prev.polkit;
 
+      # lsd uses pandoc only to render its Markdown man page. Keep the binary
+      # and generated shell completions without pulling pandoc's Haskell build
+      # graph into every host that installs lsd.
+      lsd = prev.lsd.overrideAttrs (old: {
+        nativeBuildInputs = prev.lib.remove prev.pandoc (old.nativeBuildInputs or [ ]);
+        postInstall = ''
+          installShellCompletion --cmd lsd \
+            --bash $releaseDir/build/lsd-*/out/lsd.bash \
+            --fish $releaseDir/build/lsd-*/out/lsd.fish \
+            --zsh $releaseDir/build/lsd-*/out/_lsd
+        '';
+      });
+
       # CGAL 6.2 emits a non-null-terminated .debug_gdb_scripts section, which
       # LLVM 21's linker rejects during OpenSCAD's ThinLTO link.
       cgal = prev.cgal.overrideAttrs (old: {
