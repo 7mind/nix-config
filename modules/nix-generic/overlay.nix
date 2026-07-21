@@ -44,6 +44,34 @@
         ];
       });
 
+      # bat's integration tests for --help, --list-languages, PAGER=bat handling and
+      # --set-terminal-title assume that `less` is not found in $PATH during
+      # `cargo test` (so that paging falls back to direct stdout). Under
+      # qemu-user binfmt aarch64 emulation on an x86_64 builder, `less` becomes
+      # resolvable, causing output to be sent to the pager child instead.
+      # Skip the affected tests (matching the skips already present in nixpkgs'
+      # bat package.nix for other pager tests).
+      bat = prev.bat.overrideAttrs (old: prev.lib.optionalAttrs prev.stdenv.hostPlatform.isAarch64 {
+        checkFlags = (old.checkFlags or [ ]) ++ [
+          "--skip=basic_set_terminal_title"
+          "--skip=env_var_pager_value_bat"
+          "--skip=help_uses_valid_config"
+          "--skip=help_works_with_invalid_config"
+          "--skip=list_languages"
+          "--skip=long_help"
+          "--skip=short_help"
+        ];
+      });
+
+      # Every polkit test enters a user and mount namespace through
+      # os.unshare(CLONE_NEWUSER | CLONE_NEWNS). qemu-user binfmt returns EINVAL
+      # for that call, so none of the test bodies run on the emulated aarch64
+      # builder. Nix reports buildPlatform == hostPlatform == aarch64-linux in
+      # this setup, so disable the suite for aarch64-linux.
+      polkit = if prev.stdenv.hostPlatform.isAarch64
+        then prev.polkit.override { doCheck = false; }
+        else prev.polkit;
+
       # CGAL 6.2 emits a non-null-terminated .debug_gdb_scripts section, which
       # LLVM 21's linker rejects during OpenSCAD's ThinLTO link.
       cgal = prev.cgal.overrideAttrs (old: {
