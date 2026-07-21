@@ -8,6 +8,11 @@
       description = "Enable common Linux system packages and settings";
     };
     smind.environment.linux.serial-debug.enable = lib.mkEnableOption "serial console debug output";
+    smind.environment.linux.fwupd.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Install fwupd firmware update tools";
+    };
   };
 
   config = lib.mkMerge [
@@ -85,7 +90,7 @@
         # hw tools
         pciutils
         usbutils
-        fwupd
+      ] ++ lib.optional config.smind.environment.linux.fwupd.enable fwupd ++ [
         lm_sensors
 
         # networking

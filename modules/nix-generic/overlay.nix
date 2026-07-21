@@ -85,6 +85,10 @@
         '';
       });
 
+      # tpm2-tools exposes a supported switch for omitting its pandoc-generated
+      # man pages. fwupd depends on the tools, not their documentation.
+      tpm2-tools = prev.tpm2-tools.override { enableManpages = false; };
+
       # CGAL 6.2 emits a non-null-terminated .debug_gdb_scripts section, which
       # LLVM 21's linker rejects during OpenSCAD's ThinLTO link.
       cgal = prev.cgal.overrideAttrs (old: {
@@ -111,6 +115,45 @@
             doCheck = false;
             nativeCheckInputs = [ ];
           });
+
+          paho-mqtt = python-prev.paho-mqtt.overridePythonAttrs (old:
+            prev.lib.optionalAttrs prev.stdenv.hostPlatform.isAarch64 {
+              # These integration tests launch broker/client subprocesses whose
+              # teardown timeout interrupts different clients under load.
+              disabledTestPaths = (old.disabledTestPaths or [ ]) ++ [
+                "tests/lib"
+              ];
+              disabledTests = (old.disabledTests or [ ]) ++ [
+                "test_callback_v1_mqtt3"
+                "test_callback_v2_mqtt3"
+              ];
+            });
+
+          anyio = python-prev.anyio.overridePythonAttrs (old:
+            prev.lib.optionalAttrs prev.stdenv.hostPlatform.isAarch64 {
+              disabledTests = (old.disabledTests or [ ]) ++ [
+                "test_keyboard_interrupt_does_not_resume_test"
+              ];
+            });
+
+          websockets = python-prev.websockets.overridePythonAttrs (old:
+            prev.lib.optionalAttrs prev.stdenv.hostPlatform.isAarch64 {
+              # unittestCheckHook ignores disabledTests, so make these two
+              # socket-error timing tests undiscoverable on aarch64.
+              postPatch = (old.postPatch or "") + ''
+                substituteInPlace tests/sync/test_connection.py \
+                  --replace-fail "def test_writing_in_recv_events_fails" "def disabled_writing_in_recv_events_fails" \
+                  --replace-fail "def test_writing_in_send_context_fails" "def disabled_writing_in_send_context_fails"
+              '';
+            });
+
+          pillow = python-prev.pillow.overridePythonAttrs (_:
+            prev.lib.optionalAttrs prev.stdenv.hostPlatform.isAarch64 {
+              # Under qemu-user the Python interpreter aborts while pytest is
+              # still collecting tests, before a narrower test can be named.
+              doCheck = false;
+              nativeCheckInputs = [ ];
+            });
 
           # construct-classes = python-prev.construct-classes.overridePythonAttrs (old: {
           #   postPatch = (old.postPatch or "") + ''

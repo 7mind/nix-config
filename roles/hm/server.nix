@@ -12,12 +12,13 @@
       tmux.enable = lib.mkDefault true;
 
       zsh.enable = lib.mkDefault true;
-      nushell.enable = lib.mkDefault true;
 
       cleanups.enable = lib.mkDefault true;
     };
 
-    # Oracle Cloud Infrastructure CLI (Linux only).
-    home.packages = lib.optional (!cfg-meta.isDarwin) pkgs.oci-cli;
+    # Oracle Cloud Infrastructure CLI (x86 Linux only).
+    home.packages = lib.optional (
+      pkgs.stdenv.hostPlatform.isLinux && pkgs.stdenv.hostPlatform.isx86
+    ) pkgs.oci-cli;
   };
 }

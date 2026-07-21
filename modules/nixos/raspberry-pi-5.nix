@@ -58,6 +58,10 @@
   smind = {
     zfs.enable = false;
     kernel.sane-defaults.enable = false;
-    hw.cpu.isArm = true;
+    environment.linux.fwupd.enable = false;
+    hw = {
+      cpu.isArm = true;
+      fwupd.enable = false;
+    };
   };
 }

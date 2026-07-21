@@ -9,7 +9,9 @@
     smind = {
       roles.server.generic = true;
 
+      environment.linux.fwupd.enable = false;
       hw.cpu.isArm = true;
+      hw.fwupd.enable = false;
       hw.oracle-cloud.enable = true;
 
       bootloader.systemd-boot.enable = true;
