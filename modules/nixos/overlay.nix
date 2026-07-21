@@ -11,41 +11,7 @@
     (final: prev: {
       # Standalone ghostty terminfo, avoiding the full GUI app (gtk4, libadwaita,
       # gstreamer, ...). Parses the terminfo from ghostty's Zig source, tic-compiles.
-      ghostty-terminfo =
-        prev.runCommand "ghostty-terminfo-${prev.ghostty.version}"
-          {
-            nativeBuildInputs = [ prev.ncurses ];
-          }
-          ''
-            ${prev.python3.interpreter} ${prev.writeText "gen-ghostty-ti.py" ''
-              import re, sys
-              with open(sys.argv[1]) as f:
-                  content = f.read()
-              names_match = re.search(r'\.names\s*=\s*&\.\{(.*?)\}', content, re.DOTALL)
-              names = re.findall(r'"([^"]+)"', names_match.group(1))
-              caps = []
-              for line in content.split('\n'):
-                  m = re.search(r'\.name\s*=\s*"([^"]+)"', line)
-                  if not m:
-                      continue
-                  name = m.group(1)
-                  if '.boolean' in line:
-                      caps.append(f"\t{name},")
-                  elif '.canceled' in line:
-                      caps.append(f"\t{name}@,")
-                  elif '.numeric' in line:
-                      nm = re.search(r'\.numeric\s*=\s*(\d+)', line)
-                      caps.append(f"\t{name}#{nm.group(1)},")
-                  elif '.string' in line:
-                      sm = re.search(r'\.string\s*=\s*"([^"]*)"', line)
-                      s = sm.group(1).replace('\\\\', '\\')
-                      caps.append(f"\t{name}={s},")
-              print('|'.join(names) + ',')
-              print('\n'.join(caps))
-            ''} ${prev.ghostty.src}/src/terminfo/ghostty.zig > ghostty.ti
-            mkdir -p $out/share/terminfo
-            tic -x -o $out/share/terminfo ghostty.ti
-          '';
+      ghostty-terminfo = prev.callPackage ../../pkg/ghostty-terminfo { };
     })
     (
       self: super:

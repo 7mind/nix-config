@@ -18,6 +18,8 @@
   # `pkgs.intel-compute-runtime`.
   nixpkgs.overlays = [
     (final: prev: {
+      ghostty-terminfo = prev.callPackage ../../pkg/ghostty-terminfo { };
+
       intel-compute-runtime = prev.intel-compute-runtime.overrideAttrs (oldAttrs: rec {
         version = "26.18.38308.1";
         src = prev.fetchFromGitHub {
@@ -64,7 +66,7 @@
   documentation.nixos.enable = lib.mkDefault false;
 
   environment.systemPackages = [
-    pkgs.ghostty.terminfo
+    pkgs.ghostty-terminfo
   ];
 
   services.openssh = {
