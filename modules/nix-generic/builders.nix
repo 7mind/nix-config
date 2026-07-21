@@ -36,9 +36,9 @@ let
       # Same Threadripper as the x86_64 entry above, exposed as an
       # aarch64-linux builder via the binfmt/QEMU emulation enabled in
       # hosts/pavel-trx40/cfg-pavel-trx40.nix. Per-job throughput is
-      # below a native ARM64 box (o1/o2), but 32C/64T + the userspace
+      # below a native ARM64 box (o0/o1/o2), but 32C/64T + the userspace
       # QEMU translator running on Zen2 still beats local emulation on
-      # vm by a wide margin, and frequently the small o1/o2 boxes too
+      # vm by a wide margin, and frequently the small o0/o1/o2 boxes too
       # — so this entry is given a higher speedFactor than the native
       # ones to make the scheduler prefer it whenever pavel-trx40 is
       # up. The `nix.settings.fallback = true` below keeps vm building
@@ -85,6 +85,19 @@ let
       }
 
       {
+        hostName = "o0.7mind.io";
+        system = "aarch64-linux";
+        protocol = "ssh-ng";
+        sshUser = "root";
+        sshKey = lib.mkIf ownerSecretsEnabled "${config.age.secrets.builder-key.path}";
+        publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSUtaU3FyUjVSb0FUV2Z2ZFdPUkdHU1FGRTJFTzJpSlA5S3Z2WWtRbVE2aG8gcm9vdEBuaXhvcwo=";
+        maxJobs = 4;
+        speedFactor = 8;
+        supportedFeatures = [ "benchmark" "big-parallel" ];
+        mandatoryFeatures = [ ];
+      }
+
+      {
         hostName = "o1.7mind.io";
         system = "aarch64-linux";
         protocol = "ssh-ng";
@@ -124,7 +137,7 @@ in
     # no matching system+features), fall through to a local build
     # instead of failing. Pairs with the short `connect-timeout = 3`
     # set in modules/nix-generic/attic-cache.nix — together they make
-    # an offline pavel-trx40/o1/o2 non-fatal.
+    # an offline pavel-trx40/o0/o1/o2 non-fatal.
     nix.settings.fallback = true;
 
     nix.extraOptions = ''
