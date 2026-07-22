@@ -127,6 +127,8 @@
           "audiocd-kio"
           # doesn't build on current nixpkgs
           "calligra"
+          # requires Python <3.14, fails to configure against python3.14
+          "kdev-python"
         ];
       in
       lib.pipe kdePackages.sources [
