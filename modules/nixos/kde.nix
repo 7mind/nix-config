@@ -125,6 +125,8 @@
           "itinerary"
           # broken
           "audiocd-kio"
+          # doesn't build on current nixpkgs
+          "calligra"
         ];
       in
       lib.pipe kdePackages.sources [
