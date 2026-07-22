@@ -115,11 +115,11 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1782222298,
-        "narHash": "sha256-Ztn9zl0Q8Pbj0mVwYsaofyWRLv4fpEGIJnHMTfUAgtY=",
+        "lastModified": 1784590444,
+        "narHash": "sha256-Hpr17vBzXROrzlsEA2cM2Vo1Dvqdid+H6C9hqDMLQzE=",
         "owner": "neko-kai",
         "repo": "claude-code-sandbox",
-        "rev": "705c572558328c2612e65722b3cdf814fe1d97a5",
+        "rev": "48e39fbbb2cddc1d88738c407c92737765811cc9",
         "type": "github"
       },
       "original": {
@@ -131,11 +131,11 @@
     "codegraph": {
       "flake": false,
       "locked": {
-        "lastModified": 1783904943,
-        "narHash": "sha256-GmnzjlrzV5qwz71Be12qLkylFjQsSViZSaX5nb3EKfc=",
+        "lastModified": 1784661220,
+        "narHash": "sha256-PPPOp4goz154esdUJYMu20Lby3QObsEt5z5k+9CSjwk=",
         "owner": "colbymchenry",
         "repo": "codegraph",
-        "rev": "e871c49a3173a637172f501f21f6a2753ea5a39f",
+        "rev": "ea72e1b190921232aa7bd02e96bef5bbe4fe0ab6",
         "type": "github"
       },
       "original": {
@@ -156,11 +156,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1784154908,
-        "narHash": "sha256-a3xiaE3QqPqxjHrD+5IE3z898r42Jia+80ZLE2reyz0=",
+        "lastModified": 1784754481,
+        "narHash": "sha256-M0a9tfit0f8FQFTPdQOShSXVpS6kpKrEsfc58Ljc1eU=",
         "owner": "7mind",
         "repo": "cq",
-        "rev": "2e6cb7ae37f972e1eb3c5b1769c73591c0986080",
+        "rev": "1204c64aa0c62830643027910d9b416f5e283252",
         "type": "github"
       },
       "original": {
