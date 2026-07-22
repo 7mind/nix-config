@@ -119,7 +119,16 @@ struct Shared {
     /// `Z2mClient` stored `_groups_payload` + `_groups_event`, but
     /// generalized to any topic instead of two hardcoded ones.
     topic_cache: Mutex<HashMap<String, TopicCacheEntry>>,
+
+    /// Rolling buffer of `bridge/logging` payloads with arrival stamps.
+    /// `/set` commands (scene_add) are fire-and-forget on the wire; z2m
+    /// reports their zigbee-level failures (coordinator BUSY/BUFFER_FULL)
+    /// only through this log stream, so verification scans it.
+    log_buffer: Mutex<Vec<(std::time::Instant, String)>>,
 }
+
+/// Cap for `Shared::log_buffer`; oldest entries are dropped beyond this.
+const LOG_BUFFER_CAP: usize = 1000;
 
 #[derive(Default)]
 struct TopicCacheEntry {
@@ -154,6 +163,7 @@ impl Z2mClient {
         let shared = Arc::new(Shared {
             requests: Mutex::new(HashMap::new()),
             topic_cache: Mutex::new(HashMap::new()),
+            log_buffer: Mutex::new(Vec::new()),
         });
         // Pre-create the topic cache entries so the fetch path always
         // finds an Arc<Notify> to wait on, even if the eventloop hasn't
@@ -190,7 +200,7 @@ impl Z2mClient {
         // Subscribe to all the bridge topics we care about. The broker
         // delivers any retained messages right after the SUBACK; the
         // eventloop's Publish handler drops them into `topic_cache`.
-        for topic in [bridge::GROUPS, bridge::DEVICES] {
+        for topic in [bridge::GROUPS, bridge::DEVICES, bridge::LOGGING] {
             tracing::debug!(topic, "z2m-client: subscribing");
             client.subscribe(topic, QoS::AtLeastOnce).await?;
         }
@@ -501,6 +511,35 @@ impl Z2mClient {
         Ok(())
     }
 
+    /// Scan `bridge/logging` lines received after `since` for a failed
+    /// `scene_add` on `group`. z2m reports these as error-level messages of
+    /// the shape `Publish 'set' 'scene_add' to '<group>' failed: ...` —
+    /// e.g. coordinator send rejections (ember `status=BUSY`, zstack
+    /// `BUFFER_FULL`) that a plain `/set` publish can never surface.
+    pub async fn scene_add_errors_since(
+        &self,
+        since: std::time::Instant,
+        group: &str,
+    ) -> Vec<String> {
+        let needle_op = "'scene_add'";
+        let needle_group = format!("'{group}' failed");
+        let guard = self.shared.log_buffer.lock().await;
+        guard
+            .iter()
+            .filter(|(t, _)| *t >= since)
+            .filter_map(|(_, raw)| {
+                let msg = serde_json::from_str::<Value>(raw)
+                    .ok()
+                    .and_then(|v| {
+                        let level_err = v.get("level").and_then(Value::as_str) == Some("error");
+                        let m = v.get("message").and_then(Value::as_str).map(str::to_owned);
+                        if level_err { m } else { None }
+                    })?;
+                (msg.contains(needle_op) && msg.contains(&needle_group)).then_some(msg)
+            })
+            .collect()
+    }
+
     /// Set device-level configuration via `bridge/request/device/options`.
     /// This is the bridge API endpoint for device metadata like
     /// `description`, `retain`, etc. — distinct from `set_device_options`
@@ -599,6 +638,16 @@ async fn run_event_loop(
                                 let _ = tx.send(resp);
                             }
                         }
+                    }
+                    continue;
+                }
+                if topic == bridge::LOGGING {
+                    let line = String::from_utf8_lossy(&p.payload).into_owned();
+                    let mut guard = shared.log_buffer.lock().await;
+                    guard.push((std::time::Instant::now(), line));
+                    if guard.len() > LOG_BUFFER_CAP {
+                        let excess = guard.len() - LOG_BUFFER_CAP;
+                        guard.drain(..excess);
                     }
                     continue;
                 }

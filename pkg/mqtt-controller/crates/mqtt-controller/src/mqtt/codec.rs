@@ -14,6 +14,11 @@ pub mod bridge {
     pub const GROUPS: &str = "zigbee2mqtt/bridge/groups";
     pub const DEVICES: &str = "zigbee2mqtt/bridge/devices";
     pub const RESPONSE_PREFIX: &str = "zigbee2mqtt/bridge/response/";
+    /// z2m mirrors every log line here (winston transport registered at
+    /// bridge start). `/set` commands like `scene_add` report failures
+    /// ONLY through this stream, so the provisioner watches it to verify
+    /// that fire-and-forget publishes actually reached the zigbee network.
+    pub const LOGGING: &str = "zigbee2mqtt/bridge/logging";
 }
 
 /// Z-Wave JS UI MQTT API topics used by the provisioner for rename
