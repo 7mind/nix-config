@@ -646,9 +646,15 @@ do_switch() {
         # (deploying from a host that doesn't hold it — then -ncs is required).
         if [[ "$THISHOST" != "$host" && "$DO_CHECK_SIGS" == "true" ]]; then
             local sign_key="/run/agenix/nix-signing-key"
-            if sudo test -f "$sign_key"; then
+            # Invoke the absolute system nix so this matches the NOPASSWD sudoers
+            # entry created by smind.security.sudo.wheel-permissive-rules
+            # (/run/current-system/sw/bin/nix); a bare "sudo nix" may resolve
+            # elsewhere and prompt for a password. The key presence check stays
+            # unprivileged — [[ -e ]] only needs /run/agenix traversable, so it
+            # avoids a password-triggering "sudo test".
+            if [[ -e "$sign_key" ]]; then
                 echo "    Signing closure for $host with nix-local key..."
-                sudo nix store sign --key-file "$sign_key" --recursive "$closure"
+                sudo /run/current-system/sw/bin/nix store sign --key-file "$sign_key" --recursive "$closure"
             else
                 echo "    Warning: signing key $sign_key not found; remote copy may fail require-sigs (retry with -ncs)."
             fi
