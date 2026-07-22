@@ -634,6 +634,26 @@ do_switch() {
         fi
 
         echo "    ${verb} $host..."
+
+        # Remote copies enforce require-sigs on the target. Host-specific config
+        # paths built on remote (cross-arch) builders — e.g. the aarch64 Pis
+        # built from an x86_64 host — arrive in the local store unsigned, since
+        # nix only signs at build time on the local daemon. Stamp the whole
+        # closure with the local nix-local signing key (which the targets already
+        # trust via trusted-public-keys) before copying, so require-sigs passes
+        # without -ncs. Needs root: the key is 0400 and only root is a trusted
+        # user. Skipped when signatures are disabled (-ncs) or the key is absent
+        # (deploying from a host that doesn't hold it — then -ncs is required).
+        if [[ "$THISHOST" != "$host" && "$DO_CHECK_SIGS" == "true" ]]; then
+            local sign_key="/run/agenix/nix-signing-key"
+            if sudo test -f "$sign_key"; then
+                echo "    Signing closure for $host with nix-local key..."
+                sudo nix store sign --key-file "$sign_key" --recursive "$closure"
+            else
+                echo "    Warning: signing key $sign_key not found; remote copy may fail require-sigs (retry with -ncs)."
+            fi
+        fi
+
         case "$platform" in
             darwin)
                 if [[ "$action" == "boot" ]]; then
