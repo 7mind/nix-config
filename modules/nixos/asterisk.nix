@@ -206,7 +206,16 @@ let
 
     [global]
     type=global
-    user_agent=${cfg.userAgent}
+    user_agent=${cfg.userAgent}${optionalString (cfg.realm != null) ''
+
+      ; Digest realm sent in WWW-Authenticate. Asterisk's default is the literal
+      ; string "asterisk", which does not match the domain clients register
+      ; against. Tolerant clients just echo whatever realm the server sends, but
+      ; strict ones (Linphone) look up the stored password *by realm*, find
+      ; nothing for "asterisk", and re-REGISTER with no Authorization header --
+      ; producing an endless challenge loop with no InvalidPassword event.
+      ; Setting this to the SIP domain makes those clients authenticate.
+      default_realm=${cfg.realm}''}
     ; One SIP domain only; multi-domain matching is an attack surface here.
     disable_multi_domain=yes
     ; Emit a security event once this many unmatched requests arrive in the
@@ -361,6 +370,19 @@ in
 {
   options.smind.services.asterisk = {
     enable = mkEnableOption "Asterisk PBX";
+
+    realm = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "pbx.example.org";
+      description = ''
+        Digest authentication realm advertised in challenges. Leave null to keep
+        Asterisk's default (the literal string `asterisk`). Set it to the SIP
+        domain clients register against: clients that match stored credentials
+        by realm -- Linphone among them -- otherwise never send an Authorization
+        header and loop on repeated challenges.
+      '';
+    };
 
     verboseLevel = mkOption {
       type = types.ints.unsigned;
