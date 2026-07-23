@@ -655,6 +655,30 @@ in
       # Upstream sets restartIfChanged=false to protect calls in progress, which
       # also means config changes need an explicit `systemctl restart asterisk`.
       preStart = lib.mkAfter "${runtimeConfScript}";
+
+      # The upstream unit ships with zero sandboxing. These directives are the
+      # subset that does NOT interfere with how Asterisk actually runs: it starts
+      # as root, binds privileged ports (5060/5061), then drops to the asterisk
+      # user, and uses realtime scheduling and AF_NETLINK for media/interface
+      # work. So RestrictRealtime, RestrictAddressFamilies, SystemCallFilter and a
+      # CapabilityBoundingSet are deliberately omitted here -- they need an on-box
+      # start test before they can be trusted not to break RTP or the port bind.
+      # ProtectSystem="full" keeps /usr,/boot,/etc read-only while leaving /var
+      # and /run writable, which is all Asterisk needs.
+      serviceConfig = {
+        NoNewPrivileges = true;
+        ProtectSystem = "full";
+        ProtectHome = true;
+        PrivateTmp = true;
+        ProtectControlGroups = true;
+        ProtectKernelModules = true;
+        ProtectKernelTunables = true;
+        ProtectKernelLogs = true;
+        ProtectClock = true;
+        ProtectHostname = true;
+        RestrictSUIDSGID = true;
+        LockPersonality = true;
+      };
     };
 
     networking.firewall = mkIf cfg.openFirewall {
