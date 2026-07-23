@@ -190,6 +190,22 @@
             '';
           });
 
+      # CVE-2026-57191 (CVSS 8.2, unauthenticated): unbounded sscanf on the MWI
+      # NOTIFY "Message-Account" header in res_pjsip_pubsub lets a crafted SIP
+      # NOTIFY overflow a 512-byte stack buffer and permanently wedge the PJSIP
+      # transport. nixpkgs still ships 22.8.2, which is affected; the upstream
+      # fix (standard 22.10.1 / certified 22.8-cert3) just bounds the field with
+      # a width specifier. `--replace-fail` makes the build error the day a
+      # nixpkgs bump already carries the fix, so this override can't go stale
+      # silently. Only raspi5l builds asterisk.
+      asterisk = super.asterisk.overrideAttrs (old: {
+        postPatch = (old.postPatch or "") + ''
+          substituteInPlace res/res_pjsip_pubsub.c \
+            --replace-fail 'sscanf(line, "message-account: %s"' \
+                           'sscanf(line, "message-account: %511s"'
+        '';
+      });
+
       # Traccar wraps its JVM with the FULL openjdk, which runtime-depends on
       # gtk+3 (AWT/Swing) and so drags wayland + libX11 into the closure. The
       # GPS server is headless and never touches AWT, so point the wrapper at
