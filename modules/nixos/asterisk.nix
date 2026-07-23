@@ -41,6 +41,21 @@ let
     disallow=all
     allow=${concatStringsSep "," codecs}'';
 
+  # A PJSIP transport serves exactly one address family, so dual-stack means a
+  # second object bound to `::`. pjproject sets IPV6_V6ONLY, so this can reuse
+  # the same port number without colliding with the IPv4 socket (verified).
+  #
+  # No NAT block here on purpose: IPv6 is end-to-end, so Asterisk's own address
+  # is already the one peers must reach, and applying an IPv4 external address
+  # to a v6 transport would corrupt the SDP.
+  udp6Transport = optionalString cfg.ipv6.enable ''
+
+    [${cfg.udpTransport}6]
+    type=transport
+    protocol=udp
+    bind=[::]:${toString cfg.udpPort}
+  '';
+
   extensionModule =
     { name, ... }:
     {
@@ -210,7 +225,7 @@ let
     protocol=udp
     bind=0.0.0.0:${toString cfg.udpPort}
     ${natBlock}
-
+    ${udp6Transport}
     ${trunkTlsTransport}
     ${endpointSections}
     ${trunkSections}
@@ -318,6 +333,17 @@ let
           'method=tlsv1_2' \
           ${lib.escapeShellArg natBlock} \
           >> "$tmp"
+        ${optionalString cfg.ipv6.enable ''
+          printf '\n%s\n' \
+            '[${cfg.tlsTransport}6]' \
+            'type=transport' \
+            'protocol=tls' \
+            'bind=[::]:${toString cfg.tls.port}' \
+            "cert_file=$cert" \
+            "priv_key_file=$key" \
+            'method=tlsv1_2' \
+            >> "$tmp"
+        ''}
       else
         echo "asterisk: TLS certificate not readable at $cert -- starting without a TLS transport" >&2
       fi
@@ -410,6 +436,13 @@ in
         description = "Private key file name inside certificateDir.";
       };
     };
+
+    ipv6.enable = mkEnableOption ''
+      dual-stack SIP: a second UDP transport, and a second TLS listener, bound
+      to `::` on the same ports. IPv6 is end-to-end, so these carry no NAT
+      settings -- clients reach the host directly and no port forward is
+      involved, only an inbound allow rule on the router
+    '';
 
     nat = {
       externalAddress = mkOption {
