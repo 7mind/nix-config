@@ -296,7 +296,11 @@ let
 
     [logfiles]
     ; Goes to journald via syslog; the fail2ban jail reads it from there.
-    syslog.local0 => notice,warning,error,security
+    ; `verbose` is included so that `pjsip set logger on` actually lands
+    ; somewhere -- without it the SIP/SDP trace is emitted to nothing and call
+    ; debugging is impossible without attaching a console. It only produces
+    ; volume while a debug logger is switched on; journald handles rotation.
+    syslog.local0 => notice,warning,error,security,verbose
   '';
 
   # Written at start-up so that secrets stay out of the Nix store.
@@ -357,6 +361,17 @@ in
 {
   options.smind.services.asterisk = {
     enable = mkEnableOption "Asterisk PBX";
+
+    verboseLevel = mkOption {
+      type = types.ints.unsigned;
+      default = 3;
+      description = ''
+        Asterisk verbose level. Must be above 0 or every verbose message is
+        discarded, including the `pjsip set logger on` SIP/SDP trace. Combined
+        with `verbose` in logger.conf this makes call debugging a plain
+        `journalctl -u asterisk`.
+      '';
+    };
 
     userAgent = mkOption {
       type = types.str;
@@ -648,6 +663,14 @@ in
         "rtp.conf" = rtpConf;
         "logger.conf" = loggerConf;
       };
+      # Asterisk's verbose level defaults to 0, which silently discards every
+      # verbose message -- including the entire `pjsip set logger on` SIP/SDP
+      # trace, making call debugging impossible. Level 3 is the usual operational
+      # setting: call progress plus, when enabled, full SIP messages.
+      extraConfig = ''
+        [options]
+        verbose = ${toString cfg.verboseLevel}
+      '';
     };
 
     systemd.services.asterisk = {
