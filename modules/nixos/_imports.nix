@@ -3,6 +3,7 @@
   ./alien-filesystems.nix
   ./networkd-routes-to-dns.nix
   ./amnezia-vpn.nix
+  ./asterisk.nix
   ./attic-cache-tmpfiles.nix
   ./audio.nix
   ./btrfs-snapshots.nix
