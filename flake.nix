@@ -102,6 +102,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    classic-app-switcher = {
+      url = "github:neko-kai/classic-app-switcher";
+      flake = false;
+    };
+
     touchpad-gesture-customization-app-expose = {
       url = "github:7mind/touchpad-gesture-customization-app-expose";
       inputs.nixpkgs.follows = "nixpkgs";

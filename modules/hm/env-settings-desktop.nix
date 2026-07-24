@@ -66,7 +66,7 @@
 
       pdftk
 
-      tgeraser
+      # tgeraser # error: telethon-1.42.0 not supported for interpreter python3.14
       geekbench
 
       # mcus

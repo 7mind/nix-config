@@ -40,13 +40,13 @@ in
     };
 
     smind.hm.desktop.cosmic.hotkey-modifier = lib.mkOption {
-      type = lib.types.enum [ "super" "ctrl" "super+ctrl" ];
-      default = "super";
+      type = outerConfig.lib.xkb.modifierType;
+      default = outerConfig.smind.desktop.xkb.hotkey-modifier;
+      example = "ctrl-super";
       description = ''
-        Modifier key for window switching hotkeys (Tab, grave, Space):
-        - "super": Use Super/Cmd key (macOS-style)
-        - "ctrl": Use Ctrl key (traditional Linux/Windows style)
-        - "super+ctrl": Require both Super+Ctrl pressed together
+        Modifier(s) for window switching hotkeys (Tab, grave, Space), as a dash-separated
+        combination of "ctrl", "alt", "super", "shift" (e.g. "super", "ctrl", "ctrl-super").
+        Defaults to smind.desktop.xkb.hotkey-modifier.
       '';
     };
 
@@ -199,10 +199,8 @@ in
 
           hotkeyMod = config.smind.hm.desktop.cosmic.hotkey-modifier;
 
-          hotkeyMods =
-            if hotkeyMod == "super" then [ "Super" ]
-            else if hotkeyMod == "ctrl" then [ "Ctrl" ]
-            else [ "Ctrl" "Super" ]; # super+ctrl
+          cosmicModifierTokens = { ctrl = "Ctrl"; alt = "Alt"; super = "Super"; shift = "Shift"; };
+          hotkeyMods = map (t: cosmicModifierTokens.${t}) (outerConfig.lib.xkb.modifierTokens hotkeyMod);
 
           kbHotkey = key: action: kb hotkeyMods key action;
           disableHotkeyShift = key: disable ([ "Shift" ] ++ hotkeyMods) key;

@@ -109,6 +109,22 @@
         "type": "github"
       }
     },
+    "classic-app-switcher": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1784763853,
+        "narHash": "sha256-45Y3BYKSZrWJptbzAi2ybK7xNCdqPFlHP2mEKZqkLnk=",
+        "owner": "neko-kai",
+        "repo": "classic-app-switcher",
+        "rev": "57e701df7a9ad6f124f1b96ccfa698bfec19aac8",
+        "type": "github"
+      },
+      "original": {
+        "owner": "neko-kai",
+        "repo": "classic-app-switcher",
+        "type": "github"
+      }
+    },
     "claude-code-sandbox": {
       "inputs": {
         "flake-utils": "flake-utils_2",
@@ -1325,6 +1341,7 @@
         "agenix": "agenix",
         "agenix-rekey": "agenix-rekey",
         "browservice": "browservice",
+        "classic-app-switcher": "classic-app-switcher",
         "cq": "cq",
         "crane": "crane",
         "darwin": "darwin",

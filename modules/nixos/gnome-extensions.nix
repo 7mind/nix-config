@@ -46,7 +46,7 @@ let
   ++ lib.optional extCfg.dash-to-dock.enable pkgs.gnomeExtensions.dash-to-dock
   ++ lib.optional extCfg.dash2dock-lite.enable pkgs.gnomeExtensions.dash2dock-lite
   ++ lib.optional extCfg.no-overview.enable pkgs.gnomeExtensions.no-overview
-  ++ lib.optional extCfg.classic-app-switcher.enable pkgs.gnomeExtensions.classic-app-switcher
+  ++ lib.optional extCfg.classic-app-switcher.enable pkgs.gnome-shell-extension-classic-app-switcher
   ++ lib.optional extCfg.touchpad-gesture-customization.enable pkgs.gnome-shell-extension-touchpad-gesture-customization-app-expose
   ++ lib.optional hibernateCfg.enable hibernateExtensionPatched
   ++ lib.optional config.smind.desktop.gnome.sticky-keys.enable gnomeExtensions.keyboard-modifiers-status
@@ -81,7 +81,11 @@ in
       };
       dash2dock-lite.enable = lib.mkEnableOption "dash2dock-lite extension" // { default = false; };
       no-overview.enable = lib.mkEnableOption "no-overview extension - skip overview on login" // { default = false; };
-      classic-app-switcher.enable = lib.mkEnableOption "Classic App Switcher extension" // { default = false; };
+      classic-app-switcher = {
+        enable = lib.mkEnableOption "Classic App Switcher extension (custom fork)" // { default = false; };
+        mac-like-config.enable = lib.mkEnableOption "mac-like options for classic-app-switcher" // { default = true; };
+        extra-hotkeys.enable = lib.mkEnableOption "hide-others / show-all-apps hotkeys for classic-app-switcher" // { default = true; };
+      };
       touchpad-gesture-customization = {
         enable = lib.mkEnableOption "Touchpad Gesture Customization — remap touchpad gestures" // {
           default = config.smind.three-finger-drag.enable;
@@ -160,6 +164,25 @@ in
               transparency-mode = "FIXED";
               running-indicator-style = "DOTS";
               show-apps-always-in-the-edge = true;
+            };
+          } ++ lib.optional (extCfg.classic-app-switcher.enable && extCfg.classic-app-switcher.mac-like-config.enable) {
+            "org/gnome/shell/extensions/classic-app-switcher" = {
+              close-current-window = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
+              enable-keyboard-shortcuts = true;
+              enable-overview-effects = false;
+              hide-boxpointer = false;
+              hide-current-app = [ (config.lib.xkb.modifierBinding config.smind.desktop.gnome.minimize-modifier "h") ];
+              hide-windows-from-overview = true;
+              minimize-current-window = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
+              panel-box = "left";
+              position-in-box = lib.gvariant.mkInt32 1;
+              quit-current-app = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
+              show-label = true;
+              show-recent-app = [ (config.lib.xkb.modifierBinding config.smind.desktop.gnome.minimize-modifier "u") ];
+              unminimize-recent-window = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
+            } // lib.optionalAttrs extCfg.classic-app-switcher.extra-hotkeys.enable {
+              hide-others = [ "<Control><Alt><Super>h" ];
+              show-all-apps = [ "<Control><Alt><Super>u" ];
             };
           }
           );

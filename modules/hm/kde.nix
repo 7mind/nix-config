@@ -49,13 +49,13 @@ lib.optionalAttrs cfg-meta.isLinux {
     smind.hm.desktop.kde.minimal-keybindings = lib.mkEnableOption "minimal KDE keybindings for window switching";
 
     smind.hm.desktop.kde.hotkey-modifier = lib.mkOption {
-      type = lib.types.enum [ "super" "ctrl" "super+ctrl" ];
-      default = "super";
+      type = outerConfig.lib.xkb.modifierType;
+      default = outerConfig.smind.desktop.xkb.hotkey-modifier;
+      example = "ctrl-super";
       description = ''
-        Modifier key for window switching hotkeys (Tab, grave, Space):
-        - "super": Use Meta/Cmd key (macOS-style)
-        - "ctrl": Use Ctrl key (traditional Linux/Windows style)
-        - "super+ctrl": Require both Meta+Ctrl pressed together
+        Modifier(s) for window switching hotkeys (Tab, grave, Space), as a dash-separated
+        combination of "ctrl", "alt", "super", "shift" (e.g. "super", "ctrl", "ctrl-super").
+        Defaults to smind.desktop.xkb.hotkey-modifier.
       '';
     };
 
@@ -475,10 +475,10 @@ lib.optionalAttrs cfg-meta.isLinux {
         let
           hotkeyMod = config.smind.hm.desktop.kde.hotkey-modifier;
 
-          hotkeyModifier =
-            if hotkeyMod == "super" then "Meta"
-            else if hotkeyMod == "ctrl" then "Ctrl"
-            else "Meta+Ctrl"; # super+ctrl
+          kdeModifierTokens = { ctrl = "Ctrl"; alt = "Alt"; super = "Meta"; shift = "Shift"; };
+          hotkeyModifier = lib.concatMapStringsSep "+"
+            (t: kdeModifierTokens.${t})
+            (outerConfig.lib.xkb.modifierTokens hotkeyMod);
 
           mkBinding = key: "${hotkeyModifier}+${key}";
         in

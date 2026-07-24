@@ -54,6 +54,11 @@
           pkgs.callPackage "${cfg-meta.paths.pkg}/gnome-shortcut-inhibitor/default.nix"
             { };
 
+        gnome-shell-extension-classic-app-switcher =
+          pkgs.callPackage "${cfg-meta.paths.pkg}/classic-app-switcher/default.nix" {
+            src = inputs.classic-app-switcher;
+          };
+
         gnome-shell-extension-touchpad-gesture-customization-app-expose =
           inputs.touchpad-gesture-customization-app-expose.packages.${super.system}.default;
 

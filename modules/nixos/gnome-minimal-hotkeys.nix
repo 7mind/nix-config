@@ -8,13 +8,23 @@
     smind.desktop.gnome.app-window-previews = lib.mkEnableOption "switching app windows with previews with Super-Grave";
     smind.desktop.gnome.close-window-hotkey = lib.mkEnableOption "enable Super-Q close window hotkey" // { default = true; };
     smind.desktop.gnome.hotkey-modifier = lib.mkOption {
-      type = lib.types.enum [ "super" "ctrl" "super+ctrl" ];
-      default = "super";
+      type = config.lib.xkb.modifierType;
+      default = config.smind.desktop.xkb.hotkey-modifier;
+      example = "ctrl-super";
       description = ''
-        Modifier key for window switching hotkeys (Tab, grave, Space):
-        - "super": Use Super/Cmd key (macOS-style)
-        - "ctrl": Use Ctrl key (traditional Linux/Windows style)
-        - "super+ctrl": Require both Super+Ctrl pressed together
+        Modifier(s) for window switching hotkeys (Tab, grave, Space), as a dash-separated
+        combination of "ctrl", "alt", "super", "shift" (e.g. "super", "ctrl", "ctrl-super").
+        Defaults to smind.desktop.xkb.hotkey-modifier.
+      '';
+    };
+    smind.desktop.gnome.minimize-modifier = lib.mkOption {
+      type = config.lib.xkb.modifierType;
+      default = config.smind.desktop.xkb.minimize-modifier;
+      example = "ctrl-alt-super-shift";
+      description = ''
+        Modifier(s) for the minimize-window hotkey and the Classic App Switcher's
+        hide-current-app/show-recent-app shortcuts, as a dash-separated combination of
+        "ctrl", "alt", "super", "shift". Defaults to smind.desktop.xkb.minimize-modifier.
       '';
     };
     smind.desktop.gnome.custom-keybindings = lib.mkOption {
@@ -59,10 +69,9 @@
             let
               empty = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
               hotkeyMod = config.smind.desktop.gnome.hotkey-modifier;
-              hotkeyBindings = key:
-                if hotkeyMod == "super" then [ "<Super>${key}" ]
-                else if hotkeyMod == "ctrl" then [ "<Primary>${key}" ]
-                else [ "<Super><Primary>${key}" ]; # super+ctrl
+              hotkeyBindings = key: [ (config.lib.xkb.modifierBinding hotkeyMod key) ];
+              minimizeMod = config.smind.desktop.gnome.minimize-modifier;
+              minimizeBindings = key: [ (config.lib.xkb.modifierBinding minimizeMod key) ];
               toggleOverviewBinding = "<Alt><Super>space";
               vicinaeToggleBindings = hotkeyBindings "space";
               vicinaeTogglePath = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/vicinae-toggle/";
@@ -342,7 +351,7 @@
                   else empty;
                 switch-input-source-backward = empty;
 
-                minimize = [ "<Primary><Alt>m" ];
+                minimize = minimizeBindings "m";
                 toggle-maximized = [ "<Primary><Alt>f" ];
               };
               "org/gnome/desktop/wm/preferences" =

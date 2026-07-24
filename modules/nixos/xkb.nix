@@ -19,6 +19,30 @@
       example = [ "grp:alt_shift_toggle" "caps:escape" ];
       description = "XKB options (e.g. layout toggle, caps behavior)";
     };
+
+    hotkey-modifier = lib.mkOption {
+      type = config.lib.xkb.modifierType;
+      default = "super";
+      example = "ctrl-super";
+      description = ''
+        Default modifier(s) for window-switching hotkeys (Tab, grave, Space) shared
+        across desktop environments, as a dash-separated combination of "ctrl", "alt",
+        "super", "shift" (e.g. "super", "ctrl", "ctrl-super"). Per-DE hotkey-modifier
+        options default to this.
+      '';
+    };
+
+    minimize-modifier = lib.mkOption {
+      type = config.lib.xkb.modifierType;
+      default = "ctrl-alt";
+      example = "ctrl-alt-super-shift";
+      description = ''
+        Default modifier(s) for the minimize-window hotkey and related shortcuts
+        (e.g. Classic App Switcher's hide/show-recent-app) shared across desktop
+        environments, as a dash-separated combination of "ctrl", "alt", "super",
+        "shift". Per-DE minimize-modifier options default to this.
+      '';
+    };
   };
 
   # Helper functions for parsing "layout+variant" format
@@ -38,5 +62,25 @@
 
     # Get list of variants from config
     getVariants = layouts: map config.lib.xkb.parseVariant layouts;
+
+    # Map a single modifier token to its GTK/GNOME accelerator representation
+    modifierAccelTokens = {
+      ctrl = "<Primary>";
+      alt = "<Alt>";
+      super = "<Super>";
+      shift = "<Shift>";
+    };
+
+    # Option type for a modifier spec: a dash-separated combination of
+    # "ctrl", "alt", "super", "shift" (e.g. "ctrl", "super", "ctrl-alt", "ctrl-alt-super-shift")
+    modifierType = lib.types.addCheck lib.types.str
+      (s: lib.all (t: builtins.hasAttr t config.lib.xkb.modifierAccelTokens) (lib.splitString "-" s));
+
+    # Split a modifier spec into its individual tokens, e.g. "ctrl-alt" -> [ "ctrl" "alt" ]
+    modifierTokens = spec: lib.splitString "-" spec;
+
+    # Turn a modifier spec + key into a GTK accelerator binding, e.g. "ctrl-alt" "m" -> "<Primary><Alt>m"
+    modifierBinding = spec: key:
+      (lib.concatMapStrings (t: config.lib.xkb.modifierAccelTokens.${t}) (lib.splitString "-" spec)) + key;
   };
 }
