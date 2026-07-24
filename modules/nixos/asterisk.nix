@@ -27,6 +27,9 @@ let
 
   runtimeDir = "/run/asterisk";
   runtimeInclude = "${runtimeDir}/pjsip-runtime.conf";
+  recordingDir = "/var/lib/asterisk/recordings";
+  recordingApplication = ''MixMonitor(${recordingDir}/''${UNIQUEID}.wav,b)'';
+  recordingStep = optionalString cfg.recording.enable " same => n,${recordingApplication}";
 
   # Same NAT block on every transport. `local_net` suppresses the external
   # address rewrite for peers on these networks, so LAN devices (the ATA) are
@@ -257,7 +260,9 @@ let
     ; the _X. catch-all below even though they also match it.
     ${concatStringsSep "\n" (mapAttrsToList
       (num: ext: ''
-        exten => ${num},1,Dial(PJSIP/${num},${toString cfg.dialplan.ringTimeout})
+        exten => ${num},1,${if cfg.recording.enable then recordingApplication else "Dial(PJSIP/${num},${toString cfg.dialplan.ringTimeout})"}
+        ${optionalString cfg.recording.enable
+          " same => n,Dial(PJSIP/${num},${toString cfg.dialplan.ringTimeout})"}
          same => n,Hangup()'')
       extensions)}
 
@@ -277,6 +282,7 @@ let
 
       [${cfg.dialplan.outboundContext}]
       exten => _X.,1,NoOp(outbound ''${CALLERID(num)} -> ''${EXTEN})
+      ${recordingStep}
        same => n,Set(CALLERID(num)=${trunk.callerId})
        same => n,Set(CALLERID(name)=${trunk.callerId})
        same => n,Dial(PJSIP/''${EXTEN}@${trunk.name},${toString cfg.dialplan.trunkTimeout})
@@ -286,6 +292,7 @@ let
       ; Inbound DID: ring every listed extension at once. `s` is what Asterisk
       ; uses when the INVITE carries no dialable extension.
       exten => s,1,NoOp(inbound ''${CALLERID(all)} -> ''${EXTEN})
+      ${recordingStep}
        same => n,Dial(${ringTargets},${toString cfg.dialplan.ringTimeout})
        same => n,Hangup()
       exten => _.,1,Goto(s,1)
@@ -317,6 +324,8 @@ let
     set -euo pipefail
     umask 077
     install -d -o asterisk -g asterisk -m 0750 ${runtimeDir}
+    ${optionalString cfg.recording.enable
+      "install -d -o asterisk -g asterisk -m 0750 ${recordingDir}"}
 
     tmp="${runtimeInclude}.tmp"
     : > "$tmp"
@@ -538,6 +547,11 @@ in
       default = { };
       description = "SIP extensions, keyed by extension number.";
     };
+
+    recording.enable = mkEnableOption ''
+      recording bridged internal and trunk calls as mixed WAV files in
+      ${recordingDir}; the echo-test extension is excluded
+    '';
 
     trunk = {
       enable = mkEnableOption "an outbound SIP trunk";
