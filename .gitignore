@@ -13,3 +13,4 @@ worktrees
 nix/
 debug/
 .codegraph/
+tmp/
