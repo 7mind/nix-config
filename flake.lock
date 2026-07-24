@@ -349,6 +349,30 @@
         "type": "github"
       }
     },
+    "fecalia": {
+      "inputs": {
+        "flake-utils": [
+          "flake-utils"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1784891660,
+        "narHash": "sha256-1f1u3elDImvNPgCPUPRWPsjDrGYyCBqK864cobe1Kyk=",
+        "owner": "7mind",
+        "repo": "fecalia",
+        "rev": "040256256470eec5af976d5477c4deb24652d731",
+        "type": "github"
+      },
+      "original": {
+        "owner": "7mind",
+        "repo": "fecalia",
+        "rev": "040256256470eec5af976d5477c4deb24652d731",
+        "type": "github"
+      }
+    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -1347,6 +1371,7 @@
         "darwin": "darwin",
         "determinate": "determinate",
         "ecoflow-mqtt": "ecoflow-mqtt",
+        "fecalia": "fecalia",
         "flake-utils": "flake-utils_3",
         "fractal": "fractal",
         "home-manager": "home-manager",
