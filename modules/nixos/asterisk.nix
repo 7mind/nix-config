@@ -28,8 +28,16 @@ let
   runtimeDir = "/run/asterisk";
   runtimeInclude = "${runtimeDir}/pjsip-runtime.conf";
   recordingDir = "/var/lib/asterisk/recordings";
-  recordingApplication = ''MixMonitor(${recordingDir}/''${UNIQUEID}.wav,b)'';
+  recordingOpusBitrate = 24000;
+  recordingApplication = ''MixMonitor(${recordingDir}/''${UNIQUEID}.opus,b)'';
   recordingStep = optionalString cfg.recording.enable " same => n,${recordingApplication}";
+
+  # Nixpkgs includes the Ogg/Opus format module but omits libopusenc, which
+  # leaves the module read-only.
+  asteriskRecordingPackage = pkgs.asterisk.overrideAttrs (old: {
+    buildInputs = old.buildInputs ++ [ pkgs.libopusenc ];
+    NIX_CFLAGS_COMPILE = "-I${pkgs.libopus.dev}/include/opus";
+  });
 
   # Same NAT block on every transport. `local_net` suppresses the external
   # address rewrite for peers on these networks, so LAN devices (the ATA) are
@@ -319,6 +327,11 @@ let
     syslog.local0 => notice,warning,error,security,verbose
   '';
 
+  formatsConf = ''
+    [opus]
+    maxaveragebitrate=${toString recordingOpusBitrate}
+  '';
+
   # Written at start-up so that secrets stay out of the Nix store.
   runtimeConfScript = pkgs.writeShellScript "asterisk-runtime-conf" ''
     set -euo pipefail
@@ -549,7 +562,7 @@ in
     };
 
     recording.enable = mkEnableOption ''
-      recording bridged internal and trunk calls as mixed WAV files in
+      recording bridged internal and trunk calls as mixed Ogg/Opus files in
       ${recordingDir}; the echo-test extension is excluded
     '';
 
@@ -693,11 +706,14 @@ in
   config = mkIf cfg.enable {
     services.asterisk = {
       enable = true;
+      package = mkIf cfg.recording.enable asteriskRecordingPackage;
       confFiles = {
         "pjsip.conf" = pjsipConf;
         "extensions.conf" = extensionsConf;
         "rtp.conf" = rtpConf;
         "logger.conf" = loggerConf;
+      } // lib.optionalAttrs cfg.recording.enable {
+        "formats.conf" = formatsConf;
       };
       # Asterisk's verbose level defaults to 0, which silently discards every
       # verbose message -- including the entire `pjsip set logger on` SIP/SDP
