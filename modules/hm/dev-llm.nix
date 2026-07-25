@@ -40,6 +40,7 @@ in
     # verbose MCP server stays proxied.
     smind.hm.dev.llm.pi.mcpDirectTools = [ "codegraph" "ledger" ];
 
+    smind.hm.dev.llm.pi.providers.xai.enable = true;
     # Default Pi to maximum reasoning depth. Merges into the cq-managed
     # programs.pi.settings (which sets defaultProvider/model but not this).
     # Pi clamps the level per model's thinkingLevelMap, so it is safe: the
