@@ -182,6 +182,7 @@ impl Topology {
                 kind,
                 plug_protocol,
                 switch_model,
+                trv_variant: entry.trv_variant().map(str::to_string),
             });
             device_by_name.insert((*name).clone(), DeviceIdx::new(i as u32));
         }
@@ -695,10 +696,11 @@ impl Topology {
                         .is_some_and(|v| v == "manual");
                     if !has_manual_mode {
                         return Err(TopologyError::HeatingError(
-                            HeatingConfigError::DeviceMissingManualMode {
+                            HeatingConfigError::DeviceMissingRequiredMode {
                                 zone: zone.name.clone(),
                                 device: zone.relay.clone(),
                                 device_kind: "relay",
+                                required: "options.operating_mode = \"manual\"",
                             },
                         ));
                     }
@@ -724,21 +726,47 @@ impl Topology {
                             },
                         ));
                     }
-                    // Validate TRV options.
+                    // Validate TRV mode options — field name depends on
+                    // hardware variant (Bosch uses operating_mode,
+                    // SONOFF TRVZB uses system_mode).
                     if let Some(entry) = config.devices.get(&zt.device) {
                         let opts = entry.options();
-                        let has_manual = opts
-                            .get("operating_mode")
-                            .and_then(|v| v.as_str())
-                            .is_some_and(|v| v == "manual");
-                        if !has_manual {
-                            return Err(TopologyError::HeatingError(
-                                HeatingConfigError::DeviceMissingManualMode {
-                                    zone: zone.name.clone(),
-                                    device: zt.device.clone(),
-                                    device_kind: "TRV",
-                                },
-                            ));
+                        let variant = entry
+                            .trv_variant()
+                            .unwrap_or(crate::config::catalog::TRV_VARIANT_BOSCH_BTH_RA);
+                        match variant {
+                            crate::config::catalog::TRV_VARIANT_SONOFF_TRVZB => {
+                                let has_heat = opts
+                                    .get("system_mode")
+                                    .and_then(|v| v.as_str())
+                                    .is_some_and(|v| v == "heat");
+                                if !has_heat {
+                                    return Err(TopologyError::HeatingError(
+                                        HeatingConfigError::DeviceMissingRequiredMode {
+                                            zone: zone.name.clone(),
+                                            device: zt.device.clone(),
+                                            device_kind: "TRV",
+                                            required: "options.system_mode = \"heat\"",
+                                        },
+                                    ));
+                                }
+                            }
+                            _ => {
+                                let has_manual = opts
+                                    .get("operating_mode")
+                                    .and_then(|v| v.as_str())
+                                    .is_some_and(|v| v == "manual");
+                                if !has_manual {
+                                    return Err(TopologyError::HeatingError(
+                                        HeatingConfigError::DeviceMissingRequiredMode {
+                                            zone: zone.name.clone(),
+                                            device: zt.device.clone(),
+                                            device_kind: "TRV",
+                                            required: "options.operating_mode = \"manual\"",
+                                        },
+                                    ));
+                                }
+                            }
                         }
                         crate::config::heating::validate_trv_options(&zt.device, opts)
                             .map_err(TopologyError::HeatingError)?;
@@ -865,7 +893,7 @@ fn kind_label(entry: &DeviceCatalogEntry) -> &'static str {
         DeviceCatalogEntry::Light(_) => "light",
         DeviceCatalogEntry::Switch { .. } => "switch",
         DeviceCatalogEntry::MotionSensor { .. } => "motion-sensor",
-        DeviceCatalogEntry::Trv(_) => "trv",
+        DeviceCatalogEntry::Trv { .. } => "trv",
         DeviceCatalogEntry::WallThermostat(_) => "wall-thermostat",
         DeviceCatalogEntry::Plug { .. } => "plug",
     }

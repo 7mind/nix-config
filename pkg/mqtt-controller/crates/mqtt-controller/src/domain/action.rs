@@ -46,9 +46,14 @@ pub enum Payload {
     TrvSetpoint { occupied_heating_setpoint: f64 },
 
     /// `{"operating_mode": "manual"}` — reassert the required operating
-    /// mode on a TRV or wall thermostat that has drifted (e.g. someone
-    /// pressed a button on the physical device).
+    /// mode on a Bosch BTH-RA TRV or wall thermostat that has drifted
+    /// (e.g. someone pressed a button on the physical device).
     OperatingMode { operating_mode: &'static str },
+
+    /// `{"system_mode": "heat"}` — reassert the required climate mode on
+    /// a SONOFF TRVZB (or other system_mode-based TRV) that has drifted
+    /// into `auto`/`off`.
+    SystemMode { system_mode: &'static str },
 
     /// `{"window_detection": "ON"}` or `{"window_detection": "OFF"}` —
     /// Bosch BTH-RA/RM230Z window-open mode. When ON, the device stops

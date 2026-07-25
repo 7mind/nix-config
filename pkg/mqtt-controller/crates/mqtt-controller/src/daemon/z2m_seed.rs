@@ -146,8 +146,7 @@ fn light_event(device: &str, payload: &Value, now: std::time::Instant) -> Option
 fn trv_event(device: &str, payload: &Value, now: std::time::Instant) -> Option<Event> {
     // A TRV payload arriving via the bulk WS dump may be missing fields
     // the device hasn't yet reported; accept whatever is there. At
-    // least one numeric climate field is a sanity threshold — skip
-    // empty objects.
+    // least one climate field is a sanity threshold — skip empty objects.
     let local_temperature = payload.get("local_temperature").and_then(|v| v.as_f64());
     let pi_heating_demand = payload
         .get("pi_heating_demand")
@@ -164,6 +163,10 @@ fn trv_event(device: &str, payload: &Value, now: std::time::Instant) -> Option<E
         .get("operating_mode")
         .and_then(|v| v.as_str())
         .map(String::from);
+    let system_mode = payload
+        .get("system_mode")
+        .and_then(|v| v.as_str())
+        .map(String::from);
     let battery = payload
         .get("battery")
         .and_then(|v| v.as_u64())
@@ -174,6 +177,7 @@ fn trv_event(device: &str, payload: &Value, now: std::time::Instant) -> Option<E
         || running_state.is_some()
         || occupied_heating_setpoint.is_some()
         || operating_mode.is_some()
+        || system_mode.is_some()
         || battery.is_some();
     if !any_field {
         return None;
@@ -185,6 +189,7 @@ fn trv_event(device: &str, payload: &Value, now: std::time::Instant) -> Option<E
         running_state,
         occupied_heating_setpoint,
         operating_mode,
+        system_mode,
         battery,
         ts: now,
     })

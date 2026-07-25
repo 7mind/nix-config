@@ -123,6 +123,10 @@ pub(super) fn parse_event(topology: &Topology, p: &Publish, clock: &dyn Clock) -
             .get("operating_mode")
             .and_then(|v| v.as_str())
             .map(String::from);
+        let system_mode = value
+            .get("system_mode")
+            .and_then(|v| v.as_str())
+            .map(String::from);
         let battery = value
             .get("battery")
             .and_then(|v| v.as_u64())
@@ -134,6 +138,7 @@ pub(super) fn parse_event(topology: &Topology, p: &Publish, clock: &dyn Clock) -
             running_state,
             occupied_heating_setpoint,
             operating_mode,
+            system_mode,
             battery,
             ts: now,
         });

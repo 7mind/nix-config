@@ -71,13 +71,30 @@ fn two_period_day(day_temp: f64, night_temp: f64) -> Vec<DayTimeRange> {
 }
 
 fn trv_dev(ieee: &str) -> DeviceCatalogEntry {
-    DeviceCatalogEntry::Trv(CommonFields {
-        ieee_address: ieee.into(),
-        description: None,
-        options: BTreeMap::from([
-            ("operating_mode".into(), serde_json::json!("manual")),
-        ]),
-    })
+    DeviceCatalogEntry::Trv {
+        common: CommonFields {
+            ieee_address: ieee.into(),
+            description: None,
+            options: BTreeMap::from([
+                ("operating_mode".into(), serde_json::json!("manual")),
+            ]),
+        },
+        variant: crate::config::catalog::TRV_VARIANT_BOSCH_BTH_RA.into(),
+    }
+}
+
+fn trv_dev_sonoff(ieee: &str) -> DeviceCatalogEntry {
+    DeviceCatalogEntry::Trv {
+        common: CommonFields {
+            ieee_address: ieee.into(),
+            description: None,
+            options: BTreeMap::from([
+                ("system_mode".into(), serde_json::json!("heat")),
+                ("open_window".into(), serde_json::json!("OFF")),
+            ]),
+        },
+        variant: crate::config::catalog::TRV_VARIANT_SONOFF_TRVZB.into(),
+    }
 }
 
 fn wt_dev(ieee: &str) -> DeviceCatalogEntry {
@@ -186,6 +203,7 @@ fn echo_setpoint(ep: &mut EventProcessor, trv: &str, temp: f64, clk: &FakeClock)
         running_state: None,
         occupied_heating_setpoint: Some(temp),
         operating_mode: None,
+        system_mode: None,
         battery: None,
         ts: clk.now(),
     });
@@ -199,6 +217,7 @@ fn send_trv_demand(ep: &mut EventProcessor, trv: &str, temp: f64, demand: u8, st
         running_state: Some(state.into()),
         occupied_heating_setpoint: Some(setpoint),
         operating_mode: None,
+        system_mode: None,
         battery: None,
         ts: clk.now(),
     });
@@ -512,6 +531,7 @@ fn trv_mode_drift_triggers_reassertion() {
         running_state: None,
         occupied_heating_setpoint: None,
         operating_mode: Some("schedule".into()),
+        system_mode: None,
         battery: None,
         ts: clk.now(),
     });
@@ -520,6 +540,78 @@ fn trv_mode_drift_triggers_reassertion() {
             && a.payload_json(&ep).contains("manual"))
         .collect();
     assert!(!mode.is_empty(), "TRV mode drift must trigger reassertion");
+}
+
+fn sonoff_config() -> Config {
+    let mut cfg = simple_config();
+    cfg.devices.insert(
+        "trv-bath-1".into(),
+        trv_dev_sonoff("0xtrv-bath-1"),
+    );
+    cfg
+}
+
+#[test]
+fn sonoff_trv_system_mode_drift_triggers_reassertion() {
+    let cfg = sonoff_config();
+    let (mut ep, clk) = setup(&cfg);
+    tick(&mut ep);
+    let actions = ep.handle_event(Event::TrvState {
+        device: "trv-bath-1".into(),
+        local_temperature: Some(20.0),
+        pi_heating_demand: None,
+        running_state: Some("idle".into()),
+        occupied_heating_setpoint: Some(20.0),
+        operating_mode: None,
+        system_mode: Some("auto".into()),
+        battery: Some(100),
+        ts: clk.now(),
+    });
+    let mode: Vec<_> = actions
+        .iter()
+        .filter(|a| {
+            a.target_name(&ep) == "trv-bath-1"
+                && a.payload_json(&ep).contains("system_mode")
+                && a.payload_json(&ep).contains("heat")
+        })
+        .collect();
+    assert!(
+        !mode.is_empty(),
+        "SONOFF TRVZB system_mode drift must reassert heat"
+    );
+}
+
+#[test]
+fn sonoff_trv_heat_without_pi_demand_starts_relay() {
+    // TRVZB has no pi_heating_demand. running_state=heat alone must
+    // produce zone demand and emit a relay ON.
+    let cfg = sonoff_config();
+    let (mut ep, clk) = setup(&cfg);
+    tick(&mut ep);
+    echo_setpoint(&mut ep, "trv-bath-1", 20.0, &clk);
+    // No pi_heating_demand — only running_state.
+    ep.handle_event(Event::TrvState {
+        device: "trv-bath-1".into(),
+        local_temperature: Some(18.0),
+        pi_heating_demand: None,
+        running_state: Some("heat".into()),
+        occupied_heating_setpoint: Some(20.0),
+        operating_mode: None,
+        system_mode: Some("heat".into()),
+        battery: Some(100),
+        ts: clk.now(),
+    });
+    let actions = tick(&mut ep);
+    let relay_on: Vec<_> = actions
+        .iter()
+        .filter(|a| {
+            a.target_name(&ep) == "wt-bath" && a.payload_json(&ep).contains("ON")
+        })
+        .collect();
+    assert!(
+        !relay_on.is_empty(),
+        "SONOFF TRVZB with running_state=heat and no PI demand must start the relay"
+    );
 }
 
 #[test]
@@ -571,6 +663,7 @@ fn setpoint_reconciliation_retries_on_divergence() {
         running_state: None,
         occupied_heating_setpoint: Some(15.0), // wrong
         operating_mode: None,
+        system_mode: None,
         battery: None,
         ts: clk.now(),
     });

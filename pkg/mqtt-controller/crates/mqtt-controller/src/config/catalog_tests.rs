@@ -113,6 +113,35 @@ fn deserialize_plug_with_capabilities() {
 }
 
 #[test]
+fn deserialize_trv_defaults_to_bosch_variant() {
+    let json = r#"{
+        "kind": "trv",
+        "ieee_address": "0x30e8e40000d4eb2d",
+        "options": { "operating_mode": "manual" }
+    }"#;
+    let entry: DeviceCatalogEntry = serde_json::from_str(json).unwrap();
+    assert!(entry.is_trv());
+    assert_eq!(entry.trv_variant(), Some(TRV_VARIANT_BOSCH_BTH_RA));
+}
+
+#[test]
+fn deserialize_trv_sonoff_variant() {
+    let json = r#"{
+        "kind": "trv",
+        "ieee_address": "0x44e2f8fffe2335f9",
+        "variant": "sonoff-trvzb",
+        "options": { "system_mode": "heat", "open_window": "OFF" }
+    }"#;
+    let entry: DeviceCatalogEntry = serde_json::from_str(json).unwrap();
+    assert!(entry.is_trv());
+    assert_eq!(entry.trv_variant(), Some(TRV_VARIANT_SONOFF_TRVZB));
+    assert_eq!(
+        entry.options().get("system_mode").and_then(|v| v.as_str()),
+        Some("heat")
+    );
+}
+
+#[test]
 fn deserialize_plug_basic_no_power() {
     let json = r#"{
         "kind": "plug",

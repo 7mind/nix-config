@@ -84,8 +84,10 @@ pub enum Event {
         /// `"idle"` or `"heat"`.
         running_state: Option<String>,
         occupied_heating_setpoint: Option<f64>,
-        /// `"schedule"`, `"manual"`, or `"pause"`.
+        /// Bosch BTH-RA: `"schedule"`, `"manual"`, or `"pause"`.
         operating_mode: Option<String>,
+        /// SONOFF TRVZB: `"off"`, `"auto"`, or `"heat"`.
+        system_mode: Option<String>,
         /// Battery percentage (0-100).
         battery: Option<u8>,
         ts: Instant,

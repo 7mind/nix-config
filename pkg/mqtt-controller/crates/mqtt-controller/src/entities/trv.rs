@@ -49,7 +49,10 @@ pub struct TrvActual {
     pub running_state: HeatingRunningState,
     pub running_state_seen: bool,
     pub setpoint: Option<f64>,
+    /// Bosch BTH-RA: `schedule` / `manual` / `pause`.
     pub operating_mode: Option<String>,
+    /// SONOFF TRVZB: `off` / `auto` / `heat`.
+    pub system_mode: Option<String>,
     pub battery: Option<u8>,
 }
 
@@ -62,6 +65,7 @@ impl Default for TrvActual {
             running_state_seen: false,
             setpoint: None,
             operating_mode: None,
+            system_mode: None,
             battery: None,
         }
     }
@@ -214,15 +218,32 @@ impl TrvEntity {
 
     /// True if the TRV's PID controller is requesting heat, regardless
     /// of inhibition/force state.
+    ///
+    /// Demand sources, by hardware:
+    ///   * Bosch BTH-RA reports both `running_state` and
+    ///     `pi_heating_demand`. Residual PID trickle (1–4%) with
+    ///     `running_state=idle` is common; when `running_state` is
+    ///     available we require *both* heat + demand ≥ `min_demand`.
+    ///   * SONOFF TRVZB has no `pi_heating_demand` — `running_state=heat`
+    ///     alone is treated as full demand.
+    ///   * Fallback (no `running_state` ever seen): rely on
+    ///     `pi_heating_demand` alone against the higher fallback threshold.
     pub fn has_raw_demand(&self, min_demand: u8, min_demand_fallback: u8) -> bool {
         let Some(actual) = self.actual.value() else {
             return false;
         };
-        let demand = actual.pi_heating_demand.unwrap_or(0);
         if actual.running_state_seen {
-            actual.running_state.is_heat() && demand >= min_demand
+            if !actual.running_state.is_heat() {
+                return false;
+            }
+            match actual.pi_heating_demand {
+                // Bosch-style: heat + demand above threshold filters residual PID.
+                Some(demand) => demand >= min_demand,
+                // SONOFF TRVZB / devices without PI report: heat is enough.
+                None => true,
+            }
         } else {
-            demand >= min_demand_fallback
+            actual.pi_heating_demand.unwrap_or(0) >= min_demand_fallback
         }
     }
 }

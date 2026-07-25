@@ -31,7 +31,7 @@ pub(super) const MAX_SETPOINT: f64 = 30.0;
 /// Wall thermostat state refresh interval.
 const WT_REFRESH_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
-/// Shared body of `check_trv_mode` / `check_wt_mode`: if the device's
+/// Shared body of Bosch/wall-thermostat mode enforcement: if the device's
 /// reported `operating_mode` is anything other than "manual" or unknown,
 /// re-issue a `mode=manual` command and warn. `device_kind` is used only
 /// for the log message ("TRV" or "wall thermostat").
@@ -57,6 +57,30 @@ fn reassert_manual_mode_if_needed(
     }
 }
 
+/// SONOFF TRVZB mode enforcement: `system_mode` must stay at `heat` so the
+/// device's built-in weekly schedule (`auto`) and frost-only (`off`) modes
+/// cannot override controller setpoints.
+fn reassert_system_mode_heat_if_needed(
+    device: &str,
+    device_idx: crate::topology::DeviceIdx,
+    current_mode: Option<&str>,
+) -> Vec<Effect> {
+    match current_mode {
+        Some("heat") | None => Vec::new(),
+        Some(m) => {
+            tracing::warn!(
+                device,
+                current_mode = m,
+                "TRV system_mode is not 'heat', reasserting"
+            );
+            vec![Effect::PublishDeviceSet {
+                device: device_idx,
+                payload: Payload::SystemMode { system_mode: "heat" },
+            }]
+        }
+    }
+}
+
 impl EventProcessor {
     // ---- Event dispatch -------------------------------------------------------
 
@@ -73,6 +97,7 @@ impl EventProcessor {
                 running_state,
                 occupied_heating_setpoint,
                 operating_mode,
+                system_mode,
                 battery,
                 ts,
             } => {
@@ -84,6 +109,7 @@ impl EventProcessor {
                     running_state.as_deref(),
                     *occupied_heating_setpoint,
                     operating_mode.as_deref(),
+                    system_mode.as_deref(),
                     *battery,
                     *ts,
                 );
@@ -216,10 +242,21 @@ impl EventProcessor {
         let Some(device_idx) = self.topology.device_idx(device) else {
             return Vec::new();
         };
-        let mode = self.world.trvs.get(device)
-            .and_then(|t| t.actual.value())
-            .and_then(|a| a.operating_mode.as_deref());
-        reassert_manual_mode_if_needed(device, device_idx, mode, "TRV")
+        let variant = self
+            .topology
+            .trv_variant(device)
+            .unwrap_or(crate::config::catalog::TRV_VARIANT_BOSCH_BTH_RA);
+        let actual = self.world.trvs.get(device).and_then(|t| t.actual.value());
+        match variant {
+            crate::config::catalog::TRV_VARIANT_SONOFF_TRVZB => {
+                let mode = actual.and_then(|a| a.system_mode.as_deref());
+                reassert_system_mode_heat_if_needed(device, device_idx, mode)
+            }
+            _ => {
+                let mode = actual.and_then(|a| a.operating_mode.as_deref());
+                reassert_manual_mode_if_needed(device, device_idx, mode, "TRV")
+            }
+        }
     }
 
     fn check_wt_mode(&self, device: &str) -> Vec<Effect> {

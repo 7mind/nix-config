@@ -129,6 +129,7 @@ fn trv_event_full_payload() {
             "running_state": "heat",
             "occupied_heating_setpoint": 22.0,
             "operating_mode": "manual",
+            "system_mode": "heat",
             "battery": 85
         }),
         now(),
@@ -141,6 +142,7 @@ fn trv_event_full_payload() {
             running_state,
             occupied_heating_setpoint,
             operating_mode,
+            system_mode,
             battery,
             ..
         } => {
@@ -149,6 +151,7 @@ fn trv_event_full_payload() {
             assert_eq!(running_state.as_deref(), Some("heat"));
             assert_eq!(occupied_heating_setpoint, Some(22.0));
             assert_eq!(operating_mode.as_deref(), Some("manual"));
+            assert_eq!(system_mode.as_deref(), Some("heat"));
             assert_eq!(battery, Some(85));
         }
         other => panic!("expected TrvState, got {other:?}"),

@@ -107,7 +107,7 @@ impl DeviceKind {
             DeviceCatalogEntry::Switch { .. } => Self::Switch,
             DeviceCatalogEntry::MotionSensor { .. } => Self::MotionSensor,
             DeviceCatalogEntry::Plug { .. } => Self::Plug,
-            DeviceCatalogEntry::Trv(_) => Self::Trv,
+            DeviceCatalogEntry::Trv { .. } => Self::Trv,
             DeviceCatalogEntry::WallThermostat(_) => Self::WallThermostat,
         }
     }
@@ -134,6 +134,9 @@ pub(in crate::topology) struct DeviceInfo {
     pub plug_protocol: Option<PlugProtocol>,
     /// `Some` for switches, naming the model in `switch_models`.
     pub switch_model: Option<String>,
+    /// `Some` for TRVs, naming the hardware variant (`bosch-bth-ra`,
+    /// `sonoff-trvzb`, …).
+    pub trv_variant: Option<String>,
 }
 
 /// The validated topology. Owned as `Arc<Topology>` by the daemon.
@@ -515,6 +518,14 @@ impl Topology {
         self.device_idx(device)
             .map(|i| self.device_kind(i) == DeviceKind::Trv)
             .unwrap_or(false)
+    }
+
+    /// Hardware variant of a TRV (`bosch-bth-ra`, `sonoff-trvzb`, …).
+    /// Returns `None` if the device is not a TRV.
+    pub fn trv_variant(&self, device: &str) -> Option<&str> {
+        self.device_idx(device).and_then(|i| {
+            self.devices[i.as_usize()].trv_variant.as_deref()
+        })
     }
 
     /// True if `device` is a Light.

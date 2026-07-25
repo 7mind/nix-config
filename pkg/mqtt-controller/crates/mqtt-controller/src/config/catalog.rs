@@ -87,10 +87,23 @@ pub enum DeviceCatalogEntry {
         max_illuminance: Option<u32>,
     },
 
-    /// Bosch BTH-RA TRV (thermostatic radiator valve). Controlled by the
-    /// heating subsystem — setpoint is driven by temperature schedules,
-    /// valve position by the device's internal PID controller.
-    Trv(CommonFields),
+    /// Thermostatic radiator valve. Controlled by the heating subsystem —
+    /// setpoint is driven by temperature schedules. Hardware behaviour
+    /// (demand reporting, mode field names) depends on [`Self::trv_variant`].
+    ///
+    /// Known variants:
+    ///   * `"bosch-bth-ra"` (default) — Bosch BTH-RA: `pi_heating_demand`,
+    ///     `operating_mode` (`manual`/`schedule`/`pause`).
+    ///   * `"sonoff-trvzb"` — SONOFF TRVZB: `running_state` demand only
+    ///     (no PI report), `system_mode` (`off`/`auto`/`heat`), optional
+    ///     `valve_opening_degree` clamp for direct 3rd-party driving.
+    Trv {
+        #[serde(flatten)]
+        common: CommonFields,
+        /// Hardware variant identifier. Defaults to `bosch-bth-ra`.
+        #[serde(default = "default_trv_variant")]
+        variant: String,
+    },
 
     /// Bosch BTH-RM230Z 230V wall thermostat used as a relay. The heating
     /// subsystem controls the relay via `state: ON/OFF` after provisioning
@@ -153,11 +166,21 @@ fn default_occupancy_timeout() -> u32 {
     60
 }
 
+/// Default TRV hardware variant (Bosch BTH-RA).
+pub const TRV_VARIANT_BOSCH_BTH_RA: &str = "bosch-bth-ra";
+/// SONOFF TRVZB hardware variant.
+pub const TRV_VARIANT_SONOFF_TRVZB: &str = "sonoff-trvzb";
+
+fn default_trv_variant() -> String {
+    TRV_VARIANT_BOSCH_BTH_RA.into()
+}
+
 impl DeviceCatalogEntry {
     pub fn common(&self) -> &CommonFields {
         match self {
-            Self::Light(c) | Self::Trv(c) | Self::WallThermostat(c) => c,
-            Self::Switch { common, .. }
+            Self::Light(c) | Self::WallThermostat(c) => c,
+            Self::Trv { common, .. }
+            | Self::Switch { common, .. }
             | Self::MotionSensor { common, .. }
             | Self::Plug { common, .. } => common,
         }
@@ -205,7 +228,15 @@ impl DeviceCatalogEntry {
 
     /// True if this kind is a TRV (thermostatic radiator valve).
     pub fn is_trv(&self) -> bool {
-        matches!(self, Self::Trv(_))
+        matches!(self, Self::Trv { .. })
+    }
+
+    /// The TRV hardware variant, if this is a TRV.
+    pub fn trv_variant(&self) -> Option<&str> {
+        match self {
+            Self::Trv { variant, .. } => Some(variant.as_str()),
+            _ => None,
+        }
     }
 
     /// True if this kind is a wall thermostat (used as relay).

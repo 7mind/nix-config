@@ -402,13 +402,14 @@ pub enum HeatingConfigError {
     RelayMissingManualControl { zone: String, relay: String },
 
     #[error(
-        "zone {zone:?}: {device_kind} {device:?} is missing options.operating_mode = \"manual\" — \
+        "zone {zone:?}: {device_kind} {device:?} is missing {required} — \
          without this the device's internal schedule may override controller commands"
     )]
-    DeviceMissingManualMode {
+    DeviceMissingRequiredMode {
         zone: String,
         device: String,
         device_kind: &'static str,
+        required: &'static str,
     },
 
     #[error(
@@ -518,15 +519,16 @@ fn check_brightness(
     }
 }
 
-/// Known configurable options for Bosch BTH-RA TRVs with validation.
-/// Unknown options are allowed through — the device might support
-/// attributes we don't validate yet.
+/// Known configurable options for TRVs (Bosch BTH-RA and SONOFF TRVZB)
+/// with validation. Unknown options are allowed through — the device
+/// might support attributes we don't validate yet.
 pub fn validate_trv_options(
     device: &str,
     options: &std::collections::BTreeMap<String, serde_json::Value>,
 ) -> Result<(), HeatingConfigError> {
     for (key, value) in options {
         match key.as_str() {
+            // Bosch BTH-RA
             "operating_mode" => check_choice(device, key, value, &["schedule", "manual", "pause"])?,
             "display_brightness" => check_brightness(device, key, value)?,
             "display_switch_on_duration" => check_u64_range(device, key, value, 5, 30, " (seconds)")?,
@@ -534,6 +536,22 @@ pub fn validate_trv_options(
             "displayed_temperature" => check_choice(device, key, value, &["set_temperature", "measured_temperature"])?,
             "local_temperature_calibration" => check_f64_range(device, key, value, -5.0, 5.0)?,
             "child_lock" => check_choice(device, key, value, &["LOCK", "UNLOCK"])?,
+            // SONOFF TRVZB
+            "system_mode" => check_choice(device, key, value, &["off", "auto", "heat"])?,
+            "open_window" => check_choice(device, key, value, &["ON", "OFF"])?,
+            "frost_protection_temperature" => check_f64_range(device, key, value, 4.0, 35.0)?,
+            "temperature_accuracy" => check_f64_range(device, key, value, -1.0, -0.2)?,
+            "valve_opening_degree" => check_u64_range(device, key, value, 0, 100, " (%)")?,
+            "valve_closing_degree" => check_u64_range(device, key, value, 0, 100, " (%)")?,
+            "temperature_sensor_select" => check_choice(
+                device, key, value,
+                &["internal", "external", "external_2", "external_3"],
+            )?,
+            "smart_temperature_control" => {
+                if !value.is_boolean() {
+                    return Err(invalid_option(device, key, value, "must be a boolean"));
+                }
+            }
             _ => {}
         }
     }

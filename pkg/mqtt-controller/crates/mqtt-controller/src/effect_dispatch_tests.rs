@@ -86,14 +86,17 @@ fn plug(ieee: &str) -> DeviceCatalogEntry {
 }
 
 fn trv(ieee: &str) -> DeviceCatalogEntry {
-    DeviceCatalogEntry::Trv(CommonFields {
-        ieee_address: ieee.into(),
-        description: None,
-        options: BTreeMap::from([(
-            "operating_mode".into(),
-            serde_json::json!("manual"),
-        )]),
-    })
+    DeviceCatalogEntry::Trv {
+        common: CommonFields {
+            ieee_address: ieee.into(),
+            description: None,
+            options: BTreeMap::from([(
+                "operating_mode".into(),
+                serde_json::json!("manual"),
+            )]),
+        },
+        variant: crate::config::catalog::TRV_VARIANT_BOSCH_BTH_RA.into(),
+    }
 }
 
 fn wt(ieee: &str) -> DeviceCatalogEntry {
@@ -288,6 +291,7 @@ fn touched_from_trv_state_includes_zone() {
         running_state: Some("heat".into()),
         occupied_heating_setpoint: Some(21.0),
         operating_mode: Some("manual".into()),
+        system_mode: None,
         battery: Some(80),
         ts: now(),
     };

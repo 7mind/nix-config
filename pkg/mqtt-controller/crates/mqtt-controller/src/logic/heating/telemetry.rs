@@ -25,6 +25,7 @@ impl EventProcessor {
         running_state: Option<&str>,
         occupied_heating_setpoint: Option<f64>,
         operating_mode: Option<&str>,
+        system_mode: Option<&str>,
         battery: Option<u8>,
         _ts: Instant,
     ) {
@@ -72,6 +73,7 @@ impl EventProcessor {
             running_state_seen: new_rs_seen,
             setpoint: occupied_heating_setpoint.or(prev.setpoint),
             operating_mode: operating_mode.map(String::from).or(prev.operating_mode),
+            system_mode: system_mode.map(String::from).or(prev.system_mode),
             battery: battery.or(prev.battery),
         };
         trv.actual.update(actual, now);

@@ -68,3 +68,49 @@ fn trv_demand_suppressed_during_release() {
     assert!(!trv.has_effective_demand(now, 5, 80));
     assert!(trv.has_raw_demand(5, 80)); // raw demand still present
 }
+
+#[test]
+fn demand_without_pi_report_uses_running_state() {
+    // SONOFF TRVZB has no pi_heating_demand — running_state=heat alone
+    // must count as demand, otherwise the zone relay never starts.
+    let now = Instant::now();
+    let mut trv = TrvEntity::default();
+    let mut actual = TrvActual::default();
+    actual.running_state = HeatingRunningState::Heat;
+    actual.running_state_seen = true;
+    actual.pi_heating_demand = None;
+    trv.actual.update(actual, now);
+    trv.target
+        .set_and_command(TrvTarget::Setpoint(21.0), Owner::Schedule, now);
+    trv.target.confirm(now);
+
+    assert!(trv.has_raw_demand(5, 80));
+    assert!(trv.has_effective_demand(now, 5, 80));
+
+    // idle without PI still means no demand
+    let mut idle = TrvActual::default();
+    idle.running_state = HeatingRunningState::Idle;
+    idle.running_state_seen = true;
+    idle.pi_heating_demand = None;
+    trv.actual.update(idle, now);
+    assert!(!trv.has_raw_demand(5, 80));
+}
+
+#[test]
+fn demand_with_pi_still_requires_threshold() {
+    let now = Instant::now();
+    let mut trv = TrvEntity::default();
+    let mut actual = TrvActual::default();
+    actual.running_state = HeatingRunningState::Heat;
+    actual.running_state_seen = true;
+    actual.pi_heating_demand = Some(3); // below min_demand=5
+    trv.actual.update(actual, now);
+    assert!(!trv.has_raw_demand(5, 80));
+
+    let mut actual = TrvActual::default();
+    actual.running_state = HeatingRunningState::Heat;
+    actual.running_state_seen = true;
+    actual.pi_heating_demand = Some(10);
+    trv.actual.update(actual, now);
+    assert!(trv.has_raw_demand(5, 80));
+}
