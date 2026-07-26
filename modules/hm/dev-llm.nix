@@ -40,19 +40,17 @@ in
     # verbose MCP server stays proxied.
     smind.hm.dev.llm.pi.mcpDirectTools = [ "codegraph" "ledger" ];
 
-    smind.hm.dev.llm.pi.providers.xai.enable = true;
     # Default Pi to maximum reasoning depth. Merges into the cq-managed
     # programs.pi.settings (which sets defaultProvider/model but not this).
-    # Pi clamps the level per model's thinkingLevelMap, so it is safe: the
-    # pinned grok-build default already always reasons at max and ignores it;
-    # the xhigh default takes effect for other providers selected at runtime.
+    # Pi clamps the level per model's thinkingLevelMap, so it is safe across
+    # providers selected at runtime.
     programs.pi.settings.defaultThinkingLevel = "xhigh";
 
     # Add the Xiaomi MiMo provider to Pi's package set. Registers the
     # `xiaomi-mimo` provider (models mimo-v2-pro/omni/tts) against the
     # OpenAI-compatible endpoint; auth via `/login xiaomi-mimo` OAuth or the
     # XIAOMI_MIMO_API_KEY env var. The list merges with cq's base packages
-    # (pi-search-hub/pi-ollama-cloud/@sinamtz/pi-minimax-provider/pi-xai).
+    # (pi-search-hub + any enabled inference-provider packages).
     # Self-contained: its only imports are `import type` of the host pi API
     # packages (erased at runtime), so Pi's managed --legacy-peer-deps install
     # resolves it with no extra runtime deps.
