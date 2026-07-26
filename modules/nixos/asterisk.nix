@@ -39,14 +39,36 @@ let
     NIX_CFLAGS_COMPILE = "-I${pkgs.libopus.dev}/include/opus";
   });
 
-  # Same NAT block on every transport. `local_net` suppresses the external
-  # address rewrite for peers on these networks, so LAN devices (the ATA) are
-  # unaffected by the internet-facing settings.
-  natBlock = concatMapStringsSep "\n" (n: "local_net=${n}") cfg.nat.localNets
-    + optionalString (cfg.nat.externalAddress != null) ''
+  # NAT rewrite lines. `local_net` suppresses external_* for peers on those
+  # networks (wanted on UDP for the LAN ATA). The inbound TLS listener must
+  # NOT use local_net: a softphone on LAN/Tailscale would then get Contact
+  # <sip:192.168.x.x:5061;transport=TLS>, fail the TLS CN check against a
+  # cert for the public hostname, never deliver ACK, and the PBX BYEs at ~30s
+  # with 408 Request Timeout.
+  localNetLines = concatMapStringsSep "\n" (n: "local_net=${n}") cfg.nat.localNets;
 
-      external_media_address=${cfg.nat.externalAddress}
-      external_signaling_address=${cfg.nat.externalAddress}'';
+  externalMediaLine = optionalString (cfg.nat.externalMediaAddress != null)
+    "external_media_address=${cfg.nat.externalMediaAddress}";
+
+  externalSignalingLine = optionalString (cfg.nat.externalSignalingAddress != null)
+    "external_signaling_address=${cfg.nat.externalSignalingAddress}";
+
+  joinConfLines = lines: concatStringsSep "\n" (builtins.filter (s: s != "") lines);
+
+  # UDP + trunk client: rewrite only for peers outside localNets.
+  natBlockWithLocalNets = joinConfLines [
+    localNetLines
+    externalMediaLine
+    externalSignalingLine
+  ];
+
+  # Inbound TLS: always rewrite Contact to the cert hostname and media to the
+  # public IPv4. Softphones reach us via the hostname; advertising a LAN IP in
+  # Contact breaks ACK over TLS (CN mismatch).
+  tlsListenerNatBlock = joinConfLines [
+    externalMediaLine
+    externalSignalingLine
+  ];
 
   codecBlock = codecs: ''
     disallow=all
@@ -167,7 +189,7 @@ let
     protocol=tls
     bind=0.0.0.0:${toString trunk.tlsSourcePort}
     method=tlsv1_2
-    ${natBlock}
+    ${natBlockWithLocalNets}
   '';
 
   trunkTransportLine = optionalString trunkNeedsTlsTransport
@@ -244,7 +266,7 @@ let
     type=transport
     protocol=udp
     bind=0.0.0.0:${toString cfg.udpPort}
-    ${natBlock}
+    ${natBlockWithLocalNets}
     ${udp6Transport}
     ${trunkTlsTransport}
     ${endpointSections}
@@ -381,7 +403,7 @@ let
           "cert_file=$cert" \
           "priv_key_file=$key" \
           'method=tlsv1_2' \
-          ${lib.escapeShellArg natBlock} \
+          ${lib.escapeShellArg tlsListenerNatBlock} \
           >> "$tmp"
         ${optionalString cfg.ipv6.enable ''
           printf '\n%s\n' \
@@ -519,13 +541,27 @@ in
     '';
 
     nat = {
-      externalAddress = mkOption {
+      externalSignalingAddress = mkOption {
         type = types.nullOr types.str;
         default = null;
         example = "pbx.example.org";
         description = ''
-          Public address advertised in SIP/SDP to peers outside `localNets`.
-          Resolved once at start-up: restart Asterisk if the public IP changes.
+          Host placed in SIP Contact/Via for rewritten peers. Prefer the DNS
+          name on the TLS certificate (not a bare IP): clients ACK 2xx to the
+          Contact URI over a fresh TLS session and verify the cert against that
+          host. Resolved once at start-up for IP literals; a name is left to the
+          client to resolve. Restart Asterisk if a literal IP changes.
+        '';
+      };
+
+      externalMediaAddress = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "203.0.113.10";
+        description = ''
+          Address placed in SDP `c=` for rewritten peers. Prefer a stable public
+          IPv4 literal so media does not depend on AAAA selection for the SIP
+          hostname. Required for internet-side RTP (with the RTP port forward).
         '';
       };
 
@@ -538,7 +574,12 @@ in
           "100.64.0.0/10"
           "fd00::/8"
         ];
-        description = "Networks treated as local, i.e. exempt from the NAT rewrite.";
+        description = ''
+          Networks treated as local on the UDP and trunk-client transports, i.e.
+          exempt from the external_* rewrite so LAN devices (the ATA) keep LAN
+          media addresses. Not applied to the inbound TLS listener: TLS
+          softphones must always see the certificate hostname in Contact.
+        '';
       };
     };
 
