@@ -138,6 +138,19 @@ let
 
   extensions = cfg.extensions;
 
+  # from_domain on every extension endpoint. Without it, PJSIP puts the local
+  # transport address into the From URI host of INVITEs *toward* that endpoint
+  # -- which is 192.168.x on the UDP/LAN path and pbx.example on TLS. The
+  # callee's softphone then displays "101@192.168.10.252" or
+  # "101@pbx.example" depending on which socket Asterisk chose for that leg,
+  # even when both phones are on the public internet. Pinning From to the SIP
+  # realm makes internal caller identity stable and matches the domain clients
+  # register against. (from_domain is already set on the trunk endpoint.)
+  # Plain "\n..." (not an indented '' string): Nix drops the first newline of
+  # ''...'' literals, which previously glued from_domain onto the callerid line.
+  endpointFromDomain = optionalString (cfg.realm != null)
+    "\nfrom_domain=${cfg.realm}";
+
   endpointSections = concatStringsSep "\n" (mapAttrsToList
     (num: ext: ''
       [${num}]
@@ -146,7 +159,7 @@ let
       ${codecBlock ext.codecs}
       auth=${num}
       aors=${num}
-      callerid=${ext.displayName} <${num}>
+      callerid=${ext.displayName} <${num}>${endpointFromDomain}
       direct_media=no
       force_rport=yes
       rewrite_contact=yes
