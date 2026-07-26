@@ -76,13 +76,13 @@ in
         enable = lib.mkEnableOption "dash-to-dock extension" // { default = false; };
         unity-like-config = {
           enable = lib.mkEnableOption "unity-like options for dash-to-dock" // { default = true; };
-          super-num-hotkeys = lib.mkEnableOption "enable dash-to-dock super-<N> hotkeys";
+          super-num-hotkeys = lib.mkEnableOption "enable dash-to-dock super-<N> hotkeys" // { default = false; };
         };
       };
       dash2dock-lite.enable = lib.mkEnableOption "dash2dock-lite extension" // { default = false; };
       no-overview.enable = lib.mkEnableOption "no-overview extension - skip overview on login" // { default = false; };
       classic-app-switcher = {
-        enable = lib.mkEnableOption "Classic App Switcher extension (custom fork)" // { default = false; };
+        enable = lib.mkEnableOption "Classic App Switcher extension (custom fork)" // { default = true; };
         mac-like-config.enable = lib.mkEnableOption "mac-like options for classic-app-switcher" // { default = true; };
         extra-hotkeys.enable = lib.mkEnableOption "hide-others / show-all-apps hotkeys for classic-app-switcher" // { default = true; };
       };
@@ -180,7 +180,7 @@ in
               show-label = true;
               show-recent-app = [ (config.lib.xkb.modifierBinding config.smind.desktop.gnome.minimize-modifier "u") ];
               unminimize-recent-window = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
-            } // lib.optionalAttrs extCfg.classic-app-switcher.extra-hotkeys.enable {
+            } // lib.optionalAttrs (extCfg.classic-app-switcher.enable && extCfg.classic-app-switcher.extra-hotkeys.enable) {
               hide-others = [ "<Control><Alt><Super>h" ];
               show-all-apps = [ "<Control><Alt><Super>u" ];
             };
