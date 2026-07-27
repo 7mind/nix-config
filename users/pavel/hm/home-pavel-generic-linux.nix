@@ -1,5 +1,12 @@
 { lib, pkgs, xdg_associate, cfg-meta, config, import_if_exists, import_if_exists_or, ... }:
 
+let
+  jetbrainsKeymap = builtins.path {
+    path = "${cfg-meta.paths.users}/pavel/hm/keymap-idea-linux.xml";
+    name = "keymap-idea-linux.xml";
+    recursive = false;
+  };
+in
 {
   programs.vscodium.profiles.default.keybindings =
     if cfg-meta.isLinux then
@@ -12,7 +19,7 @@
       ${pkgs.findutils}/bin/find ${config.home.homeDirectory}/.config/JetBrains \
         -type d \
         -wholename '*/JetBrains/*/keymaps' '!' -path '*/settingsSync/*' \
-        -exec cp -f "${cfg-meta.paths.users}/pavel/hm/keymap-idea-linux.xml" {}/Magen.xml \;
+        -exec cp -f "${jetbrainsKeymap}" {}/Magen.xml \;
     fi
   '';
 

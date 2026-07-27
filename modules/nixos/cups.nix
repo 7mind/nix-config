@@ -1,4 +1,13 @@
-{ pkgs, lib, config, cfg-meta, ... }: {
+{ pkgs, lib, config, cfg-meta, ... }:
+
+let
+  brotherDcpPpd = builtins.path {
+    path = "${cfg-meta.paths.private}/BrotherDCP.ppd";
+    name = "BrotherDCP.ppd";
+    recursive = false;
+  };
+in
+{
   options = {
     smind.environment.cups.enable = lib.mkEnableOption "CUPS printing with PDF printer and network discovery";
   };
@@ -23,7 +32,7 @@
     services.printing.drivers = lib.singleton (pkgs.linkFarm "drivers" [
       {
         name = "share/cups/model/BrotherDCP.ppd";
-        path = "${cfg-meta.paths.private}/BrotherDCP.ppd";
+        path = brotherDcpPpd;
       }
     ]);
 

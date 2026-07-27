@@ -84,6 +84,8 @@
       description = "GNOME window button layout.";
     };
 
+    smind.desktop.gnome.single-workspace = lib.mkEnableOption "a single GNOME workspace" // { default = true; };
+
     smind.desktop.gnome.gvfs.disableMtp = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -199,6 +201,7 @@
               "org/gnome/desktop/wm/preferences" = {
                 # button-layout = ":minimize,maximize,close";
                 button-layout = config.smind.desktop.gnome.wm.buttonLayout;
+              } // lib.optionalAttrs config.smind.desktop.gnome.single-workspace {
                 num-workspaces = lib.gvariant.mkInt32 1;
               };
               "org/gnome/mutter/wayland" = {
@@ -221,7 +224,6 @@
                 gtk-enable-primary-paste = true;
               };
               "org/gnome/mutter" = {
-                dynamic-workspaces = false;
                 edge-tiling = true;
                 overlay-key = "";
                 #workspaces-only-on-primary = true;
@@ -233,6 +235,8 @@
                   ++ lib.optionals config.smind.desktop.gnome.vrr.enable [
                     "variable-refresh-rate"
                   ];
+              } // lib.optionalAttrs config.smind.desktop.gnome.single-workspace {
+                dynamic-workspaces = false;
               };
               "org/gnome/shell" = {
                 "remember-mount-password" = true;
