@@ -21,6 +21,7 @@
   ./dev-wireshark.nix
   ./email.nix
   ./fingerprint.nix
+  ./flexisip.nix
   ./gatus.nix
   ./framework-laptop.nix
   ./cups.nix

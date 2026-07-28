@@ -32,9 +32,12 @@
 
         mqtt-controller-src = pkgs.lib.cleanSourceWith {
           src = "${cfg-meta.paths.pkg}/mqtt-controller";
-          filter = name: type:
-            let baseName = baseNameOf (toString name); in
-            ! (type == "directory" && baseName == "target");
+          filter =
+            name: type:
+            let
+              baseName = baseNameOf (toString name);
+            in
+            !(type == "directory" && baseName == "target");
         };
       in
       {
@@ -55,9 +58,10 @@
             { };
 
         gnome-shell-extension-classic-app-switcher =
-          pkgs.callPackage "${cfg-meta.paths.pkg}/classic-app-switcher/default.nix" {
-            src = inputs.classic-app-switcher;
-          };
+          pkgs.callPackage "${cfg-meta.paths.pkg}/classic-app-switcher/default.nix"
+            {
+              src = inputs.classic-app-switcher;
+            };
 
         gnome-shell-extension-touchpad-gesture-customization-app-expose =
           inputs.touchpad-gesture-customization-app-expose.packages.${super.system}.default;
@@ -76,13 +80,19 @@
 
         saic-mqtt-gateway = pkgs.callPackage "${cfg-meta.paths.pkg}/saic-mqtt-gateway/default.nix" { };
 
-        hoymiles-mqtt-bridge = pkgs.callPackage "${cfg-meta.paths.pkg}/hoymiles-mqtt-bridge/default.nix" { };
+        hoymiles-mqtt-bridge =
+          pkgs.callPackage "${cfg-meta.paths.pkg}/hoymiles-mqtt-bridge/default.nix"
+            { };
 
         enocean-mqtt = pkgs.callPackage "${cfg-meta.paths.pkg}/enocean-mqtt/default.nix" { };
 
         matter-mqtt-bridge = pkgs.callPackage "${cfg-meta.paths.pkg}/matter-mqtt-bridge/default.nix" { };
 
         resock = pkgs.callPackage "${cfg-meta.paths.pkg}/resock/default.nix" { };
+        flexisip = pkgs.callPackage "${cfg-meta.paths.pkg}/flexisip/default.nix" { };
+        flexisip-http-file-transfer-server =
+          pkgs.callPackage "${cfg-meta.paths.pkg}/flexisip-http-file-transfer-server/default.nix"
+            { };
 
         mqtt-controller-frontend =
           let
@@ -93,7 +103,8 @@
               system = "x86_64-linux";
               overlays = [ inputs.rust-overlay.overlays.default ];
             };
-            craneLib = (inputs.crane.mkLib pkgsBuild).overrideToolchain (p:
+            craneLib = (inputs.crane.mkLib pkgsBuild).overrideToolchain (
+              p:
               p.rust-bin.stable.latest.minimal.override {
                 targets = [ "wasm32-unknown-unknown" ];
               }
@@ -103,56 +114,66 @@
               cargoToml = "${mqtt-controller-src}/crates/mqtt-controller-frontend/Cargo.toml";
               cargoExtraArgs = "-p mqtt-controller-frontend";
             };
-            cargoArtifacts = craneLib.buildDepsOnly (commonArgs // {
-              CARGO_BUILD_TARGET = "wasm32-unknown-unknown";
-              doCheck = false;
-            });
+            cargoArtifacts = craneLib.buildDepsOnly (
+              commonArgs
+              // {
+                CARGO_BUILD_TARGET = "wasm32-unknown-unknown";
+                doCheck = false;
+              }
+            );
           in
-          craneLib.buildTrunkPackage (commonArgs // {
-            inherit cargoArtifacts;
-            wasm-bindgen-cli = pkgsBuild.wasm-bindgen-cli;
-            # trunk must run from the frontend crate dir to find its [package]
-            # Cargo.toml; cd there and adjust the install path accordingly.
-            preBuild = "cd crates/mqtt-controller-frontend";
-            trunkIndexPath = "./index.html";
-            installPhaseCommand = "cp -r dist $out";
-          });
+          craneLib.buildTrunkPackage (
+            commonArgs
+            // {
+              inherit cargoArtifacts;
+              wasm-bindgen-cli = pkgsBuild.wasm-bindgen-cli;
+              # trunk must run from the frontend crate dir to find its [package]
+              # Cargo.toml; cd there and adjust the install path accordingly.
+              preBuild = "cd crates/mqtt-controller-frontend";
+              trunkIndexPath = "./index.html";
+              installPhaseCommand = "cp -r dist $out";
+            }
+          );
 
         mqtt-controller =
           let
-            craneLib = (inputs.crane.mkLib pkgs).overrideToolchain (p:
-              p.rust-bin.stable.latest.minimal
-            );
+            craneLib = (inputs.crane.mkLib pkgs).overrideToolchain (p: p.rust-bin.stable.latest.minimal);
             commonArgs = {
               src = mqtt-controller-src;
               cargoToml = "${mqtt-controller-src}/crates/mqtt-controller/Cargo.toml";
               cargoExtraArgs = "-p mqtt-controller";
               nativeBuildInputs = [ pkgs.mold ];
             };
-            cargoArtifacts = craneLib.buildDepsOnly (commonArgs // {
-              doCheck = false;
-            });
+            cargoArtifacts = craneLib.buildDepsOnly (
+              commonArgs
+              // {
+                doCheck = false;
+              }
+            );
           in
-          craneLib.buildPackage (commonArgs // {
-            inherit cargoArtifacts;
-            cargoTestExtraArgs = "-p mqtt-controller -p mqtt-controller-wire";
-            doCheck = true;
-            postInstall = pkgs.lib.optionalString (self.mqtt-controller-frontend != null) ''
-              mkdir -p $out/share/mqtt-controller
-              cp -r ${self.mqtt-controller-frontend} $out/share/mqtt-controller/web
-              chmod -R u+w $out/share/mqtt-controller/web
-            '';
-            passthru = {
-              inherit (self) mqtt-controller-frontend;
-            };
-            meta = with pkgs.lib; {
-              description = "Unified zigbee2mqtt provisioner and runtime controller";
-              license = licenses.mit;
-              maintainers = with maintainers; [ pshirshov ];
-              mainProgram = "mqtt-controller";
-              platforms = platforms.linux;
-            };
-          });
+          craneLib.buildPackage (
+            commonArgs
+            // {
+              inherit cargoArtifacts;
+              cargoTestExtraArgs = "-p mqtt-controller -p mqtt-controller-wire";
+              doCheck = true;
+              postInstall = pkgs.lib.optionalString (self.mqtt-controller-frontend != null) ''
+                mkdir -p $out/share/mqtt-controller
+                cp -r ${self.mqtt-controller-frontend} $out/share/mqtt-controller/web
+                chmod -R u+w $out/share/mqtt-controller/web
+              '';
+              passthru = {
+                inherit (self) mqtt-controller-frontend;
+              };
+              meta = with pkgs.lib; {
+                description = "Unified zigbee2mqtt provisioner and runtime controller";
+                license = licenses.mit;
+                maintainers = with maintainers; [ pshirshov ];
+                mainProgram = "mqtt-controller";
+                platforms = platforms.linux;
+              };
+            }
+          );
 
         zigbee-mqtt-import = pkgs.callPackage "${cfg-meta.paths.pkg}/zigbee-mqtt-import/default.nix" { };
         linux-3-finger-drag = pkgs.callPackage "${cfg-meta.paths.pkg}/linux-3-finger-drag/default.nix" { };
@@ -195,36 +216,43 @@
             '';
           });
 
-      # CVE-2026-57191 (CVSS 8.2, unauthenticated): unbounded sscanf on the MWI
-      # NOTIFY "Message-Account" header in res_pjsip_pubsub lets a crafted SIP
-      # NOTIFY overflow a 512-byte stack buffer and permanently wedge the PJSIP
-      # transport. nixpkgs still ships 22.8.2, which is affected; the upstream
-      # fix (standard 22.10.1 / certified 22.8-cert3) just bounds the field with
-      # a width specifier. `--replace-fail` makes the build error the day a
-      # nixpkgs bump already carries the fix, so this override can't go stale
-      # silently. Only raspi5l builds asterisk.
-      asterisk = super.asterisk.overrideAttrs (old: {
-        postPatch = (old.postPatch or "") + ''
-          substituteInPlace res/res_pjsip_pubsub.c \
-            --replace-fail 'sscanf(line, "message-account: %s"' \
-                           'sscanf(line, "message-account: %511s"'
-        '';
-      });
+        # nixpkgs still ships 22.8.2. Use the complete upstream security release
+        # rather than carrying one advisory's patch while leaving the other fixes
+        # from 22.9.0-22.10.1 absent.
+        asterisk = super.asterisk.overrideAttrs (old: rec {
+          version = "22.10.1";
+          src = super.fetchurl {
+            url = "https://downloads.asterisk.org/pub/telephony/asterisk/old-releases/asterisk-${version}.tar.gz";
+            hash = "sha256-CVNWTET6SYJ/PJ1wym6A24OCjJhIRAhSxr5EyWGFU1M=";
+          };
+          preConfigure = (old.preConfigure or "") + ''
+            chmod +w externals_cache
+            cp --no-preserve=mode ${
+              super.fetchurl {
+                url = "https://raw.githubusercontent.com/asterisk/third-party/master/pjproject/2.17/pjproject-2.17.tar.bz2";
+                hash = "sha256-BLLrHw8BqgrRlFsWcXGENEilGqa3w+gGSW1DTxOhErc=";
+              }
+            } externals_cache/pjproject-2.17.tar.bz2
+            chmod -w externals_cache
+          '';
+        });
 
-      # Traccar wraps its JVM with the FULL openjdk, which runtime-depends on
-      # gtk+3 (AWT/Swing) and so drags wayland + libX11 into the closure. The
-      # GPS server is headless and never touches AWT, so point the wrapper at
-      # the headless JDK — drops gtk3/wayland/X11 entirely (only raspi5m uses it).
-      traccar = super.traccar.override {
-        pkgs = super // { openjdk = super.openjdk_headless; };
-      };
+        # Traccar wraps its JVM with the FULL openjdk, which runtime-depends on
+        # gtk+3 (AWT/Swing) and so drags wayland + libX11 into the closure. The
+        # GPS server is headless and never touches AWT, so point the wrapper at
+        # the headless JDK — drops gtk3/wayland/X11 entirely (only raspi5m uses it).
+        traccar = super.traccar.override {
+          pkgs = super // {
+            openjdk = super.openjdk_headless;
+          };
+        };
 
-      fractal = cfg-flakes.fractal.fractal-tray.overrideAttrs (old: {
-              cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
-                inherit (old) src;
-                hash = "sha256-pC3kTRO3FSaA4IAdfYwnW6oeQXVc4dj7SmMxzw9SVjA=";
-              };
-            });
+        fractal = cfg-flakes.fractal.fractal-tray.overrideAttrs (old: {
+          cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+            inherit (old) src;
+            hash = "sha256-pC3kTRO3FSaA4IAdfYwnW6oeQXVc4dj7SmMxzw9SVjA=";
+          };
+        });
 
         # Pending upstream merge of https://github.com/NixOS/nixpkgs/pull/478140
         keyd = super.keyd.overrideAttrs (drv: {

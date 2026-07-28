@@ -1,0 +1,28 @@
+diff --git a/src/modules/module-toolbox.cc b/src/modules/module-toolbox.cc
+index dd1e6ea9..55d5c9f1 100644
+--- a/src/modules/module-toolbox.cc
++++ b/src/modules/module-toolbox.cc
+@@ -36,0 +37 @@ static constexpr auto* kPrefix{"ModuleToolbox"};
++static constexpr auto* kPathOptionTag{"path"};
+@@ -437,0 +439,21 @@ void addPathHeader(Agent* agent, MsgSip& msg, const tport_t* tport, const char* u
++
++	if (!sip_has_supported(sip->sip_supported, kPathOptionTag)) {
++		if (sip->sip_supported) {
++			const msg_param_t pathOptionTag[] = {kPathOptionTag, nullptr};
++			if (msg_list_append_items(home, sip->sip_supported, pathOptionTag) < 0) {
++				LOGD_CTX(kPrefix) << "Failed to add 'Path' header field (" << uri
++				                  << "): could not append the path option tag to 'Supported'";
++				return;
++			}
++		} else {
++			auto* supported = sip_supported_make(home, kPathOptionTag);
++			if (!supported ||
++			    msg_header_insert(msg.getMsg(), reinterpret_cast<msg_pub_t*>(sip),
++			                      reinterpret_cast<msg_header_t*>(supported)) < 0) {
++				LOGD_CTX(kPrefix) << "Failed to add 'Path' header field (" << uri
++				                  << "): could not create the 'Supported' header field";
++				return;
++			}
++		}
++	}
++

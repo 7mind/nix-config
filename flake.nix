@@ -167,26 +167,42 @@
     };
   };
 
-  outputs = inputs@{ self, ... }:
+  outputs =
+    inputs@{ self, ... }:
     let
       globals = import ./globals.nix;
       hosts-public = import ./hosts.nix;
-      hosts-private = globals.import_if_exists_or ./private/hosts.nix ({ ... }: {
-        nixos = [ ];
-        darwin = [ ];
-      });
+      hosts-private = globals.import_if_exists_or ./private/hosts.nix (
+        { ... }: {
+          nixos = [ ];
+          darwin = [ ];
+        }
+      );
       builders = {
-        make-nixos-x86_64 = globals.make-nixos-x86_64 { inherit inputs; inherit self; };
-        make-nixos-aarch64 = globals.make-nixos-aarch64 { inherit inputs; inherit self; };
-        make-darwin-aarch64 = globals.make-darwin-aarch64 { inherit inputs; inherit self; };
+        make-nixos-x86_64 = globals.make-nixos-x86_64 {
+          inherit inputs;
+          inherit self;
+        };
+        make-nixos-aarch64 = globals.make-nixos-aarch64 {
+          inherit inputs;
+          inherit self;
+        };
+        make-darwin-aarch64 = globals.make-darwin-aarch64 {
+          inherit inputs;
+          inherit self;
+        };
       };
     in
     {
       inherit globals; # this makes this flake reusable by other flakes
 
-      nixosConfigurations = builtins.listToAttrs ((hosts-public builders).nixos ++ (hosts-private builders).nixos);
+      nixosConfigurations = builtins.listToAttrs (
+        (hosts-public builders).nixos ++ (hosts-private builders).nixos
+      );
 
-      darwinConfigurations = builtins.listToAttrs ((hosts-public builders).darwin ++ (hosts-private builders).darwin);
+      darwinConfigurations = builtins.listToAttrs (
+        (hosts-public builders).darwin ++ (hosts-private builders).darwin
+      );
 
       # Default agenix-rekey for all hosts
       agenix-rekey = inputs.agenix-rekey.configure {
@@ -195,20 +211,22 @@
       };
 
       # Per-host agenix-rekey configurations for selective rekeying
-      agenix-rekey-hosts = builtins.mapAttrs
-        (name: _:
-          inputs.agenix-rekey.configure {
-            userFlake = self;
-            nixosConfigurations = { ${name} = (self.nixosConfigurations // self.darwinConfigurations).${name}; };
-          }
-        )
-        (self.nixosConfigurations // self.darwinConfigurations);
+      agenix-rekey-hosts = builtins.mapAttrs (
+        name: _:
+        inputs.agenix-rekey.configure {
+          userFlake = self;
+          nixosConfigurations = {
+            ${name} = (self.nixosConfigurations // self.darwinConfigurations).${name};
+          };
+        }
+      ) (self.nixosConfigurations // self.darwinConfigurations);
 
       # Host metadata for setup script
       hostMeta =
         let
           allConfigs = self.nixosConfigurations // self.darwinConfigurations;
-          extractMeta = name: cfg:
+          extractMeta =
+            name: cfg:
             let
               config = cfg.config;
               smindHost = config.smind.host;
@@ -221,11 +239,21 @@
             };
         in
         builtins.mapAttrs extractMeta allConfigs;
-    } // inputs.flake-utils.lib.eachDefaultSystem (system: rec {
+    }
+    // inputs.flake-utils.lib.eachDefaultSystem (system: rec {
       pkgs = import inputs.nixpkgs {
         localSystem = system;
         overlays = [ inputs.agenix-rekey.overlays.default ];
       };
+      checks =
+        inputs.nixpkgs.lib.optionalAttrs
+          (builtins.elem system [
+            "x86_64-linux"
+            "aarch64-linux"
+          ])
+          {
+            flexisip-file-transfer = import ./tests/flexisip.nix { inherit pkgs; };
+          };
       devShells.default = pkgs.mkShell {
         packages = with pkgs; [
           # Plain `agenix` can't see host pubkeys from our `private/` git

@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 # Asterisk PBX (PJSIP stack only; chan_sip no longer exists in Asterisk 22).
 #
@@ -29,7 +34,7 @@ let
   runtimeInclude = "${runtimeDir}/pjsip-runtime.conf";
   recordingDir = "/var/lib/asterisk/recordings";
   recordingOpusBitrate = 24000;
-  recordingApplication = ''MixMonitor(${recordingDir}/''${UNIQUEID}.opus,b)'';
+  recordingApplication = "MixMonitor(${recordingDir}/\${UNIQUEID}.opus,b)";
   recordingStep = optionalString cfg.recording.enable " same => n,${recordingApplication}";
 
   # Nixpkgs includes the Ogg/Opus format module but omits libopusenc, which
@@ -47,11 +52,13 @@ let
   # with 408 Request Timeout.
   localNetLines = concatMapStringsSep "\n" (n: "local_net=${n}") cfg.nat.localNets;
 
-  externalMediaLine = optionalString (cfg.nat.externalMediaAddress != null)
-    "external_media_address=${cfg.nat.externalMediaAddress}";
+  externalMediaLine = optionalString (
+    cfg.nat.externalMediaAddress != null
+  ) "external_media_address=${cfg.nat.externalMediaAddress}";
 
-  externalSignalingLine = optionalString (cfg.nat.externalSignalingAddress != null)
-    "external_signaling_address=${cfg.nat.externalSignalingAddress}";
+  externalSignalingLine = optionalString (
+    cfg.nat.externalSignalingAddress != null
+  ) "external_signaling_address=${cfg.nat.externalSignalingAddress}";
 
   joinConfLines = lines: concatStringsSep "\n" (builtins.filter (s: s != "") lines);
 
@@ -119,8 +126,21 @@ let
           description = "How many devices may register this extension simultaneously.";
         };
 
+        rewriteContact = mkOption {
+          type = types.bool;
+          default = true;
+          description = ''
+            Replace a registered Contact with the packet source address. Disable
+            for clients whose connection and Path are managed by a SIP proxy.
+          '';
+        };
+
         mediaEncryption = mkOption {
-          type = types.enum [ "no" "sdes" "dtls" ];
+          type = types.enum [
+            "no"
+            "sdes"
+            "dtls"
+          ];
           default = "no";
           description = "PJSIP media_encryption for this endpoint.";
         };
@@ -132,6 +152,12 @@ let
             Fall back to unencrypted media when the peer does not offer SRTP.
             Set for endpoints that roam between LAN and internet.
           '';
+        };
+
+        video = mkOption {
+          type = types.bool;
+          default = false;
+          description = "Permit one pass-through video stream on this endpoint.";
         };
       };
     };
@@ -148,11 +174,10 @@ let
   # register against. (from_domain is already set on the trunk endpoint.)
   # Plain "\n..." (not an indented '' string): Nix drops the first newline of
   # ''...'' literals, which previously glued from_domain onto the callerid line.
-  endpointFromDomain = optionalString (cfg.realm != null)
-    "\nfrom_domain=${cfg.realm}";
+  endpointFromDomain = optionalString (cfg.realm != null) "\nfrom_domain=${cfg.realm}";
 
-  endpointSections = concatStringsSep "\n" (mapAttrsToList
-    (num: ext: ''
+  endpointSections = concatStringsSep "\n" (
+    mapAttrsToList (num: ext: ''
       [${num}]
       type=endpoint
       context=${cfg.dialplan.internalContext}
@@ -162,12 +187,15 @@ let
       callerid=${ext.displayName} <${num}>${endpointFromDomain}
       direct_media=no
       force_rport=yes
-      rewrite_contact=yes
+      rewrite_contact=${if ext.rewriteContact then "yes" else "no"}
       rtp_symmetric=yes
       ice_support=no
       dtmf_mode=rfc4733
       media_encryption=${ext.mediaEncryption}
       media_encryption_optimistic=${if ext.mediaEncryptionOptimistic then "yes" else "no"}
+      max_audio_streams=1
+      max_video_streams=${if ext.video then "1" else "0"}
+      rtcp_mux=${if ext.video then "yes" else "no"}
       rtp_timeout=120
       rtp_timeout_hold=600
 
@@ -175,19 +203,18 @@ let
       type=aor
       max_contacts=${toString ext.maxContacts}
       remove_existing=yes
+      support_path=yes
       qualify_frequency=60
       qualify_timeout=5
-    '')
-    extensions);
+    '') extensions
+  );
 
   trunk = cfg.trunk;
 
   # In pjsip.conf `;` opens a comment, so URI parameters have to be escaped.
-  trunkProxy = optionalString (trunk.proxy != null)
-    "\noutbound_proxy=sip:${trunk.proxy}\\;lr";
+  trunkProxy = optionalString (trunk.proxy != null) "\noutbound_proxy=sip:${trunk.proxy}\\;lr";
 
-  trunkTransportParam = optionalString (trunk.transport != "udp")
-    "\\;transport=${trunk.transport}";
+  trunkTransportParam = optionalString (trunk.transport != "udp") "\\;transport=${trunk.transport}";
 
   # Outbound TLS needs a TLS transport object to originate from. It is kept
   # separate from the inbound listener on purpose: the listener only exists once
@@ -205,8 +232,7 @@ let
     ${natBlockWithLocalNets}
   '';
 
-  trunkTransportLine = optionalString trunkNeedsTlsTransport
-    "\ntransport=${trunkTlsTransportName}";
+  trunkTransportLine = optionalString trunkNeedsTlsTransport "\ntransport=${trunkTlsTransportName}";
 
   trunkSections = optionalString trunk.enable ''
     [${trunk.name}]
@@ -252,16 +278,18 @@ let
 
     [global]
     type=global
-    user_agent=${cfg.userAgent}${optionalString (cfg.realm != null) ''
+    user_agent=${cfg.userAgent}${
+      optionalString (cfg.realm != null) ''
 
-      ; Digest realm sent in WWW-Authenticate. Asterisk's default is the literal
-      ; string "asterisk", which does not match the domain clients register
-      ; against. Tolerant clients just echo whatever realm the server sends, but
-      ; strict ones (Linphone) look up the stored password *by realm*, find
-      ; nothing for "asterisk", and re-REGISTER with no Authorization header --
-      ; producing an endless challenge loop with no InvalidPassword event.
-      ; Setting this to the SIP domain makes those clients authenticate.
-      default_realm=${cfg.realm}''}
+        ; Digest realm sent in WWW-Authenticate. Asterisk's default is the literal
+        ; string "asterisk", which does not match the domain clients register
+        ; against. Tolerant clients just echo whatever realm the server sends, but
+        ; strict ones (Linphone) look up the stored password *by realm*, find
+        ; nothing for "asterisk", and re-REGISTER with no Authorization header --
+        ; producing an endless challenge loop with no InvalidPassword event.
+        ; Setting this to the SIP domain makes those clients authenticate.
+        default_realm=${cfg.realm}''
+    }
     ; One SIP domain only; multi-domain matching is an attack surface here.
     disable_multi_domain=yes
     ; Emit a security event once this many unmatched requests arrive in the
@@ -291,17 +319,21 @@ let
 
   ringTargets = concatStringsSep "&" (map (n: "PJSIP/${n}") cfg.dialplan.inboundRing);
 
-  ringGroupSections = concatStringsSep "\n" (mapAttrsToList
-    (num: targets:
+  ringGroupSections = concatStringsSep "\n" (
+    mapAttrsToList (
+      num: targets:
       let
-        dialApplication = "Dial(${concatStringsSep "&" (map (n: "PJSIP/${n}") targets)},${toString cfg.dialplan.ringTimeout})";
+        dialApplication = "Dial(${
+          concatStringsSep "&" (map (n: "PJSIP/${n}") targets)
+        },${toString cfg.dialplan.ringTimeout})";
       in
       ''
         exten => ${num},1,${if cfg.recording.enable then recordingApplication else dialApplication}
         ${optionalString cfg.recording.enable " same => n,${dialApplication}"}
          same => n,Hangup()
-      '')
-    cfg.dialplan.ringGroups);
+      ''
+    ) cfg.dialplan.ringGroups
+  );
 
   # Outbound filter contexts. Numbers arrive already normalised to E.164 without
   # '+'. Emergency exact-matches skip the filter; deny patterns run before allow
@@ -317,11 +349,9 @@ let
   outboundAllow = cfg.dialplan.outbound.allowPatterns;
   outboundFilterEnabled = outboundDeny != [ ] || outboundAllow != [ ];
 
-  patternGoto = destination: pattern: ''
-    exten => _${pattern},1,Goto(${destination},''${EXTEN},1)'';
+  patternGoto = destination: pattern: "exten => _${pattern},1,Goto(${destination},\${EXTEN},1)";
 
-  exactGoto = destination: number: ''
-    exten => ${number},1,Goto(${destination},''${EXTEN},1)'';
+  exactGoto = destination: number: "exten => ${number},1,Goto(${destination},\${EXTEN},1)";
 
   outboundTrunkSection = ''
     [${outboundTrunkCtx}]
@@ -355,7 +385,9 @@ let
     ${concatMapStringsSep "\n" (patternGoto outboundReject) outboundDeny}
     ; Allows. Empty allowPatterns => fall through to the open catch-all below.
     ${concatMapStringsSep "\n" (patternGoto outboundTrunkCtx) outboundAllow}
-    exten => _X.,1,Goto(${if outboundAllow == [ ] then outboundTrunkCtx else outboundReject},''${EXTEN},1)
+    exten => _X.,1,Goto(${
+      if outboundAllow == [ ] then outboundTrunkCtx else outboundReject
+    },''${EXTEN},1)
 
     ${outboundTrunkSection}
 
@@ -375,13 +407,17 @@ let
     [${cfg.dialplan.internalContext}]
     ; Local extensions. An exact match always beats a pattern, so these win over
     ; the _X. catch-all below even though they also match it.
-    ${concatStringsSep "\n" (mapAttrsToList
-      (num: ext: ''
-        exten => ${num},1,${if cfg.recording.enable then recordingApplication else "Dial(PJSIP/${num},${toString cfg.dialplan.ringTimeout})"}
-        ${optionalString cfg.recording.enable
-          " same => n,Dial(PJSIP/${num},${toString cfg.dialplan.ringTimeout})"}
-         same => n,Hangup()'')
-      extensions)}
+    ${concatStringsSep "\n" (
+      mapAttrsToList (num: ext: ''
+        exten => ${num},1,${
+          if cfg.recording.enable then
+            recordingApplication
+          else
+            "Dial(PJSIP/${num},${toString cfg.dialplan.ringTimeout})"
+        }
+        ${optionalString cfg.recording.enable " same => n,Dial(PJSIP/${num},${toString cfg.dialplan.ringTimeout})"}
+         same => n,Hangup()'') extensions
+    )}
 
     ; Virtual extensions that ring multiple registered endpoints at once.
     ${ringGroupSections}
@@ -444,8 +480,7 @@ let
     set -euo pipefail
     umask 077
     install -d -o asterisk -g asterisk -m 0750 ${runtimeDir}
-    ${optionalString cfg.recording.enable
-      "install -d -o asterisk -g asterisk -m 0750 ${recordingDir}"}
+    ${optionalString cfg.recording.enable "install -d -o asterisk -g asterisk -m 0750 ${recordingDir}"}
 
     tmp="${runtimeInclude}.tmp"
     : > "$tmp"
@@ -455,11 +490,10 @@ let
         "$1" "$2" "$(cat "$3")" >> "$tmp"
     }
 
-    ${concatStringsSep "\n" (mapAttrsToList
-      (num: ext: ''emit_auth ${num} ${num} ${ext.passwordFile}'')
-      extensions)}
-    ${optionalString trunk.enable
-      ''emit_auth ${trunk.name} ${trunk.authUser} ${trunk.passwordFile}''}
+    ${concatStringsSep "\n" (
+      mapAttrsToList (num: ext: "emit_auth ${num} ${num} ${ext.passwordFile}") extensions
+    )}
+    ${optionalString trunk.enable "emit_auth ${trunk.name} ${trunk.authUser} ${trunk.passwordFile}"}
 
     ${optionalString (cfg.tls.certificateDir != null) ''
       cert="${cfg.tls.certificateDir}/${cfg.tls.certificateFile}"
@@ -532,7 +566,12 @@ in
 
     codecs = mkOption {
       type = types.listOf types.str;
-      default = [ "opus" "g722" "alaw" "ulaw" ];
+      default = [
+        "opus"
+        "g722"
+        "alaw"
+        "ulaw"
+      ];
       description = ''
         Default codec preference for extensions. Opus first gives full-band
         audio (and its own FEC/PLC) between softphones; alaw/ulaw are the
@@ -638,6 +677,7 @@ in
       localNets = mkOption {
         type = types.listOf types.str;
         default = [
+          "127.0.0.0/8"
           "10.0.0.0/8"
           "172.16.0.0/12"
           "192.168.0.0/16"
@@ -660,7 +700,9 @@ in
     };
 
     fail2ban = {
-      enable = mkEnableOption "a fail2ban jail against SIP brute-force" // { default = true; };
+      enable = mkEnableOption "a fail2ban jail against SIP brute-force" // {
+        default = true;
+      };
 
       maxretry = mkOption {
         type = types.ints.positive;
@@ -722,7 +764,11 @@ in
       };
 
       transport = mkOption {
-        type = types.enum [ "udp" "tcp" "tls" ];
+        type = types.enum [
+          "udp"
+          "tcp"
+          "tls"
+        ];
         default = "udp";
         description = "Transport used towards the trunk.";
       };
@@ -775,7 +821,10 @@ in
 
       codecs = mkOption {
         type = types.listOf types.str;
-        default = [ "alaw" "ulaw" ];
+        default = [
+          "alaw"
+          "ulaw"
+        ];
         description = ''
           Trunk codecs. The PSTN side is 8 kHz G.711 regardless, so offering
           anything wider only invites needless transcoding.
@@ -836,7 +885,10 @@ in
       outbound = {
         emergencyNumbers = mkOption {
           type = types.listOf types.str;
-          default = [ "112" "999" ];
+          default = [
+            "112"
+            "999"
+          ];
           description = ''
             Exact extensions that skip the outbound filter and always dial the
             trunk. Matched before any pattern. Keep this list short -- these
@@ -916,7 +968,8 @@ in
         "extensions.conf" = extensionsConf;
         "rtp.conf" = rtpConf;
         "logger.conf" = loggerConf;
-      } // lib.optionalAttrs cfg.recording.enable {
+      }
+      // lib.optionalAttrs cfg.recording.enable {
         "formats.conf" = formatsConf;
       };
       # Asterisk's verbose level defaults to 0, which silently discards every
@@ -976,7 +1029,10 @@ in
       allowedUDPPorts = [ cfg.udpPort ];
       allowedTCPPorts = [ cfg.tls.port ];
       allowedUDPPortRanges = [
-        { from = cfg.rtpPortRange.from; to = cfg.rtpPortRange.to; }
+        {
+          from = cfg.rtpPortRange.from;
+          to = cfg.rtpPortRange.to;
+        }
       ];
     };
 
@@ -1006,15 +1062,15 @@ in
         message = "smind.services.asterisk.dialplan.inboundRing names an undefined extension";
       }
       {
-        assertion = lib.all
-          (targets: lib.all (n: cfg.extensions ? ${n}) targets)
-          (attrValues cfg.dialplan.ringGroups);
+        assertion = lib.all (targets: lib.all (n: cfg.extensions ? ${n}) targets) (
+          attrValues cfg.dialplan.ringGroups
+        );
         message = "smind.services.asterisk.dialplan.ringGroups names an undefined extension";
       }
       {
-        assertion = lib.all
-          (n: !(cfg.extensions ? ${n}) && n != cfg.dialplan.echoTestExtension)
-          (lib.attrNames cfg.dialplan.ringGroups);
+        assertion = lib.all (n: !(cfg.extensions ? ${n}) && n != cfg.dialplan.echoTestExtension) (
+          lib.attrNames cfg.dialplan.ringGroups
+        );
         message = "smind.services.asterisk.dialplan.ringGroups numbers must not collide with an extension or the echo test";
       }
     ];
