@@ -407,6 +407,10 @@ pkgs.testers.runNixOSTest {
           to = 12199;
         };
         messaging.database.enable = true;
+        conference = {
+          enable = true;
+          package = pkgs.callPackage ../pkg/flexisip-conference/default.nix { };
+        };
         presence.enable = true;
         push.enable = false;
         fileTransfer = {
@@ -456,6 +460,7 @@ pkgs.testers.runNixOSTest {
       # Let wait_for_unit report startup failures instead of observing the
       # production restart loop indefinitely.
       systemd.services.flexisip-proxy.serviceConfig.Restart = lib.mkForce "no";
+      systemd.services.flexisip-conference.serviceConfig.Restart = lib.mkForce "no";
       systemd.services.flexisip-presence.serviceConfig.Restart = lib.mkForce "no";
     };
 
@@ -465,8 +470,10 @@ pkgs.testers.runNixOSTest {
     server.wait_for_unit("asterisk.service")
     server.wait_for_unit("flexisip-database-prepare.service")
     server.wait_for_unit("flexisip-prepare.service")
+    server.wait_for_unit("redis-flexisip.service")
     # Regression: Flexisip 2.6 must accept the generated configuration schema.
     server.wait_for_unit("flexisip-proxy.service")
+    server.wait_for_unit("flexisip-conference.service")
     server.wait_for_unit("flexisip-presence.service")
     server.wait_for_unit("httpd.service")
     server.wait_for_unit("nginx.service")
@@ -486,13 +493,39 @@ pkgs.testers.runNixOSTest {
     server.succeed("grep -F 'prevent-loops=false' /run/flexisip/flexisip.conf")
     server.succeed("grep -F 'force-public-ip-for-sdp-masquerading=true' /run/flexisip/flexisip.conf")
     server.succeed("grep -F 'message-database-enabled=true' /run/flexisip/flexisip.conf")
-    server.succeed("grep -F \"filter=is_request && request.method-name == 'MESSAGE'\" /run/flexisip/flexisip.conf")
+    server.succeed(
+        "grep -F \"filter=is_request && request.method-name == 'MESSAGE' && "
+        "!(request.uri.user == 'conference-factory' || request.uri.user == 'conference-focus')\" "
+        "/run/flexisip/flexisip.conf"
+    )
+    server.succeed("grep -F 'db-implementation=redis' /run/flexisip/flexisip.conf")
+    server.succeed("grep -F 'redis-server-domain=127.0.0.1' /run/flexisip/flexisip.conf")
+    server.succeed("grep -F 'redis-server-port=6379' /run/flexisip/flexisip.conf")
     server.succeed("! grep -F '__FLEXISIP_' /run/flexisip/flexisip.conf")
+    server.succeed("! grep -F '__FLEXISIP_' /run/flexisip/flexisip-conference.conf")
+    server.succeed("grep -Fx 'conference-factory-uris=sip:conference-factory@pbx.test' /run/flexisip/flexisip-conference.conf")
+    server.succeed("grep -Fx 'conference-focus-uris=sip:conference-focus@pbx.test' /run/flexisip/flexisip-conference.conf")
+    server.succeed("grep -Fx 'outbound-proxy=sip:127.0.0.1:5070;transport=tcp' /run/flexisip/flexisip-conference.conf")
+    server.succeed("grep -Fx 'supported-media-types=text' /run/flexisip/flexisip-conference.conf")
+    server.succeed("grep -Fx 'auth-domains-mode=static' /run/flexisip/flexisip-conference.conf")
     server.succeed("grep -F \"request.method-name == 'REGISTER'\" /run/flexisip/routes.conf")
+    server.succeed(
+        "test $(grep -n -F '<sip:127.0.0.1:6064;transport=tcp>' /run/flexisip/routes.conf | cut -d: -f1) "
+        "-lt $(grep -n -F '<sip:127.0.0.1:5060;transport=udp>' /run/flexisip/routes.conf | cut -d: -f1)"
+    )
     server.succeed("grep -A14 -F '[101]' /etc/asterisk/pjsip.conf | grep -Fx 'rewrite_contact=no'")
     server.succeed("grep -A14 -F '[103]' /etc/asterisk/pjsip.conf | grep -Fx 'rewrite_contact=yes'")
     server.succeed("test $(mariadb --protocol=socket --batch --skip-column-names -e 'SELECT COUNT(*) FROM flexisip_accounts.accounts') -eq 1")
     server.succeed("test $(mariadb --protocol=socket --batch --skip-column-names -e 'SELECT HEX(password) FROM flexisip_accounts.passwords') = 746573742D70617373776F7264")
+    server.succeed("mariadb --protocol=socket --batch --skip-column-names -e 'USE flexisip_conference; SHOW TABLES' | grep -q .")
+    server.succeed("redis-cli -p 6379 ping | grep -Fx PONG")
+    server.succeed("redis-cli -p 6379 set persistence-test present | grep -Fx OK")
+    server.succeed("systemctl restart redis-flexisip.service")
+    server.wait_for_unit("redis-flexisip.service")
+    server.succeed("redis-cli -p 6379 get persistence-test | grep -Fx present")
+    server.succeed("systemctl restart flexisip-proxy.service flexisip-conference.service")
+    server.wait_for_unit("flexisip-proxy.service")
+    server.wait_for_unit("flexisip-conference.service")
     server.succeed(
         "systemd-run --unit=sipp-callee --collect --service-type=exec "
         "--working-directory=/tmp sipp 127.0.0.1:5070 -sf ${registeredCalleeScenario} "
@@ -534,6 +567,10 @@ pkgs.testers.runNixOSTest {
     server.succeed(
         "curl --silent --show-error --insecure https://lp.test/linphone-config.xml "
         "| grep -F 'https://lp.test/flexisip-http-file-transfer-server/hft.php'"
+    )
+    server.succeed(
+        "curl --silent --show-error --insecure https://lp.test/linphone-config.xml "
+        "| grep -F '<entry name=\"conference_factory_uri\" overwrite=\"true\">sip:conference-factory@pbx.test</entry>'"
     )
 
     unauthenticated_status = server.succeed(

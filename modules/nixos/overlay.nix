@@ -90,6 +90,7 @@
 
         resock = pkgs.callPackage "${cfg-meta.paths.pkg}/resock/default.nix" { };
         flexisip = pkgs.callPackage "${cfg-meta.paths.pkg}/flexisip/default.nix" { };
+        flexisip-conference = pkgs.callPackage "${cfg-meta.paths.pkg}/flexisip-conference/default.nix" { };
         flexisip-http-file-transfer-server =
           pkgs.callPackage "${cfg-meta.paths.pkg}/flexisip-http-file-transfer-server/default.nix"
             { };

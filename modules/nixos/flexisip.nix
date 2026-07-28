@@ -34,6 +34,7 @@ let
 
   runtimeDir = "/run/flexisip";
   stateDir = "/var/lib/flexisip";
+  conferenceStateDir = "${stateDir}/conference";
   databaseStateDir = "${stateDir}/database";
   databasePasswordPath = "${databaseStateDir}/password";
   fileTransferStateDir = "/var/lib/flexisip-file-transfer";
@@ -43,23 +44,35 @@ let
     + optionalString (cfg.fileTransfer.publicPort != 443) ":${toString cfg.fileTransfer.publicPort}";
   fileTransferUrl = "https://${fileTransferAuthority}/flexisip-http-file-transfer-server/hft.php";
   confPath = "${runtimeDir}/flexisip.conf";
+  conferenceConfPath = "${runtimeDir}/flexisip-conference.conf";
   routesPath = "${runtimeDir}/routes.conf";
   authDbPath = "${runtimeDir}/users.db";
   providersPath = "${runtimeDir}/sip-bridge-providers.json";
   databasePasswordPlaceholder = "__FLEXISIP_DATABASE_PASSWORD__";
   fileTransferNoncePlaceholder = "__FLEXISIP_FILE_TRANSFER_NONCE__";
+  conferenceFactoryUri = "sip:${cfg.conference.factoryUser}@${cfg.domain}";
+  conferenceFocusUri = "sip:${cfg.conference.focusUser}@${cfg.domain}";
+  conferenceRequestFilter = "(request.uri.user == '${cfg.conference.factoryUser}' || request.uri.user == '${cfg.conference.focusUser}')";
+  routerFilter =
+    "is_request && request.method-name == 'MESSAGE'"
+    + optionalString cfg.conference.enable " && !${conferenceRequestFilter}";
   linphoneProvisioningFile = pkgs.writeText "linphone-flexisip.xml" ''
     <?xml version="1.0" encoding="UTF-8"?>
     <config xmlns="http://www.linphone.org/xsds/lpconfig.xsd">
       <section name="misc">
         <entry name="file_transfer_server_url" overwrite="true">${fileTransferUrl}</entry>
       </section>
+      ${optionalString cfg.conference.enable ''
+        <section name="proxy">
+          <entry name="conference_factory_uri" overwrite="true">${conferenceFactoryUri}</entry>
+        </section>
+      ''}
     </config>
   '';
 
   isFrontend = cfg.role == "frontend";
   isStandalone = cfg.role == "standalone";
-  databaseEnabled = cfg.messaging.database.enable || cfg.fileTransfer.enable;
+  databaseEnabled = cfg.messaging.database.enable || cfg.fileTransfer.enable || cfg.conference.enable;
 
   extensionModule =
     { name, ... }:
@@ -107,6 +120,9 @@ let
   # presence server). Registrar reg-on-response still records contacts from
   # Asterisk's 200 OK for delivery and connection reuse.
   routesConf = optionalString isFrontend ''
+    ${optionalString cfg.conference.enable ''
+      <sip:127.0.0.1:${toString cfg.conference.port};transport=tcp>    request.uri.domain == '${cfg.domain}' && ${conferenceRequestFilter}
+    ''}
     <${cfg.backend.uri}>    request.uri.domain == '${cfg.domain}' && (request.method-name == 'REGISTER' || request.method-name == 'INVITE' || request.method-name == 'ACK' || request.method-name == 'CANCEL' || request.method-name == 'BYE' || request.method-name == 'UPDATE' || request.method-name == 'PRACK' || request.method-name == 'INFO' || request.method-name == 'REFER')
   '';
 
@@ -273,7 +289,11 @@ let
     enabled=true
     reg-domains=${cfg.domain}
     max-contacts-by-aor=8
-    db-implementation=internal
+    db-implementation=${if cfg.conference.enable then "redis" else "internal"}
+    ${optionalString cfg.conference.enable ''
+      redis-server-domain=127.0.0.1
+      redis-server-port=${toString cfg.conference.redisPort}
+    ''}
     # Frontend: Asterisk accepts/rejects REGISTER; Flexisip holds the client
     # connection and records the contact from the 200 OK (Linphone push path).
     reg-on-response=${if isFrontend then "true" else "false"}
@@ -289,7 +309,7 @@ let
 
     [module::Router]
     enabled=true
-    ${optionalString isFrontend "filter=is_request && request.method-name == 'MESSAGE'"}
+    ${optionalString isFrontend "filter=${routerFilter}"}
     call-fork-timeout=${toString cfg.dialplan.ringTimeout}
     call-fork-current-branches-timeout=${toString cfg.dialplan.ringTimeout}
     # 1:1 SIP MESSAGE: keep for late registrants, with an optional durable
@@ -351,6 +371,36 @@ let
       [b2bua-server::sip-bridge]
       providers=${providersPath}
     ''}
+  '';
+
+  conferenceConfTemplate = pkgs.writeText "flexisip-conference.conf.template" ''
+    [global]
+    log-level=message
+    syslog-level=error
+    log-directory=/var/log/flexisip
+
+    [conference-server]
+    transport=sip:127.0.0.1:${toString cfg.conference.port};transport=tcp
+    conference-factory-uris=${conferenceFactoryUri}
+    conference-focus-uris=${conferenceFocusUri}
+    outbound-proxy=sip:127.0.0.1:${toString cfg.internalUdpPort};transport=tcp
+    local-domains=${cfg.domain}
+    database-backend=mysql
+    database-connection-string=db='flexisip_conference' user='flexisip' password='${databasePasswordPlaceholder}' host='127.0.0.1'
+    check-capabilities=true
+    supported-media-types=text
+    state-directory=${conferenceStateDir}
+
+    [module::Authorization]
+    auth-domains-mode=static
+    auth-domains=${cfg.domain}
+
+    [module::Registrar]
+    enabled=true
+    reg-domains=${cfg.domain}
+    db-implementation=redis
+    redis-server-domain=127.0.0.1
+    redis-server-port=${toString cfg.conference.redisPort}
   '';
 
   fileTransferConfigTemplate = pkgs.writeText "flexisip-file-transfer.conf.php.template" ''
@@ -420,9 +470,11 @@ let
     ${pkgs.mariadb}/bin/mariadb --protocol=socket <<SQL
     CREATE DATABASE IF NOT EXISTS flexisip_messages CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
     CREATE DATABASE IF NOT EXISTS flexisip_accounts CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    ${optionalString cfg.conference.enable "CREATE DATABASE IF NOT EXISTS flexisip_conference CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"}
     CREATE USER IF NOT EXISTS 'flexisip'@'127.0.0.1' IDENTIFIED BY '$database_password';
     ALTER USER 'flexisip'@'127.0.0.1' IDENTIFIED BY '$database_password';
     GRANT ALL PRIVILEGES ON flexisip_messages.* TO 'flexisip'@'127.0.0.1';
+    ${optionalString cfg.conference.enable "GRANT ALL PRIVILEGES ON flexisip_conference.* TO 'flexisip'@'127.0.0.1';"}
     GRANT SELECT ON flexisip_accounts.* TO 'flexisip'@'127.0.0.1';
     CREATE TABLE IF NOT EXISTS flexisip_accounts.accounts (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -478,10 +530,15 @@ let
     set -euo pipefail
     install -d -o flexisip -g flexisip -m 0750 ${runtimeDir}
     install -d -o flexisip -g flexisip -m 0750 ${stateDir}/b2b
+    ${optionalString cfg.conference.enable ''
+      install -d -o flexisip -g flexisip -m 0750 ${conferenceStateDir}
+    ''}
+    ${optionalString (cfg.messaging.database.enable || cfg.conference.enable) ''
+      database_password=$(<${databasePasswordPath})
+    ''}
     ${
       if cfg.messaging.database.enable then
         ''
-          database_password=$(<${databasePasswordPath})
           ${pkgs.gnused}/bin/sed "s/${databasePasswordPlaceholder}/$database_password/g" \
             ${flexisipConfTemplate} > ${confPath}
           chown flexisip:flexisip ${confPath}
@@ -492,6 +549,12 @@ let
           install -o flexisip -g flexisip -m 0640 ${flexisipConfTemplate} ${confPath}
         ''
     }
+    ${optionalString cfg.conference.enable ''
+      ${pkgs.gnused}/bin/sed "s/${databasePasswordPlaceholder}/$database_password/g" \
+        ${conferenceConfTemplate} > ${conferenceConfPath}
+      chown flexisip:flexisip ${conferenceConfPath}
+      chmod 0640 ${conferenceConfPath}
+    ''}
   '';
 
   writeFileTransferConfig = pkgs.writeShellScript "flexisip-write-file-transfer-conf" ''
@@ -655,8 +718,6 @@ in
         description = ''
           Enable proper 1:1 SIP MESSAGE handling on the proxy: late fork
           (deliver when the recipient registers) and an optional MariaDB queue.
-          Group chat requires the separate flexisip-conference project and is
-          not included.
         '';
       };
       deliveryTimeoutSeconds = mkOption {
@@ -679,6 +740,35 @@ in
             Soci backend. Disabling this loses queued messages on restart.
           '';
         };
+      };
+    };
+
+    conference = {
+      enable = mkEnableOption "persistent Linphone group chat through Flexisip Conference";
+      package = mkOption {
+        type = types.package;
+        default = pkgs.flexisip-conference;
+        description = "Flexisip Conference server package.";
+      };
+      port = mkOption {
+        type = types.port;
+        default = 6064;
+        description = "Localhost TCP port for the conference server.";
+      };
+      redisPort = mkOption {
+        type = types.port;
+        default = 6379;
+        description = "Localhost Redis port shared by the proxy and conference server.";
+      };
+      factoryUser = mkOption {
+        type = types.str;
+        default = "conference-factory";
+        description = "SIP user part advertised as the conference factory.";
+      };
+      focusUser = mkOption {
+        type = types.str;
+        default = "conference-focus";
+        description = "SIP user part used for generated conference focus URIs.";
       };
     };
 
@@ -846,6 +936,20 @@ in
           message = "messaging.database.enable requires messaging.enable";
         }
         {
+          assertion = !cfg.conference.enable || cfg.messaging.enable;
+          message = "conference.enable requires messaging.enable";
+        }
+        {
+          assertion =
+            !cfg.conference.enable
+            || (
+              cfg.conference.factoryUser != ""
+              && cfg.conference.focusUser != ""
+              && cfg.conference.factoryUser != cfg.conference.focusUser
+            );
+          message = "conference factoryUser and focusUser must be distinct non-empty SIP user parts";
+        }
+        {
           assertion =
             !cfg.fileTransfer.enable
             || (
@@ -871,6 +975,9 @@ in
         pkgs.jq
       ];
       environment.etc."flexisip/flexisip.conf.template".source = flexisipConfTemplate;
+      environment.etc."flexisip/flexisip-conference.conf.template" = mkIf cfg.conference.enable {
+        source = conferenceConfTemplate;
+      };
 
       systemd.services.flexisip-prepare = {
         description = "Prepare Flexisip runtime config and secrets";
@@ -878,6 +985,7 @@ in
         before = [
           "flexisip-proxy.service"
           "flexisip-b2bua.service"
+          "flexisip-conference.service"
           "flexisip-presence.service"
         ];
         after = [
@@ -900,9 +1008,13 @@ in
           "network-online.target"
           "flexisip-prepare.service"
         ]
+        ++ lib.optional cfg.conference.enable "redis-flexisip.service"
         ++ lib.optional isFrontend "asterisk.service";
         wants = [ "network-online.target" ];
-        requires = [ "flexisip-prepare.service" ];
+        requires = [
+          "flexisip-prepare.service"
+        ]
+        ++ lib.optional cfg.conference.enable "redis-flexisip.service";
         serviceConfig = {
           Type = "notify";
           User = "flexisip";
@@ -957,7 +1069,7 @@ in
       };
 
       systemd.services.flexisip-database-prepare = {
-        description = "Prepare Flexisip message and file-transfer databases";
+        description = "Prepare Flexisip databases";
         wantedBy = [ "multi-user.target" ];
         after = [ "mysql.service" ];
         requires = [ "mysql.service" ];
@@ -966,6 +1078,65 @@ in
           RemainAfterExit = true;
           ExecStart = prepareDatabase;
           UMask = "0027";
+        };
+      };
+    })
+
+    (mkIf cfg.conference.enable {
+      services.redis.servers.flexisip = {
+        enable = true;
+        bind = "127.0.0.1";
+        port = cfg.conference.redisPort;
+        openFirewall = false;
+        appendOnly = true;
+      };
+
+      systemd.services.flexisip-conference = {
+        description = "Flexisip conference and group-chat server";
+        wantedBy = [ "multi-user.target" ];
+        after = [
+          "network-online.target"
+          "flexisip-prepare.service"
+          "flexisip-proxy.service"
+          "redis-flexisip.service"
+        ];
+        wants = [ "network-online.target" ];
+        requires = [
+          "flexisip-prepare.service"
+          "flexisip-proxy.service"
+          "redis-flexisip.service"
+        ];
+        serviceConfig = {
+          Type = "notify";
+          User = "flexisip";
+          Group = "flexisip";
+          ExecStart = "${cfg.conference.package}/bin/flexisip-conference -c ${conferenceConfPath} --disable-stdout --syslog";
+          Restart = "on-failure";
+          RestartForceExitStatus = 5;
+          RestartSec = 2;
+          WatchdogSec = 30;
+          LimitNOFILE = 524288;
+          UMask = "0027";
+          StateDirectory = "flexisip";
+          LogsDirectory = "flexisip";
+          RuntimeDirectory = "flexisip";
+          RuntimeDirectoryPreserve = "yes";
+          NoNewPrivileges = true;
+          ProtectSystem = "strict";
+          ProtectHome = true;
+          PrivateTmp = true;
+          PrivateDevices = true;
+          ReadWritePaths = [
+            stateDir
+            runtimeDir
+          ];
+          RestrictAddressFamilies = [
+            "AF_UNIX"
+            "AF_INET"
+            "AF_INET6"
+            "AF_NETLINK"
+          ];
+          SystemCallArchitectures = "native";
         };
       };
     })

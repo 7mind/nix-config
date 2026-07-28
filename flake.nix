@@ -252,6 +252,7 @@
             "aarch64-linux"
           ])
           {
+            asterisk-linphone-fallback = import ./tests/asterisk-linphone-fallback.nix { inherit pkgs; };
             flexisip-file-transfer = import ./tests/flexisip.nix { inherit pkgs; };
           };
       devShells.default = pkgs.mkShell {
