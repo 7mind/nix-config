@@ -570,6 +570,10 @@ pkgs.testers.runNixOSTest {
     )
     server.succeed(
         "curl --silent --show-error --insecure https://lp.test/linphone-config.xml "
+        "| grep -F '<section name=\"proxy_default_values\">'"
+    )
+    server.succeed(
+        "curl --silent --show-error --insecure https://lp.test/linphone-config.xml "
         "| grep -F '<entry name=\"conference_factory_uri\" overwrite=\"true\">sip:conference-factory@pbx.test</entry>'"
     )
 

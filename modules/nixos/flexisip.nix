@@ -63,7 +63,7 @@ let
         <entry name="file_transfer_server_url" overwrite="true">${fileTransferUrl}</entry>
       </section>
       ${optionalString cfg.conference.enable ''
-        <section name="proxy">
+        <section name="proxy_default_values">
           <entry name="conference_factory_uri" overwrite="true">${conferenceFactoryUri}</entry>
         </section>
       ''}
