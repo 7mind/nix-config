@@ -489,6 +489,7 @@ pkgs.testers.runNixOSTest {
     )
     server.succeed("grep -F 'support-legacy-client=false' /run/flexisip/flexisip.conf")
     server.succeed("grep -F 'transports=sips:pbx.test:5061;maddr=127.0.0.1 sip:127.0.0.1:5070' /run/flexisip/flexisip.conf")
+    server.succeed("ss -H -ltn 'sport = :5070' | grep -F '127.0.0.1:5070'")
     server.succeed("grep -F 'sdp-port-range=12000-12199' /run/flexisip/flexisip.conf")
     server.succeed("grep -F 'prevent-loops=false' /run/flexisip/flexisip.conf")
     server.succeed("grep -F 'force-public-ip-for-sdp-masquerading=true' /run/flexisip/flexisip.conf")
