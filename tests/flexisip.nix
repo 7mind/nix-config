@@ -119,6 +119,90 @@ let
     </scenario>
   '';
 
+  conferenceCalleeReceiveScenario = pkgs.writeText "flexisip-conference-callee-receive.xml" ''
+    <?xml version="1.0" encoding="ISO-8859-1" ?>
+    <!DOCTYPE scenario SYSTEM "sipp.dtd">
+    <scenario name="Accept a conference-focus invitation">
+      <recv request="INVITE"/>
+      <send retrans="500">
+        <![CDATA[
+          SIP/2.0 200 OK
+          [last_Via:]
+          [last_From:]
+          [last_To:];tag=[pid]SIPpTag01[call_number]
+          [last_Call-ID:]
+          [last_CSeq:]
+          Contact: <sip:101@[local_ip]:[local_port]>
+          Content-Length: 0
+        ]]>
+      </send>
+      <recv request="ACK"/>
+    </scenario>
+  '';
+
+  conferenceFocusInviteScenario = pkgs.writeText "flexisip-conference-focus-invite.xml" ''
+    <?xml version="1.0" encoding="ISO-8859-1" ?>
+    <!DOCTYPE scenario SYSTEM "sipp.dtd">
+    <scenario name="Invite a registered participant from the local conference focus">
+      <send retrans="500">
+        <![CDATA[
+          INVITE sip:101@pbx.test SIP/2.0
+          Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+          From: <sip:conference-focus@pbx.test;gr=urn:uuid:test-focus;conf-id=test-conference>;tag=[call_number]
+          To: <sip:101@pbx.test>
+          Call-ID: [call_id]
+          CSeq: 1 INVITE
+          Contact: <sip:conference-focus@pbx.test;gr=urn:uuid:test-focus;conf-id=test-conference>;isfocus;text
+          Max-Forwards: 70
+          Require: recipient-list-invite
+          Content-Type: application/resource-lists+xml
+          Content-Length: [len]
+
+          <?xml version="1.0" encoding="UTF-8"?>
+          <resource-lists xmlns="urn:ietf:params:xml:ns:resource-lists">
+            <list><entry uri="sip:101@pbx.test"/></list>
+          </resource-lists>
+        ]]>
+      </send>
+      <recv response="100"/>
+      <pause milliseconds="500"/>
+    </scenario>
+  '';
+
+  spoofedConferenceFocusInviteScenario = pkgs.writeText "flexisip-spoofed-conference-focus-invite.xml" ''
+    <?xml version="1.0" encoding="ISO-8859-1" ?>
+    <!DOCTYPE scenario SYSTEM "sipp.dtd">
+    <scenario name="Reject a non-local conference-focus identity">
+      <send retrans="500">
+        <![CDATA[
+          INVITE sip:101@pbx.test SIP/2.0
+          Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+          From: <sip:conference-focus@pbx.test;gr=urn:uuid:spoofed-focus;conf-id=spoofed-conference>;tag=[call_number]
+          To: <sip:101@pbx.test>
+          Call-ID: [call_id]
+          CSeq: 1 INVITE
+          Contact: <sip:conference-focus@[local_ip]:[local_port]>
+          Max-Forwards: 70
+          Content-Length: 0
+        ]]>
+      </send>
+      <recv response="407"/>
+      <send>
+        <![CDATA[
+          ACK sip:101@pbx.test SIP/2.0
+          Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+          From: <sip:conference-focus@pbx.test;gr=urn:uuid:spoofed-focus;conf-id=spoofed-conference>;tag=[call_number]
+          To: <sip:101@pbx.test>[peer_tag_param]
+          Call-ID: [call_id]
+          CSeq: 1 ACK
+          Contact: <sip:conference-focus@[local_ip]:[local_port]>
+          Max-Forwards: 70
+          Content-Length: 0
+        ]]>
+      </send>
+    </scenario>
+  '';
+
   extensionCallScenario = pkgs.writeText "asterisk-extension-call.xml" ''
     <?xml version="1.0" encoding="ISO-8859-1" ?>
     <!DOCTYPE scenario SYSTEM "sipp.dtd">
@@ -410,6 +494,7 @@ pkgs.testers.runNixOSTest {
         conference = {
           enable = true;
           package = pkgs.callPackage ../pkg/flexisip-conference/default.nix { };
+          provisioningAccountIndex = 0;
         };
         presence.enable = true;
         push.enable = false;
@@ -484,19 +569,23 @@ pkgs.testers.runNixOSTest {
     server.succeed("grep -A1 -F '[module::Authorization]' /run/flexisip/flexisip.conf | grep -Fx 'enabled=false'")
     server.succeed(
         "grep -Fx \"filter=is_request && (request.method-name == 'MESSAGE' || "
-        "request.method-name == 'PUBLISH' || request.method-name == 'SUBSCRIBE')\" "
+        "request.method-name == 'PUBLISH' || request.method-name == 'SUBSCRIBE' || "
+        "(request.method-name == 'INVITE' && from.uri.user == 'conference-focus' && "
+        "from.uri.domain == 'pbx.test'))\" "
         "/run/flexisip/flexisip.conf"
     )
+    server.succeed("grep -Fx 'trusted-hosts=127.0.0.1' /run/flexisip/flexisip.conf")
     server.succeed("grep -F 'support-legacy-client=false' /run/flexisip/flexisip.conf")
     server.succeed("grep -F 'transports=sips:pbx.test:5061;maddr=127.0.0.1 sip:127.0.0.1:5070' /run/flexisip/flexisip.conf")
-    server.succeed("ss -H -ltn 'sport = :5070' | grep -F '127.0.0.1:5070'")
     server.succeed("grep -F 'sdp-port-range=12000-12199' /run/flexisip/flexisip.conf")
     server.succeed("grep -F 'prevent-loops=false' /run/flexisip/flexisip.conf")
     server.succeed("grep -F 'force-public-ip-for-sdp-masquerading=true' /run/flexisip/flexisip.conf")
     server.succeed("grep -F 'message-database-enabled=true' /run/flexisip/flexisip.conf")
     server.succeed(
-        "grep -F \"filter=is_request && request.method-name == 'MESSAGE' && "
-        "!(request.uri.user == 'conference-factory' || request.uri.user == 'conference-focus')\" "
+        "grep -F \"filter=is_request && ((request.method-name == 'MESSAGE' && "
+        "!(request.uri.user == 'conference-factory' || request.uri.user == 'conference-focus')) || "
+        "(request.method-name == 'INVITE' && from.uri.user == 'conference-focus' && "
+        "from.uri.domain == 'pbx.test'))\" "
         "/run/flexisip/flexisip.conf"
     )
     server.succeed("grep -F 'db-implementation=redis' /run/flexisip/flexisip.conf")
@@ -553,6 +642,51 @@ pkgs.testers.runNixOSTest {
     assert extension_status == 0, extension_status
     server.succeed("grep -F 'INVITE sip:101@' /tmp/callee.messages")
     server.succeed("systemctl stop sipp-callee")
+    server.succeed(
+        "systemd-run --unit=sipp-conference-callee --collect --service-type=exec "
+        "--working-directory=/tmp sipp 127.0.0.1:5070 -sf ${registeredCalleeScenario} "
+        "-rxsf ${conferenceCalleeReceiveScenario} "
+        "-t t1 -i 127.0.0.2 -p 5091 -m 1 -nd "
+        "-trace_err -error_file /tmp/conference-callee.errors "
+        "-trace_msg -message_file /tmp/conference-callee.messages"
+    )
+    server.wait_until_succeeds(
+        "asterisk -rx 'pjsip show aor 101' | grep -F 'sip:101@127.0.0.2:5091'",
+        timeout=10,
+    )
+    conference_status, conference_output = server.execute(
+        "cd /tmp && sipp 127.0.0.1:5070 -sf ${conferenceFocusInviteScenario} "
+        "-t t1 -i 127.0.0.1 -p 5093 -m 1 -nd -recv_timeout 5000 "
+        "-trace_err -error_file /tmp/conference-focus.errors "
+        "-trace_msg -message_file /tmp/conference-focus.messages"
+    )
+    if conference_status != 0:
+        print(conference_output)
+        print(server.succeed(
+            "cat /tmp/conference-focus.errors /tmp/conference-focus.messages "
+            "/tmp/conference-callee.errors /tmp/conference-callee.messages 2>/dev/null || true"
+        ))
+        print(server.succeed(
+            "journalctl -u flexisip-proxy -u flexisip-conference "
+            "-u asterisk -u sipp-conference-callee --no-pager || true"
+        ))
+    assert conference_status == 0, conference_status
+    server.succeed("grep -F 'INVITE sip:101@127.0.0.2:5091' /tmp/conference-callee.messages")
+    spoofed_focus_status, spoofed_focus_output = server.execute(
+        "cd /tmp && sipp 127.0.0.1:5070 -sf ${spoofedConferenceFocusInviteScenario} "
+        "-t t1 -i 127.0.0.4 -p 5094 -m 1 -nd -recv_timeout 5000 "
+        "-trace_err -error_file /tmp/spoofed-conference-focus.errors "
+        "-trace_msg -message_file /tmp/spoofed-conference-focus.messages"
+    )
+    if spoofed_focus_status != 0:
+        print(spoofed_focus_output)
+        print(server.succeed(
+            "cat /tmp/spoofed-conference-focus.errors "
+            "/tmp/spoofed-conference-focus.messages 2>/dev/null || true"
+        ))
+    assert spoofed_focus_status == 0, spoofed_focus_status
+    server.succeed("grep -F 'SIP/2.0 407 Proxy Authentication Required' /tmp/spoofed-conference-focus.messages")
+    server.succeed("systemctl stop sipp-conference-callee")
     echo_status, echo_output = server.execute(
         "cd /tmp && sipp 127.0.0.1:5070 -sf ${echoCallScenario} "
         "-i 127.0.0.2 -p 5090 -m 1 -nd "
@@ -576,6 +710,29 @@ pkgs.testers.runNixOSTest {
     server.succeed(
         "curl --silent --show-error --insecure https://lp.test/linphone-config.xml "
         "| grep -F '<entry name=\"conference_factory_uri\" overwrite=\"true\">sip:conference-factory@pbx.test</entry>'"
+    )
+    server.succeed(
+        "curl --silent --show-error --insecure https://lp.test/linphone-config.xml "
+        "| sed -n '/<section name=\"proxy_default_values\">/,/<\\/section>/p' "
+        "| grep -F '<entry name=\"supported\" overwrite=\"true\">replaces, outbound, gruu, path, record-aware</entry>'"
+    )
+    server.succeed(
+        "! curl --silent --show-error --insecure https://lp.test/linphone-config.xml "
+        "| grep -F '<section name=\"proxy_0\">'"
+    )
+    server.succeed(
+        "curl --silent --show-error --insecure https://lp.test/linphone-conference-account-0.xml "
+        "| grep -F '<entry name=\"transient_provisioning\" overwrite=\"true\">1</entry>'"
+    )
+    server.succeed(
+        "curl --silent --show-error --insecure https://lp.test/linphone-conference-account-0.xml "
+        "| sed -n '/<section name=\"proxy_0\">/,/<\\/section>/p' "
+        "| grep -F '<entry name=\"conference_factory_uri\" overwrite=\"true\">sip:conference-factory@pbx.test</entry>'"
+    )
+    server.succeed(
+        "curl --silent --show-error --insecure https://lp.test/linphone-conference-account-0.xml "
+        "| sed -n '/<section name=\"proxy_0\">/,/<\\/section>/p' "
+        "| grep -F '<entry name=\"supported\" overwrite=\"true\">replaces, outbound, gruu, path, record-aware</entry>'"
     )
 
     unauthenticated_status = server.succeed(

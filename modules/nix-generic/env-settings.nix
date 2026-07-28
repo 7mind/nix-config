@@ -86,6 +86,7 @@
       tmux
       zellij
       lsix # show thumbnails in the terminal
+      qrencode
       spacer
       viddy
       tealdeer

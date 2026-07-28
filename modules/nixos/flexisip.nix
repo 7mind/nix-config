@@ -53,9 +53,17 @@ let
   conferenceFactoryUri = "sip:${cfg.conference.factoryUser}@${cfg.domain}";
   conferenceFocusUri = "sip:${cfg.conference.focusUser}@${cfg.domain}";
   conferenceRequestFilter = "(request.uri.user == '${cfg.conference.factoryUser}' || request.uri.user == '${cfg.conference.focusUser}')";
+  conferenceFocusInviteFilter = "(request.method-name == 'INVITE' && from.uri.user == '${cfg.conference.focusUser}' && from.uri.domain == '${cfg.domain}')";
+  frontendAuthenticationFilter =
+    "is_request && (request.method-name == 'MESSAGE' || request.method-name == 'PUBLISH' || request.method-name == 'SUBSCRIBE'"
+    + optionalString cfg.conference.enable " || ${conferenceFocusInviteFilter}"
+    + ")";
+  linphoneSupportedTags = "replaces, outbound, gruu, path, record-aware";
   routerFilter =
-    "is_request && request.method-name == 'MESSAGE'"
-    + optionalString cfg.conference.enable " && !${conferenceRequestFilter}";
+    if cfg.conference.enable then
+      "is_request && ((request.method-name == 'MESSAGE' && !${conferenceRequestFilter}) || ${conferenceFocusInviteFilter})"
+    else
+      "is_request && request.method-name == 'MESSAGE'";
   linphoneProvisioningFile = pkgs.writeText "linphone-flexisip.xml" ''
     <?xml version="1.0" encoding="UTF-8"?>
     <config xmlns="http://www.linphone.org/xsds/lpconfig.xsd">
@@ -65,8 +73,22 @@ let
       ${optionalString cfg.conference.enable ''
         <section name="proxy_default_values">
           <entry name="conference_factory_uri" overwrite="true">${conferenceFactoryUri}</entry>
+          <entry name="supported" overwrite="true">${linphoneSupportedTags}</entry>
         </section>
       ''}
+    </config>
+  '';
+  linphoneConferenceAccountProvisioningPath = "/linphone-conference-account-${toString cfg.conference.provisioningAccountIndex}.xml";
+  linphoneConferenceAccountProvisioningFile = pkgs.writeText "linphone-flexisip-conference-account.xml" ''
+    <?xml version="1.0" encoding="UTF-8"?>
+    <config xmlns="http://www.linphone.org/xsds/lpconfig.xsd">
+      <section name="misc">
+        <entry name="transient_provisioning" overwrite="true">1</entry>
+      </section>
+      <section name="proxy_${toString cfg.conference.provisioningAccountIndex}">
+        <entry name="conference_factory_uri" overwrite="true">${conferenceFactoryUri}</entry>
+        <entry name="supported" overwrite="true">${linphoneSupportedTags}</entry>
+      </section>
     </config>
   '';
 
@@ -269,7 +291,8 @@ let
     ${optionalString cfg.authentication.enable ''
       # In frontend mode Asterisk authenticates PBX-bound requests. If Flexisip
       # authenticates them first, it removes their credentials before forwarding.
-      ${optionalString isFrontend "filter=is_request && (request.method-name == 'MESSAGE' || request.method-name == 'PUBLISH' || request.method-name == 'SUBSCRIBE')"}
+      ${optionalString isFrontend "filter=${frontendAuthenticationFilter}"}
+      ${optionalString (isFrontend && cfg.conference.enable) "trusted-hosts=127.0.0.1"}
       auth-domains=${cfg.domain}
       realm=${if cfg.realm != null then cfg.realm else cfg.domain}
       db-implementation=file
@@ -770,6 +793,15 @@ in
         default = "conference-focus";
         description = "SIP user part used for generated conference focus URIs.";
       };
+      provisioningAccountIndex = mkOption {
+        type = types.nullOr types.ints.unsigned;
+        default = null;
+        description = ''
+          Existing Linphone account index to update through a transient
+          conference provisioning document. Set this only when the PBX account
+          already exists at the selected proxy_N index.
+        '';
+      };
     };
 
     presence = {
@@ -948,6 +980,12 @@ in
               && cfg.conference.factoryUser != cfg.conference.focusUser
             );
           message = "conference factoryUser and focusUser must be distinct non-empty SIP user parts";
+        }
+        {
+          assertion =
+            cfg.conference.provisioningAccountIndex == null
+            || (cfg.conference.enable && cfg.fileTransfer.enable);
+          message = "conference.provisioningAccountIndex requires conference.enable and fileTransfer.enable";
         }
         {
           assertion =
@@ -1172,6 +1210,9 @@ in
               SetEnv ap_trust_cgilike_cl 1
 
               Alias "/linphone-config.xml" "${linphoneProvisioningFile}"
+              ${optionalString (cfg.conference.provisioningAccountIndex != null) ''
+                Alias "${linphoneConferenceAccountProvisioningPath}" "${linphoneConferenceAccountProvisioningFile}"
+              ''}
               Alias "/flexisip-http-file-transfer-server/tmp" "${cfg.fileTransfer.package}/share/flexisip-http-file-transfer-server/download.php"
               Alias "/flexisip-http-file-transfer-server" "${cfg.fileTransfer.package}/share/flexisip-http-file-transfer-server"
 
@@ -1189,6 +1230,11 @@ in
               <Location "/linphone-config.xml">
                 Require all granted
               </Location>
+              ${optionalString (cfg.conference.provisioningAccountIndex != null) ''
+                <Location "${linphoneConferenceAccountProvisioningPath}">
+                  Require all granted
+                </Location>
+              ''}
           '';
         };
       };
