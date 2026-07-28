@@ -93,9 +93,8 @@
       inputs.home-manager.follows = "home-manager";
     };
 
-    determinate = {
-      url = "https://flakehub.com/f/DeterminateSystems/determinate/*";
-    };
+    # Optional: uncomment to make the Determinate Nix modules available.
+    # determinate.url = "https://flakehub.com/f/DeterminateSystems/determinate/*";
 
     kanata-switcher = {
       url = "github:7mind/kanata-switcher/persistent-daemon";

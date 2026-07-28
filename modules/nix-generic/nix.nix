@@ -4,6 +4,7 @@ let
   lixPkgSet = pkgs0: pkgs0.lixPackageSets.latest;
   hasDeterminateOption = options ? determinate && options.determinate ? enable;
   hasDeterminateNixOption = options ? determinateNix && options.determinateNix ? enable;
+  hasDeterminateSupport = hasDeterminateOption || hasDeterminateNixOption;
   isDeterminate = config.smind.nix.nix-impl == "determinate";
   nixPackage =
     if config.smind.nix.nix-impl == "lix"
@@ -18,7 +19,7 @@ in
       description = "Turn on gabage collection, experimental options and other sane defaults";
     };
     smind.nix.nix-impl = lib.mkOption {
-      type = lib.types.enum [ "nix" "lix" "determinate" ];
+      type = lib.types.enum ([ "nix" "lix" ] ++ lib.optional hasDeterminateSupport "determinate");
       default = "nix";
       description = "Use a replacement implementation of Nix";
     };

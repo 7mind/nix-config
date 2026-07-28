@@ -101,7 +101,7 @@ rec {
             inputs.home-manager.nixosModules.home-manager
             inputs.agenix.nixosModules.default
             inputs.agenix-rekey.nixosModules.default
-            inputs.determinate.nixosModules.default
+          ] ++ pkgs.lib.optional (inputs ? determinate) inputs.determinate.nixosModules.default ++ [
             inputs.kanata-switcher.nixosModules.default
             inputs.noctalia.nixosModules.default
 
@@ -231,7 +231,7 @@ rec {
             inputs.home-manager.darwinModules.home-manager
             inputs.agenix.darwinModules.default
             inputs.agenix-rekey.nixosModules.default
-            inputs.determinate.darwinModules.default
+          ] ++ pkgs.lib.optional (inputs ? determinate) inputs.determinate.darwinModules.default ++ [
             { nixpkgs.overlays = [
                 inputs.nix-vscode-extensions.overlays.default
                 inputs.rust-overlay.overlays.default
