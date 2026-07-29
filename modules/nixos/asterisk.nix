@@ -470,7 +470,13 @@ let
           same => n,GotoIf($["''${DIALSTATUS}" = "CHANUNAVAIL"]?linphone-fallback)
           same => n,GotoIf($["''${DIALSTATUS}" = "CONGESTION"]?linphone-fallback)
           same => n(local-call-rejected),Hangup()
-          same => n(linphone-fallback),Dial(PJSIP/${linphoneFallbackEndpoint}/sip:${
+          ; Two beeps as early media so the caller knows the fallback route is in
+          ; use. Progress() opens the early-media path; `noanswer` stops Playback
+          ; from answering -- the call keeps ringing until the fallback
+          ; destination picks up.
+          same => n(linphone-fallback),Progress()
+          same => n,Playback(beep&beep,noanswer)
+          same => n,Dial(PJSIP/${linphoneFallbackEndpoint}/sip:${
             linphoneFallback.targets.${num}
           }@${linphoneFallback.domain},${toString linphoneFallback.ringTimeout})
         ''}
@@ -904,7 +910,8 @@ in
       enable = mkEnableOption ''
         fallback calls through one Asterisk-owned SIP account after a mapped
         local extension returns NOANSWER, CHANUNAVAIL, or CONGESTION, except
-        when the destination explicitly rejects the call
+        when the destination explicitly rejects the call. The caller hears two
+        beeps as early media when the fallback engages
       '';
 
       domain = mkOption {
@@ -1117,9 +1124,14 @@ in
 
     systemd.services.asterisk = {
       # The upstream module writes preStart as `types.lines`, so this appends.
-      # Upstream sets restartIfChanged=false to protect calls in progress, which
-      # also means config changes need an explicit `systemctl restart asterisk`.
       preStart = lib.mkAfter "${runtimeConfScript}";
+
+      # Upstream sets restartIfChanged=false to protect calls in progress,
+      # which also means config changes need an explicit `systemctl restart
+      # asterisk`. Overridden here: this PBX idles most of the time, so having
+      # every config change take effect on switch is worth the risk of
+      # dropping a rare in-progress call.
+      restartIfChanged = lib.mkForce true;
 
       # Upstream ships with zero sandboxing. Asterisk starts as root, binds
       # privileged ports (5060/5061), then drops to the asterisk user via -U, and

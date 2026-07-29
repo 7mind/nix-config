@@ -231,6 +231,8 @@ pkgs.testers.runNixOSTest {
     server.succeed("grep -F 'DIALSTATUS' /etc/asterisk/extensions.conf | grep -F 'CHANUNAVAIL'")
     server.fail("grep -F 'DIALSTATUS' /etc/asterisk/extensions.conf | grep -F 'BUSY'")
     server.succeed("grep -F 'HANGUPCAUSE' /etc/asterisk/extensions.conf | grep -F '\"21\"'")
+    server.succeed("grep -F 'Playback(beep&beep,noanswer)' /etc/asterisk/extensions.conf")
+    server.succeed("grep -F '(linphone-fallback),Progress()' /etc/asterisk/extensions.conf")
 
     server.wait_until_succeeds(
       "asterisk -rx 'pjsip show registrations' | grep -E "
