@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 NordVPN WireGuard Configuration Extractor
-Extracts WireGuard configuration files from NordVPN's API.
+Extracts WireGuard configuration files from NordVPN's API,
+or lists peer endpoints for an existing peerEndpoint field.
 Uses only Python standard library (no external dependencies).
 """
 
@@ -23,9 +24,10 @@ class NordVPNConfigExtractor:
     SERVER_RECOMMENDATIONS_URL = "https://api.nordvpn.com/v1/servers/recommendations"
     COUNTRIES_URL = "https://api.nordvpn.com/v1/servers/countries"
     DEFAULT_DNS = "194.242.2.4, 94.140.14.14"
+    WG_PORT = 51820
 
-    def __init__(self, access_token: str):
-        """Initialize with access token."""
+    def __init__(self, access_token: str = ""):
+        """Initialize with access token (required only for full config extraction)."""
         self.access_token = access_token
         self._country_map = None
 
@@ -136,7 +138,7 @@ class NordVPNConfigExtractor:
         country_name = server["locations"][0]["country"]["name"]
         city_name = server["locations"][0]["country"]["city"]["name"]
         hostname = server["hostname"]
-        station_ip = server["station"]
+        endpoint = self.peer_endpoint(server)
 
         # Find WireGuard public key
         public_key = None
@@ -163,9 +165,14 @@ DNS = {dns}
 [Peer]
 PublicKey = {public_key}
 AllowedIPs = 0.0.0.0/0, ::/0
-Endpoint = {station_ip}:51820
+Endpoint = {endpoint}
 """
         return filename, config
+
+    @classmethod
+    def peer_endpoint(cls, server: dict) -> str:
+        """Return host:port suitable for a WireGuard peerEndpoint field."""
+        return f"{server['station']}:{cls.WG_PORT}"
 
     def list_countries(self):
         """List all available countries with their codes."""
@@ -197,17 +204,22 @@ Endpoint = {station_ip}:51820
             dns: DNS servers to use
             output_dir: Directory to save configuration files
         """
-        print(f"Fetching private key...")
+        print(f"Fetching private key...", file=sys.stderr)
         private_key = self.get_private_key()
 
-        print(f"Fetching server recommendations (limit: {total_configs}" + (f", country: {country.upper()}" if country else "") + ")...")
+        print(
+            f"Fetching server recommendations (limit: {total_configs}"
+            + (f", country: {country.upper()}" if country else "")
+            + ")...",
+            file=sys.stderr,
+        )
         servers = self.get_server_recommendations(total_configs, country)
 
         if not servers:
             print("No servers found matching criteria", file=sys.stderr)
             return
 
-        print(f"Found {len(servers)} server(s)")
+        print(f"Found {len(servers)} server(s)", file=sys.stderr)
 
         # Create output directory if it doesn't exist
         os.makedirs(output_dir, exist_ok=True)
@@ -219,20 +231,56 @@ Endpoint = {station_ip}:51820
                 filepath = os.path.join(output_dir, filename)
                 with open(filepath, "w") as f:
                     f.write(config)
-                print(f"[{i}/{len(servers)}] Created: {filename}")
+                print(f"[{i}/{len(servers)}] Created: {filename}", file=sys.stderr)
             except Exception as e:
                 print(f"Error creating config for server: {e}", file=sys.stderr)
                 continue
 
+    def list_endpoints(
+        self,
+        total: int = 3,
+        country: Optional[str] = None,
+    ):
+        """
+        Print recommended peer endpoints (host:port), one per line on stdout.
+
+        Intended for pasting into an existing WireGuard peerEndpoint field
+        without rewriting full config files. Progress goes to stderr so the
+        stdout stream stays machine-readable.
+        """
+        print(
+            f"Fetching server recommendations (limit: {total}"
+            + (f", country: {country.upper()}" if country else "")
+            + ")...",
+            file=sys.stderr,
+        )
+        servers = self.get_server_recommendations(total, country)
+
+        if not servers:
+            print("No servers found matching criteria", file=sys.stderr)
+            sys.exit(1)
+
+        print(
+            f"Found {len(servers)} server(s); paste one into peerEndpoint:",
+            file=sys.stderr,
+        )
+        for server in servers:
+            print(self.peer_endpoint(server))
+
+
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="Extract NordVPN WireGuard configurations",
+        description="Extract NordVPN WireGuard configurations or peer endpoints",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # List available countries
   %(prog)s --list-countries
+
+  # List peer endpoints only (no token, no files) — paste into peerEndpoint
+  %(prog)s --endpoints
+  %(prog)s --endpoints --country nl --count 10
 
   # Set access token as environment variable
   export NORDVPN_ACCESS_TOKEN="your_token_here"
@@ -255,6 +303,14 @@ Common country codes: us, uk, de, fr, nl, ca, au, jp, etc.
         help="List all available country codes and exit"
     )
     parser.add_argument(
+        "--endpoints",
+        action="store_true",
+        help=(
+            "Print recommended peer endpoints (host:port) to stdout instead of "
+            "writing config files; does not require an access token"
+        ),
+    )
+    parser.add_argument(
         "--token",
         help="NordVPN access token (or set NORDVPN_ACCESS_TOKEN env variable)",
         default=os.environ.get("NORDVPN_ACCESS_TOKEN")
@@ -266,7 +322,7 @@ Common country codes: us, uk, de, fr, nl, ca, au, jp, etc.
     )
     parser.add_argument(
         "--count", "-n",
-        help="Number of configurations to extract (default: 3)",
+        help="Number of configurations/endpoints to extract (default: 3)",
         type=int,
         default=3
     )
@@ -284,13 +340,23 @@ Common country codes: us, uk, de, fr, nl, ca, au, jp, etc.
 
     # Handle list-countries command (doesn't require token)
     if args.list_countries:
-        extractor = NordVPNConfigExtractor(access_token="dummy")
+        extractor = NordVPNConfigExtractor()
         extractor.list_countries()
+        sys.exit(0)
+
+    # Peer-endpoint list mode (doesn't require token or write files)
+    if args.endpoints:
+        extractor = NordVPNConfigExtractor()
+        extractor.list_endpoints(total=args.count, country=args.country)
         sys.exit(0)
 
     # Check for access token
     if not args.token:
-        print("Error: Access token required. Provide via --token or NORDVPN_ACCESS_TOKEN environment variable", file=sys.stderr)
+        print(
+            "Error: Access token required. Provide via --token or "
+            "NORDVPN_ACCESS_TOKEN environment variable",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     # Extract configs
@@ -301,7 +367,7 @@ Common country codes: us, uk, de, fr, nl, ca, au, jp, etc.
         dns=args.dns,
         output_dir=args.output
     )
-    print("\nDone!")
+    print("\nDone!", file=sys.stderr)
 
 
 if __name__ == "__main__":
