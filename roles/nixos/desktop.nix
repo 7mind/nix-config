@@ -5,6 +5,7 @@ let
     config.smind.roles.desktop.generic-gnome
     || config.smind.roles.desktop.generic-kde
     || config.smind.roles.desktop.generic-cosmic
+    || config.smind.roles.desktop.generic-pantheon
     || config.smind.roles.desktop.generic;
 in
 {
@@ -24,6 +25,7 @@ in
     smind.roles.desktop.generic-gnome = lib.mkEnableOption "GNOME-based desktop role with full defaults";
     smind.roles.desktop.generic-kde = lib.mkEnableOption "KDE-based desktop role with full defaults";
     smind.roles.desktop.generic-cosmic = lib.mkEnableOption "COSMIC-based desktop role with full defaults";
+    smind.roles.desktop.generic-pantheon = lib.mkEnableOption "Pantheon-based desktop role with full defaults";
     smind.roles.desktop.generic = lib.mkEnableOption "Desktop role without defaults";
   };
 
@@ -109,6 +111,10 @@ in
 
     (lib.mkIf config.smind.roles.desktop.generic-cosmic {
       smind.desktop.cosmic.enable = lib.mkDefault true;
+    })
+
+    (lib.mkIf config.smind.roles.desktop.generic-pantheon {
+      smind.desktop.pantheon.enable = lib.mkDefault true;
     })
   ];
 }

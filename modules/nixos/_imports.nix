@@ -61,6 +61,7 @@
   ./nushell.nix
   ./oracle-cloud.nix
   ./overlay.nix
+  ./pantheon.nix
   ./pylontech.nix
   ./plymouth.nix
   ./power-generic.nix

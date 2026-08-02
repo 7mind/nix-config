@@ -1,11 +1,12 @@
 { config, lib, pkgs, ... }:
 
 let
-  # Priority: KDE > GNOME > COSMIC > Hyprland > Sway > Niri
+  # Priority: KDE > GNOME > Pantheon > COSMIC > Hyprland > Sway > Niri
   selectedBackend =
     if config.smind.display-manager != "auto" then config.smind.display-manager
     else if config.smind.desktop.kde.enable then "plasma-login-manager"
     else if config.smind.desktop.gnome.enable then "gdm"
+    else if config.smind.desktop.pantheon.enable then "lightdm"
     else if config.smind.desktop.cosmic.enable then "cosmic-greeter"
     else if config.smind.desktop.hyprland.enable then "greetd"
     else if config.smind.desktop.sway.enable then "greetd"
@@ -15,6 +16,7 @@ let
   enabledDesktops = lib.filter (x: x != null) [
     (if config.smind.desktop.kde.enable then "KDE" else null)
     (if config.smind.desktop.gnome.enable then "GNOME" else null)
+    (if config.smind.desktop.pantheon.enable then "Pantheon" else null)
     (if config.smind.desktop.cosmic.enable then "COSMIC" else null)
     (if config.smind.desktop.hyprland.enable then "Hyprland" else null)
     (if config.smind.desktop.sway.enable then "Sway" else null)
@@ -26,14 +28,15 @@ in
 {
   options.smind = {
     display-manager = lib.mkOption {
-      type = lib.types.enum [ "auto" "gdm" "plasma-login-manager" "cosmic-greeter" "greetd" "none" ];
+      type = lib.types.enum [ "auto" "gdm" "plasma-login-manager" "lightdm" "cosmic-greeter" "greetd" "none" ];
       default = "auto";
       description = ''
         Display manager to use.
 
-      - auto: Automatically select based on priority: KDE > GNOME > COSMIC
+      - auto: Automatically select based on priority: KDE > GNOME > Pantheon > COSMIC
       - gdm: GNOME Display Manager
       - plasma-login-manager: Plasma Login Manager (KDE default)
+      - lightdm: LightDM with the Pantheon greeter
       - cosmic-greeter: COSMIC greeter
       - greetd: Generic greeter
       - none: No display manager (manual startx/login)
@@ -60,10 +63,10 @@ in
       warnings = lib.optionals (hasMultipleDesktops && config.smind.display-manager == "auto") [
         ''
           Multiple desktop environments enabled: ${lib.concatStringsSep ", " enabledDesktops}
-          Auto-selected display manager: ${selectedBackend} (priority: KDE > GNOME > COSMIC)
+          Auto-selected display manager: ${selectedBackend} (priority: KDE > GNOME > Pantheon > COSMIC)
 
           All desktops will be available as sessions at login.
-          To override, set: smind.display-manager = "gdm" | "plasma-login-manager" | "cosmic-greeter"
+          To override, set: smind.display-manager = "gdm" | "plasma-login-manager" | "lightdm" | "cosmic-greeter"
         ''
       ];
 
@@ -143,6 +146,11 @@ in
 
     (lib.mkIf (selectedBackend == "plasma-login-manager") {
       services.displayManager.plasma-login-manager.enable = true;
+    })
+
+    (lib.mkIf (selectedBackend == "lightdm") {
+      services.xserver.enable = true;
+      services.xserver.displayManager.lightdm.enable = true;
     })
 
     (lib.mkIf (selectedBackend == "cosmic-greeter") {
