@@ -82,7 +82,7 @@ in
       dash2dock-lite.enable = lib.mkEnableOption "dash2dock-lite extension" // { default = false; };
       no-overview.enable = lib.mkEnableOption "no-overview extension - skip overview on login" // { default = false; };
       classic-app-switcher = {
-        enable = lib.mkEnableOption "Classic App Switcher extension (custom fork)" // { default = true; };
+        enable = lib.mkEnableOption "Classic App Switcher extension (custom fork)" // { default = false; };
         mac-like-config.enable = lib.mkEnableOption "mac-like options for classic-app-switcher" // { default = true; };
         extra-hotkeys.enable = lib.mkEnableOption "hide-others / show-all-apps hotkeys for classic-app-switcher" // { default = true; };
       };
