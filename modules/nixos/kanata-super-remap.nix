@@ -42,6 +42,7 @@ let
         cp ${./kanata-lib-super-swap.kbd} $out/kanata-lib-super-swap.kbd
 
         echo "(defcfg" > $out/kanata.kbd
+        echo "linux-continue-if-no-devs-found yes" >> $out/kanata.kbd
         cat "$extraDefCfgPath" >> $out/kanata.kbd
         echo ")" >> $out/kanata.kbd
         echo "" >> $out/kanata.kbd
