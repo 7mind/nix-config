@@ -112,11 +112,11 @@
     "classic-app-switcher": {
       "flake": false,
       "locked": {
-        "lastModified": 1784763853,
-        "narHash": "sha256-45Y3BYKSZrWJptbzAi2ybK7xNCdqPFlHP2mEKZqkLnk=",
+        "lastModified": 1786369345,
+        "narHash": "sha256-09GUch2619YNShD63xR7aEWaiiaJHllqLyFjM1OVYew=",
         "owner": "neko-kai",
         "repo": "classic-app-switcher",
-        "rev": "57e701df7a9ad6f124f1b96ccfa698bfec19aac8",
+        "rev": "a8ebc51f150f164ed72939852d3609b8b733f9d7",
         "type": "github"
       },
       "original": {
@@ -1476,11 +1476,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1780942860,
-        "narHash": "sha256-m1G+07brZrQG6rfMzSfNTN5NYxXDLFV6O3KkX57dI3s=",
+        "lastModified": 1786373097,
+        "narHash": "sha256-CpZtkKm7Gq5EnTOeeF7XIFmwaaQwZoAaBV/jdV1EuWE=",
         "owner": "7mind",
         "repo": "touchpad-gesture-customization-app-expose",
-        "rev": "cf754220b2e300d7cafcef89066f3bcef9a6bfd3",
+        "rev": "0876e367aa5dbf32119f710074ded1bc3fc0fbbd",
         "type": "github"
       },
       "original": {

@@ -234,8 +234,7 @@ in
         keybind = [
           "clear"
 
-          # Copy/Paste - performable: only triggers if there's a selection, otherwise passes through
-          "performable:super+c=copy_to_clipboard"
+          "super+c=copy_to_clipboard"
           "super+v=paste_from_clipboard"
 
           # Clear screen and scrollback
@@ -283,6 +282,7 @@ in
           "ctrl+right=next_tab"
         ] ++ lib.optionals config.smind.hm.ghostty.ctrl-keybindings [
           # Additional Ctrl keybindings (in addition to Super)
+          # Copy/Paste - performable: only triggers if there's a selection, otherwise passes through
           "performable:ctrl+c=copy_to_clipboard"
           "ctrl+v=paste_from_clipboard"
           "ctrl+t=new_tab"
