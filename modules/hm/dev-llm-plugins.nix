@@ -33,17 +33,11 @@ let
     hash = "sha256-/h4HxkUbtRGoqgyFvjJrd++XmOd1KSVku5dR2/f9b/s=";
   };
 
-  cavemanSource = pkgs.fetchFromGitHub {
+  cavemanSkill = pkgs.fetchurl {
     name = "caveman";
-    owner = "JuliusBrussee";
-    repo = "caveman";
-    rev = "2c67abb9833689b48c7abba88afaa77c39a18657";
-    hash = "sha256-9G7m2U5EezqKozO03r07nSEBOGS9tO2fjklQVohdqO0=";
+    url = "https://raw.githubusercontent.com/JuliusBrussee/caveman/2c67abb9833689b48c7abba88afaa77c39a18657/skills/caveman/SKILL.md";
+    hash = "sha256-2vnOxJbr0DmAnYI2+Z8X+htL6q34zk4tUy0NpR1wr84=";
   };
-
-  cavemanCodexPlugin = pkgs.runCommand "caveman" { } ''
-    cp -r ${cavemanSource}/plugins/caveman "$out"
-  '';
 
   claudeAlwaysEnabledMarker = "${config.programs.claude-code.configDir}/.i-have-adhd-always";
   piAlwaysEnabledMarker = "${config.programs.pi.configDir}/.i-have-adhd-always";
@@ -93,13 +87,13 @@ in
       ))
 
       (lib.mkIf cfg.cavemanPlugin.claude.enable {
-        programs.claude-code.plugins = [ cavemanSource ];
+        programs.claude-code.skills.caveman = builtins.readFile cavemanSkill;
       })
       (lib.mkIf cfg.cavemanPlugin.codex.enable {
-        programs.codex.plugins = [ cavemanCodexPlugin ];
+        programs.codex.skills.caveman = builtins.readFile cavemanSkill;
       })
       (lib.mkIf cfg.cavemanPlugin.pi.enable {
-        programs.pi.skills.caveman = builtins.readFile "${cavemanSource}/plugins/caveman/skills/caveman/SKILL.md";
+        programs.pi.skills.caveman = builtins.readFile cavemanSkill;
       })
     ]
   );
