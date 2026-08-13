@@ -2,18 +2,7 @@
 
 {
   nixpkgs.overlays = [
-    (final: prev:
-      let
-        # VTK 9.5.2 predates GDAL 3.13's const-qualified metadata API.
-        vtkGdalConstPatch = prev.fetchpatch {
-          url = "https://github.com/Kitware/VTK/commit/2395603fdddc40c29efc64c632ae98225ca2a58e.patch";
-          hash = "sha256-Gcnt1JXWPkhfNLhtk9SXYqx/0cLkjO4xiRfR8YiaY8I=";
-        };
-        patchVtk = vtk: vtk.overrideAttrs (old: {
-          patches = (old.patches or [ ]) ++ [ vtkGdalConstPatch ];
-        });
-      in
-      {
+    (final: prev: {
       # Downgrade wireplumber to 0.5.12 to fix GNOME crash when switching
       # Bluetooth audio to handsfree/HSP/HFP profile.
       # See: https://github.com/NixOS/nixpkgs/issues/475202
@@ -101,8 +90,6 @@
           })
         ];
       });
-
-      vtk = patchVtk prev.vtk;
 
       # Work around Python package regressions after nixpkgs update.
       pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
