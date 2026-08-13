@@ -8,9 +8,10 @@ let
     # https://github.com/rs-gh-asdf/framework-system/blob/af23ae7bf5cfbcb20bf2d3799a281ccf01ca40c6/EXAMPLES.md
     # The Framework 13 matrix places physical left ctrl at row 1 col 12 and physical fn at row 2 col 2.
     # Remap both positions directly so the layout does not depend on the BIOS ctrl/fn swap setting.
-    # Physical left ctrl emits set-2 F24 (0x005f) instead of the EC-internal Fn (SCANCODE_FN =
-    # 0x00ff, which the EC consumes and never sends to the host). Kanata implements the Fn layer
-    # on KEY_F24: tap = language switch, hold = KEY_FN + EC-Fn-layer emulation
+    # Physical left ctrl emits set-2 0x005f instead of the EC-internal Fn (SCANCODE_FN = 0x00ff,
+    # which the EC consumes and never sends to the host). Linux 6.17+ maps 0x005f to KEY_F24;
+    # older kernels map it to KEY_ZENKAKUHANKAKU. Kanata implements the Fn layer on both keycodes:
+    # tap = language switch, hold = KEY_FN + EC-Fn-layer emulation
     # (see private/users/kai/kanata/kanata-framework13.kbd). 0x0057 (F23) is avoided because the
     # EC Copilot-key chord injects it.
     ${frameworkToolExecutable} --remap-key 1 12 0x005f
