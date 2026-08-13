@@ -147,11 +147,11 @@
     "codegraph": {
       "flake": false,
       "locked": {
-        "lastModified": 1784751556,
-        "narHash": "sha256-UHu8wi0BdkZ1ZvAxMAxMMb1ujPDCSfRH1ZFezcmaLeg=",
+        "lastModified": 1786157765,
+        "narHash": "sha256-RlA4VViOJR5w4yYoZlFE66WLaCTiCn55vePNUtnEneU=",
         "owner": "colbymchenry",
         "repo": "codegraph",
-        "rev": "572d22bfbe82602080e457bec655f72e3314f9ef",
+        "rev": "c6aaa20358cd6adcd04b87bdef8e5803ad146f3a",
         "type": "github"
       },
       "original": {
@@ -173,11 +173,11 @@
         "openai-codex-plugin": "openai-codex-plugin"
       },
       "locked": {
-        "lastModified": 1786574139,
-        "narHash": "sha256-y0E+QIJgVGzc0UKXjBu1aZq90uN5bJQY5NqohaKnmiM=",
+        "lastModified": 1786620646,
+        "narHash": "sha256-NHqPDTMaQHrb/qfYMh4c7hXxN7UU9/rJR12JEWbyD9w=",
         "owner": "7mind",
         "repo": "cq",
-        "rev": "e0886ecc430668f92fc6ccabb3c3289b6120b36e",
+        "rev": "9ab67ef13c98e3a3754c9d11ad75ed3f951759ed",
         "type": "github"
       },
       "original": {
