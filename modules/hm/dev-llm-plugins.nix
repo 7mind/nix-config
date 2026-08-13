@@ -59,7 +59,7 @@ in
     lib.mkMerge [
       (lib.mkIf cfg.iHaveAdhdPlugin.claude.enable (
         lib.mkMerge [
-          { programs.claude-code.plugins = [ iHaveAdhdPlugin ]; }
+          { programs.claude-code.plugins.i-have-adhd = iHaveAdhdPlugin; }
           (lib.mkIf cfg.iHaveAdhdPlugin.claude.alwaysEnabled {
             home.file."${claudeAlwaysEnabledMarker}".text = "";
             smind.hm.dev.llm.yolo.extraReadOnlyPaths = [ claudeAlwaysEnabledMarker ];
