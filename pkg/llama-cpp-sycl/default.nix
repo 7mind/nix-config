@@ -1,18 +1,10 @@
 # llama.cpp built with the SYCL backend, using nixpkgs `intel-llvm` as the
 # DPC++ toolchain.
 #
-# Pinned to llama.cpp `073bb2c20b5b2c919469653214aaa1a9895816a2` (2026-04).
-# Same base used by:
-#   - Hal9000AIML/arc-pro-b70-ubuntu-gpu-speedup-bugfixes — provides the 8
-#     SYCL cherry-picks in `patches/0001-0008` (BF16 GET_ROWS, MoE
-#     mul_mat_vec_q fusion, K-quant subgroup-16 DMMV, oneMKL small-matmul
-#     route, reorder-OOM safety, RAII temp buffer + HOST_MEM_FALLBACK,
-#     Q8_0 reorder dequantize). Without these, stock SYCL hangs on MoE
-#     and crashes on Q8_0 on B70 (BMG-G31).
-#   - `pkg/ollama-sycl/` — vendors the SAME commit (whole-tree) so both
-#     binaries share kernel fixes. `patches/0009` (upstream PR #22035)
-#     is the single source of truth for the MMVQ unaligned-vocab fix
-#     and is referenced by relative path from ollama-sycl's postPatch.
+# Pinned to llama.cpp `b10242` / `96278e39` — the exact tag nixpkgs
+# ollama 0.32.7 vendors via FetchContent (`LLAMA_CPP_VERSION`). Planting
+# this package's `libggml-sycl.so` into ollama-sycl is only ABI-safe
+# while both share that ggml version.
 #
 # Roles:
 #   - `llama-cli` / `llama-bench` — diagnostic/benchmark binaries
@@ -54,43 +46,25 @@
 # nativeBuildInput and pointing CC/CXX at it explicitly in preConfigure.
 stdenv.mkDerivation (finalAttrs: {
   pname = "llama-cpp-sycl";
-  # Bumped 073bb2c20 (Apr 2026) → ad09224 (2026-05-07): merge commit of
-  # ggml-org/llama.cpp#22149 which added SYCL implementations for
-  # GGML_OP_SSM_SCAN, GGML_OP_GATED_DELTA_NET (small touch),
-  # GGML_OP_SOLVE_TRI, GGML_OP_FILL, GGML_OP_CUMSUM, GGML_OP_DIAG.
-  # Without these, Qwen3 (Mamba-2 hybrid attention layers use
-  # SSM_SCAN) and other newer architectures load-crash on L0 because
-  # the sched routes ops to SYCL that have no implementation and no
-  # gating in device_supports_op.
-  # Bumped ad09224 (2026-05-07) → b9509 / 6f3a9f3d (449 commits ahead): the
-  # exact llama.cpp commit nixpkgs ollama 0.30 vendors via FetchContent
-  # (identical src hash), so ollama-sycl can plant this package's
-  # libggml-sycl.so against an ABI-matched ggml-base.
-  version = "b9509";
+  # Bumped b9509 / 6f3a9f3d → b10242 / 96278e39: the exact llama.cpp
+  # tag nixpkgs ollama 0.32.7 vendors via FetchContent (identical src
+  # hash), so ollama-sycl can plant this package's libggml-sycl.so
+  # against an ABI-matched ggml-base.
+  version = "b10242";
 
   src = fetchFromGitHub {
     owner = "ggml-org";
     repo = "llama.cpp";
-    rev = "6f3a9f3dee3c27545371044a3a38005721ac8a8e";
-    hash = "sha256-bO1ucb/+vidj/EYzNCssotjte9NlVLdjC794jToNNeM=";
+    rev = "96278e39fc83e1d97c881e34bcec39ac7ea98820";
+    hash = "sha256-mBqO6h9eiSAXqiHy1H3aK2ACbz1aYagmjAN7IpXNTcw=";
   };
 
-  # Hal9000AIML/arc-pro-b70-ubuntu-gpu-speedup-bugfixes cherry-picks.
-  # As of b9509 ALL of them are upstream in ggml-org/llama.cpp:
-  #   - 0001 (BF16 GET_ROWS) — present; re-applying detects a reversed
-  #     patch (the getrows.cpp / ggml-sycl.cpp hunks are already merged).
-  #   - 0002 (fused MoE mul_mat_vec_q), 0003 (native subgroup K-quant
-  #     DMMV), 0005-0008 (reorder OOM fallback + HOST_MEM_FALLBACK +
-  #     Q8_0 reorder dequant) — upstream since ad09224.
-  #   - 0004 (route small f32 matmuls to oneMKL, bypass oneDNN) — now
-  #     upstream at b9509 (also detected as reversed). Dropped.
-  #   - 0009 (MMVQ unaligned-vocab assert, PR #22035), 0010 (convert.cpp
-  #     BF16 __INTEL_LLVM_COMPILER gate drop) — upstream pre-ad09224.
-  # The only out-of-tree fixes left are the intel-llvm@2025-11-14
-  # IMF/IGC environment workarounds in postPatch below (not upstreamable:
-  # they target our open-source DPC++ snapshot, not llama.cpp itself).
-  # Patch files retained under ./patches/ for reference and because
-  # ollama-sycl referenced 0009/0010 by path historically.
+  # Hal9000AIML/arc-pro-b70-ubuntu-gpu-speedup-bugfixes cherry-picks are
+  # all upstream as of b9509 (and remain so at b10242). The only
+  # out-of-tree fixes left are the intel-llvm@2025-11-14 IMF/IGC
+  # environment workarounds in postPatch below (not upstreamable: they
+  # target our open-source DPC++ snapshot, not llama.cpp itself).
+  # Patch files retained under ./patches/ for reference.
   patches = [ ];
 
   # intel-llvm in nativeBuildInputs so its bin/clang(++) is on $PATH and
@@ -152,6 +126,18 @@ stdenv.mkDerivation (finalAttrs: {
     ' ggml/src/ggml-sycl/set_rows.cpp
     grep -q 'is_same_v<TOut, sycl::ext::oneapi::bfloat16>' ggml/src/ggml-sycl/set_rows.cpp \
       || (echo "bf16 IMF-bypass perl substitution did not apply to set_rows.cpp"; exit 1)
+
+    # b10242's op_tanh leftover `constexpr int ver = __INTEL_LLVM_COMPILER;`
+    # is unguarded. Open-source intel-llvm/clang does not define that
+    # macro (only proprietary icpx/dpcpp does), so the SYCL compile
+    # fails with "use of undeclared identifier". The following #if
+    # already uses defined(__INTEL_LLVM_COMPILER); the unused `ver`
+    # assignment is dead.
+    sed -i '/constexpr int ver = __INTEL_LLVM_COMPILER;/d' ggml/src/ggml-sycl/element_wise.cpp
+    grep -q '__INTEL_LLVM_COMPILER' ggml/src/ggml-sycl/element_wise.cpp \
+      || (echo "expected remaining guarded __INTEL_LLVM_COMPILER in element_wise.cpp"; exit 1)
+    grep -q 'constexpr int ver = __INTEL_LLVM_COMPILER' ggml/src/ggml-sycl/element_wise.cpp \
+      && (echo "unguarded __INTEL_LLVM_COMPILER leftover still present"; exit 1)
 
     # Device-side memcpy → __builtin_memcpy fixes. IGC (Intel Graphics
     # Compiler) cannot resolve a plain `memcpy` external symbol when

@@ -109,32 +109,18 @@ rec {
                 inputs.nix-vscode-extensions.overlays.default
                 inputs.rust-overlay.overlays.default
                 (final: prev: {
-                  # Two overrides on intel-compute-runtime:
-                  # (1) Bump 26.14.37833.4 → 26.18.38308.1 (2026-05-12).
-                  #     nixpkgs gmmlib is already 22.10.0 (the 26.18 pairing),
-                  #     so no companion bump. Drop once nixpkgs passes 26.18.
-                  # (2) Patch intel-graphics-compiler into the RPATH of the
-                  #     Level Zero driver `libze_intel_gpu.so.1` (`drivers`
-                  #     split output). Upstream postFixup only fixes RPATH on
-                  #     the OpenCL ICD (`libigdrcl.so`), leaving the L0 driver
-                  #     without IGC on any search path; NEO's runtime dlopen of
-                  #     `libigdfcl.so.2`/`libigc.so.2` during eager device init
-                  #     then fails via `abortUnrecoverable`
-                  #     (`gmm_helper/resource_info.cpp:15`). This abort was
-                  #     mis-attributed to `intel/compute-runtime#922` on this
-                  #     host since ~2026-02 — verified: putting
-                  #     `${intel-graphics-compiler}/lib` on LD_LIBRARY_PATH
-                  #     yields clean `zeInit = 0x0`, device enumeration, and
-                  #     USM allocations. Closing this packaging gap unbricks
-                  #     Level Zero on Battlemage.
-                  intel-compute-runtime = (prev.intel-compute-runtime.overrideAttrs (oldAttrs: rec {
-                    version = "26.18.38308.1";
-                    src = prev.fetchFromGitHub {
-                      owner = "intel";
-                      repo = "compute-runtime";
-                      tag = version;
-                      hash = "sha256-539TqwzPhclEpyxrwRB0DBLCAgM8JojdshvhNp0jeKU=";
-                    };
+                  # Patch intel-graphics-compiler into the RPATH of the Level
+                  # Zero driver `libze_intel_gpu.so.1` (`drivers` split
+                  # output). nixpkgs postFixup only fixes RPATH on the OpenCL
+                  # ICD (`libigdrcl.so`), leaving the L0 driver without IGC on
+                  # any search path; NEO's runtime dlopen of `libigdfcl.so.2`/
+                  # `libigc.so.2` during eager device init then fails via
+                  # `abortUnrecoverable` (`gmm_helper/resource_info.cpp:15`).
+                  # Verified: putting `${intel-graphics-compiler}/lib` on
+                  # LD_LIBRARY_PATH yields clean `zeInit = 0x0`, device
+                  # enumeration, and USM allocations. The former 26.18 source
+                  # pin is dropped — locked nixpkgs is already 26.27.39122.11.
+                  intel-compute-runtime = prev.intel-compute-runtime.overrideAttrs (oldAttrs: {
                     postFixup = (oldAttrs.postFixup or "") + ''
                       for lib in "$drivers"/lib/libze_intel*.so* ; do
                         # symlinks have no headers — skip cleanly
@@ -149,7 +135,7 @@ rec {
                         } "$lib"
                       done
                     '';
-                  }));
+                  });
                   # nixpkgs `intel-llvm` (PR #470035, merged April 2026)
                   # packaging bug: its merged output uses symlinkJoin +
                   # __structuredAttrs = true, which silently produces an empty
@@ -192,27 +178,22 @@ rec {
                   mkl-sycl = final.callPackage ./pkg/mkl-sycl/default.nix { };
 
                   # llama.cpp built with the SYCL backend, pinned to the same
-                  # upstream commit ollama 0.21 vendors. Linux-only — needs
-                  # intel-llvm + intel-compute-runtime + level-zero, none of
-                  # which exist on Darwin.
+                  # llama.cpp tag nixpkgs ollama vendors (b10242). Linux-only —
+                  # needs intel-llvm + intel-compute-runtime + level-zero, none
+                  # of which exist on Darwin.
                   llama-cpp-sycl = final.callPackage ./pkg/llama-cpp-sycl/default.nix {
                     mkl = final.mkl-sycl;
                   };
 
-                  # ollama with the GGML SYCL backend wired in for the
-                  # Intel Arc Pro B70. Vendors the entire llama.cpp tree
-                  # at the same commit as pkg/llama-cpp-sycl (073bb2c20),
-                  # so both packages share kernel fixes and our MMVQ
-                  # cherry-pick. Inherits the (overridden, see below)
-                  # `ollama` for go-side tooling versions.
+                  # ollama with the GGML SYCL backend wired in for the Intel
+                  # Arc Pro B70. Plants llama-cpp-sycl's libggml-sycl.so into
+                  # the nixpkgs ollama (0.32.7) backend dir. Both share llama.cpp
+                  # b10242 so the planted .so is ABI-matched to ollama's ggml-base.
                   ollama-sycl = final.callPackage ./pkg/ollama-sycl/default.nix { };
 
                   # Stock ollama flavors (ollama/-cuda/-rocm/-vulkan) ride
-                  # nixpkgs' own version (0.30.7), matching the in-container
-                  # ollama-sycl server. The former 0.24.0 pin is retired: clean
-                  # ollama < 0.30 lacks `llama/compat/`, which nixpkgs' postPatch
-                  # (apply-patch.cmake, FetchContent llama.cpp) now requires —
-                  # pinning back to 0.24.0 broke every flavor's patchPhase.
+                  # nixpkgs' own version (0.32.7), matching the in-container
+                  # ollama-sycl server.
                 })
               ];
             }

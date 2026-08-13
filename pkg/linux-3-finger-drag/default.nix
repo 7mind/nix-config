@@ -8,16 +8,16 @@
 
 rustPlatform.buildRustPackage {
   pname = "linux-3-finger-drag";
-  version = "1.6.0-unstable-2025-11-24";
+  version = "1.7.0";
 
   src = fetchFromGitHub {
     owner = "lmr97";
     repo = "linux-3-finger-drag";
-    rev = "d95fbb48d8c9e8d3b659c613525bd3285e11fc7f";
-    hash = "sha256-sLy8twEKiSZZAiTnD6Zeh+g5wmEq4FqvGNTPmY8eRqU=";
+    rev = "d917e2393aff4e9994c5f8519e6157518bbb12fb";
+    hash = "sha256-wsM4qPAk/H5HK848Fky+Vc3qvrImJ4HikYYsS18equQ=";
   };
 
-  cargoHash = "sha256-oJESYBV26acyknIDcGnxDhBOBsXoqgy9OEHIhKf9uZQ=";
+  cargoHash = "sha256-bHiVZfI3g9pjOdRfVCoI4+96wZPFCYrq17rrPc34e0s=";
 
   nativeBuildInputs = [ pkg-config ];
 

@@ -7,27 +7,17 @@
   ];
 
   # nspawn containers re-evaluate nixpkgs fresh and do not inherit the
-  # host's overlays. Mirror the two host-side `intel-compute-runtime`
-  # overrides (see `globals.nix` for the full rationale): the 26.18
-  # bump *and* the patchelf that puts intel-graphics-compiler into the
+  # host's overlays. Mirror the host-side `intel-compute-runtime` RPATH
+  # fix (see `globals.nix`): patchelf intel-graphics-compiler into the
   # Level Zero driver's RPATH so NEO can dlopen `libigdfcl.so.2` /
-  # `libigc.so.2` at eager device init. Without the RPATH fix every
-  # container's L0 path aborts at `gmm_helper/resource_info.cpp:15`
-  # — the symptom the OpenCL-UR-bypass quirks were compensating for.
-  # Dormant on containers that don't reference
-  # `pkgs.intel-compute-runtime`.
+  # `libigc.so.2` at eager device init. Without it every container's L0
+  # path aborts at `gmm_helper/resource_info.cpp:15`. Dormant on
+  # containers that don't reference `pkgs.intel-compute-runtime`.
   nixpkgs.overlays = [
     (final: prev: {
       ghostty-terminfo = prev.callPackage ../../pkg/ghostty-terminfo { };
 
-      intel-compute-runtime = prev.intel-compute-runtime.overrideAttrs (oldAttrs: rec {
-        version = "26.18.38308.1";
-        src = prev.fetchFromGitHub {
-          owner = "intel";
-          repo = "compute-runtime";
-          tag = version;
-          hash = "sha256-539TqwzPhclEpyxrwRB0DBLCAgM8JojdshvhNp0jeKU=";
-        };
+      intel-compute-runtime = prev.intel-compute-runtime.overrideAttrs (oldAttrs: {
         postFixup = (oldAttrs.postFixup or "") + ''
           for lib in "$drivers"/lib/libze_intel*.so* ; do
             [ -L "$lib" ] && continue

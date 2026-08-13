@@ -2,18 +2,16 @@
 # (Battlemage / Xe2).
 #
 # Architecture (rewritten for ollama ≥ 0.30): ride the *clean* nixpkgs
-# `ollama` (0.30.7) and PLANT `pkg/llama-cpp-sycl`'s prebuilt
+# `ollama` (0.32.7) and PLANT `pkg/llama-cpp-sycl`'s prebuilt
 # `libggml-sycl.so` into ollama's backend dir. ollama's Go engine loads
 # ggml backends via GGML_BACKEND_DL — it globs `libggml-*.so` out of
 # `lib/ollama/` and registers whatever it finds (this is exactly how the
 # stock cuda/rocm/vulkan flavors ship their `libggml-{cuda,hip,vulkan}.so`).
 #
-# Why planting is ABI-safe here: nixpkgs ollama 0.30.7 vendors its
-# Go-engine ggml at the SAME release as llama.cpp b9509 — both produce
-# `libggml-base.so.0.13.1` (GGML_BACKEND_API_VERSION 2), and our
-# `libggml-sycl.so` NEEDs `libggml-base.so.0`, which ollama provides
-# unchanged. b9509 is also the exact commit ollama 0.30.7 pins for its
-# llama-server FetchContent, so the whole stack is one ggml version.
+# Why planting is ABI-safe here: nixpkgs ollama 0.32.7 vendors llama.cpp
+# at b10242 via FetchContent, and llama-cpp-sycl is built from that same
+# tag. Our `libggml-sycl.so` NEEDs `libggml-base.so.0`, which ollama
+# provides unchanged. The whole stack is one ggml version.
 #
 # This retires the previous whole-tree-vendor model (./ollama-src, 44
 # patches, OLLAMA_ENABLE_SYCL preBuild): ollama 0.30 moved llama.cpp to
@@ -32,7 +30,7 @@
 
 ollama.overrideAttrs (oldAttrs: {
   pname = "ollama-sycl";
-  # version inherited from nixpkgs ollama (0.30.7).
+  # version inherited from nixpkgs ollama (0.32.7).
 
   nativeBuildInputs = (oldAttrs.nativeBuildInputs or [ ]) ++ [ makeWrapper ];
 
@@ -63,6 +61,6 @@ ollama.overrideAttrs (oldAttrs: {
   '';
 
   meta = (oldAttrs.meta or { }) // {
-    description = "Ollama with SYCL backend (Intel Arc / Battlemage / Xe2) — llama.cpp@b9509";
+    description = "Ollama with SYCL backend (Intel Arc / Battlemage / Xe2) — llama.cpp@b10242";
   };
 })
