@@ -42,17 +42,6 @@
           '' + oldAttrs.preConfigure;
           meta = oldAttrs.meta // { broken = false; };
         });
-
-        # Linux 7.1 removed ipv6_stub from the public networking API.
-        amneziawg = prev.amneziawg.overrideAttrs (oldAttrs: {
-          patches = (oldAttrs.patches or [ ]) ++ [
-            (pkgs.fetchpatch {
-              url = "https://github.com/amnezia-vpn/amneziawg-linux-kernel-module/commit/2a764691e22f15770aa1551ecae12c0431dbd651.patch";
-              stripLen = 1;
-              hash = "sha256-oj6iPKTKpuRJjd8QZS5dOVyHo2y/rrtY+Q0RLqSvwzg=";
-            })
-          ];
-        });
       });
     };
 
