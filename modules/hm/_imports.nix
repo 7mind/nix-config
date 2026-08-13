@@ -10,6 +10,7 @@
   ./dev-jetbrains.nix
   ./dev-git.nix
   ./dev-llm.nix
+  ./dev-llm-plugins.nix
   ./dev-cs.nix
   ./dev-scala.nix
   ./electron-wrappers.nix
