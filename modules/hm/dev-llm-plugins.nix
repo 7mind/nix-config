@@ -26,7 +26,8 @@ let
     };
 
   iHaveAdhdPlugin = pkgs.fetchFromGitHub {
-    name = "i-have-adhd";
+    pname = "i-have-adhd";
+    version = "0.1.0";
     owner = "ayghri";
     repo = "i-have-adhd";
     rev = "2ed064090711586e0c97a2fbbf15465fe8f1808b";
