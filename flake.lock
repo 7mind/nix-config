@@ -173,11 +173,11 @@
         "openai-codex-plugin": "openai-codex-plugin"
       },
       "locked": {
-        "lastModified": 1786786824,
-        "narHash": "sha256-tY6K7UFhHbuuELGs7B14AC7+5X0PbRrtXnjBtQIuziE=",
+        "lastModified": 1786794808,
+        "narHash": "sha256-/7rTWN6b2GIRJ47iHSCCJpBYREZ6kziDW1H7yij7MRE=",
         "owner": "7mind",
         "repo": "cq",
-        "rev": "9a8542381508182472ad52c5999d364a2a45addc",
+        "rev": "ecea6319001be7a3795884f4b264ef1d441f32ca",
         "type": "github"
       },
       "original": {
