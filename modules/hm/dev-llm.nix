@@ -3,7 +3,7 @@
 # that module and wires THIS host's facts (GPU flags, rootless-Podman socket,
 # ollama models dir) from the NixOS system config (outerConfig), which the
 # portable module cannot reference.
-{ config, lib, cfg-meta, outerConfig, inputs, ... }:
+{ config, lib, pkgs, cfg-meta, outerConfig, inputs, ... }:
 let
   cfg = config.smind.hm.dev.llm;
 
@@ -45,6 +45,14 @@ in
     # Pi clamps the level per model's thinkingLevelMap, so it is safe across
     # providers selected at runtime.
     programs.pi.settings.defaultThinkingLevel = "xhigh";
+
+    home.activation.removeObsoleteClaudePluginBackup = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+      backup=${lib.escapeShellArg "${config.programs.claude-code.configDir}/skills/claude-code-home-manager.hmbak"}
+      manifest="$backup/.claude-plugin/plugin.json"
+      if [ -f "$manifest" ] && ${pkgs.jq}/bin/jq -e '.name == "claude-code-home-manager"' "$manifest" >/dev/null; then
+        rm -rf "$backup"
+      fi
+    '';
 
     # Add the Xiaomi MiMo provider to Pi's package set. Registers the
     # `xiaomi-mimo` provider (models mimo-v2-pro/omni/tts) against the
