@@ -42,6 +42,18 @@ let
 
   claudeAlwaysEnabledMarker = "${config.programs.claude-code.configDir}/.i-have-adhd-always";
   piAlwaysEnabledMarker = "${config.programs.pi.configDir}/.i-have-adhd-always";
+  claudeAlwaysEnabledYoloHook = {
+    command = ''
+      marker="''${CLAUDE_CONFIG_DIR:-${config.programs.claude-code.configDir}}/.i-have-adhd-always"
+      [ -e "$marker" ] || : > "$marker"
+    '';
+  };
+  piAlwaysEnabledYoloHook = {
+    command = ''
+      marker="''${PI_CODING_AGENT_DIR:-${config.programs.pi.configDir}}/.i-have-adhd-always"
+      [ -e "$marker" ] || : > "$marker"
+    '';
+  };
 in
 {
   options.smind.hm.dev.llm = {
@@ -63,7 +75,10 @@ in
           { programs.claude-code.plugins.i-have-adhd = iHaveAdhdPlugin; }
           (lib.mkIf cfg.iHaveAdhdPlugin.claude.alwaysEnabled {
             home.file."${claudeAlwaysEnabledMarker}".text = "";
-            smind.hm.dev.llm.yolo.extraReadOnlyPaths = [ claudeAlwaysEnabledMarker ];
+            smind.hm.dev.llm.yolo.hooks.pre-start = {
+              sandbox = [ claudeAlwaysEnabledYoloHook ];
+              shell = [ claudeAlwaysEnabledYoloHook ];
+            };
           })
         ]
       ))
@@ -82,7 +97,10 @@ in
           }
           (lib.mkIf cfg.iHaveAdhdPlugin.pi.alwaysEnabled {
             home.file."${piAlwaysEnabledMarker}".text = "";
-            smind.hm.dev.llm.yolo.extraReadOnlyPaths = [ piAlwaysEnabledMarker ];
+            smind.hm.dev.llm.yolo.hooks.pre-start = {
+              sandbox = [ piAlwaysEnabledYoloHook ];
+              shell = [ piAlwaysEnabledYoloHook ];
+            };
           })
         ]
       ))
