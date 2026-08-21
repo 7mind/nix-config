@@ -40,7 +40,7 @@ in
 
     snapshotPreserve = lib.mkOption {
       type = lib.types.str;
-      default = "24h 7d";
+      default = "24h 7d 12m";
       description = "Retention buckets, e.g. 24 hourly and 7 daily snapshots.";
     };
   };
