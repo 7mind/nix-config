@@ -142,6 +142,26 @@
               nativeCheckInputs = [ ];
             });
 
+          python-matter-server =
+            let
+              skipZeroconf = pkg:
+                pkg.overridePythonAttrs (old:
+                  prev.lib.optionalAttrs prev.stdenv.hostPlatform.isAarch64 {
+                    # test_server_start opens an IPv6 multicast socket;
+                    # qemu-user and the nix sandbox return OSError 92.
+                    disabledTests = (old.disabledTests or [ ]) ++ [
+                      "test_server_start"
+                    ];
+                  }
+                );
+            in
+            skipZeroconf python-prev.python-matter-server
+            // {
+              # preserve callPackage-style .override { withDashboard = false }
+              # used by the dashboard bootstrap in nixpkgs' package.nix
+              override = args: skipZeroconf (python-prev.python-matter-server.override args);
+            };
+
           # construct-classes = python-prev.construct-classes.overridePythonAttrs (old: {
           #   postPatch = (old.postPatch or "") + ''
           #     substituteInPlace pyproject.toml \
