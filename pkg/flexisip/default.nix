@@ -2,6 +2,7 @@
   lib,
   stdenv,
   fetchFromGitHub,
+  fetchurl,
   cmake,
   ninja,
   pkg-config,
@@ -45,9 +46,16 @@ let
     ps.six
   ]);
 
-  # Flexisip 2.6.0 submodule pin (GitLab only). Built in-tree as STATIC libs
+  # Flexisip 2.6.x submodule pin (GitLab only; unchanged 2.6.0 → 2.6.1). Built in-tree as STATIC libs
   # and linked into libflexisip — not installed as a standalone shared library.
   sofiaSrc = ./vendor/bc-sofia-sip-02b6544.tar.gz;
+
+  # 2.6.1 moved the XXE-patched libxsd out of tree into this GitLab-only
+  # submodule. The GitHub archive ships an empty placeholder.
+  xsdSrc = fetchurl {
+    url = "https://gitlab.linphone.org/BC/public/external/xsd/-/archive/a2ca5f3676c1139346f386648f16e95ab4f34044/xsd-a2ca5f3676c1139346f386648f16e95ab4f34044.tar.gz";
+    hash = "sha256-aOPerU4PjjNCcJO7ymD6OwVh0Jp3/kTqIPOxvqL1qG4=";
+  };
 
   # nixpkgs bc-soci is sqlite-only; Flexisip's soci-helper always includes the
   # mysql backend header even when auth uses the file backend. Rebuild with
@@ -109,13 +117,13 @@ let
 in
 stdenv.mkDerivation rec {
   pname = "flexisip";
-  version = "2.6.0";
+  version = "2.6.1";
 
   src = fetchFromGitHub {
     owner = "BelledonneCommunications";
     repo = "flexisip";
     rev = version;
-    hash = "sha256-7q1Hj2gcbaTaQfsme6RF/cBQXUFFJYCJHsJ9XW3wY6s=";
+    hash = "sha256-Pc/baegjA0idSt4U96LIePjQe8gfXKEEepLq/Z9qLSY=";
   };
 
   patches = [ ./add-supported-path.patch ];
@@ -169,7 +177,7 @@ stdenv.mkDerivation rec {
         echo '# Nix: linphone stack provided via find_package (see nix-system-deps.cmake)' > cmake/LinphoneSDK.cmake
         cat ${./nix-system-deps.cmake} >> cmake/ExternalDependencies.cmake
 
-        # Vendor the Flexisip 2.6.0 sofia-sip submodule pin. The github archive of
+        # Vendor the Flexisip 2.6.x sofia-sip submodule pin. The github archive of
         # flexisip carries an empty sofia-sip submodule placeholder — replace it.
         rm -rf submodules/externals/sofia-sip
         mkdir -p submodules/externals
@@ -177,6 +185,13 @@ stdenv.mkDerivation rec {
         mv submodules/externals/bc-sofia-sip-02b6544 submodules/externals/sofia-sip
         test -f submodules/externals/sofia-sip/CMakeLists.txt \
           || (echo "sofia-sip vendor unpack failed" >&2; ls -la submodules/externals >&2; exit 1)
+
+        # 2.6.1 XXE-patched libxsd (GitLab submodule).
+        rm -rf submodules/externals/xsd
+        tar xzf ${xsdSrc} -C submodules/externals
+        mv submodules/externals/xsd-a2ca5f3676c1139346f386648f16e95ab4f34044 submodules/externals/xsd
+        test -f submodules/externals/xsd/libxsd/xsd/cxx/config.hxx \
+          || (echo "xsd vendor unpack failed" >&2; ls -la submodules/externals/xsd >&2; exit 1)
 
         # External libbelr only knows its own output. Register the application
         # grammar directories before Flexisip or its Linphone libraries parse.

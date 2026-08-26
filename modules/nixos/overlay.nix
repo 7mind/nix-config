@@ -89,6 +89,21 @@
         matter-mqtt-bridge = pkgs.callPackage "${cfg-meta.paths.pkg}/matter-mqtt-bridge/default.nix" { };
 
         resock = pkgs.callPackage "${cfg-meta.paths.pkg}/resock/default.nix" { };
+        # nixpkgs liblinphone 5.4.85 includes ZXing/TextUtfEncoding.h, removed
+        # in zxing-cpp 3.x. encode() now takes UTF-8 std::string directly.
+        linphonePackages = super.linphonePackages.overrideScope (
+          _lfinal: lprev: {
+            liblinphone = lprev.liblinphone.overrideAttrs (old: {
+              postPatch = (old.postPatch or "") + ''
+                substituteInPlace src/factory/factory.cpp \
+                  --replace-fail '#include <ZXing/TextUtfEncoding.h>' '/* zxing-cpp 3.x dropped TextUtfEncoding.h */' \
+                  --replace-fail '#include <TextUtfEncoding.h>' '/* zxing-cpp 3.x dropped TextUtfEncoding.h */' \
+                  --replace-fail 'ZXing::TextUtfEncoding::FromUtf8(code)' 'code'
+              '';
+            });
+          }
+        );
+
         flexisip = pkgs.callPackage "${cfg-meta.paths.pkg}/flexisip/default.nix" { };
         flexisip-conference = pkgs.callPackage "${cfg-meta.paths.pkg}/flexisip-conference/default.nix" { };
         flexisip-http-file-transfer-server =

@@ -1,9 +1,10 @@
 # Flexisip (Nix package)
 
-Belledonne Communications Flexisip 2.6.0, built against:
+Belledonne Communications Flexisip 2.6.1, built against:
 
 - nixpkgs `linphonePackages` (bctoolbox, ortp, belr, belle-sip, mediastreamer2, liblinphone, …)
-- Vendored sofia-sip pin `02b6544` (Flexisip 2.6.0 submodule; GitLab-only, under `vendor/`)
+- Vendored sofia-sip pin `02b6544` (Flexisip 2.6.x submodule; GitLab-only, under `vendor/`)
+- Flexisip 2.6.1 XXE-patched libxsd pin `a2ca5f36` (GitLab-only submodule; fetched at build time)
 
 Upstream’s flake is a **dev shell only** (x86_64, no package output). This package is the deployable unit.
 
