@@ -45,7 +45,7 @@
 
     home.packages = lib.mkIf cfg-meta.isLinux (with pkgs; [
       # productivity
-      libreoffice-fresh
+      libreoffice-stable
 
       # graphics
       imagemagick
