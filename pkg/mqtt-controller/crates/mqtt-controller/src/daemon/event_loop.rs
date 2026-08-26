@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::mpsc;
+use tokio::time::{interval, MissedTickBehavior};
 
 use crate::domain::event::Event;
 use crate::effect_dispatch;
@@ -33,7 +34,10 @@ pub(super) async fn run_event_loop(
     web: Option<WebHandle>,
     clock: Arc<dyn Clock>,
 ) -> anyhow::Result<()> {
-    let mut tick = tokio::time::interval(TICK_INTERVAL);
+    let mut tick = interval(TICK_INTERVAL);
+    // Burst after a blocked poll dumps tens of heating ticks in one
+    // second (WT GET storm). Skip missed ticks; the next interval is enough.
+    tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
     // The first tick fires immediately; skip it so we don't waste a
     // handle_event call right after startup.
     tick.tick().await;

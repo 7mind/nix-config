@@ -712,3 +712,34 @@ fn min_cycle_forces_trvs_open_when_blocking_relay_off() {
     let trv = ep.world.trvs.get("trv-bath-1").unwrap();
     assert!(trv.is_forced_open());
 }
+
+// -- WT stale GET cap (D10) --
+
+fn wt_gets(ep: &EventProcessor, actions: &[Effect]) -> usize {
+    actions
+        .iter()
+        .filter(|a| {
+            matches!(a, Effect::PublishDeviceGet { .. }) && a.target_name(ep) == "wt-bath"
+        })
+        .count()
+}
+
+#[test]
+fn wt_stale_get_is_capped_across_tick_burst() {
+    // regression: D10 — Tick burst after a blocked poll logged 150 GETs/s
+    let cfg = simple_config();
+    let (mut ep, clk) = setup(&cfg);
+    echo_relay(&mut ep, "wt-bath", false, &clk);
+    clk.advance(Duration::from_secs(10 * 60 + 1));
+    // Keep the 5-minute periodic refresh quiet so we only see stale GETs.
+    ep.last_wt_refresh = Some(clk.now());
+
+    let first = tick(&mut ep);
+    assert_eq!(wt_gets(&ep, &first), 1, "first stale tick sends GET");
+    let second = tick(&mut ep);
+    assert_eq!(wt_gets(&ep, &second), 0, "immediate second tick is suppressed");
+    clk.advance(Duration::from_secs(60));
+    ep.last_wt_refresh = Some(clk.now());
+    let third = tick(&mut ep);
+    assert_eq!(wt_gets(&ep, &third), 1, "GET allowed again after probe interval");
+}

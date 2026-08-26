@@ -3,8 +3,10 @@
 
 use rumqttc::{Publish, QoS};
 
+use super::enqueue_parsed_event;
 use super::parse::parse_event;
 use super::*;
+use crate::domain::event::Event;
 use crate::config::catalog::PlugProtocol;
 use crate::config::scenes::{Scene, SceneSchedule, Slot};
 use crate::config::switch_model::{ActionMapping, Gesture, SwitchModel};
@@ -517,4 +519,30 @@ fn non_duplicate_publish_still_parses() {
         parse_event(&topo, &p, &clock()).is_some(),
         "dup=false publishes must parse normally"
     );
+}
+
+// -- event channel enqueue (D10) --
+
+#[test]
+fn enqueue_drops_when_channel_is_full() {
+    // regression: D10 — blocking send here stopped rumqttc poll
+    let (tx, _rx) = tokio::sync::mpsc::channel(1);
+    let ts = clock().now();
+    tx.try_send(Event::Tick { ts }).unwrap();
+    assert!(
+        enqueue_parsed_event(&tx, Event::Tick { ts }),
+        "full channel must drop, not report closed"
+    );
+}
+
+#[test]
+fn enqueue_reports_closed_when_receiver_is_gone() {
+    let (tx, rx) = tokio::sync::mpsc::channel(1);
+    drop(rx);
+    assert!(!enqueue_parsed_event(
+        &tx,
+        Event::Tick {
+            ts: clock().now()
+        }
+    ));
 }

@@ -263,7 +263,10 @@ in
       systemd.services.mqtt-controller-provision = {
         description = "Apply declarative zigbee2mqtt groups + scenes from Nix config";
         wantedBy = [ "multi-user.target" ];
-        after = [ "zigbee2mqtt.service" "mosquitto.service" "network-online.target" ];
+        # After=zwave-js-ui orders us behind the unit when it exists; the
+        # driver can still report "not connected" once the unit is up, so
+        # the binary treats Z-Wave reconcile as best-effort.
+        after = [ "zigbee2mqtt.service" "mosquitto.service" "zwave-js-ui.service" "network-online.target" ];
         wants = [ "zigbee2mqtt.service" "mosquitto.service" "network-online.target" ];
         restartTriggers = [ configFile ];
         before = [ "mqtt-controller.service" ];
@@ -313,8 +316,11 @@ in
         };
       };
 
-      # Daemon. Starts only after the provisioner succeeds so its first
-      # state-refresh sees the right groups.
+      # Daemon. After= the oneshot so a successful provision runs first;
+      # Upholds= on the provisioner starts us if we came up earlier.
+      # Do not Requires= the oneshot: a Z-Wave getNodes blip (or any
+      # later provision failure) would otherwise take lighting down and
+      # start-limit would keep it down.
       systemd.services.mqtt-controller = {
         description = "MQTT lighting runtime controller (replaces bento mqtt-automation)";
         wantedBy = [ "multi-user.target" ];
@@ -324,7 +330,6 @@ in
           "network-online.target"
         ];
         wants = [ "mosquitto.service" "network-online.target" ];
-        requires = [ "mqtt-controller-provision.service" ];
         restartTriggers = [ configFile ];
         environment = {
           TZ = cfg.timezone;

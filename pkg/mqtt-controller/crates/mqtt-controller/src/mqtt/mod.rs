@@ -266,7 +266,7 @@ async fn run_eventloop(
             }
             Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(p))) => {
                 if let Some(event) = parse::parse_event(&topology, &p, &*clock) {
-                    if tx.send(event).await.is_err() {
+                    if !enqueue_parsed_event(&tx, event) {
                         break;
                     }
                 }
@@ -290,6 +290,23 @@ async fn run_eventloop(
 /// Unrelated traffic (`bridge/*`, `*/availability`, our own
 /// `*/set|*/get` echoes, Z-Wave node admin topics) is filtered in
 /// [`parse::parse_event`].
+/// Push a parsed event toward the daemon without blocking `poll()`.
+/// Returns `false` if the receiver is gone (daemon shutting down).
+/// A full channel drops the event: blocking here stops rumqttc from
+/// flushing publishes and deadlocks the daemon (D10).
+fn enqueue_parsed_event(tx: &mpsc::Sender<Event>, event: Event) -> bool {
+    match tx.try_send(event) {
+        Ok(()) => true,
+        Err(mpsc::error::TrySendError::Closed(_)) => false,
+        Err(mpsc::error::TrySendError::Full(_)) => {
+            tracing::warn!(
+                "mqtt: event channel full; dropping incoming event to keep poll alive"
+            );
+            true
+        }
+    }
+}
+
 async fn subscribe_all_topics(
     client: &AsyncClient,
     _topology: &Topology,

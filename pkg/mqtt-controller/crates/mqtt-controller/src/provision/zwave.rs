@@ -6,6 +6,7 @@
 //! the daemon's startup seed path uses the same client.
 
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 use crate::config::Config;
 use crate::mqtt::zwave_api::{ZwaveApiClient, ZwaveNode};
@@ -51,8 +52,7 @@ pub async fn reconcile_zwave_names(
         "zwave: checking node names and locations"
     );
 
-    let mut client = ZwaveApiClient::connect(mqtt_config, options.timeout).await?;
-    let nodes = client.get_nodes(options.timeout).await?;
+    let (mut client, nodes) = fetch_zwave_nodes(mqtt_config, options).await?;
     let nodes_by_id: BTreeMap<u16, ZwaveNode> =
         nodes.into_iter().map(|n| (n.node_id, n)).collect();
 
@@ -117,4 +117,79 @@ pub async fn reconcile_zwave_names(
 
     client.disconnect().await;
     Ok(summary)
+}
+
+/// Connect + getNodes with retries on the start-race errors we see when
+/// zwave-js-ui's MQTT gateway is up but the driver is not yet connected.
+const ZWAVE_FETCH_ATTEMPTS: u32 = 4;
+
+async fn fetch_zwave_nodes(
+    mqtt_config: &MqttConfig,
+    options: &ProvisionOptions,
+) -> anyhow::Result<(ZwaveApiClient, Vec<ZwaveNode>)> {
+    let mut last_err: Option<anyhow::Error> = None;
+    for attempt in 1..=ZWAVE_FETCH_ATTEMPTS {
+        match try_fetch_zwave_nodes(mqtt_config, options.timeout).await {
+            Ok(pair) => return Ok(pair),
+            Err(e) if attempt < ZWAVE_FETCH_ATTEMPTS && is_transient_zwave_error(&e) => {
+                tracing::warn!(
+                    attempt,
+                    attempts = ZWAVE_FETCH_ATTEMPTS,
+                    error = %e,
+                    "zwave inventory fetch failed; retrying"
+                );
+                last_err = Some(e);
+                tokio::time::sleep(options.fetch_retry).await;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Err(last_err.unwrap_or_else(|| anyhow::anyhow!("zwave inventory retry loop ended without an error")))
+}
+
+async fn try_fetch_zwave_nodes(
+    mqtt_config: &MqttConfig,
+    timeout: Duration,
+) -> anyhow::Result<(ZwaveApiClient, Vec<ZwaveNode>)> {
+    let mut client = ZwaveApiClient::connect(mqtt_config, timeout).await?;
+    let nodes = client.get_nodes(timeout).await?;
+    Ok((client, nodes))
+}
+
+/// Timeout / "Z-Wave client not connected" — the gateway answered or the
+/// request raced startup. Other errors (auth, parse) are not retried.
+pub(crate) fn is_transient_zwave_error(err: &anyhow::Error) -> bool {
+    let full = format!("{err:#}");
+    full.contains("timed out") || full.contains("not connected")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_transient_zwave_error;
+
+    #[test]
+    fn get_nodes_timeout_is_transient() {
+        let err = anyhow::anyhow!(
+            "zwave: zwave/_CLIENTS/ZWAVE_GATEWAY-zwave/api/getNodes/set API timed out"
+        );
+        assert!(is_transient_zwave_error(&err));
+    }
+
+    #[test]
+    fn client_not_connected_is_transient() {
+        let err = anyhow::anyhow!("zwave: getNodes API failed: Z-Wave client not connected");
+        assert!(is_transient_zwave_error(&err));
+    }
+
+    #[test]
+    fn connect_timeout_is_transient() {
+        let err = anyhow::anyhow!("zwave mqtt connect timed out");
+        assert!(is_transient_zwave_error(&err));
+    }
+
+    #[test]
+    fn parse_failure_is_not_transient() {
+        let err = anyhow::anyhow!("zwave: getNodes response missing 'result' array");
+        assert!(!is_transient_zwave_error(&err));
+    }
 }

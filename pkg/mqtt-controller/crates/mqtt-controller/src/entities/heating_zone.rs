@@ -30,6 +30,8 @@ pub struct HeatingZoneEntity {
     pub wt_operating_mode: Option<String>,
     /// When the wall thermostat last reported any state.
     pub wt_last_seen: Option<Instant>,
+    /// Last time we sent a stale-keepalive GET. Caps Tick-burst storms.
+    pub wt_last_stale_probe: Option<Instant>,
     /// True once the wall thermostat has reported at least once.
     pub relay_state_known: bool,
     /// Tick generation for dedup (prevents double-publish in one pass).
@@ -44,6 +46,7 @@ impl Default for HeatingZoneEntity {
             relay_on_since: None,
             wt_operating_mode: None,
             wt_last_seen: None,
+            wt_last_stale_probe: None,
             relay_state_known: false,
             desired_relay_gen: 0,
         }

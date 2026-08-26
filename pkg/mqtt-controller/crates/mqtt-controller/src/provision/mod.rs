@@ -142,11 +142,18 @@ pub async fn reconcile(
     let mut summary = ReconcileSummary::default();
 
     // Phase 0: Z-Wave node renames (independent of zigbee2mqtt).
-    // Runs first so subsequent Z-Wave topics use the correct names.
-    let zwave_summary = zwave::reconcile_zwave_names(config, &mqtt, &options)
-        .await
-        .context("reconciling zwave node names")?;
-    summary += zwave_summary;
+    // Best-effort: a getNodes timeout / "client not connected" during
+    // broker or zwave-js-ui startup must not abort zigbee group/scene
+    // reconcile (and must not take the lighting daemon down with it).
+    match zwave::reconcile_zwave_names(config, &mqtt, &options).await {
+        Ok(zwave_summary) => summary += zwave_summary,
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "zwave name reconcile failed; continuing with zigbee provision"
+            );
+        }
+    }
 
     let client = Z2mClient::connect(mqtt, options.timeout)
         .await

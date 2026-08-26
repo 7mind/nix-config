@@ -31,6 +31,10 @@ pub(super) const MAX_SETPOINT: f64 = 30.0;
 /// Wall thermostat state refresh interval.
 const WT_REFRESH_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
+/// Minimum gap between stale-keepalive GETs for one zone. A Tick burst
+/// after a blocked event loop used to emit one GET per missed tick.
+const WT_STALE_PROBE_INTERVAL: Duration = Duration::from_secs(60);
+
 /// Shared body of Bosch/wall-thermostat mode enforcement: if the device's
 /// reported `operating_mode` is anything other than "manual" or unknown,
 /// re-issue a `mode=manual` command and warn. `device_kind` is used only
@@ -183,19 +187,32 @@ impl EventProcessor {
 
         // 0c. Wall thermostat keepalive: detect stale mains-powered devices.
         for zone in &heating_config.zones {
-            let hz = self.world.heating_zone(&zone.name);
-            if hz.is_wt_stale(now) {
-                tracing::warn!(
-                    zone = %zone.name,
-                    relay = %zone.relay,
-                    last_seen_secs_ago = hz.wt_last_seen
-                        .map(|s| now.duration_since(s).as_secs())
-                        .unwrap_or(0),
-                    "wall thermostat stale: sending GET to provoke state report"
-                );
-                if let Some(relay_idx) = self.topology.device_idx(&zone.relay) {
-                    actions.push(Effect::PublishDeviceGet { device: relay_idx });
-                }
+            let relay = zone.relay.clone();
+            let name = zone.name.clone();
+            let hz = self.world.heating_zone(&name);
+            if !hz.is_wt_stale(now) {
+                continue;
+            }
+            let due = hz
+                .wt_last_stale_probe
+                .map(|t| now.duration_since(t) >= WT_STALE_PROBE_INTERVAL)
+                .unwrap_or(true);
+            if !due {
+                continue;
+            }
+            let last_seen_secs_ago = hz
+                .wt_last_seen
+                .map(|s| now.duration_since(s).as_secs())
+                .unwrap_or(0);
+            hz.wt_last_stale_probe = Some(now);
+            tracing::warn!(
+                zone = %name,
+                relay = %relay,
+                last_seen_secs_ago,
+                "wall thermostat stale: sending GET to provoke state report"
+            );
+            if let Some(relay_idx) = self.topology.device_idx(&relay) {
+                actions.push(Effect::PublishDeviceGet { device: relay_idx });
             }
         }
 
