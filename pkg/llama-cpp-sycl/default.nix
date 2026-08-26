@@ -1,8 +1,8 @@
 # llama.cpp built with the SYCL backend, using nixpkgs `intel-llvm` as the
 # DPC++ toolchain.
 #
-# Pinned to llama.cpp `b10242` / `96278e39` — the exact tag nixpkgs
-# ollama 0.32.7 vendors via FetchContent (`LLAMA_CPP_VERSION`). Planting
+# Pinned to llama.cpp `b10434` / `7e4c0a96` — the exact tag nixpkgs
+# ollama 0.32.14 vendors via FetchContent (`LLAMA_CPP_VERSION`). Planting
 # this package's `libggml-sycl.so` into ollama-sycl is only ABI-safe
 # while both share that ggml version.
 #
@@ -46,21 +46,21 @@
 # nativeBuildInput and pointing CC/CXX at it explicitly in preConfigure.
 stdenv.mkDerivation (finalAttrs: {
   pname = "llama-cpp-sycl";
-  # Bumped b9509 / 6f3a9f3d → b10242 / 96278e39: the exact llama.cpp
-  # tag nixpkgs ollama 0.32.7 vendors via FetchContent (identical src
+  # Bumped b10242 / 96278e39 → b10434 / 7e4c0a96: the exact llama.cpp
+  # tag nixpkgs ollama 0.32.14 vendors via FetchContent (identical src
   # hash), so ollama-sycl can plant this package's libggml-sycl.so
   # against an ABI-matched ggml-base.
-  version = "b10242";
+  version = "b10434";
 
   src = fetchFromGitHub {
     owner = "ggml-org";
     repo = "llama.cpp";
-    rev = "96278e39fc83e1d97c881e34bcec39ac7ea98820";
-    hash = "sha256-mBqO6h9eiSAXqiHy1H3aK2ACbz1aYagmjAN7IpXNTcw=";
+    rev = "7e4c0a96880dae4fc4268ad441f8a6446bd5460a";
+    hash = "sha256-Sz0kW1q91YzdrKbZUqMbFJ0DLZrzARSGheUrtCKcoQo=";
   };
 
   # Hal9000AIML/arc-pro-b70-ubuntu-gpu-speedup-bugfixes cherry-picks are
-  # all upstream as of b9509 (and remain so at b10242). The only
+  # all upstream as of b9509 (and remain so at b10434). The only
   # out-of-tree fixes left are the intel-llvm@2025-11-14 IMF/IGC
   # environment workarounds in postPatch below (not upstreamable: they
   # target our open-source DPC++ snapshot, not llama.cpp itself).
@@ -126,18 +126,6 @@ stdenv.mkDerivation (finalAttrs: {
     ' ggml/src/ggml-sycl/set_rows.cpp
     grep -q 'is_same_v<TOut, sycl::ext::oneapi::bfloat16>' ggml/src/ggml-sycl/set_rows.cpp \
       || (echo "bf16 IMF-bypass perl substitution did not apply to set_rows.cpp"; exit 1)
-
-    # b10242's op_tanh leftover `constexpr int ver = __INTEL_LLVM_COMPILER;`
-    # is unguarded. Open-source intel-llvm/clang does not define that
-    # macro (only proprietary icpx/dpcpp does), so the SYCL compile
-    # fails with "use of undeclared identifier". The following #if
-    # already uses defined(__INTEL_LLVM_COMPILER); the unused `ver`
-    # assignment is dead.
-    sed -i '/constexpr int ver = __INTEL_LLVM_COMPILER;/d' ggml/src/ggml-sycl/element_wise.cpp
-    grep -q '__INTEL_LLVM_COMPILER' ggml/src/ggml-sycl/element_wise.cpp \
-      || (echo "expected remaining guarded __INTEL_LLVM_COMPILER in element_wise.cpp"; exit 1)
-    grep -q 'constexpr int ver = __INTEL_LLVM_COMPILER' ggml/src/ggml-sycl/element_wise.cpp \
-      && (echo "unguarded __INTEL_LLVM_COMPILER leftover still present"; exit 1)
 
     # Device-side memcpy → __builtin_memcpy fixes. IGC (Intel Graphics
     # Compiler) cannot resolve a plain `memcpy` external symbol when

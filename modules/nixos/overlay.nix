@@ -321,14 +321,14 @@
 
         smfc = super.python3Packages.buildPythonApplication rec {
           pname = "smfc";
-          version = "6.1.0";
+          version = "6.2.1";
           pyproject = true;
 
           src = super.fetchFromGitHub {
             owner = "petersulyok";
             repo = "smfc";
             tag = "v${version}";
-            hash = "sha256-OYMCWQDzYMgbeGCXboQk7YhUmoEumtIoNfoz9DrqHcI=";
+            hash = "sha256-FyNmHAvxn2v7xRQzythxMutzyuBBePc01QZf2fNuZws=";
           };
 
           build-system = [ super.python3Packages.setuptools ];

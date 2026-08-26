@@ -31,18 +31,10 @@
   cfg-packages = { inputs, pkgs, arch }:
     {
       jdk-main = pkgs.graalvmPackages.graalvm-ce;
-      linux-kernel = pkgs.linuxKernel.packages.linux_7_1.extend (_: prev: {
-        # OpenZFS 2.4.3 contains the Linux 7.1 compatibility changes, but its
-        # release metadata still declares 7.0 as the maximum supported kernel.
-        # https://github.com/openzfs/zfs/pull/18682
-        zfs_unstable = prev.zfs_unstable.overrideAttrs (oldAttrs: {
-          preConfigure = ''
-            substituteInPlace META \
-              --replace-fail "Linux-Maximum: 7.0" "Linux-Maximum: 7.1"
-          '' + oldAttrs.preConfigure;
-          meta = oldAttrs.meta // { broken = false; };
-        });
-      });
+      # OpenZFS 2.4.4 META already declares Linux-Maximum: 7.2 (nixpkgs
+      # kernelMaxSupportedMajorMinor matches). The previous 7.0 → 7.1
+      # substituteInPlace is stale and fails --replace-fail against 2.4.4.
+      linux-kernel = pkgs.linuxKernel.packages.linux_7_1;
     };
 
 
