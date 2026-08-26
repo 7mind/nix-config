@@ -1,4 +1,4 @@
-{ config, lib, ... }:
+{ config, lib, pkgs, ... }:
 
 let
   cfg = config.smind.services.pihole;
@@ -213,7 +213,33 @@ in
     };
 
     # Writable /run/pihole-FTL for the PID file (see settings.files.pid above).
-    systemd.services.pihole-ftl.serviceConfig.RuntimeDirectory = "pihole-FTL";
+    systemd.services.pihole-ftl = {
+      # network.target is too early on switch: VLAN bridges and resolved's
+      # :53 stub are still moving. Wait for both before FTL binds.
+      after = [ "network-online.target" "systemd-resolved.service" ];
+      wants = [ "network-online.target" ];
+      serviceConfig.RuntimeDirectory = "pihole-FTL";
+    };
+
+    # Upstream setup is WantedBy every FTL start (so every nixos-rebuild
+    # switch). Its script only retries the FTL API 3×0.5s — raspi5l often
+    # loses that race (more interfaces to bind) and the oneshot fails the
+    # activation. Wait until :webPort answers.
+    systemd.services.pihole-ftl-setup = {
+      after = [ "pihole-ftl.service" ];
+      serviceConfig.ExecStartPre = pkgs.writeShellScript "wait-pihole-ftl-api" ''
+        set -eu
+        for _ in $(${pkgs.coreutils}/bin/seq 1 30); do
+          if ${pkgs.curl}/bin/curl -sf -o /dev/null --max-time 1 \
+              "http://127.0.0.1:${toString cfg.webPort}/"; then
+            exit 0
+          fi
+          ${pkgs.coreutils}/bin/sleep 1
+        done
+        echo "pihole-FTL web API not ready on :${toString cfg.webPort} after 30s" >&2
+        exit 1
+      '';
+    };
 
     # Expose DNS (53 tcp+udp) and the web UI only on the chosen interfaces.
     networking.firewall.interfaces = lib.genAttrs cfg.interfaces (_: {
