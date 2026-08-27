@@ -31,6 +31,8 @@ in
     };
   };
 
+  environment.systemPackages = [ llamaCppRocm ];
+
   virtualisation.vmware.host.enable = true;
 
   # VMware hardcodes paths to /usr/bin for various utilities
