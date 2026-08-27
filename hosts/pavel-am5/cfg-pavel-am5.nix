@@ -1,5 +1,12 @@
 { config, cfg-meta, lib, pkgs, cfg-const, import_if_exists, cfg-flakes, ... }:
 
+let
+  llamaCppRocm = pkgs.llama-cpp.override {
+    rocmSupport = true;
+    rocmGpuTargets = [ "gfx1100" ];
+  };
+  llamaServer = lib.getExe' llamaCppRocm "llama-server";
+in
 {
   imports = [
     ./hardware-configuration.nix
@@ -37,6 +44,55 @@
 
 
   services = {
+    llama-swap = {
+      enable = true;
+      listenAddress = "0.0.0.0";
+      port = 11435;
+      openFirewall = true;
+
+      settings = {
+        healthCheckTimeout = 600;
+        globalTTL = 900;
+
+        models."qwen3.8-27b-q8".cmd = lib.escapeShellArgs [
+          llamaServer
+          "--host"
+          "127.0.0.1"
+          "--port"
+          "\${PORT}"
+          "-hf"
+          "bartowski/Qwen3.8-27B-GGUF:Q8_0"
+          "--no-mmproj"
+          "-dev"
+          "ROCm0"
+          "-ngl"
+          "99"
+          "-fa"
+          "on"
+          "-ctk"
+          "q8_0"
+          "-ctv"
+          "q8_0"
+          "--spec-type"
+          "draft-mtp"
+          "--spec-draft-n-max"
+          "3"
+          "-ctkd"
+          "q8_0"
+          "-ctvd"
+          "q8_0"
+          "--threads"
+          "12"
+          "-c"
+          "262144"
+        ];
+      };
+    };
+
+    ollama.enable = lib.mkForce false;
+    ollama.loadModels = lib.mkForce [ ];
+    zfs.autoSnapshot.monthly = 6;
+
     samba = {
       # add user: sudo smbpasswd -a pavel
       # change password: sudo smbpasswd -U pavel
@@ -75,6 +131,15 @@
       enable = true;
       openFirewall = true;
     };
+  };
+
+  systemd.services = {
+    llama-swap.environment = {
+      HIP_VISIBLE_DEVICES = "0";
+      ROCR_VISIBLE_DEVICES = "0";
+    };
+    llama-swap.serviceConfig.SupplementaryGroups = [ "render" ];
+    ollama-custom-models.enable = false;
   };
 
   systemd.network = {
@@ -187,15 +252,7 @@
 
     llm.enable = true;
     llm.ollama.package = pkgs.ollama-vulkan;
-
-    llm.ollama.customModels = [
-      { baseName = "huihui_ai/qwen3.5-abliterated:35b"; }
-      { baseName = "glm-4.7-flash:q8_0"; }
-      { baseName = "nemotron-cascade-2:30b"; }
-      { baseName = "gemma4:31b-it-q8_0"; contextLength = 65535; }
-      #{ baseName = "gemma4:31b"; }
-
-    ];
+    llm.ollama.customModels = [ ];
     containers.docker.enable = true;
     infra.nix-build.enable = true;
 
@@ -272,7 +329,6 @@
         "uinput"
         "ssh-users"
         "podman"
-        "ollama"
         "tss"
       ];
       openssh.authorizedKeys.keys = cfg-const.ssh-keys-pavel;
@@ -299,7 +355,6 @@
         "uinput"
         "ssh-users"
         "podman"
-        "ollama"
       ];
     };
 
