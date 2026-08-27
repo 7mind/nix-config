@@ -123,6 +123,7 @@ in
           pkgs.open-vsx.jeanp413.open-remote-ssh
           pkgs.open-vsx.devmikeua.mikrotik-routeros-script
           pkgs.open-vsx.rszyma.vscode-kanata
+          pkgs.open-vsx.mathematic.vscode-pdf
 
           # vscjava.vscode-java-pack
           # missing: anycode*,
