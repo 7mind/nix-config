@@ -1,0 +1,115 @@
+JSON Schema patterns commonly contain ECMAScript shorthand character
+classes. Passing those escapes through verbatim produces invalid GBNF and
+causes llama-server to reject the entire tool set.
+
+Upstream: https://github.com/ggml-org/llama.cpp/issues/27580
+
+diff --git a/common/json-schema-to-grammar.cpp b/common/json-schema-to-grammar.cpp
+index b18607cd..aa8135e5 100644
+--- a/common/json-schema-to-grammar.cpp
++++ b/common/json-schema-to-grammar.cpp
+@@ -283,0 +284,25 @@ static std::unordered_set<char> ESCAPED_IN_REGEXPS_BUT_NOT_IN_LITERALS = {'^', '
++static const char * regex_shorthand_rule(char shorthand) {
++    switch (shorthand) {
++        case 'd': return "[0-9]";
++        case 'D': return "[^0-9]";
++        case 'w': return "[0-9A-Za-z_]";
++        case 'W': return "[^0-9A-Za-z_]";
++        case 's': return "[ \\t\\r\\n\\x0B\\x0C]";
++        case 'S': return "[^ \\t\\r\\n\\x0B\\x0C]";
++        default:  return nullptr;
++    }
++}
++
++static const char * regex_shorthand_range(char shorthand) {
++    switch (shorthand) {
++        case 'd': return "0-9";
++        case 'w': return "0-9A-Za-z_";
++        case 's': return " \\t\\r\\n\\x0B\\x0C";
++        default:  return nullptr;
++    }
++}
++
++static bool is_negated_regex_shorthand(char shorthand) {
++    return shorthand == 'D' || shorthand == 'W' || shorthand == 'S';
++}
++
+@@ -445,0 +471,3 @@ private:
++                } else if (c == '\\' && i + 1 < length && regex_shorthand_rule(sub_pattern[i + 1]) != nullptr) {
++                    seq.emplace_back(regex_shorthand_rule(sub_pattern[i + 1]), false);
++                    i += 2;
+@@ -450 +478,9 @@ private:
+-                        if (sub_pattern[i] == '\\') {
++                        if (sub_pattern[i] == '\\' && i + 1 < length && regex_shorthand_range(sub_pattern[i + 1]) != nullptr) {
++                            square_brackets += regex_shorthand_range(sub_pattern[i + 1]);
++                            i += 2;
++                        } else if (sub_pattern[i] == '\\' && i + 1 < length && is_negated_regex_shorthand(sub_pattern[i + 1])) {
++                            _errors.push_back(
++                                "Negated regex shorthand classes inside character classes are not supported"
++                            );
++                            i += 2;
++                        } else if (sub_pattern[i] == '\\' && i + 1 < length) {
+@@ -526 +562,3 @@ private:
+-                        if (sub_pattern[i] == '\\' && i < length - 1) {
++                        if (sub_pattern[i] == '\\' && i + 1 < length && regex_shorthand_rule(sub_pattern[i + 1]) != nullptr) {
++                            break;
++                        } else if (sub_pattern[i] == '\\' && i < length - 1) {
+diff --git a/tests/test-grammar-integration.cpp b/tests/test-grammar-integration.cpp
+index 4d5d13dd..7e518a4a 100644
+--- a/tests/test-grammar-integration.cpp
++++ b/tests/test-grammar-integration.cpp
+@@ -1202,0 +1203,54 @@ static void test_json_schema() {
++    test_schema(
++        "pattern with positive shorthand classes",
++        R"""({
++            "pattern": "^G\\d+\\w+\\s+$"
++        })""",
++        {
++            R"""("G12Az_ ")""",
++        },
++        {
++            R"""("12Az_ ")""",
++            R"""("G12Az_-")""",
++        }
++    );
++
++    test_schema(
++        "pattern with negated shorthand classes",
++        R"""({
++            "pattern": "^\\D+\\W+\\S+$"
++        })""",
++        {
++            R"""("abc-!")""",
++        },
++        {
++            R"""("123")""",
++            R"""("abc_ ")""",
++        }
++    );
++
++    test_schema(
++        "pattern with shorthand class in character class",
++        R"""({
++            "pattern": "^[A-F\\d]+$"
++        })""",
++        {
++            R"""("AB12")""",
++        },
++        {
++            R"""("G12")""",
++        }
++    );
++
++    test_schema(
++        "pattern with shorthand class in negated character class",
++        R"""({
++            "pattern": "^[^\\d]+$"
++        })""",
++        {
++            R"""("abc-")""",
++        },
++        {
++            R"""("abc1")""",
++        }
++    );
++

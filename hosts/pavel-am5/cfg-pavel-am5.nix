@@ -1,10 +1,12 @@
 { config, cfg-meta, lib, pkgs, cfg-const, import_if_exists, cfg-flakes, ... }:
 
 let
-  llamaCppRocm = pkgs.llama-cpp.override {
+  llamaCppRocm = (pkgs.llama-cpp.override {
     rocmSupport = true;
     rocmGpuTargets = [ "gfx1100" ];
-  };
+  }).overrideAttrs (old: {
+    patches = (old.patches or [ ]) ++ [ ./llama-cpp-json-schema-regex-shorthand.patch ];
+  });
   llamaServer = lib.getExe' llamaCppRocm "llama-server";
   llamaSwap = pkgs.llama-swap.overrideAttrs (old: {
     patches = (old.patches or [ ]) ++ [ ./llama-swap-ttl-from-ready.patch ];

@@ -75,9 +75,6 @@ in
 
           codezombiech.gitignore
 
-          mhutchie.git-graph
-          donjayamanne.githistory
-
           # eamodio.gitlens # annoying
 
           scalameta.metals
@@ -90,17 +87,17 @@ in
 
           dbaeumer.vscode-eslint
 
-          ms-python.python
+          # detachhead.basedpyright
+          # charliermarsh.ruff
 
           #ms-vscode.powershell
           # ms-vscode.hexeditor
           # ms-azuretools.vscode-docker
           # ms-vscode.anycode # real extensions are not nixified
 
-          ms-vscode.cmake-tools
-          ms-vscode.makefile-tools
-
-          twxs.cmake
+          # llvm-vs-code-extensions.vscode-clangd
+          # llvm-vs-code-extensions.lldb-dap
+          # pkgs.open-vsx.kylinideteam.cmake-intellisence
 
           # https://github.com/VSCodium/vscodium/blob/master/docs/index.md#proprietary-extensions
           # ms-vscode-remote.remote-wsl
@@ -124,17 +121,18 @@ in
           pkgs.open-vsx.devmikeua.mikrotik-routeros-script
           pkgs.open-vsx.rszyma.vscode-kanata
           pkgs.open-vsx.mathematic.vscode-pdf
+          silurus.office-open-xml-viewer
 
           # vscjava.vscode-java-pack
           # missing: anycode*,
           thenuprojectcontributors.vscode-nushell-lang
-        ] ++ (if cfg-meta.isDarwin then [ ] else [
-          ms-vscode.cpptools
-        ]);
+        ];
 
         profiles.default.userSettings = {
           "window.titleBarStyle" = "native";
           "workbench.startupEditor" = "newUntitledFile";
+          "ooxmlViewer.useGoogleFonts" = false;
+          "ooxmlViewer.mcpServer.enabled" = "never";
           "editor.fontSize" = config.smind.hm.vscodium.fontSize;
           "editor.fontFamily" =
             "'FiraMono Nerd Font', 'Fira Code Nerd Font Mono', 'Fira Code', monospace";
@@ -217,6 +215,7 @@ in
 
           "editor.inlineSuggest.enabled" = true;
           "security.workspace.trust.banner" = "always";
+          "telemetry.telemetryLevel" = "off";
           "telemetry.enableTelemetry" = false;
           "telemetry.enableCrashReporter" = false;
           "security.workspace.trust.untrustedFiles" = "open";
@@ -255,6 +254,8 @@ in
           "xml.server.workDir" = "~/.cache/lemminx";
 
           "update.mode" = "none";
+          "extensions.autoUpdate" = false;
+          "extensions.autoCheckUpdates" = false;
 
           "makefile.configureOnOpen" = true;
 
