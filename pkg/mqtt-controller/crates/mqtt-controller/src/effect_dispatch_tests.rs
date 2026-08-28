@@ -8,8 +8,7 @@
 //! a silently stale dashboard after group/plug/TRV echoes or
 //! after parent-room state changes that propagate to children.
 //!
-//! Relevant Codex review finding (2026-04): inbound state events
-//! mutate `WorldState` without emitting effects, and
+//! Inbound state events mutate `WorldState` without emitting effects, and
 //! `propagate_to_descendants` mutates child rooms that aren't the
 //! direct effect target. Both code paths must show up in
 //! `TouchedEntities`.
@@ -235,7 +234,7 @@ fn now() -> Instant {
 
 #[test]
 fn touched_from_group_state_includes_room_and_descendants() {
-    // Codex regression: a `GroupState` echo for the parent room
+    // A `GroupState` echo for the parent room
     // also propagates to rule-bearing descendants in
     // `handle_group_state`. The dashboard must see updates for
     // both, not just the parent.

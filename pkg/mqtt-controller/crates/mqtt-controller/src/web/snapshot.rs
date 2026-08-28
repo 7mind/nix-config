@@ -717,10 +717,6 @@ fn tass_actual_info<T>(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Typed-value converters: domain TASS values → wire-crate counterparts.
-// Kept inline here so `snapshot.rs` owns the whole domain→wire boundary.
-// ---------------------------------------------------------------------------
 
 fn room_target_value(t: &LightZoneTarget) -> RoomTargetValue {
     match t {
@@ -794,4 +790,3 @@ fn trv_target_value(t: &crate::entities::trv::TrvTarget) -> TrvTargetValue {
         },
     }
 }
-

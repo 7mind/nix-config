@@ -25,15 +25,12 @@ pub async fn reconcile_groups(
     let mut summary = ReconcileSummary::default();
     let mut state_changed = false;
 
-    // The desired set of group friendly_names. We use the room's
-    // `group_name` field as the canonical desired name.
     let desired_names: HashSet<String> = config
         .rooms
         .iter()
         .map(|r| r.group_name.clone())
         .collect();
 
-    // ----- Phase 2a: rename groups whose id matches but name drifted ---
     let by_id: HashMap<u8, &ExistingGroup> = existing.iter().map(|g| (g.id, g)).collect();
     let by_name: HashMap<String, &ExistingGroup> = existing
         .iter()
@@ -97,7 +94,6 @@ pub async fn reconcile_groups(
         }
     }
 
-    // ----- Phase 2b: prune ---------------------------------------------
     if options.prune {
         let stale: Vec<&ExistingGroup> = existing
             .iter()
@@ -123,7 +119,6 @@ pub async fn reconcile_groups(
         }
     }
 
-    // ----- Phase 2c: create missing groups -----------------------------
     let mut by_name: HashMap<String, ExistingGroup> = existing
         .iter()
         .cloned()
@@ -159,7 +154,6 @@ pub async fn reconcile_groups(
             .collect();
     }
 
-    // ----- Phase 2d: reconcile member sets ----------------------------
     for room in &config.rooms {
         if room.members.is_empty() && !options.prune {
             continue;

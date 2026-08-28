@@ -14,7 +14,6 @@ use crate::tass::{Owner, TargetPhase};
 use super::{MAX_SETPOINT, MIN_SETPOINT};
 
 impl EventProcessor {
-    // ---- TRV state update -----------------------------------------------------
     
     pub(super) fn handle_trv_state(
         &mut self,
@@ -30,7 +29,6 @@ impl EventProcessor {
         _ts: Instant,
     ) {
         let now = self.clock.now();
-        // Find the TRV — only process TRVs that belong to a heating zone.
         let is_known_trv = heating_config.zones.iter()
             .any(|z| z.trvs.iter().any(|zt| zt.device == device));
         if !is_known_trv {
@@ -40,7 +38,6 @@ impl EventProcessor {
         let trv = self.world.trv(device);
         trv.last_seen = Some(now);
     
-        // Build updated actual state, merging with existing.
         let prev = trv.actual.value().cloned().unwrap_or_default();
         let new_temp = local_temperature.or(prev.local_temperature);
         let new_demand = pi_heating_demand.or(prev.pi_heating_demand);
@@ -78,7 +75,6 @@ impl EventProcessor {
         };
         trv.actual.update(actual, now);
     
-        // Temperature handling for open window detection.
         if let Some(temp) = local_temperature {
             trv.last_temp_at = Some(now);
             // Only track baseline/high-water while a detection cycle is
@@ -94,7 +90,6 @@ impl EventProcessor {
             }
         }
     
-        // Check setpoint confirmation.
         if let Some(sp) = occupied_heating_setpoint {
             if let Some(target) = trv.target.value() {
                 let is_normal_setpoint = matches!(target, TrvTarget::Setpoint(_));
@@ -109,7 +104,6 @@ impl EventProcessor {
                             || trv.target.phase() == TargetPhase::Stale
                         {
                             trv.target.confirm(now);
-                            // Clear force reason once a non-forced setpoint is confirmed.
                             if is_normal_setpoint {
                                 trv.last_force_reason = None;
                             }
@@ -140,7 +134,6 @@ impl EventProcessor {
         }
     }
     
-    // ---- Wall thermostat state update -----------------------------------------
     
     pub(super) fn handle_wall_thermostat_state(
         &mut self,
@@ -153,7 +146,6 @@ impl EventProcessor {
     ) {
         let now = self.clock.now();
     
-        // Find zone for this relay.
         let zone_cfg = heating_config.zones.iter()
             .find(|z| z.relay == device);
         let Some(zone_cfg) = zone_cfg else { return };
@@ -171,7 +163,6 @@ impl EventProcessor {
     
         let Some(on) = relay_on else { return };
     
-        // Snapshot before mutation for pump tracking.
         let relays_on_before = self.active_relay_count();
         let pump_running = self.is_pump_running();
     
@@ -191,7 +182,6 @@ impl EventProcessor {
         }
 
         if was_on == on {
-            // First contact with relay OFF: seed pump_off_since.
             if first_contact && !on && !pump_running {
                 self.pump_off_since = self.pump_off_since.or(Some(now));
                 tracing::info!(
@@ -220,7 +210,6 @@ impl EventProcessor {
                             zone = %zone_name, relay = device,
                             "OFF echo after grace period — ON command likely failed; accepting OFF"
                         );
-                        // Accept the OFF: update actual state, reset target, track pump.
                         zone.actual.update(HeatingZoneActual { relay_on: false, temperature: local_temperature }, now);
                         zone.target.set_and_command(HeatingZoneTarget::Off, Owner::Schedule, now);
                         zone.target.confirm(now);
@@ -231,7 +220,6 @@ impl EventProcessor {
                         }
                     }
                 } else if let Some(HeatingZoneTarget::Off) = zone.target.value() {
-                    // Pending OFF confirmed by repeated echo.
                     zone.target.confirm(now);
                     self.pump_off_since = Some(now);
                     tracing::info!(
@@ -243,12 +231,10 @@ impl EventProcessor {
             return;
         }
     
-        // State transition.
         let zone = self.world.heating_zone(&zone_name);
         zone.actual.update(HeatingZoneActual { relay_on: on, temperature: local_temperature }, now);
     
         if on {
-            // OFF -> ON edge.
             zone.relay_on_since = Some(now);
             if self.startup_complete {
                 for trv_dev in &trv_devices {
@@ -266,14 +252,12 @@ impl EventProcessor {
                     trv.open_window.start_detection(now, baseline);
                 }
             }
-            // Confirm the target ON.
             let zone = self.world.heating_zone(&zone_name);
             if zone.target.value() == Some(&HeatingZoneTarget::Heating)
                 && zone.target.is_actionable()
             {
                 zone.target.confirm(now);
             }
-            // Pump tracking.
             if relays_on_before == 0 {
                 self.pump_on_since = Some(now);
                 self.pump_off_since = None;
@@ -283,10 +267,8 @@ impl EventProcessor {
                 );
             }
         } else {
-            // ON -> OFF edge.
             let zone = self.world.heating_zone(&zone_name);
             zone.relay_on_since = None;
-            // Release min_cycle-forced TRVs for this zone.
             for trv_dev in &trv_devices {
                 let trv = self.world.trv(trv_dev);
                 trv.open_window.reset();
@@ -302,14 +284,12 @@ impl EventProcessor {
                     );
                 }
             }
-            // Confirm the target OFF.
             let zone = self.world.heating_zone(&zone_name);
             if zone.target.value() == Some(&HeatingZoneTarget::Off)
                 && zone.target.is_actionable()
             {
                 zone.target.confirm(now);
             }
-            // Pump tracking.
             if relays_on_before == 1 {
                 self.pump_off_since = Some(now);
                 self.pump_on_since = None;
@@ -320,7 +300,6 @@ impl EventProcessor {
             }
         }
     
-        // After updating actual state, check for target/actual mismatch.
         // If target is Confirmed but actual diverges (e.g., manual intervention
         // or late echo), re-dirty the target so reconcile retries.
         let zone = self.world.heating_zone(&zone_name);

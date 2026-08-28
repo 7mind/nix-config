@@ -128,7 +128,6 @@ stdenvNoCC.mkDerivation {
 
     mkdir -p $out/lib $out/include $out/lib/cmake $out/lib/pkgconfig
 
-    # MKL libs + headers
     cp -a opt/intel/oneapi/mkl/${mklVer}/lib/*${shlibExt}*  $out/lib/
     cp -r opt/intel/oneapi/mkl/${mklVer}/include/*          $out/include/
     cp -r opt/intel/oneapi/mkl/${mklVer}/lib/cmake/*        $out/lib/cmake/
@@ -138,7 +137,6 @@ stdenvNoCC.mkDerivation {
     cp -a opt/intel/oneapi/compiler/${mklVer}/lib/libiomp5${shlibExt}* $out/lib/
     cp -a opt/intel/oneapi/compiler/${mklVer}/lib/libhwloc${shlibExt}* $out/lib/ || true
 
-    # TBB
     cp -a opt/intel/oneapi/tbb/${tbbVer}/lib/libtbb${shlibExt}*    $out/lib/
     cp -a opt/intel/oneapi/tbb/${tbbVer}/lib/libhwloc${shlibExt}*  $out/lib/ || true
     cp -r opt/intel/oneapi/tbb/${tbbVer}/include/*                 $out/include/

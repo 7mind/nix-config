@@ -42,21 +42,17 @@
     };
 
     home.packages = lib.mkIf cfg-meta.isLinux (with pkgs; [
-      # productivity
       libreoffice-stable
 
-      # graphics
       imagemagick
       gimp3-with-plugins
 
       nomacs-qt6
       emulsion
 
-      # video
       vlc
       mpv
 
-      # audio
       crosspipe
 
       brave
@@ -66,7 +62,6 @@
 
       geekbench
 
-      # mcus
       rpi-imager
     ]);
 

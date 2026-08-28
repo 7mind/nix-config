@@ -4,7 +4,7 @@
 //! hover-revealed tooltip with the full diagnostic surface (per-conn
 //! state, RTT windows, packet loss, backoff, last close code, event
 //! log). Encodes state in two independent channels (color + label
-//! text) per the `resilient-ws-ui` skill's accessibility rule, and
+//! text), and
 //! mirrors the state in `document.title` so backgrounded tabs surface
 //! it.
 
@@ -66,7 +66,6 @@ pub fn WsIndicator(ws: WsState) -> impl IntoView {
                 on:click=move |_| ws.manual_retry()
             >
                 <svg viewBox="0 0 32 32" class="ws-indicator-svg">
-                    // Background track for the countdown ring.
                     <circle cx="16" cy="16" r="13" class="ws-indicator-track" />
                     // Countdown ring (foreground arc). `pathLength=100`
                     // lets us drive the dash array as a percentage.
@@ -79,9 +78,7 @@ pub fn WsIndicator(ws: WsState) -> impl IntoView {
                             format!("{:.1} 100", frac * 100.0)
                         }
                     />
-                    // Central state dot.
                     <circle cx="16" cy="16" r="6" class="ws-indicator-dot" />
-                    // Terminal "×" overlay when the manager has given up.
                     <Show when=move || stats.get().widget == WidgetState::Terminal>
                         <path d="M11 11 L21 21 M21 11 L11 21" class="ws-indicator-x" />
                     </Show>
@@ -303,7 +300,6 @@ fn LogBlock(stats: ReadSignal<ManagerStats>) -> impl IntoView {
             <div class="ws-tooltip-label">"Event log"</div>
             <For
                 each=move || {
-                    // Render most-recent first, capped to last 20 lines.
                     let s = stats.get();
                     s.events.iter().rev().take(20).cloned().collect::<Vec<_>>()
                 }

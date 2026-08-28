@@ -371,7 +371,6 @@ fn plug_state_takes_priority_over_unknown() {
     ));
 }
 
-// ---- Z-Wave plug tests ------------------------------------------------
 
 #[test]
 fn parse_zwave_switch_on() {
@@ -459,7 +458,6 @@ fn zwave_unrelated_topic_returns_none() {
     assert!(parse_event(&topo, &p, &clock()).is_none());
 }
 
-// ---- Duplicate-delivery filter --------------------------------------------
 //
 // MQTT QoS 1 ("at least once") permits the broker to redeliver a publish
 // whose PUBACK it didn't observe. Redeliveries arrive with the DUP flag

@@ -71,7 +71,6 @@ impl TimeExpr {
     }
 }
 
-// ---- Parsing ---------------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseTimeExprError(pub String);
@@ -183,7 +182,6 @@ impl FromStr for TimeExpr {
     }
 }
 
-// ---- Display ---------------------------------------------------------------
 
 fn fmt_atom(f: &mut fmt::Formatter<'_>, expr: &TimeExpr) -> fmt::Result {
     match expr {
@@ -236,7 +234,6 @@ impl fmt::Display for TimeExpr {
     }
 }
 
-// ---- Serde (as string) -----------------------------------------------------
 
 impl Serialize for TimeExpr {
     fn serialize<S: ser::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {

@@ -173,7 +173,6 @@ Endpoint = {endpoint}
             countries = self._make_request(self.COUNTRIES_URL, auth=False)
             print("Available countries:")
             print("-" * 40)
-            # Sort by country name
             sorted_countries = sorted(countries, key=lambda x: x["name"])
             for country in sorted_countries:
                 print(f"{country['code']:3s} - {country['name']}")
@@ -214,10 +213,8 @@ Endpoint = {endpoint}
 
         print(f"Found {len(servers)} server(s)", file=sys.stderr)
 
-        # Create output directory if it doesn't exist
         os.makedirs(output_dir, exist_ok=True)
 
-        # Generate and save configs
         for i, server in enumerate(servers, 1):
             try:
                 filename, config = self.create_config(server, private_key, dns)
@@ -331,13 +328,11 @@ Common country codes: us, uk, de, fr, nl, ca, au, jp, etc.
     )
     args = parser.parse_args()
 
-    # Handle list-countries command (doesn't require token)
     if args.list_countries:
         extractor = NordVPNConfigExtractor()
         extractor.list_countries()
         sys.exit(0)
 
-    # Peer-endpoint list mode (doesn't require token or write files)
     if args.endpoints:
         extractor = NordVPNConfigExtractor()
         extractor.list_endpoints(total=args.count, country=args.country)

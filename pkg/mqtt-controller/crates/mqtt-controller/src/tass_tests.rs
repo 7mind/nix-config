@@ -5,7 +5,6 @@
 use super::*;
 use std::time::Duration;
 
-// ---- TassTarget tests ----
 
 #[test]
 fn target_starts_unset() {
@@ -207,7 +206,6 @@ fn target_since_tracks_each_transition() {
     assert_eq!(t.since(), Some(t2));
 }
 
-// ---- TassActual tests ----
 
 #[test]
 fn actual_starts_unknown() {
@@ -301,7 +299,6 @@ fn actual_repeated_updates_stay_fresh() {
     assert_eq!(a.value(), Some(&3));
 }
 
-// ---- Display tests ----
 
 #[test]
 fn target_phase_display() {
@@ -329,7 +326,6 @@ fn owner_display() {
     assert_eq!(Owner::Rule.to_string(), "rule");
 }
 
-// ---- Default tests ----
 
 #[test]
 fn target_default_is_unset() {

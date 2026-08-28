@@ -102,7 +102,7 @@ pub(super) fn broadcast_state_updates(
 /// Heating zones share global pump timers (`min_cycle_remaining_secs`,
 /// `min_pause_remaining_secs`) — when ANY zone is touched we have to
 /// rebroadcast all zones so untouched zone cards don't show stale
-/// countdowns. (See Codex review 2026-04.)
+/// countdowns.
 pub(super) fn broadcast_touched(
     processor: &EventProcessor,
     tx: &broadcast::Sender<mqtt_controller_wire::ServerMessage>,

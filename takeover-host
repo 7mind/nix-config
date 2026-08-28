@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Takeover script for NixOS hosts not yet managed by this flake
 # Usage: ./takeover-host <FLAKE_HOSTNAME> <REMOTE_SSH_ADDR> [--no-switch]
 
 if [ "$#" -lt 2 ]; then
@@ -22,7 +21,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "==> Building configuration for $FLAKE_HOSTNAME..."
-# We use a temporary gcroat to prevent immediate garbage collection
+# Keep a temporary GC root so the copied closure cannot be collected.
 mkdir -p .tmp/builds
 OUT_LINK=".tmp/builds/$FLAKE_HOSTNAME"
 
@@ -36,7 +35,6 @@ nix copy --to "ssh://${REMOTE_SSH_ADDR}" "$CLOSURE"
 
 if [ "$DO_SWITCH" = true ]; then
     echo "==> Ensuring bootloader is ready on $REMOTE_SSH_ADDR..."
-    # If using systemd-boot, we might need to install it first if it wasn't used before
     ssh "$REMOTE_SSH_ADDR" "sudo bootctl status >/dev/null 2>&1 || (echo 'Installing systemd-boot...' && sudo bootctl install --esp-path=/boot)" || true
 
     echo "==> Activating configuration on $REMOTE_SSH_ADDR..."

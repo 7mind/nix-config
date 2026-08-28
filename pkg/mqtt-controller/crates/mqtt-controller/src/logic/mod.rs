@@ -128,7 +128,6 @@ impl EventProcessor {
         }
     }
 
-    // ----- state accessors ---------------------------------------------------
 
     /// Read-only access to the world state.
     pub fn world(&self) -> &WorldState {
@@ -160,7 +159,6 @@ impl EventProcessor {
         self.location.as_ref()
     }
 
-    // ----- startup helpers ---------------------------------------------------
 
     /// Set the physical state of a light zone from a retained MQTT message.
     pub fn set_zone_actual(&mut self, room: &str, on: bool, ts: Instant) {
@@ -299,7 +297,6 @@ impl EventProcessor {
         }
     }
 
-    // ----- web command handlers ----------------------------------------------
 
     /// Web UI: recall a specific scene in a room.
     pub fn web_recall_scene(&mut self, room_name: &str, scene_id: u8, ts: Instant) -> Vec<Effect> {
@@ -396,7 +393,6 @@ impl EventProcessor {
         vec![Effect::PublishDeviceSet { device: device_idx, payload }]
     }
 
-    // ----- tick handler ------------------------------------------------------
 
     fn handle_tick(&mut self, ts: Instant) -> Vec<Effect> {
         let mut out = self.flush_pending_presses(ts);
@@ -412,7 +408,6 @@ impl EventProcessor {
         out
     }
 
-    // ----- target staleness --------------------------------------------------
 
     /// Threshold for marking a Commanded target as Stale.
     /// z2m echoes normally arrive within 1-2 seconds; 10s is generous.
@@ -547,7 +542,6 @@ impl EventProcessor {
         actions
     }
 
-    // ----- sun time helpers --------------------------------------------------
 
     pub(crate) fn sun_times(&mut self) -> Option<crate::sun::SunTimes> {
         let loc = self.location.as_ref()?;

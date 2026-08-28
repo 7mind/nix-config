@@ -47,7 +47,6 @@ pub fn App() -> impl IntoView {
 
     let (active_tab, set_active_tab) = signal(initial_tab);
 
-    // Sync tab changes to URL hash.
     Effect::new(move |_| {
         let tab = active_tab.get();
         if let Some(window) = web_sys::window() {
@@ -56,7 +55,6 @@ pub fn App() -> impl IntoView {
     });
     provide_context(active_tab);
 
-    // Auto-set entity filter based on active tab + topology.
     let topology = ws.topology;
     let set_filter = ws.set_filter_entities;
     Effect::new(move |_| {
@@ -144,4 +142,3 @@ fn TabButton(
         </button>
     }
 }
-

@@ -55,26 +55,20 @@ let
       (lib.filter (p: p.host != hostName) gatusPeers);
 
   endpoints = peerEndpoints ++ [
-    # ── edge ────────────────────────────────────────────────────────────────
     # nginx alive check — internal vhost returns 404 on / by design.
     # rejectSSL=true on this vhost, so probe over http.
     (mkHttp { name = "nginx 404"; group = "edge"; url = "http://nginx.web.7mind.io/"; status = "== 404"; })
 
-    # ── observability ───────────────────────────────────────────────────────
-    # Probe the readiness endpoint, not the UI — cheap, doesn't touch TSDB.
     (mkHttp { name = "Prometheus"; group = "observability"; url = "http://prometheus.web.7mind.io/-/ready"; })
     (mkHttp { name = "Grafana";    group = "observability"; url = "http://grafana.web.7mind.io/"; })
     (mkHttp { name = "InfluxDB";   group = "observability"; url = "http://influx.home.7mind.io/"; })
 
-    # ── iot-core ────────────────────────────────────────────────────────────
     (mkHttp { name = "Home Assistant"; group = "iot-core"; url = "http://ha.home.7mind.io:8123/"; })
     (mkHttp { name = "MQTT Driver";    group = "iot-core"; url = "http://raspi5m.home.7mind.io:8780/"; })
     (mkHttp { name = "Zigbee2MQTT";    group = "iot-core"; url = "http://raspi5m.home.7mind.io:8080/"; })
     (mkHttp { name = "Z-Wave JS UI";   group = "iot-core"; url = "http://raspi5m.home.7mind.io:8091/"; })
 
-    # ── iot-devices ─────────────────────────────────────────────────────────
     (mkHttp { name = "Collars web UI"; group = "iot-devices"; url = "http://collars.iot-lan.7mind.io/"; })
-    # Siemens alarm panel.
     (mkHttp { name = "Alarm panel";    group = "iot-devices"; url = "http://alarm.iot-lan.7mind.io/"; })
     # RS485 gateway requires auth — 401 unauthenticated is healthy.
     (mkHttp { name = "RS485 gateway";  group = "iot-devices"; url = "http://rs485.iot-lan.7mind.io/"; status = "== any(200, 401)"; })
@@ -84,21 +78,18 @@ let
     # (200) without auth, so it probes the app without needing credentials.
     (mkHttp { name = "Traccar";        group = "iot-devices"; url = "http://raspi5m.home.7mind.io:8082/api/server"; })
 
-    # ── energy (Victron Cerbo subsystem) ────────────────────────────────────
     (mkHttp { name = "Energy Driver";   group = "energy"; url = "http://victron.iot-lan.7mind.io:8910/"; })
     # Victron Cerbo web console — self-signed cert.
     (mkHttp { name = "Victron Console"; group = "energy"; url = "https://victron.iot-lan.7mind.io/"; insecure = true; })
     # Node-RED on the Victron Cerbo — self-signed cert on :1881.
     (mkHttp { name = "Node-RED";        group = "energy"; url = "https://victron.iot-lan.7mind.io:1881/"; insecure = true; })
 
-    # ── media ───────────────────────────────────────────────────────────────
     (mkHttp { name = "Jellyfin";       group = "media"; url = "http://jellyfin.home.7mind.io/"; })
     (mkHttp { name = "Torrent UI";     group = "media"; url = "http://torrent.home.7mind.io/"; })
     # Transmission RPC requires auth — 401 unauthenticated is the healthy state.
     (mkHttp { name = "Transmission 1"; group = "media"; url = "http://transmission1.pgtr.7mind.io/"; status = "== any(200, 401)"; })
     (mkHttp { name = "Transmission 2"; group = "media"; url = "http://transmission2.pgtr.7mind.io/"; status = "== any(200, 401)"; })
 
-    # ── tools ───────────────────────────────────────────────────────────────
     (mkHttp { name = "Atuin";            group = "tools"; url = "http://atuin.home.7mind.io/"; })
     (mkHttp { name = "BentoPDF";         group = "tools"; url = "http://bentopdf.web.7mind.io/"; })
     (mkHttp { name = "Browser";          group = "tools"; url = "http://browser.home.7mind.io/"; })
@@ -107,7 +98,6 @@ let
     # `vpn-services` is the legacy container name; serves the Todo app.
     (mkHttp { name = "Todo"; group = "tools"; url = "http://vpn-services.web.7mind.io/"; })
 
-    # ── network (gear / platform hardware) ──────────────────────────────────
     # Unifi controller redirects http→https and uses a self-signed cert.
     (mkHttp { name = "Unifi controller"; group = "network"; url = "https://unifi.home.7mind.io/"; insecure = true; })
     # Zyxel NR7101 5G modem — local IP only, self-signed if redirected to https.
@@ -115,7 +105,6 @@ let
     # Supermicro BMC — self-signed cert; landing page redirects (302).
     (mkHttp { name = "Supermicro BMC";   group = "network"; url = "https://sm.home.7mind.io/"; insecure = true; status = "== any(200, 302)"; })
 
-    # ── DNS (Pi-hole, dual instances) ───────────────────────────────────────
     # Probe each Pi-hole's web admin (:3001). The endpoint list is shared by
     # both gatus instances, so each monitor probes both resolvers.
     (mkHttp { name = "Pi-hole (raspi5m)"; group = "network"; url = "http://raspi5m.home.7mind.io:3001/"; })

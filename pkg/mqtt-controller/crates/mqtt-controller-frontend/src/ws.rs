@@ -1,7 +1,6 @@
 //! WebSocket connection manager + per-entity reactive signals.
 //!
-//! This module implements the reliability + visibility contract from
-//! the `resilient-ws-ui` skill:
+//! Reliability and visibility guarantees:
 //!
 //! - Per-connection four-state machine (NEW → ALIVE → STALE → DEAD)
 //!   with a STALE grace period that enables overlapping-connection
@@ -45,9 +44,6 @@ use mqtt_controller_wire::{
     LightSnapshot, LogEntryDto, PlugSnapshot, RoomSnapshot, ServerMessage, TopologyInfo,
 };
 
-// ---------------------------------------------------------------------------
-// Tuning — all timing constants live here so a reviewer can find them.
-// ---------------------------------------------------------------------------
 
 const MAX_LOG_ENTRIES: usize = 200;
 
@@ -111,9 +107,6 @@ const RTT_WINDOW_30S: u64 = 30;
 const RTT_WINDOW_1M: u64 = 60;
 const RTT_WINDOW_5M: u64 = 300;
 
-// ---------------------------------------------------------------------------
-// Public types
-// ---------------------------------------------------------------------------
 
 /// Per-connection state machine. STALE is a first-class state, not a
 /// transient moment inside ALIVE → DEAD: it has its own grace period
@@ -239,9 +232,6 @@ pub struct ManagerStats {
     pub widget: WidgetState,
 }
 
-// ---------------------------------------------------------------------------
-// Domain (entity) types — unchanged from the original ws.rs
-// ---------------------------------------------------------------------------
 
 /// One JSON popup request: title and pretty-printed body.
 #[derive(Clone, Debug, PartialEq)]
@@ -266,9 +256,6 @@ pub struct EntityLogPage {
 /// itself is `Send + Sync` because it's just an arena key.
 pub type EntityMap<T> = StoredValue<BTreeMap<String, RwSignal<T>>, LocalStorage>;
 
-// ---------------------------------------------------------------------------
-// Internal types
-// ---------------------------------------------------------------------------
 
 /// Held WebSocket resources for one pool entry. The `Closure` handles
 /// stay alive for the lifetime of the connection record so JS can fire
@@ -290,12 +277,10 @@ struct ConnRecord {
     /// Set when a newer connection has taken over; we keep this one
     /// open just long enough for any in-flight pong to land.
     superseded: bool,
-    // Held closure handles — released on drop.
     _on_open: Closure<dyn Fn()>,
     _on_message: Closure<dyn Fn(MessageEvent)>,
     _on_error: Closure<dyn Fn(ErrorEvent)>,
     _on_close: Closure<dyn Fn(CloseEvent)>,
-    // Per-connection timers.
     connect_timeout: Option<Timeout>,
     ping_interval: Option<Interval>,
     /// Pong-timeout for the most-recently-sent ping. We do not arm one
@@ -356,10 +341,6 @@ impl Drop for LifecycleListener {
     }
 }
 
-// ---------------------------------------------------------------------------
-// WsState — public façade. Same surface as before plus the new
-// `stats` / `now_ms` signals consumed by the indicator.
-// ---------------------------------------------------------------------------
 
 /// Reactive WebSocket state available to all components.
 ///
@@ -394,7 +375,6 @@ pub struct WsState {
     /// state change.
     pub stats: ReadSignal<ManagerStats>,
 
-    // --- internals (private to the module — accessed via methods) ---
     rooms: EntityMap<RoomSnapshot>,
     plugs: EntityMap<PlugSnapshot>,
     heating: EntityMap<HeatingZoneSnapshot>,
@@ -491,17 +471,14 @@ impl WsState {
         // not policy spread across files.
         install_lifecycle_listeners(state);
 
-        // First connection.
         state.inner.update_value(|m| {
             ensure_replacement(m, state);
         });
-        // Initial stats publish so the indicator renders on first paint.
         publish_stats(state);
 
         state
     }
 
-    // -- Domain accessors (unchanged) ----------------------------------
 
     pub fn room_signal(&self, name: &str) -> Option<RwSignal<RoomSnapshot>> {
         self.rooms.with_value(|m| m.get(name).copied())
@@ -621,9 +598,6 @@ impl WsState {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Connection lifecycle
-// ---------------------------------------------------------------------------
 
 /// Allocate a fresh connection id, open a WebSocket, and install all
 /// per-socket closures + the connect-timeout watchdog. The connection
@@ -731,7 +705,6 @@ fn ensure_replacement(m: &mut ManagerInner, state: WsState) -> Option<u64> {
     let timeout_id = id;
     let connect_timeout = Timeout::new(CONNECT_TIMEOUT_MS, move || {
         st.inner.update_value(|m| {
-            // Sample read-only state, drop the borrow, then close + log.
             let should_fire = m
                 .connections
                 .get(&timeout_id)
@@ -946,7 +919,6 @@ fn handle_pong_timeout(m: &mut ManagerInner, state: WsState, id: u64) {
         .map(|r| !r.pending_pings.is_empty())
         .unwrap_or(false);
     if !still_pending {
-        // A late pong already cleared the queue — nothing to do.
         if let Some(rec) = m.connections.get_mut(&id) {
             rec.pong_timeout = None;
         }
@@ -976,8 +948,7 @@ fn transition_to_stale(m: &mut ManagerInner, state: WsState, id: u64, reason: &s
         publish_stats(st);
     }));
     log_event(m, &format!("conn #{id} STALE ({reason})"));
-    // Kick off a replacement immediately. Overlapping failover is the
-    // skill's biggest perceived-reliability win.
+    // Overlap stale and replacement connections to avoid a visible gap.
     ensure_replacement(m, state);
 }
 
@@ -1147,9 +1118,6 @@ fn handle_message(m: &mut ManagerInner, _state: WsState, id: u64, msg: &ServerMe
     }
 }
 
-// ---------------------------------------------------------------------------
-// Backoff
-// ---------------------------------------------------------------------------
 
 fn schedule_reconnect(m: &mut ManagerInner, state: WsState) {
     if m.destroyed || m.is_terminal {
@@ -1220,9 +1188,6 @@ fn backoff_delay_ms(attempt: u32) -> u32 {
     ((capped as f64) * factor) as u32
 }
 
-// ---------------------------------------------------------------------------
-// Time-jump detector
-// ---------------------------------------------------------------------------
 
 fn handle_time_tick(m: &mut ManagerInner, state: WsState) {
     if m.destroyed {
@@ -1264,9 +1229,6 @@ fn handle_time_tick(m: &mut ManagerInner, state: WsState) {
     publish_stats(state);
 }
 
-// ---------------------------------------------------------------------------
-// Page Lifecycle
-// ---------------------------------------------------------------------------
 
 fn install_lifecycle_listeners(state: WsState) {
     let listeners = build_lifecycle_listeners(state);
@@ -1335,12 +1297,10 @@ fn on_visibility_change(m: &mut ManagerInner, state: WsState) {
         log_event(m, "tab hidden");
     } else {
         log_event(m, "tab visible");
-        // Run a deferred reconnect, if any.
         if m.reconnect_deferred_until_visible {
             m.reconnect_deferred_until_visible = false;
             schedule_reconnect(m, state);
         }
-        // Also poke ALIVE connections to verify they're still alive.
         let ids: Vec<u64> = m
             .connections
             .iter()
@@ -1357,8 +1317,6 @@ fn on_lifecycle(m: &mut ManagerInner, state: WsState, ev: &'static str) {
     log_event(m, &format!("lifecycle: {ev}"));
     match ev {
         "online" => {
-            // Network came back; verify what we have and kick a
-            // replacement if nothing is ALIVE.
             let alive_ids: Vec<u64> = m
                 .connections
                 .iter()
@@ -1373,23 +1331,18 @@ fn on_lifecycle(m: &mut ManagerInner, state: WsState, ev: &'static str) {
             }
         }
         "offline" => {
-            // Network is gone — no point retrying until 'online'.
             if let Some(t) = m.reconnect_timeout.take() {
                 t.cancel();
             }
             m.reconnect_scheduled = None;
         }
         "pageshow" => {
-            // BFCache restore (or first show). Treat as a likely
-            // resume after a long gap.
             if !has_open_replacement(m) {
                 ensure_replacement(m, state);
             }
         }
         "pagehide" => {
-            // Close everything so the page is BFCache-eligible. The
-            // skill calls this out explicitly: an open WS disqualifies
-            // BFCache on every browser.
+            // Open WebSockets prevent BFCache eligibility.
             for rec in m.connections.values() {
                 let _ = rec.socket.close_with_code_and_reason(1001, "pagehide");
             }
@@ -1405,9 +1358,6 @@ fn document_hidden() -> bool {
         .unwrap_or(false)
 }
 
-// ---------------------------------------------------------------------------
-// Stats publishing + log
-// ---------------------------------------------------------------------------
 
 fn publish_stats(state: WsState) {
     let snapshot = state.inner.with_value(|m| build_stats(m));
@@ -1518,9 +1468,6 @@ fn log_event(m: &mut ManagerInner, line: &str) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Domain message dispatch (called outside the manager borrow)
-// ---------------------------------------------------------------------------
 
 fn apply_domain_message(state: WsState, msg: ServerMessage) {
     match msg {
@@ -1684,9 +1631,6 @@ fn upsert_entity<T>(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 fn wall_now_ms() -> i64 {
     js_sys::Date::now() as i64

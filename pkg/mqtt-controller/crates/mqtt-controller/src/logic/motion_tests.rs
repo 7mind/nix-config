@@ -220,7 +220,6 @@ fn expect_state_off(effects: &[Effect]) {
     assert!(matched, "expected state_off in {effects:?}");
 }
 
-// ----- on-off (default) -----------------------------------------------------
 
 #[test]
 fn on_off_motion_on_turns_on_and_claims_motion_ownership() {
@@ -246,7 +245,6 @@ fn on_off_motion_off_turns_off_when_motion_owned() {
     expect_state_off(&effects);
 }
 
-// ----- on-only -------------------------------------------------------------
 
 #[test]
 fn on_only_motion_on_turns_on_without_claiming_ownership() {
@@ -275,7 +273,6 @@ fn on_only_motion_off_is_noop_even_while_lights_on() {
     );
 }
 
-// ----- off-only ------------------------------------------------------------
 
 #[test]
 fn off_only_motion_on_claims_ownership_without_turning_on() {
@@ -340,9 +337,8 @@ fn off_only_user_press_without_motion_is_plain_user_owned() {
     assert!(!zone.is_motion_owned());
 }
 
-// ----- off-only: review follow-ups -----------------------------------------
 
-/// Codex review (high): a brief walk-through must not latch a motion
+/// A brief walk-through must not latch a motion
 /// claim that then hijacks a later manual turn-on.
 ///
 /// We seed the group state as Off first so that the motion-off path
@@ -385,7 +381,7 @@ fn off_only_vacancy_releases_latched_claim_when_lights_off() {
     assert_eq!(zone.target.owner(), Some(Owner::User));
 }
 
-/// Codex review (high) follow-up: once the claim is released, a transient
+/// Once the claim is released, a transient
 /// peripheral occupancy blip must NOT be able to turn off the user's
 /// manual activation — because there's no motion-owned zone to turn off.
 #[test]
@@ -426,7 +422,7 @@ fn off_only_released_claim_not_reinstated_by_stray_vacancy_transition() {
     expect_state_off(&effects);
 }
 
-/// Codex review (medium): bright-room luminance gate must also suppress
+/// The bright-room luminance gate must also suppress
 /// the off-only claim, matching on-off semantics for "don't engage
 /// motion automation in bright rooms".
 #[test]
@@ -442,7 +438,7 @@ fn off_only_luminance_gate_suppresses_claim() {
     );
 }
 
-/// Codex review (medium): post-off cooldown must also suppress the
+/// Post-off cooldown must also suppress the
 /// off-only claim. After a realistic motion-driven cycle (with
 /// z2m echoes), re-entering within the cooldown window must leave the
 /// zone's ownership at `System` — the gate refuses to re-claim.
@@ -494,14 +490,13 @@ fn off_only_cooldown_gate_suppresses_claim() {
     );
 }
 
-// ----- startup-at-retained-ON behaviour -----------------------------------
 
 fn seed_actual_on(p: &mut EventProcessor, room: &str, ts: Instant) {
     let zone = p.world.light_zone(room);
     zone.actual.update(LightZoneActual::On, ts);
 }
 
-/// Codex review (medium): on-only rooms must NOT be forcibly turned off
+/// On-only rooms must NOT be forcibly turned off
 /// at daemon startup. Motion in on-only never commands off; discarding
 /// retained state there would create unsolicited state changes on every
 /// restart.
@@ -520,7 +515,7 @@ fn startup_leaves_on_only_retained_state_untouched() {
     assert!(zone.actual_is_on(), "actual state should be preserved");
 }
 
-/// Codex review round 13: a daemon restart while someone is in the
+/// A daemon restart while someone is in the
 /// room must not silently kill the off-only auto-off guarantee for
 /// that session. When any bound sensor is seeded occupied, startup
 /// adopts `Motion + On` ownership so the first live vacancy still
@@ -584,7 +579,7 @@ fn startup_forces_off_off_only_when_all_sensors_seeded_vacant() {
     expect_state_off(&effects);
 }
 
-/// Codex adversarial review (high): the startup fail-safe off path
+/// The startup fail-safe off path
 /// used to arm the motion cooldown via the echo handler's `last_off_at`
 /// write. If an MQTT retained `group_state=on` arrived during
 /// `refresh_state` and processed before the startup OFF echo, the
@@ -714,7 +709,7 @@ fn propagation_preserves_off_only_child_motion_claim() {
     expect_state_off(&effects);
 }
 
-/// Codex review round 14: a sensor bound to multiple rooms must fan a
+/// A sensor bound to multiple rooms must fan a
 /// single `occupied=false` transition out to EVERY bound room's
 /// motion-off path. Previously `dispatch_motion` re-read `prev_occupied`
 /// after the first iteration's actual-state update, so only the first
@@ -817,9 +812,8 @@ fn startup_still_turns_off_on_off_motion_rooms() {
     expect_state_off(&effects);
 }
 
-// ----- off-only target healing at motion-on --------------------------------
 
-/// Codex follow-up review (high): a stale `On` target (command timed
+/// A stale `On` target (command timed
 /// out without an echo → `TargetPhase::Stale`) must be healed to match
 /// actual before the off-only motion claim, or the next SceneToggle
 /// press will take the OFF branch even though the lights are
@@ -943,7 +937,7 @@ fn off_only_heals_stale_off_target_when_actual_is_on() {
     );
 }
 
-/// Codex follow-up review (high): repeated `occupied=true` publishes in
+/// Repeated `occupied=true` publishes in
 /// off-only rooms re-enter `dispatch_motion_on` and hand ownership over
 /// to Motion each time. If that handover refreshed the target's `since`
 /// field, a dropped user command would never mature to `Stale` — the
@@ -1006,7 +1000,7 @@ fn off_only_claim_preserves_since_for_in_flight_commanded_target() {
     );
 }
 
-/// Codex review (P2): a manual OFF → ON cycle inside a single
+/// A manual OFF → ON cycle inside a single
 /// occupancy session must NOT defeat the off-only auto-off. The fix
 /// lives in `handle_group_state`: on the OFF echo, if the zone is
 /// currently motion-owned and a bound sensor is still occupied, we
@@ -1205,9 +1199,8 @@ fn off_only_cooldown_suppressed_session_stays_user_owned_end_to_end() {
     );
 }
 
-// ----- off-only motion-off with degraded actual state ---------------------
 
-/// Codex adversarial review (high): an off-only room may reach motion
+/// An off-only room may reach motion
 /// dispatch before any group state has been observed — e.g. a seed
 /// that delivered occupancy but skipped/failed the group state payload.
 /// In that case `is_on()` is false even if the room is physically lit.
@@ -1456,7 +1449,7 @@ fn off_only_turn_off_all_zones_wipes_ownership_when_no_live_session() {
     );
 }
 
-/// Codex adversarial review (high): a zombie motion claim must not
+/// A zombie motion claim must not
 /// promote later user presses to Motion. If the sensor that made the
 /// claim ages to Stale without ever publishing `occupied=false` (so
 /// the vacancy-release path never fires), the zone is still
@@ -1557,7 +1550,6 @@ fn off_only_motion_off_releases_claim_when_actual_confirmed_off() {
     assert!(!zone.is_motion_owned());
 }
 
-// ----- occupancy-repeat replay (regression for ensuite "lights pop back on") --
 
 /// Regression for the ensuite log (ms-log-full.txt @ 00:49:57 → 00:50:07 and
 /// 00:50:34 → 00:50:37): user presses the wall switch OFF, lights go off,
@@ -2017,4 +2009,3 @@ fn high_lux_heartbeats_do_not_re_evaluate_luminance_gate() {
     let since_2 = p.world.motion_sensors.get("hue-ms-room").unwrap().actual.since();
     assert_ne!(since_1, since_2);
 }
-

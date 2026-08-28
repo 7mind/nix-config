@@ -116,7 +116,6 @@ in
   };
 
   config = lib.mkMerge [
-    # udev trigger for refresh rate updates (shared by GNOME and COSMIC)
     (lib.mkIf cfg.enable {
       services.udev.extraRules = ''
         SUBSYSTEM=="power_supply", ATTR{type}=="Mains", ACTION=="change", RUN+="${refreshRateScripts.triggerRefreshRateUpdate}"
@@ -125,7 +124,6 @@ in
       '';
     })
 
-    # GNOME/Wayland refresh rate switching
     (lib.mkIf (cfg.enable && config.smind.desktop.gnome.enable) {
       systemd.user.paths.auto-refresh-rate-gnome = {
         description = "Watch for power state changes to update refresh rate";
@@ -158,7 +156,6 @@ in
       };
     })
 
-    # COSMIC/Wayland refresh rate switching
     (lib.mkIf (cfg.enable && config.smind.desktop.cosmic.enable) {
       environment.systemPackages = [ pkgs.wlr-randr ];
 

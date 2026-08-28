@@ -12,7 +12,6 @@ fn now() -> Instant {
     Instant::now()
 }
 
-// ---- TASS TRV state derivation ----
 
 #[test]
 fn tass_trv_unknown_when_never_seen() {
@@ -123,7 +122,6 @@ fn tass_trv_idle() {
     assert_eq!(derive_trv_state_from_tass(&trv, n, 5, 80), TrvDerivedState::Idle);
 }
 
-// ---- Discovery config shape ----
 
 #[test]
 fn trv_discovery_config_topic_format() {

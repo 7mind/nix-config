@@ -189,26 +189,19 @@ in
         userKeymaps = config.smind.hm.zed.userKeymaps;
 
         extraPackages = with pkgs; [
-          # Rust
           rustup
           tree-sitter
           nodejs_22
           gcc
 
-          # Nix
           nixd
           nil
           nixpkgs-fmt
-          # Scala
           coursier
           metals
-          # C#
           omnisharp-roslyn
-          # Python
           python3Packages.python-lsp-server
-          # Bash
           bash-language-server
-          # Java
           jdt-language-server
         ];
 

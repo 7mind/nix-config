@@ -883,7 +883,7 @@ in
       description = "Public IPv4 for media (standalone B2BUA nat-addresses).";
     };
 
-    # --- standalone-only trunk options (kept for the experimental path) ---
+    # Used only by the experimental standalone path.
     trunk = {
       enable = mkEnableOption "standalone B2BUA SIP trunk";
       domain = mkOption {

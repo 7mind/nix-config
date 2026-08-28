@@ -26,7 +26,6 @@ fail() { ((++fail)); echo -e "${RED}FAIL${RESET}: $1"; }
 warn() { ((++warn)); echo -e "${YELLOW}WARN${RESET}: $1"; }
 info() { echo -e "${BOLD}---${RESET} $1"; }
 
-# ---------- 1. Nix configuration ----------
 info "Checking nix configuration"
 
 nix_config=$(nix show-config 2>/dev/null)
@@ -56,7 +55,6 @@ else
     fail "Attic cache public key not found in trusted-public-keys"
 fi
 
-# ---------- 2. Server reachability ----------
 info "Checking Attic server at $ATTIC_URL"
 
 if curl -sf --connect-timeout 5 "$ATTIC_URL" >/dev/null 2>&1; then
@@ -75,7 +73,6 @@ else
     fail "Cache '${CACHE_NAME}' not found at ${CACHE_URL}/nix-cache-info"
 fi
 
-# ---------- 3. Post-build hook (push) ----------
 # We build a unique derivation that can't exist in any upstream cache.
 # This ensures Attic must store it locally, making the narinfo check reliable.
 info "Building a unique test derivation to test push"
@@ -118,7 +115,6 @@ else
     fi
 fi
 
-# ---------- 4. Substituter (fetch) ----------
 info "Testing substituter (fetch from cache)"
 
 if [[ -n "${built_path:-}" && -n "${narinfo_hash:-}" ]]; then
@@ -135,7 +131,6 @@ else
     warn "No test path available, skipping substituter fetch test"
 fi
 
-# ---------- Summary ----------
 echo ""
 echo -e "${BOLD}=== Summary ===${RESET}"
 echo -e "${GREEN}${pass} passed${RESET}, ${RED}${fail} failed${RESET}, ${YELLOW}${warn} warnings${RESET}"

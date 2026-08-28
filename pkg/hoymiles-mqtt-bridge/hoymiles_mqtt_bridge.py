@@ -205,9 +205,6 @@ def parse_name_list(spec: str | None) -> set[str]:
     return {s.strip() for s in spec.split(",") if s.strip()}
 
 
-# --- HA discovery payload helpers --------------------------------------------
-
-
 def _device_block(*, identifiers: str, name: str, model: str | None,
                   sw_version: str | None, manufacturer: str = "Hoymiles",
                   via_device: str | None = None) -> dict[str, Any]:
@@ -294,9 +291,6 @@ def _discovery_payload(*, unique_id: str, name: str, state_topic: str,
     if spec.icon is not None:
         payload["ic"] = spec.icon
     return payload
-
-
-# --- Polling -----------------------------------------------------------------
 
 
 @dataclasses.dataclass
@@ -683,9 +677,6 @@ def discovery_messages(rt: DtuRuntime, inverters: dict[str, dict[str, Any]],
     return grouped
 
 
-# --- DTU task ----------------------------------------------------------------
-
-
 def installation_discovery_messages(*, base_topic: str, discovery_prefix: str
                                     ) -> list[tuple[str, dict[str, Any]]]:
     state_topic = f"{base_topic}/installation/state"
@@ -947,9 +938,6 @@ async def _enter_stale_mode(rt: DtuRuntime, client: aiomqtt.Client, *,
         inst_state = compute_installation_state(all_runtimes)
         await publish(client, f"{base_topic}/installation/state",
                       inst_state, retain=True)
-
-
-# --- Top-level orchestration -------------------------------------------------
 
 
 async def run() -> None:

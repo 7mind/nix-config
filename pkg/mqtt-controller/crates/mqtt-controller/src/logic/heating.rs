@@ -86,7 +86,6 @@ fn reassert_system_mode_heat_if_needed(
 }
 
 impl EventProcessor {
-    // ---- Event dispatch -------------------------------------------------------
 
     pub(super) fn handle_heating_event(&mut self, event: &Event) -> Vec<Effect> {
         // Clone once at the dispatch boundary so the per-handler bodies
@@ -137,7 +136,6 @@ impl EventProcessor {
         }
     }
 
-    // ---- Tick handler ---------------------------------------------------------
 
     pub(super) fn handle_heating_tick(&mut self) -> Vec<Effect> {
         self.heating_tick_gen += 1;
@@ -253,7 +251,6 @@ impl EventProcessor {
 
         actions
     }
-    // ---- Device mode enforcement ----------------------------------------------
 
     fn check_trv_mode(&self, device: &str) -> Vec<Effect> {
         let Some(device_idx) = self.topology.device_idx(device) else {
@@ -287,7 +284,6 @@ impl EventProcessor {
             .and_then(|hz| hz.wt_operating_mode.as_deref());
         reassert_manual_mode_if_needed(device, device_idx, mode, "wall thermostat")
     }
-    // ---- Pump tracking helpers ------------------------------------------------
 
     fn min_demand(&self) -> (u8, u8) {
         self.heating_config.as_ref()
@@ -335,7 +331,6 @@ impl EventProcessor {
     }
 }
 
-// ---- Tests -----------------------------------------------------------------
 
 #[cfg(test)]
 mod tests;

@@ -70,12 +70,10 @@ fi
 runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 declare -a candidates=()
 
-# Forwarded sockets from ssh -A, newest first.
 while IFS= read -r sock; do
     [[ -n "$sock" && -S "$sock" ]] && candidates+=("$sock")
 done < <(ls -t /tmp/ssh-*/agent.* "$HOME"/.ssh/agent/* 2>/dev/null || true)
 
-# Local agents (gcr from gnome-keyring / standalone ssh-agent).
 for sock in "$runtime_dir/gcr/ssh" "$runtime_dir/ssh-agent"; do
     [[ -S "$sock" ]] && candidates+=("$sock")
 done

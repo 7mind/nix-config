@@ -87,7 +87,6 @@ in
           zstyle ':zle:backward-kill-word-match' word-style whitespace
           bindkey "^W" backward-kill-word-match
 
-          # enable carapace
           setopt menucomplete
           zstyle ':completion:*' menu select
 
@@ -96,7 +95,6 @@ in
           }
         ''
         (lib.optionalString config.smind.hm.zsh.intellij-keybindings ''
-          # IntelliJ terminal Cmd+Left/Right
           bindkey "\e\eOD" beginning-of-line
           bindkey "\e\eOC" end-of-line
         '')

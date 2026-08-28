@@ -52,7 +52,6 @@ impl ResolvedTrigger {
 /// [`crate::config::bindings::Effect`] but with resolved indexes.
 #[derive(Debug, Clone)]
 pub enum ResolvedEffect {
-    // ---- Room-targeting effects ----
     SceneCycle { room: RoomIdx },
     SceneToggle { room: RoomIdx },
     SceneToggleCycle { room: RoomIdx },
@@ -61,12 +60,10 @@ pub enum ResolvedEffect {
     BrightnessMove { room: RoomIdx, rate: i16 },
     BrightnessStop { room: RoomIdx },
 
-    // ---- Device-targeting effects (always plugs) ----
     Toggle { plug: PlugIdx, confirm_off_seconds: Option<f64> },
     TurnOn { plug: PlugIdx },
     TurnOff { plug: PlugIdx },
 
-    // ---- Global ----
     TurnOffAllZones,
 }
 

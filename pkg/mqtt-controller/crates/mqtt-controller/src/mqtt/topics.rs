@@ -26,7 +26,6 @@ pub fn get_topic(friendly_name: &str) -> String {
     format!("zigbee2mqtt/{friendly_name}/get")
 }
 
-// ---- Z-Wave JS UI topics ------------------------------------------------
 
 /// Z-Wave binary switch state topic:
 /// `zwave/<name>/switch_binary/endpoint_0/currentValue`.

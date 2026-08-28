@@ -34,14 +34,11 @@
       } else { };
 
     environment.systemPackages = with pkgs; [
-      # file managers
       mc
       nnn
 
-      # editors
       nano
 
-      # networking
       wget
       curl
       rsync
@@ -64,7 +61,6 @@
 
       mosh
 
-      # disk tools
       file
       ncdu
       dust
@@ -74,14 +70,12 @@
       ripgrep
       fd
 
-      # monitoring
       htop
       btop
       bottom
       zenith
       bandwhich
 
-      # terminal
       tmux
       zellij
       lsix # show thumbnails in the terminal
@@ -90,33 +84,27 @@
       viddy
       tealdeer
 
-      # arc
       unar
       zip
       unzip
       p7zip
 
-      # system tools
       killall
       coreutils
       parallel
 
-      # pipe tools
       pv
       gnused
       sd
       mdcat
       bat
 
-      # security
       age
       gnupg
 
-      # benchmark
       stress
       hyperfine
     ] ++ (if cfg-meta.isLinux then with pkgs; [
-      # system tools
       radvd
     ] else [ ]);
   };

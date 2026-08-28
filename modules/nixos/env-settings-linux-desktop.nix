@@ -23,7 +23,6 @@ in
         mesa-demos # ex glxinfo
         clinfo
 
-        # X11 / WL diagnostics
         xlsclients
         wev
         evtest

@@ -44,7 +44,6 @@ pub(super) async fn refresh_state(
     z2m_ws_url: Option<&str>,
     zwave_ws_url: Option<&str>,
 ) -> Result<(), DaemonError> {
-    // --- z2m: bulk state via WebSocket /api (skipped if no URL) ---
     if let Some(ws_url) = z2m_ws_url {
         match z2m_seed::seed_z2m_state(
             processor,
@@ -80,7 +79,6 @@ pub(super) async fn refresh_state(
         tracing::info!("z2m seed skipped (no WebSocket URL configured)");
     }
 
-    // --- z-wave: bulk state via zwave-js-server WebSocket ---
     if !topology.zwave_node_id_to_name().is_empty() {
         match zwave_ws_url {
             Some(url) => match zwave_seed::seed_zwave_state(

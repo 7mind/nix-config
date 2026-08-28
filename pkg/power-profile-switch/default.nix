@@ -8,7 +8,6 @@ let
     builtins.readFile ../charger-detect/charger-detect.sh
     + builtins.readFile ./power-profile-set.sh + ''
 
-    # Call with configured arguments
     main "${profileOnAC}" "${profileOnBattery}" "${pkgs.power-profiles-daemon}/bin/powerprofilesctl" "${minWattsArg}"
   '');
 in

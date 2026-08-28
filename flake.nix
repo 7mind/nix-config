@@ -2,8 +2,6 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-    # nixpkgs.url = "github:LunNova/nixpkgs/push-nmzswnymunon";
-
     flake-utils.url = "github:numtide/flake-utils";
 
     lanzaboote.url = "github:nix-community/lanzaboote";
@@ -90,9 +88,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.home-manager.follows = "home-manager";
     };
-
-    # Optional: uncomment to make the Determinate Nix modules available.
-    # determinate.url = "https://flakehub.com/f/DeterminateSystems/determinate/*";
 
     kanata-switcher = {
       url = "github:7mind/kanata-switcher/persistent-daemon";
@@ -216,7 +211,6 @@
         }
       ) (self.nixosConfigurations // self.darwinConfigurations);
 
-      # Host metadata for setup script
       hostMeta =
         let
           allConfigs = self.nixosConfigurations // self.darwinConfigurations;

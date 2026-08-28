@@ -7,18 +7,15 @@
 
   config = lib.mkIf config.smind.hm.apps.prusa-3d-printing.enable {
     home.packages = with pkgs; [
-      # Slicers
       prusa-slicer
       orca-slicer
 
-      # CAD / Design
       freecad
       openscad-unstable
       blender
       solvespace
       dune3d
 
-      # Mesh repair and manipulation
       meshlab
     ];
   };

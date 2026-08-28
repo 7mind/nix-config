@@ -135,7 +135,6 @@ in
         MemoryDenyWriteExecute = false;  # SYCL JIT mmaps W+X
         SystemCallArchitectures = "native";
 
-        # Resource hygiene
         Restart = "on-failure";
         RestartSec = "10s";
         TimeoutStartSec = "10min";  # First boot JIT-compiles all SYCL kernels — slow

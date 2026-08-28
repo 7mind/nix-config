@@ -94,14 +94,7 @@ in
     '';
   };
 
-  # WiFi card was swapped from Qualcomm WCN785x (ath12k) to MediaTek MT7925 (mt7921e)
-  # Keeping disabled PCI runtime PM workaround for reference:
-  # services.udev.extraRules = lib.mkAfter ''
-  #   ACTION=="add|change", SUBSYSTEM=="pci", KERNEL=="0000:00:02.3", ATTR{power/control}="on"
-  # '';
-
   smind = {
-    # nix.nix-impl = "determinate"; # disabled globally: FlakeHub Cache 401 without auth
     age.enable = true;
     roles.desktop.generic-gnome = true;
     isLaptop = true;

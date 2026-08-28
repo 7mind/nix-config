@@ -96,7 +96,6 @@ impl EventProcessor {
         prev_sensor_was_occupied: bool,
         out: &mut Vec<Effect>,
     ) {
-        // Capture room metadata before borrowing mut state.
         let sun = self.sun_times();
         let (group_name, max_lux, cooldown_ms, off_transition, scenes_for_now, motion_mode) = {
             let Some(room) = self.topology.room_by_name(room_name) else {
@@ -249,10 +248,6 @@ impl EventProcessor {
         is_new_session_event: bool,
         out: &mut Vec<Effect>,
     ) {
-        // Common suppressors that apply to every mode that DOES something
-        // on motion-on. on-off and on-only suppress the light-up command;
-        // off-only suppresses the ownership claim so a bright room or the
-        // after-off cooldown window cannot silently arm a later auto-off.
         if let (Some(max), Some(actual)) = (max_lux, illuminance)
             && actual >= max
         {
@@ -299,10 +294,6 @@ impl EventProcessor {
             return;
         }
 
-        // off-only: don't publish anything, just claim motion ownership
-        // so the later motion-off is authorised. User presses in this
-        // room preserve the claim (see `resolve_zone_owner`).
-        //
         // Target healing: we adopt a target matching the observed actual
         // state when the target is either:
         //   * Unset (first claim on a fresh zone), or
@@ -356,7 +347,6 @@ impl EventProcessor {
             return;
         }
 
-        // on-off / on-only: lights-already-on short-circuits scene_recall.
         let zone = self.world.light_zone(room_name);
         if zone.is_on() {
             tracing::info!(
@@ -369,9 +359,6 @@ impl EventProcessor {
         let Some(&first) = scenes_for_now.first() else {
             return;
         };
-        // on-only skips motion ownership so subsequent user presses are
-        // plain user-owned; on-off claims motion ownership so motion-off
-        // is authorised to run later.
         let owner = match motion_mode {
             MotionMode::OnOff => Owner::Motion,
             MotionMode::OnOnly => Owner::User,
@@ -397,7 +384,6 @@ impl EventProcessor {
             owner,
             ts,
         );
-        // Don't touch last_press_at -- this isn't a button press.
         self.propagate_to_descendants(room_name, true, ts);
     }
 
@@ -413,7 +399,6 @@ impl EventProcessor {
         group_name: &str,
         out: &mut Vec<Effect>,
     ) {
-        // on-only: motion never drives off-transitions.
         if motion_mode == MotionMode::OnOnly {
             tracing::debug!(
                 sensor,
@@ -423,10 +408,6 @@ impl EventProcessor {
             return;
         }
 
-        // motion-off gates:
-        //   - we own the lights (motion turned them on, or off-only claim)
-        //   - all other sensors in this room are also inactive
-        //   - lights are physically still on
         let zone = self.world.light_zone(room_name);
         if !zone.is_motion_owned() {
             tracing::info!(
@@ -490,7 +471,6 @@ impl EventProcessor {
                 room = room_name,
                 "off-only: vacant with unknown actual → publishing state_off defensively (lights may still be on)"
             );
-            // Fall through to the state_off publish below.
         }
 
         tracing::info!(

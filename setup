@@ -2,7 +2,6 @@
 
 set -e
 
-# Master identity pubkeys for each group
 declare -A group_pubkeys
 
 # TPM-protected identity paths (can be overridden in private/setup-env)
@@ -20,7 +19,6 @@ THISHOST="$(hostname -s)"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOTS=/nix/var/nix/gcroots/my-builds
 
-# Source private environment if it exists
 [[ -f "$SCRIPT_DIR/private/setup-env" ]] && source "$SCRIPT_DIR/private/setup-env"
 
 HOSTS=()
@@ -447,9 +445,6 @@ decrypt_tpm_key() {
 }
 
 get_master_identity() {
-    # Returns path to the master identity file
-    # Tries TPM first (Linux only), then falls back to password-protected key
-
     AGE_DECRYPTED_KEY="$AGE_RUNTIME_KEY"
     trap 'rm -f "$AGE_DECRYPTED_KEY"' EXIT
 
@@ -459,7 +454,6 @@ get_master_identity() {
         fi
     fi
 
-    # Fallback (all platforms): password-protected key
     if decrypt_password_key; then
         return 0
     fi
@@ -482,7 +476,6 @@ do_rekey() {
         echo "==> Rekeying secrets for: ${HOSTS[*]}"
         add_all
 
-        # Decrypt master key to the path expected by Nix config
         get_master_identity >/dev/null || exit 1
 
         local system
@@ -602,7 +595,6 @@ do_switch() {
         fqn=$(get_host_attr "$host" "fqn")
         closure=$(readlink -f "${ROOTS}/${host}")
 
-        # null fqn means local deployment
         [[ "$fqn" == "null" || -z "$fqn" ]] && fqn=""
 
         # --host-override HOST=ADDR wins over the configured FQDN for the

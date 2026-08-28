@@ -3,11 +3,6 @@
 {
   nixpkgs.overlays = [
     (final: prev: {
-      # NOTE: claude-code and codex were vendored here; they now live in the cq
-      # flake (inputs.cq.packages.<system>.{claude-code,codex}) and are consumed
-      # directly by inputs.cq.homeManagerModules.dev-llm. Nothing else in this
-      # config references pkgs.{claude-code,codex}, so no override remains here.
-
       # ripgrep's `misc::compressed_{brotli,lz4,zstd}` integration tests fail
       # with exit 2 / empty stderr when an aarch64 build runs under qemu-user
       # binfmt on an x86_64 remote builder (nix sees buildPlatform ==

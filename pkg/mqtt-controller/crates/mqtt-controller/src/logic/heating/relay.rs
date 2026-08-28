@@ -59,7 +59,6 @@ impl EventProcessor {
             })
             .collect();
 
-        // --- Phase 0: steady-state target seed ---
         //
         // A zone whose demand matches its relay state needs no command,
         // so Phases 1-3 never touch its target — it stays `Unset`. That
@@ -104,7 +103,6 @@ impl EventProcessor {
             })
             .collect();
 
-        // --- Phase 1: ON requests ---
         for d in &decisions {
             if d.has_demand && d.target != Some(HeatingZoneTarget::Heating) {
                 let allowed = if self.is_pump_running() {
@@ -128,7 +126,6 @@ impl EventProcessor {
             }
         }
 
-        // --- Phase 2: stale-ON cancellations ---
         for d in &decisions {
             if !d.has_demand && !d.relay_on
                 && d.target == Some(HeatingZoneTarget::Heating)
@@ -149,7 +146,6 @@ impl EventProcessor {
             }
         }
 
-        // --- Phase 3: confirmed-ON relay OFF requests ---
         let want_off: Vec<&ZoneDecision> = decisions.iter()
             .filter(|d| {
                 !d.has_demand

@@ -194,7 +194,6 @@ impl EventProcessor {
         let within_window = elapsed_since_last.is_some_and(|d| d < cycle_window);
 
         if !is_on {
-            // Branch 1: fresh on -> first scene.
             let first = scenes_for_now[0];
             tracing::info!(
                 room = room_name,
@@ -213,7 +212,6 @@ impl EventProcessor {
             self.propagate_to_descendants(room_name, true, ts);
             vec![effect]
         } else if within_window {
-            // Branch 2: cycle to next scene mod N.
             let n = scenes_for_now.len();
             let next_idx = (prev_idx + 1) % n;
             let next_scene = scenes_for_now[next_idx];
@@ -240,7 +238,6 @@ impl EventProcessor {
             self.propagate_to_descendants(room_name, true, ts);
             vec![effect]
         } else {
-            // Branch 3: window expired -> toggle off.
             let elapsed_ms = elapsed_since_last
                 .map(|d| d.as_millis() as i64)
                 .unwrap_or(-1);
@@ -338,7 +335,6 @@ impl EventProcessor {
         }]
     }
 
-    // ----- shared helpers ---------------------------------------------------
 
     pub(super) fn publish_off(
         &mut self,
@@ -428,8 +424,6 @@ impl EventProcessor {
                 "group state echo → off→on transition (leaving user-owned)"
             );
         } else {
-            // Off transition: reset zone to clean state.
-            //
             // Special case for off-only rooms whose occupancy session
             // is still live: preserve `Owner::Motion` instead of wiping
             // to `Owner::System`. Without this, a user-driven off

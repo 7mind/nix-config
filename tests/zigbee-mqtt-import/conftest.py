@@ -32,8 +32,8 @@ ZIGBEE_MQTT_IMPORT_DIR = REPO_ROOT / "pkg/zigbee-mqtt-import"
 sys.path.insert(0, str(ZIGBEE_MQTT_IMPORT_DIR))
 
 
-# ---------- mosquitto (kept independent of the bento-rules / hue-setup
-# conftests so the three test directories don't depend on each other) ----------
+# Kept independent of the bento-rules and hue-setup conftests so the three
+# test directories do not depend on one another.
 
 
 def _free_port() -> int:

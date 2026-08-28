@@ -12,9 +12,6 @@ use std::time::Duration;
 use common::{TestBroker, TestClient};
 use mqtt_controller::time::FakeClock;
 
-// ---------------------------------------------------------------------------
-// Setup helpers
-// ---------------------------------------------------------------------------
 
 /// Spin up a broker, test client, and daemon using the kitchen config
 /// (no motion sensors). Returns the broker, client, and shutdown handle.
@@ -108,9 +105,6 @@ async fn wait_for_count(client: &TestClient, topic: &str, count: usize) {
         .await;
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 /// Test that TASS target phase transitions to Confirmed after z2m echo.
 ///

@@ -98,7 +98,6 @@ fn apply_actual_op(actual: &mut TassActual<u8>, op: &ActualOp, ts: Instant) {
     }
 }
 
-// ---- Target invariants ----
 
 fn assert_target_invariants(target: &TassTarget<u8>) {
     match target.phase() {
@@ -116,7 +115,6 @@ fn assert_target_invariants(target: &TassTarget<u8>) {
     assert_eq!(target.is_unset(), target.phase() == TargetPhase::Unset);
 }
 
-// ---- Actual invariants ----
 
 fn assert_actual_invariants(actual: &TassActual<u8>) {
     match actual.freshness() {

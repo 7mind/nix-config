@@ -1,8 +1,4 @@
-# Thin consumer wrapper around the portable LLM coding-agent harness
-# (inputs.cq.homeManagerModules.dev-llm, see 7mind/cq nix/hm/dev-llm.nix). Imports
-# that module and wires THIS host's facts (GPU flags, rootless-Podman socket,
-# ollama models dir) from the NixOS system config (outerConfig), which the
-# portable module cannot reference.
+# Supplies host-only facts that the portable cq module cannot access.
 { config, lib, pkgs, cfg-meta, outerConfig, inputs, ... }:
 let
   cfg = config.smind.hm.dev.llm;
@@ -14,8 +10,6 @@ let
   rootlessPodmanSocketPathValue = outerConfig.smind.containers.docker.rootless.llmSocketPath or null;
   rootlessPodmanSocketUriValue = outerConfig.smind.containers.docker.rootless.llmSocketUri or null;
 
-  # This host's detected GPU vendor(s). cq no longer builds GPU passthrough in,
-  # so the binds + availability note are wired below from these flags.
   gpu = {
     nvidia = outerConfig.smind.hw.nvidia.enable or false;
     amd = outerConfig.smind.hw.amd.gpu.enable or false;
@@ -23,8 +17,6 @@ let
   };
   gpuEnabled = gpu.nvidia || gpu.amd || gpu.intel;
 
-  # Host ollama model store, ro-bound into the sandbox when ollama runs here
-  # (cq dropped the dedicated ollamaModelsDir option — it was only a ro bind).
   ollamaModelsDir =
     if (outerConfig.services.ollama.enable or false)
     then outerConfig.services.ollama.modelsDir
@@ -87,8 +79,6 @@ in
         "/dev/nvidia-caps"
       ]);
 
-    # Read-only binds: non-device GPU bits + the host ollama model store.
-    # Merges with any per-host extraReadOnlyPaths; missing paths skipped.
     smind.hm.dev.llm.yolo.extraReadOnlyPaths =
       lib.optionals gpuEnabled [ "/run/opengl-driver" "/sys" ]
       ++ lib.optional (ollamaModelsDir != null) ollamaModelsDir;

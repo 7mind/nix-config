@@ -36,7 +36,6 @@ pub struct PendingPress {
 /// The complete state of all TASS entities plus transient event-processing state.
 #[derive(Debug, Clone)]
 pub struct WorldState {
-    // --- TASS entities ---
     pub light_zones: BTreeMap<String, LightZoneEntity>,
     pub lights: BTreeMap<String, LightEntity>,
     pub plugs: BTreeMap<String, PlugEntity>,
@@ -44,7 +43,6 @@ pub struct WorldState {
     pub heating_zones: BTreeMap<String, HeatingZoneEntity>,
     pub trvs: BTreeMap<String, TrvEntity>,
 
-    // --- Transient event-processing state (not TASS entities) ---
 
     /// Pending deferred presses, keyed by (device, button).
     pub pending_presses: BTreeMap<(String, String), PendingPress>,

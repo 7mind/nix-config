@@ -116,11 +116,9 @@ else
     echo "==> TPM identity exists: $TPM_IDENTITY"
 fi
 
-# Extract public key from TPM identity
-# Format: "# Recipient: age1tpm1..."
+# Generated identities embed `# Recipient: age1tpm1...`; older formats need --convert.
 TPM_PUBKEY=$(grep -o 'age1tpm1[a-z0-9]*' "$TPM_IDENTITY" | head -1)
 if [[ -z "$TPM_PUBKEY" ]]; then
-    # Try converting identity to recipient
     TPM_PUBKEY=$(age-plugin-tpm --convert < "$TPM_IDENTITY" 2>/dev/null | grep -o 'age1[a-z0-9]*' | head -1)
 fi
 if [[ -z "$TPM_PUBKEY" ]]; then

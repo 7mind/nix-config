@@ -13,9 +13,6 @@ use serde_json::json;
 use crate::entities::heating_zone::HeatingZoneEntity;
 use crate::entities::trv::TrvEntity;
 
-// ---------------------------------------------------------------------------
-// TRV derived state
-// ---------------------------------------------------------------------------
 
 /// Controller-derived state for a TRV, exposed to Home Assistant.
 /// Priority-ordered: the first matching condition wins.
@@ -66,9 +63,6 @@ impl fmt::Display for TrvDerivedState {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Zone derived state
-// ---------------------------------------------------------------------------
 
 /// Controller-derived state for a heating zone (wall thermostat relay).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -109,9 +103,6 @@ impl fmt::Display for ZoneDerivedState {
     }
 }
 
-// ---------------------------------------------------------------------------
-// TASS-based state derivation
-// ---------------------------------------------------------------------------
 
 /// Derive TRV state from a TASS TrvEntity.
 pub fn derive_trv_state_from_tass(
@@ -199,9 +190,6 @@ pub fn derive_zone_state_from_tass(
     ZoneDerivedState::Off
 }
 
-// ---------------------------------------------------------------------------
-// HA discovery config and state update builders
-// ---------------------------------------------------------------------------
 
 fn sanitize_name(name: &str) -> String {
     name.replace('-', "_")
@@ -288,9 +276,6 @@ pub fn zone_discovery_publish(zone_name: &str) -> DiscoveryPublish {
     discovery_publish("zone", "Zone", zone_name, ZoneDerivedState::ALL_OPTIONS)
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 #[path = "ha_discovery_tests.rs"]

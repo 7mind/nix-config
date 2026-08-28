@@ -55,8 +55,6 @@ in
 
   config = lib.mkIf config.smind.hm.ghostty.enable {
     xdg.configFile."ghostty/themes/7mind".text = ''
-      # 7mind
-      #
       palette = 0=#000000
       palette = 1=#fe5b0e
       palette = 2=#00a77d
@@ -84,8 +82,6 @@ in
       selection-foreground = #0f2247
     '';
     xdg.configFile."ghostty/themes/7mind+".text = ''
-      # 7mind+
-      #
       palette = 0=#000000
       palette = 1=#fe5b0e
       palette = 2=#19ab00
@@ -113,8 +109,6 @@ in
       selection-foreground = #0f2247
     '';
     xdg.configFile."ghostty/themes/7mind-balanced".text = ''
-      # 7mind-balanced
-      #
       palette = 0=#000000
       palette = 1=#fea095
       palette = 2=#00aa4b
@@ -145,8 +139,6 @@ in
 
 
     xdg.configFile."ghostty/themes/kitty".text = ''
-      # kitty default
-      #
       palette = 0=#000000
       palette = 1=#cc0403
       palette = 2=#19cb00

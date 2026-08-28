@@ -18,13 +18,13 @@
 
     smind.desktop.gnome.auto-suspend.timeoutAC = lib.mkOption {
       type = lib.types.int;
-      default = 7200;
+      default = 2 * 60 * 60;
       description = "Idle timeout in seconds before action on AC power";
     };
 
     smind.desktop.gnome.auto-suspend.timeoutBattery = lib.mkOption {
       type = lib.types.int;
-      default = 900;
+      default = 15 * 60;
       description = "Idle timeout in seconds before action on battery";
     };
 
@@ -301,7 +301,6 @@
       # Dark theme is handled by color-scheme = "prefer-dark" in dconf instead
       # See: https://discourse.gnome.org/t/why-gtk-theme-env-breaks-adwaita-applications/16016
 
-      #QT_QPA_PLATFORMTHEME = "gnome"; # this breaks Telegram systray icon
       QT_QPA_PLATFORMTHEME = "qgnomeplatform"; # qt.platformTheme is broken, this fixes it
 
       GNOME_SHELL_SLOWDOWN_FACTOR = "0.4";
@@ -329,8 +328,6 @@
     qt =
       {
         enable = true;
-        #platformTheme = "qgnomeplatform"; # cannot be assigned, nixpkgs bug
-        #platformTheme = "gnome"; # this breaks Telegram systray icon
         platformTheme = null;
         style = "adwaita-dark";
       };

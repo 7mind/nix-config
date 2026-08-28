@@ -58,17 +58,14 @@
       programs.firejail.enable = true;
 
       environment.systemPackages = with pkgs; [
-        # terminal support
         ghostty-terminfo
         ncurses # for generic terminfo
 
-        # nix tools
         nixpkgs-fmt
         nix-converter
         nix-ld
         nixos-firewall-tool
 
-        # disk tools
         gptfdisk
         parted
         nvme-cli
@@ -78,33 +75,27 @@
         squashfsTools
         squashfuse
 
-        # efi tools
         efibootmgr
 
-        # system tools
         pstree
         inotify-tools
         lsof
         reptyr
 
-        # hw tools
         pciutils
         usbutils
       ] ++ lib.optional config.smind.environment.linux.fwupd.enable fwupd ++ [
         lm_sensors
 
-        # networking
         bridge-utils
         ethtool
         cifs-utils
         inetutils # telnet, etc
 
-        # security
         spectre-meltdown-checker
         pax-utils
         sbctl
 
-        # system info
         macchina
         hyfetch
         inxi
@@ -112,17 +103,13 @@
         hwinfo
         dmidecode
 
-        # monitoring
-        #dstat # unmaintained, dead
         dool
         iotop
         powertop
         powerstat
 
-        # benchmark
         stress
 
-        # mail
         mailutils
       ];
 

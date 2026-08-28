@@ -9,15 +9,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# TPM-protected identity paths (can be overridden in private/setup-env)
 AGE_TPM_IDENTITY="${AGE_TPM_IDENTITY:-${HOME}/.age/tpm-identity.txt}"
 AGE_MASTER_KEY_TPM="${AGE_MASTER_KEY_TPM:-${HOME}/.age/master-key.age}"
 
-# Both paths that the merged ageWrapper expects
 KEY_LINUX="/dev/shm/age-master-key"
 KEY_DARWIN="/tmp/age-master-key"
 
-# Source private environment if it exists
 [[ -f "$SCRIPT_DIR/private/setup-env" ]] && source "$SCRIPT_DIR/private/setup-env"
 
 CREATED_KEYS=()
@@ -68,10 +65,8 @@ place_key() {
         echo "    $path already present, reusing"
     else
         if [[ ${#CREATED_KEYS[@]} -eq 0 ]]; then
-            # First key — decrypt from source
             decrypt_master_key "$path" || exit 1
         else
-            # Copy from the first key we decrypted
             cp "${CREATED_KEYS[0]}" "$path"
             chmod 600 "$path"
         fi

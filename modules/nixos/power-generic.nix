@@ -53,7 +53,6 @@ in
   };
 
   config = lib.mkMerge [
-    # Base power management
     (lib.mkIf cfg.enable {
       boot.extraModprobeConfig = ''
         options snd_hda_intel power_save=1
@@ -78,16 +77,12 @@ in
       ];
     })
 
-    # AMD-specific power management
     (lib.mkIf cfg.amd.enable {
       boot.kernelParams = [
         "amd_pstate=active"
       ];
-
-      # environment.systemPackages = [ pkgs.cpupower-gui ];
     })
 
-    # Suspend/hibernate systemd targets
     (lib.mkIf (cfg.suspend.enable || cfg.hibernate.enable) {
       systemd.targets.sleep.enable = true;
     })
@@ -102,7 +97,6 @@ in
       systemd.sleep.settings.Sleep.HibernateDelaySec = cfg.hibernateDelaySec;
     })
 
-    # Power button behavior
     (lib.mkIf (cfg.enable && cfg.powerButton != null) {
       services.logind.settings.Login.HandlePowerKey = cfg.powerButton;
 

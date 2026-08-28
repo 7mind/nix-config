@@ -31,29 +31,14 @@ GGUF_DIR="$(dirname "$0")/../debug/hf-ggufs"
 # 2026-05-19 via /api/models/<repo>/tree/main — all are single-file
 # GGUFs, public, no auth required. Total ≈ 50 GB if all fresh.
 #
-# Architectures targeted (per llama.cpp@ad09224 src/llama-arch.cpp):
-#   qwen2          — long-standing dense Transformer; control
-#   qwen3          — dense, post-Qwen2; ad09224's Qwen3-Next adds SSM_SCAN
-#                    but base Qwen3 dense is plain GQA Transformer
-#   qwen35         — qwen3.5 family dense; rope.dimension_sections
-#                    was the ollama-format mismatch in earlier rev
-#   gemma3         — Google Gemma 3; tied embeddings
-#   glm4           — THUDM GLM-4 dense Chat (not glm4moe — different arch)
-#   gpt-oss        — OpenAI 20B MoE; MXFP4 + bf16 norms
-#   llama          — control
-#   ministral      — Mistral's 8B dense; uses sliding-window attn
 declare -a MODELS=(
-  # qwen2 arch — control case
   "qwen2.5_7b_q4|bartowski/Qwen2.5-7B-Instruct-GGUF|Qwen2.5-7B-Instruct-Q4_K_M.gguf"
-  # qwen3 arch dense, small/fast smoke (1.83 GB Q8_0)
   "qwen3_1.7b_q8|Qwen/Qwen3-1.7B-GGUF|Qwen3-1.7B-Q8_0.gguf"
-  # qwen3 arch dense larger
   "qwen3_8b_q4|unsloth/Qwen3-8B-GGUF|Qwen3-8B-Q4_K_M.gguf"
   # qwen35 arch — the one ollama-store version failed with
   # `rope.dimension_sections has wrong array length`. HF unsloth
   # quant should have the upstream-expected metadata layout.
   "qwen3.5_9b_q4|unsloth/Qwen3.5-9B-GGUF|Qwen3.5-9B-Q4_K_M.gguf"
-  # gemma3 arch
   "gemma3_4b_q4|ggml-org/gemma-3-4b-it-GGUF|gemma-3-4b-it-Q4_K_M.gguf"
   # glm4 arch (THUDM GLM-4-9B-Chat). The original THUDM repo is gated;
   # bartowski's quant is public.
@@ -62,9 +47,7 @@ declare -a MODELS=(
   # Exercises the bf16 IMF-bypass postPatch in pkg/llama-cpp-sycl
   # AND the mxfp4 dequant memcpy fix.
   "gpt-oss_20b_mxfp4|ggml-org/gpt-oss-20b-GGUF|gpt-oss-20b-mxfp4.gguf"
-  # llama arch — control
   "llama3.1_8b_q4|bartowski/Meta-Llama-3.1-8B-Instruct-GGUF|Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf"
-  # mistral arch (Ministral, Mistral's 8B with sliding-window attn)
   "ministral_8b_q4|bartowski/Ministral-8B-Instruct-2410-GGUF|Ministral-8B-Instruct-2410-Q4_K_M.gguf"
 )
 PROMPT="Reply with one short sentence: what is the capital of France?"
@@ -86,17 +69,10 @@ L0_ENV=(
   LD_LIBRARY_PATH=/run/opengl-driver/lib
 )
 
-# ============================================================
-# Setup
-# ============================================================
-
 bat --paging=never "$0" 2>/dev/null || cat "$0"
 read -r -p "Press Enter to run, Ctrl+C to abort..."
 exec > >(tee "$OUT") 2>&1
 
-# Bumped llama-cpp-sycl is in the system closure already
-# (`nixos-rebuild switch`'d in via /run/current-system/sw/bin). Use
-# the system-installed binaries; no `nix build` needed.
 LLAMA_CLI=$(command -v llama-cli)
 LLAMA_BENCH=$(command -v llama-bench)
 echo "llama-cli   : $LLAMA_CLI"
@@ -114,10 +90,6 @@ ls "$LCS_DIR"/libggml-sycl.so 2>&1 | head -1
 echo
 echo "=== L0 device discovery ==="
 "${L0_ENV[@]}" "$LLAMA_CLI" --list-devices 2>&1 | head -20
-
-# ============================================================
-# HF download helper
-# ============================================================
 
 # Download <repo>/<filename> to <dst>. Resumes if partial. Returns 0
 # on success, non-zero otherwise.
@@ -154,10 +126,6 @@ download_gguf () {
   return 0
 }
 
-# ============================================================
-# Test runner
-# ============================================================
-
 # Run llama-bench + llama-cli --single-turn for one model. Captures
 # pp/tg throughput and the first few generated words.
 run_one () {
@@ -191,7 +159,6 @@ run_one () {
   echo "cli exit=$cli_rc"
 
   cli_tg=$(echo "$cli_out" | grep -oE 'Generation:[^|]*t/s' | grep -oE '[0-9.]+' | head -1)
-  # Pull a coherence snippet — first 20 words after the prompt line.
   snippet=$(echo "$cli_out" \
     | sed -n "/$(echo "$PROMPT" | head -c 40)/,/Exiting/p" \
     | tr -s ' \n\t' ' ' \
@@ -201,10 +168,6 @@ run_one () {
   printf '%s\t%s\t%s\t%d\t%d\t%s\t%s\n' \
     "$model" "${pp:-?}" "${tg:-?}" "$bench_rc" "$cli_rc" "${cli_tg:-?}" "${snippet:-?}" >> "$TSV"
 }
-
-# ============================================================
-# Main: download + test loop
-# ============================================================
 
 echo
 echo "============================================================"
@@ -238,10 +201,6 @@ for row in "${MODELS[@]}"; do
   fi
   run_one "$label" "$gguf"
 done
-
-# ============================================================
-# Summary
-# ============================================================
 
 echo
 echo "============================================================"

@@ -6,11 +6,6 @@
 # this package's `libggml-sycl.so` into ollama-sycl is only ABI-safe
 # while both share that ggml version.
 #
-# Roles:
-#   - `llama-cli` / `llama-bench` — diagnostic/benchmark binaries
-#   - `llama-server` — OpenAI-compatible endpoint, wired as a NixOS
-#     systemd service via `modules/nixos/llama-server.nix`
-#
 # Build: nix build .?submodules=1#nixosConfigurations.vm.pkgs.llama-cpp-sycl
 # Run  : result/bin/llama-cli --list-devices
 {
@@ -18,7 +13,7 @@
   stdenv,
   fetchFromGitHub,
   cmake,
-  makeWrapper,           # wrapProgram for the LD_LIBRARY_PATH suffix below
+  makeWrapper,
   pkg-config,
   autoAddDriverRunpath,  # adds /run/opengl-driver/lib to RPATH of ELFs that
                          # use libGL / libze / libOpenCL — without this, bare
@@ -31,10 +26,10 @@
   level-zero,
   ocl-icd,
   curl,
-  mkl,        # Intel Math Kernel Library — ggml-sycl hard-requires it for BLAS
-  oneDNN,     # Intel Deep Neural Network Library — soft optional, used if present
-  tbb,        # Threading Building Blocks — MKL's default threading backend
-  perl,       # multi-line postPatch substitution (substituteInPlace can't)
+  mkl,
+  oneDNN,
+  tbb,
+  perl,
 }:
 
 # Use the plain stdenv (not intel-llvm.stdenv): intel-llvm's stdenv
@@ -46,10 +41,6 @@
 # nativeBuildInput and pointing CC/CXX at it explicitly in preConfigure.
 stdenv.mkDerivation (finalAttrs: {
   pname = "llama-cpp-sycl";
-  # Bumped b10242 / 96278e39 → b10434 / 7e4c0a96: the exact llama.cpp
-  # tag nixpkgs ollama 0.32.14 vendors via FetchContent (identical src
-  # hash), so ollama-sycl can plant this package's libggml-sycl.so
-  # against an ABI-matched ggml-base.
   version = "b10434";
 
   src = fetchFromGitHub {
@@ -59,16 +50,8 @@ stdenv.mkDerivation (finalAttrs: {
     hash = "sha256-Sz0kW1q91YzdrKbZUqMbFJ0DLZrzARSGheUrtCKcoQo=";
   };
 
-  # Hal9000AIML/arc-pro-b70-ubuntu-gpu-speedup-bugfixes cherry-picks are
-  # all upstream as of b9509 (and remain so at b10434). The only
-  # out-of-tree fixes left are the intel-llvm@2025-11-14 IMF/IGC
-  # environment workarounds in postPatch below (not upstreamable: they
-  # target our open-source DPC++ snapshot, not llama.cpp itself).
-  # Patch files retained under ./patches/ for reference.
   patches = [ ];
 
-  # intel-llvm in nativeBuildInputs so its bin/clang(++) is on $PATH and
-  # the (now-fixed) merged output is in the build closure.
   nativeBuildInputs = [ cmake pkg-config autoAddDriverRunpath intel-llvm makeWrapper perl ];
 
   # Override CC/CXX explicitly. Two layers here:
@@ -201,7 +184,6 @@ stdenv.mkDerivation (finalAttrs: {
     (lib.cmakeFeature "MKL_THREADING"      "intel_thread")
     (lib.cmakeFeature "MKL_SYCL_THREADING" "intel_thread")
 
-    # Core SYCL backend
     (lib.cmakeBool "GGML_SYCL"          true)
     # Targeting Intel GPUs specifically — also valid: NVIDIA, AMD, ALL
     (lib.cmakeFeature "GGML_SYCL_TARGET" "INTEL")

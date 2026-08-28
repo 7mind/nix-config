@@ -45,13 +45,11 @@
   autoPatchelfHook,
   addDriverRunpath,
 
-  # Bundled-in-wheel native deps that autoPatchelfHook resolves directly.
   intel-compute-runtime,
   level-zero,
   ocl-icd,
   zlib,
 
-  # Python deps — same set as stock python3Packages.onnxruntime.
   coloredlogs,
   numpy,
   packaging,
@@ -94,7 +92,7 @@ buildPythonPackage {
 
   buildInputs = [
     stdenv.cc.cc.lib
-    zlib                  # libz.so.1 — needed by libonnxruntime.so + the providers + pybind11 .so
+    zlib
     intel-compute-runtime
     level-zero
     ocl-icd
@@ -155,7 +153,6 @@ buildPythonPackage {
   meta = {
     description = "ONNX Runtime with the OpenVINO Execution Provider (Intel prebuilt wheel)";
     homepage = "https://pypi.org/project/onnxruntime-openvino/";
-    # MIT (onnxruntime) + Apache-2.0 (bundled OpenVINO runtime).
     license = with lib.licenses; [ mit asl20 ];
     sourceProvenance = with lib.sourceTypes; [ binaryNativeCode ];
     platforms = [ "x86_64-linux" ];

@@ -324,7 +324,6 @@ impl EventProcessor {
             .max()
     }
 
-    // ----- private helpers ---------------------------------------------------
 
     /// Arm kill switch rules for a plug. Used in two contexts:
     /// off→on runtime transitions and the daemon's startup pre-arm

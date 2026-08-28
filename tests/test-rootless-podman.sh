@@ -21,11 +21,9 @@ pass() { printf '  \033[32mPASS\033[0m: %s\n' "$1"; PASS=$((PASS + 1)); }
 fail() { printf '  \033[31mFAIL\033[0m: %s\n' "$1"; FAIL=$((FAIL + 1)); }
 section() { printf '\n=== %s ===\n' "$1"; }
 
-# Resolve the invoking (real) user even when this script is run via sudo.
 INVOKER="${SUDO_USER:-$USER}"
 INVOKER_HOME="$(getent passwd "$INVOKER" | cut -d: -f6 || true)"
 
-# ─── Service user sanity ──────────────────────────────────────────────────────
 section "Service user identity"
 
 if id "$SVC_USER" >/dev/null 2>&1; then
@@ -35,7 +33,6 @@ else
     exit 1
 fi
 
-# Must NOT be a member of any privileged or interactive group.
 forbidden_groups=(wheel sudo root adm disk video kvm libvirtd networkmanager docker render input audio)
 groups_list=" $(id -Gn "$SVC_USER") "
 for g in "${forbidden_groups[@]}"; do
@@ -46,7 +43,6 @@ for g in "${forbidden_groups[@]}"; do
     fi
 done
 
-# ─── Privilege escalation ─────────────────────────────────────────────────────
 section "podsvc cannot escalate"
 
 # Only look for "may run" — that phrase appears when sudo lists real entries.
@@ -58,7 +54,6 @@ else
     pass "$SVC_USER has no sudo entries"
 fi
 
-# ─── Filesystem read restrictions (direct, as podsvc-llm) ─────────────────────
 section "podsvc cannot read sensitive host paths"
 
 as_svc() { sudo -u "$SVC_USER" -- "$@"; }
@@ -103,7 +98,6 @@ if [[ -n "$INVOKER_HOME" && "$INVOKER" != "$SVC_USER" && -e "$INVOKER_HOME" ]]; 
     fi
 fi
 
-# ─── Socket sanity ────────────────────────────────────────────────────────────
 section "Podman socket"
 
 if [[ -S "$SOCKET" ]]; then
@@ -135,7 +129,6 @@ else
     fail "$(dirname "$SOCKET") mode is $dir_mode (expected 750)"
 fi
 
-# ─── DOCKER_HOST environment ──────────────────────────────────────────────────
 section "Environment variables"
 
 # Read DOCKER_HOST from a fresh login shell to be independent of the caller's env.
@@ -153,7 +146,6 @@ else
     fail "CONTAINER_HOST in login shell is '$env_container_host' (expected $DOCKER_HOST_URI)"
 fi
 
-# ─── Socket reachable from invoker ────────────────────────────────────────────
 section "docker CLI connectivity"
 
 export DOCKER_HOST="$DOCKER_HOST_URI"
@@ -189,7 +181,6 @@ else
     fail "docker info reports unexpected: '$remote_info'"
 fi
 
-# ─── Container bind-mount escape attempts ────────────────────────────────────
 # Two distinct failure modes can block a malicious bind-mount escape; we
 # assert on the specific one expected for each case rather than a loose
 # "exit non-zero OR no output" check:
@@ -219,7 +210,6 @@ if ! docker image inspect "$TEST_IMAGE" >/dev/null 2>&1; then
     }
 fi
 
-# Shared utility: extract "INNER_EXIT=N" (last occurrence) from output.
 extract_inner_exit() {
     printf '%s' "$1" | sed -n 's/.*INNER_EXIT=\([0-9]*\).*/\1/p' | tail -1
 }
@@ -275,7 +265,6 @@ assert_mount_refused() {
     pass "$label: mount refused by podman (docker=125, 'permission denied')"
 }
 
-# Runtime-denied reads: mount succeeds, inner read is blocked by UNIX perms.
 assert_runtime_read_denied "/etc/shadow" /etc/shadow /host_shadow "cat /host_shadow"
 assert_runtime_read_denied "/etc/sudoers" /etc/sudoers /host_sudoers "cat /host_sudoers"
 assert_runtime_read_denied "/root" /root /host_root "ls -A /host_root"
@@ -302,7 +291,6 @@ if [[ -n "$INVOKER_HOME" && "$INVOKER" != "$SVC_USER" ]]; then
     [[ -f "$INVOKER_HOME/.zsh_history" ]] && assert_mount_refused "$INVOKER/.zsh_history" "$INVOKER_HOME/.zsh_history" /host_zsh_history
 fi
 
-# ─── Container bind-mount write attempts ─────────────────────────────────────
 section "Container cannot write to sensitive host dirs via bind mount"
 
 # Assert: read-write bind mount succeeds, but a runtime write is denied by
@@ -353,7 +341,6 @@ if [[ -n "$INVOKER_HOME" && "$INVOKER" != "$SVC_USER" ]]; then
     assert_runtime_write_denied "$INVOKER \$HOME" "$INVOKER_HOME" /host_home
 fi
 
-# ─── Summary ──────────────────────────────────────────────────────────────────
 section "Summary"
 printf 'Passed: %d  Failed: %d\n' "$PASS" "$FAIL"
 [[ "$FAIL" -eq 0 ]]

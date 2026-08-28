@@ -29,7 +29,6 @@ if [[ ${#missing[@]} -gt 0 ]]; then
   exit 1
 fi
 
-# Read age pubkey from setup-env
 declare -A group_pubkeys
 source "$REPO_ROOT/private/setup-env"
 AGE_PUBKEY="${group_pubkeys[infra]}"
@@ -131,7 +130,6 @@ cmd_add_client() {
     exit 1
   fi
 
-  # Auto-allocate IP if not specified
   if [[ -z "$client_ip" ]]; then
     local used_ips candidate
     used_ips=$(jq -r '.peers[].ip' "$PEERS_FILE")

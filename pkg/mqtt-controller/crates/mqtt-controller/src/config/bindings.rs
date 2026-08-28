@@ -74,7 +74,6 @@ pub enum Trigger {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Effect {
-    // ---- Room-targeting effects ----
 
     /// Always cycle to the next scene in the active time slot.
     /// Wall switch on-button behavior: no cycle window, no toggle-off.
@@ -121,7 +120,6 @@ pub enum Effect {
         room: String,
     },
 
-    // ---- Device-targeting effects ----
 
     /// Toggle the target device: if ON → OFF, if OFF → ON.
     /// With `confirm_off_seconds`: turning OFF requires a double-tap

@@ -94,7 +94,6 @@
         "EasyRes" = 688211836;
         "Shareful" = 1522267256;
         # mas can't handle iPad apps https://github.com/mas-cli/mas/issues/321
-        # "UniFi Protect" = 1392492235; # https://apps.apple.com/us/app/unifi-protect/id1392492235
       };
     };
   };

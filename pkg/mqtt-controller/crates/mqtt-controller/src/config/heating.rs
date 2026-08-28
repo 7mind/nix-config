@@ -10,7 +10,6 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-// ---- Weekday ---------------------------------------------------------------
 
 /// Day of the week. Serializes as lowercase string for JSON readability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
@@ -52,7 +51,6 @@ impl std::fmt::Display for Weekday {
     }
 }
 
-// ---- Time range ------------------------------------------------------------
 
 /// A time range within a single day with an associated target temperature.
 /// `end` is exclusive. No midnight crossing: start must be strictly before
@@ -128,7 +126,6 @@ impl DayTimeRange {
     }
 }
 
-// ---- Temperature schedule --------------------------------------------------
 
 /// A named temperature schedule covering a full week. Each weekday has
 /// a list of non-overlapping time ranges that together cover [00:00, 24:00).
@@ -245,7 +242,6 @@ pub struct HeatingConfig {
     pub open_window: OpenWindowProtection,
 }
 
-// ---- Validation ------------------------------------------------------------
 
 #[derive(Debug, Error, PartialEq)]
 pub enum HeatingConfigError {
@@ -438,7 +434,6 @@ pub enum HeatingConfigError {
     },
 }
 
-// ---- Device option validation helpers --------------------------------------
 //
 // The bulk of validate_trv_options / validate_wall_thermostat_options is
 // the same shape: "for this option key, the value must be {choice from
@@ -794,7 +789,6 @@ impl HeatingConfig {
     }
 }
 
-// ---- Tests -----------------------------------------------------------------
 
 #[cfg(test)]
 #[path = "heating_tests.rs"]

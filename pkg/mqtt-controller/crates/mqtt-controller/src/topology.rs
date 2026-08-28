@@ -151,7 +151,6 @@ pub(in crate::topology) struct DeviceInfo {
 /// accessors.
 #[derive(Debug)]
 pub struct Topology {
-    // ---- Rooms ----------------------------------------------------------
     /// All resolved rooms in config order; index by [`RoomIdx`].
     pub(in crate::topology) rooms: Vec<ResolvedRoom>,
     /// `room.name` → [`RoomIdx`].
@@ -167,14 +166,12 @@ pub struct Topology {
     /// Used by [`Topology::room_has_rules`] to gate descendant propagation.
     pub(in crate::topology) room_has_bindings: Vec<bool>,
 
-    // ---- Devices --------------------------------------------------------
     /// Per-device metadata, indexed by [`DeviceIdx`]. Sorted by
     /// friendly_name so iteration order is deterministic.
     pub(in crate::topology) devices: Vec<DeviceInfo>,
     /// Friendly_name → [`DeviceIdx`]. Boundary translation only.
     pub(in crate::topology) device_by_name: BTreeMap<String, DeviceIdx>,
 
-    // ---- Device-kind subsets (each entry is a [`DeviceIdx`]) ------------
     /// All switch device indexes. Used for MQTT subscriptions.
     pub(in crate::topology) switch_devices: Vec<DeviceIdx>,
     /// All motion sensor device indexes.
@@ -192,7 +189,6 @@ pub struct Topology {
     /// Z-Wave node_id → plug device index. Used by the provisioner.
     pub(in crate::topology) zwave_node_id_to_device: BTreeMap<u16, DeviceIdx>,
 
-    // ---- Switch model details -------------------------------------------
     /// Switch model descriptors, keyed by model name. Stored so we can
     /// resolve raw z2m action strings to (button, gesture) pairs at
     /// parse time without needing the full Config.
@@ -206,7 +202,6 @@ pub struct Topology {
     /// activate the hardware double-tap suppression guard.
     pub(in crate::topology) hw_double_tap_buttons: BTreeSet<(DeviceIdx, String)>,
 
-    // ---- Bindings -------------------------------------------------------
     /// Validated bindings, in config order. Index by [`BindingIdx`].
     pub(in crate::topology) bindings: Vec<ResolvedBinding>,
     /// (device, button, gesture) → binding indexes. The runtime
@@ -217,18 +212,15 @@ pub struct Topology {
     /// PowerBelow binding indexes, keyed by plug device.
     pub(in crate::topology) power_below_index: BTreeMap<DeviceIdx, Vec<BindingIdx>>,
 
-    // ---- Motion routing -------------------------------------------------
     /// Motion sensor (device idx) → rooms it drives. Same shape as the
     /// old switch_index; production has each sensor in one room.
     pub(in crate::topology) motion_index: BTreeMap<DeviceIdx, Vec<RoomIdx>>,
 
-    // ---- Heating --------------------------------------------------------
     /// Validated heating config (if present). Stored for the controller.
     pub(in crate::topology) heating_config: Option<crate::config::HeatingConfig>,
 }
 
 impl Topology {
-    // ---- Rooms ----------------------------------------------------------
 
     /// All resolved rooms in config order.
     pub fn rooms(&self) -> impl Iterator<Item = &ResolvedRoom> {
@@ -308,7 +300,6 @@ impl Topology {
         self.rooms.iter().map(|r| r.group_name.as_str()).collect()
     }
 
-    // ---- Devices --------------------------------------------------------
 
     /// Look up a device's index by name.
     pub fn device_idx(&self, name: &str) -> Option<DeviceIdx> {
@@ -344,7 +335,6 @@ impl Topology {
         self.device_idx(name).and_then(|d| self.plug_idx(d))
     }
 
-    // ---- Switch device queries (by name, used at MQTT parse time) ------
 
     /// All switch device names from the catalog, in `DeviceIdx` order.
     /// Used for MQTT subscriptions to action topics.
@@ -363,7 +353,6 @@ impl Topology {
             .collect()
     }
 
-    // ---- Bindings -------------------------------------------------------
 
     /// All resolved bindings.
     pub fn bindings(&self) -> &[ResolvedBinding] {
@@ -435,7 +424,6 @@ impl Topology {
         Some((dev_idx, mapping.button.clone(), mapping.gesture))
     }
 
-    // ---- Plug accessors -------------------------------------------------
 
     /// All plug device friendly names.
     pub fn all_plug_names(&self) -> Vec<&str> {
@@ -503,7 +491,6 @@ impl Topology {
             .collect()
     }
 
-    // ---- TRV / wall thermostat -----------------------------------------
 
     /// All TRV device friendly names.
     pub fn all_trv_names(&self) -> Vec<&str> {
@@ -550,7 +537,6 @@ impl Topology {
             .unwrap_or(false)
     }
 
-    // ---- Heating --------------------------------------------------------
 
     /// The validated heating config, if present.
     pub fn heating_config(&self) -> Option<&crate::config::HeatingConfig> {

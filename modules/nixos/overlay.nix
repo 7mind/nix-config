@@ -50,10 +50,6 @@
 
         extract-initrd = pkgs.callPackage "${cfg-meta.paths.pkg}/extract-initrd/default.nix" { };
 
-        # llm-sandbox and reattach-llm moved to the cq flake (consumed by
-        # inputs.cq.homeManagerModules.dev-llm; the yolo wrapper builds
-        # llm-sandbox internally).
-
         netns-run = pkgs.callPackage "${cfg-meta.paths.pkg}/netns-run/default.nix" { };
 
         music-meta-fix = pkgs.callPackage "${cfg-meta.paths.pkg}/music-meta-fix/default.nix" { };

@@ -7,9 +7,6 @@
 
 use serde::{Deserialize, Serialize};
 
-// ---------------------------------------------------------------------------
-// Snapshots (server → client)
-// ---------------------------------------------------------------------------
 
 /// TASS target lifecycle metadata for the frontend. Typed value lives
 /// on each entity's snapshot (e.g. `RoomSnapshot::target_value`), this
@@ -38,11 +35,6 @@ pub struct TassActualInfo {
     pub since_ago_ms: Option<u64>,
 }
 
-// ---------------------------------------------------------------------------
-// Typed TASS values, one per entity kind. These are the structured
-// counterparts of the old debug-formatted `value: String` on
-// TassTargetInfo/TassActualInfo. The frontend renders them per-kind.
-// ---------------------------------------------------------------------------
 
 /// Target value for a light zone (room).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -225,7 +217,6 @@ pub struct RoomSnapshot {
     /// Scene ids in the active slot's cycle, in order.
     pub scene_ids: Vec<u8>,
 
-    // --- TASS system view fields ---
 
     /// TASS target phase/owner/since metadata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -304,7 +295,6 @@ pub struct PlugSnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub power_watts: Option<f64>,
 
-    // --- TASS system view fields ---
 
     /// TASS target phase/owner/since metadata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -415,9 +405,6 @@ pub struct FullStateSnapshot {
     pub timestamp_epoch_ms: u64,
 }
 
-// ---------------------------------------------------------------------------
-// Decision log (server → client, streaming)
-// ---------------------------------------------------------------------------
 
 /// One event + the controller's response. Streamed to clients in real time.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -468,9 +455,6 @@ pub struct LogEntryDto {
     pub actions_emitted: Vec<ActionDto>,
 }
 
-// ---------------------------------------------------------------------------
-// Topology info (server → client, on connect)
-// ---------------------------------------------------------------------------
 
 /// Static topology metadata. Sent once on connect so the frontend knows
 /// all rooms, their slots, and available scene ids.
@@ -511,9 +495,6 @@ pub struct SlotInfo {
     pub scene_ids: Vec<u8>,
 }
 
-// ---------------------------------------------------------------------------
-// Client → Server
-// ---------------------------------------------------------------------------
 
 /// Messages the frontend sends to the server over WebSocket.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -559,9 +540,6 @@ pub enum ClientMessage {
     },
 }
 
-// ---------------------------------------------------------------------------
-// Server → Client
-// ---------------------------------------------------------------------------
 
 /// Messages the server sends to the frontend over WebSocket. All messages
 /// are multiplexed on a single connection, discriminated by `type`.
@@ -611,9 +589,6 @@ pub enum EntityUpdate {
     Light(LightSnapshot),
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {

@@ -23,7 +23,6 @@ use super::{
 impl Topology {
     /// Build and validate. Errors out on the first failure.
     pub fn build(config: &Config) -> Result<Self, TopologyError> {
-        // 1. Index rooms by name and check for duplicates.
         let mut rooms_by_name: BTreeMap<RoomName, &Room> = BTreeMap::new();
         for room in &config.rooms {
             if rooms_by_name
@@ -34,7 +33,6 @@ impl Topology {
             }
         }
 
-        // 2. Group id and friendly name uniqueness.
         let mut id_owner: BTreeMap<u8, RoomName> = BTreeMap::new();
         let mut group_name_owner: BTreeMap<FriendlyName, RoomName> = BTreeMap::new();
         for room in &config.rooms {
@@ -68,7 +66,6 @@ impl Topology {
             }
         }
 
-        // 3. Parent reference + cycle check.
         for room in &config.rooms {
             let Some(parent) = &room.parent else { continue };
             if parent == &room.name {
@@ -81,7 +78,6 @@ impl Topology {
                 });
             }
         }
-        // Walk each room's parent chain; fail if we revisit anything.
         for room in &config.rooms {
             let mut visited: Vec<RoomName> = vec![room.name.clone()];
             let mut current = room.parent.clone();
@@ -99,7 +95,6 @@ impl Topology {
             }
         }
 
-        // 4. Scene schedule validation.
         let mut needs_location = false;
         for room in &config.rooms {
             room.scenes
@@ -114,7 +109,6 @@ impl Topology {
         }
         // Location check deferred until after bindings (At triggers may also need it).
 
-        // 4b. Duration and defaults validation.
         if config.defaults.cycle_window_seconds < 0.0 {
             return Err(TopologyError::NegativeCycleWindow(
                 config.defaults.cycle_window_seconds,
@@ -134,7 +128,6 @@ impl Topology {
             }
         }
 
-        // 5. Member references must point at lights in the catalog.
         for room in &config.rooms {
             for member in &room.members {
                 let (bulb, _endpoint) = parse_member_key(member).ok_or_else(|| {
@@ -167,8 +160,7 @@ impl Topology {
             }
         }
 
-        // 6. Build the Vec<DeviceInfo> indexed catalog. Sorted by
-        //    friendly_name so iteration is deterministic.
+        // Sort by friendly name so iteration is deterministic.
         let mut device_pairs: Vec<(&String, &DeviceCatalogEntry)> = config.devices.iter().collect();
         device_pairs.sort_by(|a, b| a.0.cmp(b.0));
         let mut devices: Vec<DeviceInfo> = Vec::with_capacity(device_pairs.len());
@@ -187,9 +179,6 @@ impl Topology {
             device_by_name.insert((*name).clone(), DeviceIdx::new(i as u32));
         }
 
-        // 6b. Validate switch model references and collect hw_double_tap
-        //     entries from the catalog. Both depend only on the catalog,
-        //     not on bindings.
         let mut hw_double_tap_buttons: BTreeSet<(DeviceIdx, String)> = BTreeSet::new();
         for (name, entry) in &config.devices {
             if let DeviceCatalogEntry::Switch { model, .. } = entry {
@@ -200,7 +189,6 @@ impl Topology {
                     }
                 })?;
                 let dev_idx = device_by_name[name];
-                // Register per-button hardware double-tap suppression.
                 // Only buttons that have both press AND double_tap gestures
                 // mapped in the model get suppression — not all buttons on
                 // a model that happens to have double-tap somewhere.
@@ -218,8 +206,6 @@ impl Topology {
             }
         }
 
-        // 6c. Build the device-kind subset Vec<DeviceIdx>'s plus the
-        //     Z-Wave node_id → DeviceIdx map.
         let mut switch_devices: Vec<DeviceIdx> = Vec::new();
         let mut motion_sensor_devices: Vec<DeviceIdx> = Vec::new();
         let mut plug_devices: Vec<DeviceIdx> = Vec::new();
@@ -247,7 +233,6 @@ impl Topology {
                 DeviceKind::Light => {}
             }
         }
-        // Validate Z-Wave plugs have node_id and uniqueness.
         for &idx in &zwave_plug_devices {
             let info = &devices[idx.as_usize()];
             let entry = &config.devices[&info.name];
@@ -266,9 +251,6 @@ impl Topology {
             zwave_node_id_to_device.insert(node_id, idx);
         }
 
-        // 7. Motion sensor bindings from room.motion_sensors. Build the
-        //    motion_index keyed by DeviceIdx. We also collect each
-        //    room's bound_motion list for the ResolvedRoom assembly.
         let mut motion_index: BTreeMap<DeviceIdx, Vec<RoomIdx>> = BTreeMap::new();
         let mut bound_motion_per_room: BTreeMap<RoomName, Vec<MotionBinding>> = BTreeMap::new();
 
@@ -313,8 +295,6 @@ impl Topology {
             }
         }
 
-        // 8. Build room_by_name and room_by_group_name maps (assignment
-        //    in config order).
         let mut room_by_name: BTreeMap<RoomName, RoomIdx> = BTreeMap::new();
         let mut room_by_group_name: BTreeMap<FriendlyName, RoomIdx> = BTreeMap::new();
         for (i, room) in config.rooms.iter().enumerate() {
@@ -323,8 +303,6 @@ impl Topology {
             room_by_group_name.insert(room.group_name.clone(), idx);
         }
 
-        // 9. Validate bindings, translate into resolved form, build
-        //    dispatch indexes.
         let mut binding_names: BTreeSet<String> = BTreeSet::new();
         let mut resolved_bindings: Vec<ResolvedBinding> = Vec::new();
         let mut button_binding_index: BTreeMap<(DeviceIdx, String, Gesture), Vec<BindingIdx>> =
@@ -334,12 +312,10 @@ impl Topology {
         let mut room_has_bindings_set: BTreeSet<RoomIdx> = BTreeSet::new();
 
         for rule in &config.bindings {
-            // Name uniqueness.
             if !binding_names.insert(rule.name.clone()) {
                 return Err(TopologyError::DuplicateBindingName(rule.name.clone()));
             }
 
-            // Validate trigger device (if the trigger references one).
             let trigger_entry = if let Some(trigger_device) = rule.trigger.device() {
                 let entry = config.devices.get(trigger_device).ok_or_else(|| {
                     TopologyError::BindingTriggerUnknownDevice {
@@ -364,7 +340,6 @@ impl Topology {
                             actual_kind: kind_label(trigger_entry),
                         });
                     }
-                    // Validate button name exists in the device's model.
                     if let Some(model_name) = trigger_entry.switch_model() {
                         if let Some(model) = config.switch_models.get(model_name) {
                             if !model.buttons.contains(button) {
@@ -446,7 +421,6 @@ impl Topology {
                 }
             };
 
-            // Validate room-targeting effects: the room must exist.
             if let Some(room_name) = rule.effect.room() {
                 if !room_by_name.contains_key(room_name) {
                     return Err(TopologyError::BindingRoomNotFound {
@@ -456,7 +430,6 @@ impl Topology {
                 }
             }
 
-            // Validate device-targeting effects: target must be a plug.
             if let Some(effect_target) = rule.effect.target() {
                 let effect_entry = config.devices.get(effect_target).ok_or_else(|| {
                     TopologyError::BindingEffectUnknownDevice {
@@ -473,7 +446,6 @@ impl Topology {
                 }
             }
 
-            // Validate confirm_off_seconds if present.
             if let Some(secs) = rule.effect.confirm_off_seconds() {
                 if secs < 0.0 {
                     return Err(TopologyError::NegativeConfirmOffWindow {
@@ -517,13 +489,11 @@ impl Topology {
                 Effect::TurnOffAllZones => ResolvedEffect::TurnOffAllZones,
             };
 
-            // Track which rooms have bindings (for descendant filtering).
             if let Some(room_idx) = resolved_effect.room() {
                 room_has_bindings_set.insert(room_idx);
             }
 
             let binding_idx = BindingIdx::new(resolved_bindings.len() as u32);
-            // Build dispatch indexes from the resolved trigger.
             match &resolved_trigger {
                 ResolvedTrigger::Button { device, button, gesture } => {
                     button_binding_index
@@ -547,7 +517,6 @@ impl Topology {
             });
         }
 
-        // 10. Build resolved rooms in config order.
         let mut rooms: Vec<ResolvedRoom> = Vec::with_capacity(config.rooms.len());
         for room in &config.rooms {
             let bound_motion = bound_motion_per_room
@@ -567,15 +536,11 @@ impl Topology {
             });
         }
 
-        // 10b. room_has_bindings indexed by RoomIdx.
         let room_has_bindings: Vec<bool> = (0..rooms.len())
             .map(|i| room_has_bindings_set.contains(&RoomIdx::new(i as u32)))
             .collect();
 
-        // 11. Transitive descendants. Walk each room and gather every
-        //    room reachable via the *inverse* of the parent edge.
-        //    Filter to descendants with rules so the controller doesn't
-        //    waste cycles propagating to rule-less rooms.
+        // Propagate only to rule-bearing transitive descendants.
         let mut direct_children: BTreeMap<RoomIdx, Vec<RoomIdx>> = BTreeMap::new();
         for (i, room) in rooms.iter().enumerate() {
             let idx = RoomIdx::new(i as u32);
@@ -584,7 +549,6 @@ impl Topology {
                 direct_children.entry(parent_idx).or_default().push(idx);
             }
         }
-        // Determine which rooms have rules (motion sensors OR bindings).
         let room_has_rules_vec: Vec<bool> = rooms
             .iter()
             .enumerate()
@@ -624,7 +588,6 @@ impl Topology {
             })
             .collect();
 
-        // 12. Validate heating config if present.
         let trv_names_set: BTreeSet<&str> = trv_devices
             .iter()
             .map(|&i| devices[i.as_usize()].name.as_str())
@@ -635,12 +598,10 @@ impl Topology {
             .collect();
         let heating_config = if let Some(ref heating) = config.heating {
             use crate::config::heating::HeatingConfigError;
-            // Validate schedules.
             heating
                 .validate_schedules()
                 .map_err(|e| TopologyError::HeatingError(e))?;
 
-            // Validate zone references.
             let mut trv_to_zone: BTreeMap<String, String> = BTreeMap::new();
             let mut relay_to_zone: BTreeMap<String, String> = BTreeMap::new();
             let mut zone_names: BTreeSet<String> = BTreeSet::new();
@@ -668,8 +629,6 @@ impl Topology {
                         },
                     ));
                 }
-                // Validate the wall thermostat has the required options
-                // for safe relay control.
                 if let Some(entry) = config.devices.get(&zone.relay) {
                     let opts = entry.options();
                     // heater_type = manual_control is a hard requirement:
@@ -794,7 +753,6 @@ impl Topology {
                 }
             }
 
-            // Validate pressure groups.
             let mut trv_to_group: BTreeMap<String, String> = BTreeMap::new();
             for group in &heating.pressure_groups {
                 if group.trvs.len() < 2 {
@@ -846,7 +804,6 @@ impl Topology {
             None
         };
 
-        // Location is required if any schedule slot or At trigger uses sun expressions.
         if needs_location && config.location.is_none() {
             return Err(TopologyError::MissingLocationForSunExpressions);
         }
