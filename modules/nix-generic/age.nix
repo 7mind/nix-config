@@ -11,7 +11,6 @@ let
   defaultIdentityPath = if cfg-meta.isLinux then "/dev/shm/age-master-key" else "/tmp/age-master-key";
   hasMasterIdentity = cfg.masterIdentity.pubkey != null;
 
-  # Load owner's secrets directly
   owner = config.smind.host.owner;
   group = if cfg-meta.isLinux then "users" else "staff";
   defaultSecretsFileFor = secretOwner: "${cfg-meta.paths.secrets}/${secretOwner}/age-secrets.nix";
@@ -116,7 +115,6 @@ in
         }
       ];
     }
-    # When masterIdentity is configured, enable age and set up rekey
     (lib.mkIf hasMasterIdentity {
       smind.age.enable = lib.mkDefault true;
 
@@ -132,7 +130,6 @@ in
       };
     })
 
-    # Load owner-specific secrets
     (lib.mkIf loadOwnerSecrets {
       age.secrets = ownerSecrets;
     })

@@ -118,10 +118,6 @@ class MatterMqttBridge:
         self._known_nodes: set[int] = set()
         self._last_attrs: dict[int, dict[str, Any]] = {}
 
-    # ------------------------------------------------------------------ #
-    #  public entrypoint
-    # ------------------------------------------------------------------ #
-
     async def run(self) -> None:
         matter_task = asyncio.create_task(self._matter_loop(), name="matter-loop")
         mqtt_task = asyncio.create_task(self._mqtt_loop(), name="mqtt-loop")
@@ -144,10 +140,6 @@ class MatterMqttBridge:
             except asyncio.CancelledError:
                 pass
             LOG.info("Bridge stopped.")
-
-    # ------------------------------------------------------------------ #
-    #  Matter loop
-    # ------------------------------------------------------------------ #
 
     async def _matter_loop(self) -> None:
         for delay in _backoff_iter():
@@ -218,10 +210,6 @@ class MatterMqttBridge:
                 await self._matter_session.close()
             self._matter_session = None
 
-    # ------------------------------------------------------------------ #
-    #  MQTT loop
-    # ------------------------------------------------------------------ #
-
     async def _mqtt_loop(self) -> None:
         for delay in _backoff_iter():
             if self.shutdown_event.is_set():
@@ -237,7 +225,6 @@ class MatterMqttBridge:
                     LOG.info("MQTT connected to %s:%s", self.mqtt_host, self.mqtt_port)
                     # Drain any queued messages from a previous outage.
                     await self._mqtt_drain(mqtt_client)
-                    # Forward new messages.
                     while True:
                         if self.shutdown_event.is_set() and self.mqtt_queue.empty():
                             break
@@ -291,10 +278,6 @@ class MatterMqttBridge:
             if dropped:
                 LOG.warning("Dropped oldest MQTT message: %s", dropped[0])
 
-    # ------------------------------------------------------------------ #
-    #  Watchdog
-    # ------------------------------------------------------------------ #
-
     async def _watchdog_loop(self) -> None:
         while True:
             try:
@@ -314,10 +297,6 @@ class MatterMqttBridge:
                     self._matter_listen_task.cancel()
             except Exception as exc:
                 LOG.warning("Watchdog ping failed: %s", exc)
-
-    # ------------------------------------------------------------------ #
-    #  Event handling
-    # ------------------------------------------------------------------ #
 
     def _safe_event_handler(self, event: EventType, data: Any) -> None:
         try:
@@ -363,10 +342,6 @@ class MatterMqttBridge:
             return
 
         LOG.debug("Unhandled event: %s", event.value)
-
-    # ------------------------------------------------------------------ #
-    #  Publishing helpers
-    # ------------------------------------------------------------------ #
 
     async def _publish_node_delta(self, node) -> None:
         nid = node.node_id

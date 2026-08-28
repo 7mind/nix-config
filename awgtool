@@ -4,7 +4,6 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 SECRETS_DIR="$REPO_ROOT/private/secrets/generic"
 
-# Profile definitions
 declare -A PROFILE_PEERS_FILE
 declare -A PROFILE_SECRETS_PREFIX
 declare -A PROFILE_SUBNET
@@ -20,7 +19,6 @@ PROFILE_SUBNET[7mind]="10.101.0"
 
 KNOWN_PROFILES="${!PROFILE_PEERS_FILE[*]}"
 
-# Ensure required tools are available
 missing=()
 for cmd in wg age jq qrencode; do
   command -v "$cmd" &>/dev/null || missing+=("$cmd")
@@ -53,8 +51,6 @@ Options (for --add-client):
 EOF
   exit 1
 }
-
-# --- Helpers ---
 
 build_client_config() {
   local peers_file="$1" client_name="$2" privkey="$3" psk="$4" subnet="$5"
@@ -96,8 +92,6 @@ print_config_with_qr() {
   echo ""
   echo "$config" | qrencode -t UTF8
 }
-
-# --- Commands ---
 
 cmd_init() {
   local server_key_file="$SECRETS_DIR/${SECRETS_PREFIX}-server-key.age"
@@ -233,8 +227,6 @@ cmd_print_client() {
   client_ip="$(jq -r --arg name "$client_name" '.peers[] | select(.name == $name) | .ip' "$PEERS_FILE")"
   print_config_with_qr "$config" "$client_name ($client_ip/32)"
 }
-
-# --- Parse arguments ---
 
 PROFILE=""
 COMMAND=""

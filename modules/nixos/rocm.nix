@@ -11,24 +11,7 @@
   };
 
   config = lib.mkIf config.smind.hw.amd.gpu.enable {
-
-    # https://github.com/NixOS/nixpkgs/issues/421822
-    # nixpkgs.overlays = [
-    #   (final: prev: {
-    #     rocmPackages = prev.rocmPackages.overrideScope (rocmFinal: rocmPrev: {
-    #       rocdbgapi = rocmPrev.rocdbgapi.override { buildDocs = false; };
-    #     });
-    #   })
-    # ];
-
-    # pytorch is broken:
-    # https://github.com/NixOS/nixpkgs/blob/c8fadee69d99c39795e50754c1d0f4fb9b24cd65/pkgs/development/python-modules/torch/default.nix#L227
-    # should be unblocked by: https://github.com/NixOS/nixpkgs/pull/367695
-
     nixpkgs.config.rocmSupport = lib.mkIf config.smind.hw.amd.rocm.enable true;
-    # nixpkgs.config.packageOverrides = pkgs: {
-    #   rocmPackages_6 = pkgs.rocmPackages_6.gfx1100;
-    # };
 
     # Force compute power profile on desktops (not laptops - would hurt battery/thermals)
     services.udev.extraRules = lib.mkIf (config.smind.hw.amd.rocm.enable && !config.smind.isLaptop) ''
@@ -39,10 +22,6 @@
     hardware.amdgpu = {
       opencl.enable = true;
       initrd.enable = true;
-      # radv enabled by default
-      # amdvlk.enable = true;
-      # amdvlk.supportExperimental.enable = true;
-      # amdvlk.support32Bit.enable = true;
     };
 
     hardware.graphics = {
@@ -52,10 +31,6 @@
         pkgs.rocmPackages.clr
       ];
     };
-
-    # environment.variables = lib.mkIf config.smind.hw.amd.rocm.enable {
-    #   ROCM_HOME = "${pkgs.rocmPackages.rocmPath}";
-    # };
 
     # All PowerPlay features except GFXOFF (PP_GFXOFF_MASK, bit 15) on desktops:
     # GFXOFF causes hangs on idle, especially RDNA3 (RX 7000) — soft lockups in
@@ -85,8 +60,6 @@
       # amd-smi replaces rocm-smi (ROCm 7.x ships both, rocm-smi deprecated).
       # Keep both on PATH while scripts still use the old name.
       rocmPackages.amdsmi
-
-      # zluda # broken
 
       (python3.withPackages (python-pkgs: [
         python-pkgs.torchWithRocm

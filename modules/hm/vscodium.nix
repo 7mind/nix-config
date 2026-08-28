@@ -1,4 +1,4 @@
-{ config, lib, pkgs, cfg-flakes, cfg-packages, cfg-meta, outerConfig, override_pkg, cfg-args, ... }:
+{ config, lib, pkgs, cfg-packages, cfg-meta, outerConfig, override_pkg, cfg-args, ... }:
 
 let
   defaultTerminalFontFamily = "'${outerConfig.smind.fonts.terminal}'";
@@ -71,11 +71,7 @@ in
 
       (lib.mkIf (!config.smind.hm.vscodium.mutableConfig) {
         profiles.default.extensions = with pkgs.vscode-marketplace; with pkgs.vscode-extensions; [
-          #github.github-vscode-theme
-
           codezombiech.gitignore
-
-          # eamodio.gitlens # annoying
 
           scalameta.metals
           scala-lang.scala
@@ -86,26 +82,6 @@ in
           mads-hartmann.bash-ide-vscode
 
           dbaeumer.vscode-eslint
-
-          # detachhead.basedpyright
-          # charliermarsh.ruff
-
-          #ms-vscode.powershell
-          # ms-vscode.hexeditor
-          # ms-azuretools.vscode-docker
-          # ms-vscode.anycode # real extensions are not nixified
-
-          # llvm-vs-code-extensions.vscode-clangd
-          # llvm-vs-code-extensions.lldb-dap
-          # pkgs.open-vsx.kylinideteam.cmake-intellisence
-
-          # https://github.com/VSCodium/vscodium/blob/master/docs/index.md#proprietary-extensions
-          # ms-vscode-remote.remote-wsl
-          # ms-vscode-remote.remote-ssh
-
-          # ms-dotnettools.csharp
-          # ms-dotnettools.csdevkit
-          # ms-dotnettools.vscode-dotnet-runtime
 
           redhat.vscode-xml
           redhat.vscode-yaml
@@ -123,8 +99,6 @@ in
           pkgs.open-vsx.mathematic.vscode-pdf
           silurus.office-open-xml-viewer
 
-          # vscjava.vscode-java-pack
-          # missing: anycode*,
           thenuprojectcontributors.vscode-nushell-lang
         ];
 
@@ -164,7 +138,6 @@ in
             "**/.direnv" = true;
             "**/.venv" = true;
           };
-          #"explorer.excludeGitIgnore" = true;
 
           "files.insertFinalNewline" = true;
           "files.trimTrailingWhitespace" = true;
@@ -224,7 +197,6 @@ in
 
 
 
-          # nix
           "nix.enableLanguageServer" = true;
           "nix.formatterPath" = "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt";
           "nix.serverPath" = "${pkgs.nixd}/bin/nixd";
@@ -240,7 +212,6 @@ in
             };
           };
 
-          # scala
           "metals.enableIndentOnPaste" = true;
           "metals.enableSemanticHighlighting" = true;
           "metals.enableStripMarginOnTypeFormatting" = true;
@@ -267,10 +238,6 @@ in
               "path" = "${cfg-packages.jdk-main}";
               default = true;
             }
-            # {
-            #   "name" = "GraalVM 19 CE+JS";
-            #   "path" = let graal-legacy = cfg-flakes.pkgs7mind.graalvm-legacy-packages; in "${graal-legacy.graalvm19-ce-js.out}";
-            # }
           ];
 
 

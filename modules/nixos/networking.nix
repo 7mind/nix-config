@@ -226,11 +226,6 @@ in
         openFirewall = true;
       };
 
-      # boot.kernel.sysctl = {
-      #   "net.ipv6.conf.br-main.accept_ra" = 1;
-      # };
-
-
       systemd.network =
         let
           cfg = config.smind.net;

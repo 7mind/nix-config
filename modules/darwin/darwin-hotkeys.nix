@@ -2,7 +2,6 @@
 
 
 let
-  # some "Sensible" enums for AppleSymbolicHotKeys IDs based on their function.
   hotkeyEnums = {
     moveFocusToMenuBar = 7; # Control-fn-F2
     moveFocusToDock = 8; # Control-fn-F3
@@ -50,7 +49,6 @@ let
 
   uniqueSortedHotkeyIntegerIdsToDisable = lib.sort lib.lessThan editMe_disableHotKeys;
 
-  # Construct the target attribute set for the AppleSymbolicHotKeys dictionary.
   appleSymbolicHotkeysSettings = lib.listToAttrs (
     map
       (id: {

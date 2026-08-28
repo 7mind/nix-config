@@ -176,11 +176,9 @@ in
       xdg.configFile."cosmic/com.system76.CosmicTk/v1/interface_density".text =
         config.smind.hm.desktop.cosmic.interface-density;
 
-      # Corner roundness for dark theme
       xdg.configFile."cosmic/com.system76.CosmicTheme.Dark/v1/roundness".text =
         config.smind.hm.desktop.cosmic.roundness;
 
-      # Corner roundness for light theme
       xdg.configFile."cosmic/com.system76.CosmicTheme.Light/v1/roundness".text =
         config.smind.hm.desktop.cosmic.roundness;
 

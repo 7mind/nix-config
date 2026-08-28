@@ -72,7 +72,6 @@
       cosmic-term
       cosmic-screenshot
       polkit_gnome
-      # seahorse and gcr added by smind.security.keyring module
     ];
   };
 }

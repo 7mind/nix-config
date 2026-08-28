@@ -16,20 +16,6 @@
     (
       self: super:
       let
-        # ollamaVersion = "0.20.0";
-        # mkPinnedOllama =
-        #   pkg:
-        #   pkg.overrideAttrs (_: {
-        #     version = ollamaVersion;
-        #     src = super.fetchFromGitHub {
-        #       owner = "ollama";
-        #       repo = "ollama";
-        #       tag = "v${ollamaVersion}";
-        #       hash = "sha256-QQKPXdXlsT+uMGGIyqkVZqk6OTa7VHrwDVmgDdgdKOY=";
-        #     };
-        #     vendorHash = "sha256-Lc1Ktdqtv2VhJQssk8K1UOimeEjVNvDWePE9WkamCos=";
-        #   });
-
         mqtt-controller-src = pkgs.lib.cleanSourceWith {
           src = "${cfg-meta.paths.pkg}/mqtt-controller";
           filter =
@@ -41,12 +27,6 @@
         };
       in
       {
-        # ollama = mkPinnedOllama super.ollama;
-        # ollama-cpu = mkPinnedOllama super.ollama-cpu;
-        # ollama-vulkan = mkPinnedOllama super.ollama-vulkan;
-        # ollama-rocm = mkPinnedOllama super.ollama-rocm;
-        # ollama-cuda = mkPinnedOllama super.ollama-cuda;
-
         ip-update = pkgs.callPackage "${cfg-meta.paths.pkg}/ip-update/ip-update.nix" { };
 
         nordvpn-wireguard-extractor =
@@ -255,9 +235,6 @@
             hash = "sha256-pC3kTRO3FSaA4IAdfYwnW6oeQXVc4dj7SmMxzw9SVjA=";
           };
         });
-
-        # GNOME adaptive brightness patches disabled - using wluma instead
-        # patch can be found in git history
 
         # Fix for black screen on resume (remove lock screen animation during suspend)
         # MR !3742: https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/3742

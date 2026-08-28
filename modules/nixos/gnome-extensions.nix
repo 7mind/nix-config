@@ -102,7 +102,6 @@ in
 
     environment.systemPackages = extensions;
 
-    # Polkit rules for GNOME extensions
     security.polkit.extraConfig = ''
       // Allow any local session to claim sensors from iio-sensor-proxy (ALS)
       polkit.addRule(function(action, subject) {
@@ -151,9 +150,6 @@ in
               dock-position = "LEFT";
               dock-fixed = false; # due to upstream bug, only panel mode works for autohide
               custom-theme-shrink = true;
-          #              autohide = true;
-          #              intellihide = false;
-          #              intellihide-mode = "ALL_WINDOWS";
               hot-keys = extCfg.dash-to-dock.unity-like-config.super-num-hotkeys;
               click-action = "focus-or-appspread";
               scroll-action = "cycle-windows";

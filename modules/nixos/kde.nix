@@ -42,8 +42,6 @@
       serviceConfig.MemoryHigh = lib.mkForce "2G";
     };
 
-    # Display manager (plasma-login-manager) configuration handled by display-manager.nix module
-
     smind.security.keyring = {
       enable = true;
       backend = "kwallet";
@@ -60,9 +58,7 @@
     ];
 
     environment.systemPackages = with pkgs; [
-      # packages out of kdePackages
       krusader
-#      krita
       krename
       kdiff3
       gsettings-qt
@@ -71,52 +67,7 @@
       gsettings-desktop-schemas # org.gnome.desktop.* schemas for gsettings consumers on KDE
       gtk3 # provides additional GTK GSettings schemas used by some apps
       gtk4 # provides GTK4 GSettings schemas used by some apps
-    ] ++ [
-      # packages in kdePackages
-      #      kdePackages.kate
-      #      kdePackages.kwalletmanager
-      #      kdePackages.okular
-      #      kdePackages.gwenview
-      #      kdePackages.ark
-      #      kdePackages.spectacle
-      #      kdePackages.filelight
-      #      kdePackages.kaddressbook
-      #
-      #      kdePackages.kcalutils
-      #      kdePackages.networkmanager-qt
-      #      kdePackages.kdegraphics-thumbnailers
-      #
-      #      kdePackages.akonadi
-      #      kdePackages.akonadi-calendar
-      #      kdePackages.akonadi-contacts
-      #      kdePackages.akonadi-import-wizard
-      #      kdePackages.akonadi-mime
-      #      kdePackages.akonadi-search
-      #      kdePackages.akonadiconsole
-      #
-      #      kdePackages.kaccounts-integration
-      #      kdePackages.incidenceeditor
-      #      kdePackages.plasma-wayland-protocols
-      #      kdePackages.dolphin-plugins
-      #      kdePackages.kdenetwork-filesharing
-      #      kdePackages.calendarsupport
-      #      kdePackages.print-manager
-      #      kdePackages.kontact
-      #      kdePackages.korganizer
-      #      kdePackages.eventviews
-      #      kdePackages.ffmpegthumbs
-      #      kdePackages.kdepim-runtime
-      #      kdePackages.kdepim-addons
-      #      kdePackages.krdc
-      #
-      #      (lib.mkIf config.smind.desktop.kde.kde-gtk-config.enable kdePackages.kde-gtk-config)
-      #
-      #      kdePackages.kio
-      #      kdePackages.kio-extras
-      #      kdePackages.kio-fuse
-      #      kdePackages.kio-admin
     ] ++
-    # all packages from kdePackages
     (
       let
         exclusions = (if config.smind.desktop.kde.kde-gtk-config.enable then [ ] else [ "kde-gtk-config" ]) ++ [
@@ -147,11 +98,6 @@
 
     environment.plasma6.excludePackages = with pkgs; [
       orca
-      #      kdePackages.elisa
-      #      kdePackages.oxygen
-      #      kdePackages.khelpcenter
-      #      kdePackages.konsole
-      #      kdePackages.plasma-browser-integration
     ];
 
     xdg.mime.defaultApplications = lib.mkIf config.smind.desktop.kde.mime.enable {

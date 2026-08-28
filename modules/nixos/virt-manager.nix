@@ -12,7 +12,6 @@ let
     OPERATION="$2"
     SUB_OPERATION="$3"
 
-    # Check if this VM should trigger GPU passthrough
     case "$VM_NAME" in
       ${lib.concatStringsSep "|" cfg.gpuPassthrough.vmNames})
         ;;
@@ -29,16 +28,13 @@ let
     bind_vfio() {
       echo "Binding GPU to vfio-pci for VM: $VM_NAME"
 
-      # Unload nvidia modules
       modprobe -r nvidia_uvm nvidia_drm nvidia_modeset nvidia 2>/dev/null || true
 
-      # Unbind from nvidia
       [ -e "/sys/bus/pci/devices/$GPU_PCI/driver" ] && \
         echo "$GPU_PCI" > /sys/bus/pci/devices/$GPU_PCI/driver/unbind 2>/dev/null || true
       [ -n "$GPU_AUDIO_PCI" ] && [ -e "/sys/bus/pci/devices/$GPU_AUDIO_PCI/driver" ] && \
         echo "$GPU_AUDIO_PCI" > /sys/bus/pci/devices/$GPU_AUDIO_PCI/driver/unbind 2>/dev/null || true
 
-      # Bind to vfio-pci
       modprobe vfio-pci
       echo "$VENDOR_DEVICE" > /sys/bus/pci/drivers/vfio-pci/new_id 2>/dev/null || true
       [ -n "$AUDIO_VENDOR_DEVICE" ] && \
@@ -48,18 +44,15 @@ let
     bind_nvidia() {
       echo "Rebinding GPU to nvidia for host use after VM: $VM_NAME"
 
-      # Remove from vfio-pci
       echo "$VENDOR_DEVICE" > /sys/bus/pci/drivers/vfio-pci/remove_id 2>/dev/null || true
       [ -n "$AUDIO_VENDOR_DEVICE" ] && \
         echo "$AUDIO_VENDOR_DEVICE" > /sys/bus/pci/drivers/vfio-pci/remove_id 2>/dev/null || true
 
-      # Unbind from vfio-pci
       [ -e "/sys/bus/pci/devices/$GPU_PCI/driver" ] && \
         echo "$GPU_PCI" > /sys/bus/pci/devices/$GPU_PCI/driver/unbind 2>/dev/null || true
       [ -n "$GPU_AUDIO_PCI" ] && [ -e "/sys/bus/pci/devices/$GPU_AUDIO_PCI/driver" ] && \
         echo "$GPU_AUDIO_PCI" > /sys/bus/pci/devices/$GPU_AUDIO_PCI/driver/unbind 2>/dev/null || true
 
-      # Rescan and reload nvidia
       echo 1 > /sys/bus/pci/rescan
       modprobe nvidia
       modprobe nvidia_modeset
@@ -160,7 +153,6 @@ in
       };
     })
 
-    # Automatic GPU passthrough via libvirt hooks
     (lib.mkIf (cfg.gpuPassthrough.enable && cfg.gpuPassthrough.vmNames != [ ]) {
       assertions = [{
         assertion = nvidiaCfg.enable;

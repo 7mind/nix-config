@@ -4,7 +4,6 @@ let
   cfg = config.smind.hw.nvidia;
   cfgSpec = config.smind.hw.nvidia.specialisation;
 
-  # Script to unbind GPU from nvidia and bind to vfio-pci for VM passthrough
   gpuBindVfio = pkgs.writeShellScriptBin "gpu-bind-vfio" ''
     set -euo pipefail
 
@@ -20,10 +19,8 @@ let
 
     echo "Unbinding NVIDIA GPU from nvidia driver..."
 
-    # Unload nvidia modules
     modprobe -r nvidia_uvm nvidia_drm nvidia_modeset nvidia 2>/dev/null || true
 
-    # Unbind from nvidia driver
     if [[ -e "/sys/bus/pci/devices/$GPU_PCI/driver" ]]; then
       echo "$GPU_PCI" > /sys/bus/pci/devices/$GPU_PCI/driver/unbind 2>/dev/null || true
     fi
@@ -31,7 +28,6 @@ let
       echo "$GPU_AUDIO_PCI" > /sys/bus/pci/devices/$GPU_AUDIO_PCI/driver/unbind 2>/dev/null || true
     fi
 
-    # Bind to vfio-pci
     modprobe vfio-pci
 
     echo "$VENDOR_DEVICE" > /sys/bus/pci/drivers/vfio-pci/new_id 2>/dev/null || true
@@ -42,7 +38,6 @@ let
     echo "GPU bound to vfio-pci. Ready for VM passthrough."
   '';
 
-  # Script to unbind GPU from vfio-pci and rebind to nvidia for host use
   gpuBindNvidia = pkgs.writeShellScriptBin "gpu-bind-nvidia" ''
     set -euo pipefail
 
@@ -58,13 +53,11 @@ let
 
     echo "Unbinding GPU from vfio-pci..."
 
-    # Remove from vfio-pci
     echo "$VENDOR_DEVICE" > /sys/bus/pci/drivers/vfio-pci/remove_id 2>/dev/null || true
     if [[ -n "$AUDIO_VENDOR_DEVICE" ]]; then
       echo "$AUDIO_VENDOR_DEVICE" > /sys/bus/pci/drivers/vfio-pci/remove_id 2>/dev/null || true
     fi
 
-    # Unbind from vfio-pci
     if [[ -e "/sys/bus/pci/devices/$GPU_PCI/driver" ]]; then
       echo "$GPU_PCI" > /sys/bus/pci/devices/$GPU_PCI/driver/unbind 2>/dev/null || true
     fi
@@ -72,10 +65,8 @@ let
       echo "$GPU_AUDIO_PCI" > /sys/bus/pci/devices/$GPU_AUDIO_PCI/driver/unbind 2>/dev/null || true
     fi
 
-    # Rescan PCI bus
     echo 1 > /sys/bus/pci/rescan
 
-    # Load nvidia modules
     modprobe nvidia
     modprobe nvidia_modeset
     modprobe nvidia_drm
@@ -176,7 +167,6 @@ in
 
   config =
     let
-      # NVIDIA configuration to apply when GPU is active
       nvidiaConfig = {
         assertions = [
           {
@@ -292,7 +282,6 @@ in
         };
       };
 
-      # Minimal config when GPU is not present (just AMD iGPU)
       noNvidiaConfig = {
         services.xserver.videoDrivers = lib.mkForce [ "modesetting" ];
         hardware.nvidia.prime.offload.enable = lib.mkForce false;
@@ -314,10 +303,8 @@ in
 
     in
     lib.mkIf cfg.enable (lib.mkMerge [
-      # Without specialisation: just apply nvidia config directly
       (lib.mkIf (!cfgSpec.enable) nvidiaConfig)
 
-      # With specialisation: default has GPU, "no-nvidia" specialisation removes it
       (lib.mkIf (cfgSpec.enable && cfgSpec.defaultWithGpu) (lib.mkMerge [
         nvidiaConfig
         {
@@ -328,7 +315,6 @@ in
         }
       ]))
 
-      # With specialisation: default has no GPU, "nvidia" specialisation adds it
       (lib.mkIf (cfgSpec.enable && !cfgSpec.defaultWithGpu) {
         hardware.graphics.enable = true;
         specialisation.nvidia = {

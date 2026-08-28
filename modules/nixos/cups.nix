@@ -45,11 +45,6 @@ in
           deviceUri = "ipp://printer.iot-lan.7mind.io:631/ipp/print";
           # offline printer hack
           model = "BrotherDCP.ppd";
-          # Initial setup
-          # model = "everywhere";
-          # ppdOptions = {
-          #   "Duplex" = "DuplexNoTumble";
-          # };
         }
       ];
       ensureDefaultPrinter = "printer.iot-lan.7mind.io";

@@ -82,9 +82,6 @@ def mosquitto() -> Iterator[tuple[str, int]]:
                 proc.kill()
 
 
-# ---------- bridge/devices retained publisher ----------
-
-
 def publish_bridge_devices(
     host: str, port: int, devices: list[dict[str, Any]]
 ) -> None:

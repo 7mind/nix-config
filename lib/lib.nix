@@ -54,49 +54,6 @@ let
   outerConfig =
     if (cfg-meta.isLinux) then args.nixosConfig else args.darwinConfig;
 
-
-
-  # be careful:
-  # mkIf false { ... } → { _type = "if"; condition = false; content = { ... }; }
-  # and etc, all the module system functions produce some hidden fields
-
-  #mergeWithRecursiveUpdate = modules: pkgs.lib.foldl' pkgs.lib.recursiveUpdate { } modules;
-
-  # deep_merge = list:
-  #   let
-  #     mergeTwo = a: b:
-  #       if pkgs.lib.isAttrs a && pkgs.lib.isAttrs b then
-  #         builtins.foldl'
-  #           (acc: key:
-  #             let
-  #               aVal = if builtins.hasAttr key acc then acc.${key} else null;
-  #               bVal = b.${key};
-  #               newVal = if aVal == null then bVal else mergeTwo aVal bVal;
-  #             in
-  #             acc // { "${key}" = newVal; }
-  #           )
-  #           a
-  #           (builtins.attrNames b)
-  #       else if pkgs.lib.isList a && pkgs.lib.isList b then
-  #         a ++ b
-  #       else
-  #       # In all other cases, the right-hand value wins.
-  #         b;
-  #   in
-  #   builtins.foldl' mergeTwo { } list;
-
-  # merge_nixpkgs_modules = funcs:
-  #   let
-  #     mergeWithRecursiveUpdate = modules: pkgs.lib.foldl' pkgs.lib.recursiveUpdate { } modules;
-  #     call_and_merge = funcs: args: deep_merge (map (f: f args) funcs);
-  #     argsLists = map lib.functionArgs funcs;
-  #     mergedArgs = mergeWithRecursiveUpdate argsLists;
-  #     mergedFunc = lib.setFunctionArgs (call_and_merge funcs) mergedArgs;
-
-  #   in
-  #   mergedFunc;
-
-
   extendFuncResultWith = func: attrset:
     let
       mergeOneLevel = modules: lib.attrsets.zipAttrsWith
@@ -125,7 +82,6 @@ let
       privateUsers = 65536 * outercfg.privateUsersMultiplier;
 
       extraFlags = [
-        # "--private-users=${toString (65536 * offset)}:65535"
         "--private-users-ownership=chown"
       ];
 

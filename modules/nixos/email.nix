@@ -35,15 +35,12 @@
       extraConfig = ''
         set_from_header on
         syslog LOG_MAIL
-        #logfile /tmp/msmtp.log
       '';
       accounts = {
         default = {
           host = "mail.smtp2go.com";
           user = "7mind.io";
 
-          # host = "smtp.sendgrid.net";
-          # user = "apikey";
 
           passwordeval = if config.smind.age.active then "cat ${config.age.secrets.msmtp-password.path}" else "exit 1";
           from = "%U.${config.smind.host.email.sender}";

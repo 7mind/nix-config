@@ -35,7 +35,6 @@
 
     environment.systemPackages = with pkgs; [
       # file managers
-      #far2l broken
       mc
       nnn
 
@@ -73,7 +72,7 @@
       lsd
       rename
       ripgrep
-      fd # TODO:
+      fd
 
       # monitoring
       htop
@@ -105,14 +104,13 @@
       # pipe tools
       pv
       gnused
-      sd # TODO
+      sd
       mdcat
       bat
 
       # security
       age
       gnupg
-      #inputs.agenix.packages."${system}".default
 
       # benchmark
       stress

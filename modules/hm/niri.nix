@@ -20,7 +20,6 @@ let
   ];
 in
 lib.optionalAttrs cfg-meta.isLinux {
-  # imports = [ defaultNiriConfigModule ];
 
   config = lib.mkIf niriEnabled {
       programs.niri.package = pkgs.niri;

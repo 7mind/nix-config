@@ -44,7 +44,6 @@ class NordVPNConfigExtractor:
         """
         try:
             request = Request(url)
-            # Add basic authentication if needed
             if auth:
                 credentials = base64.b64encode(
                     f"token:{self.access_token}".encode()
@@ -83,7 +82,6 @@ class NordVPNConfigExtractor:
         Returns:
             Numeric country ID or None if not found
         """
-        # Lazy load country map
         if self._country_map is None:
             try:
                 countries = self._make_request(self.COUNTRIES_URL, auth=False)
@@ -118,7 +116,6 @@ class NordVPNConfigExtractor:
             else:
                 params["filters[country_id]"] = str(country_id)
 
-        # Build URL with query parameters
         url = f"{self.SERVER_RECOMMENDATIONS_URL}?{urlencode(params)}"
         return self._make_request(url, auth=False)
 
@@ -134,13 +131,11 @@ class NordVPNConfigExtractor:
         Returns:
             Tuple of (filename, config_content)
         """
-        # Extract server information
         country_name = server["locations"][0]["country"]["name"]
         city_name = server["locations"][0]["country"]["city"]["name"]
         hostname = server["hostname"]
         endpoint = self.peer_endpoint(server)
 
-        # Find WireGuard public key
         public_key = None
         for tech in server["technologies"]:
             if tech["identifier"] == "wireguard_udp":
@@ -152,10 +147,8 @@ class NordVPNConfigExtractor:
         if not public_key:
             raise ValueError(f"No WireGuard public key found for {hostname}")
 
-        # Create filename
         filename = f"{country_name} - {city_name} - {hostname}.conf"
 
-        # Create config content
         config = f"""# {filename}
 [Interface]
 PrivateKey = {private_key}
@@ -350,7 +343,6 @@ Common country codes: us, uk, de, fr, nl, ca, au, jp, etc.
         extractor.list_endpoints(total=args.count, country=args.country)
         sys.exit(0)
 
-    # Check for access token
     if not args.token:
         print(
             "Error: Access token required. Provide via --token or "
@@ -359,7 +351,6 @@ Common country codes: us, uk, de, fr, nl, ca, au, jp, etc.
         )
         sys.exit(1)
 
-    # Extract configs
     extractor = NordVPNConfigExtractor(args.token)
     extractor.extract_configs(
         total_configs=args.count,

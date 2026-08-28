@@ -18,13 +18,13 @@
 
     smind.desktop.gnome.auto-suspend.timeoutAC = lib.mkOption {
       type = lib.types.int;
-      default = 7200; # 2 hours
+      default = 7200;
       description = "Idle timeout in seconds before action on AC power";
     };
 
     smind.desktop.gnome.auto-suspend.timeoutBattery = lib.mkOption {
       type = lib.types.int;
-      default = 900; # 15 minutes
+      default = 900;
       description = "Idle timeout in seconds before action on battery";
     };
 
@@ -195,18 +195,13 @@
 
       profiles.${config.smind.desktop.gnome.dconf.profile}.databases = [
         {
-          lockAll = true; # prevents overriding
+          lockAll = true;
           settings = lib.mkMerge ([
             {
               "org/gnome/desktop/wm/preferences" = {
-                # button-layout = ":minimize,maximize,close";
                 button-layout = config.smind.desktop.gnome.wm.buttonLayout;
               } // lib.optionalAttrs config.smind.desktop.gnome.single-workspace {
                 num-workspaces = lib.gvariant.mkInt32 1;
-              };
-              "org/gnome/mutter/wayland" = {
-                #xwayland-allow-grabs = true;
-                #xwayland-grab-access-rules=['parsecd']
               };
               "org/gnome/desktop/interface" = {
                 gtk-theme = "adw-gtk3-dark";
@@ -226,7 +221,6 @@
               "org/gnome/mutter" = {
                 edge-tiling = true;
                 overlay-key = "";
-                #workspaces-only-on-primary = true;
                 experimental-features =
                   lib.optionals config.smind.desktop.gnome.fractional-scaling.enable [
                     "scale-monitor-framebuffer"
@@ -286,7 +280,6 @@
               "stickykeys-modifier-beep" = true;
             };
           } ++ [{
-            # Configure gsd-power auto-suspend
             "org/gnome/settings-daemon/plugins/power" = {
               sleep-inactive-ac-type = config.smind.desktop.gnome.auto-suspend.onAC;
               sleep-inactive-battery-type = config.smind.desktop.gnome.auto-suspend.onBattery;
@@ -342,32 +335,13 @@
         style = "adwaita-dark";
       };
 
-    # https://github.com/NixOS/nixpkgs/issues/33277#issuecomment-639281657
-    # https://github.com/NixOS/nixpkgs/issues/114514
     services.desktopManager.gnome = {
       enable = true;
-      # extraGSettingsOverridePackages = [ pkgs.mutter ];
-      # extraGSettingsOverrides = ''
-      #   [org.gnome.mutter]
-      #   experimental-features=['scale-monitor-framebuffer', 'xwayland-native-scaling']
-      #   [org.gnome.mutter.wayland]
-      #   xwayland-allow-grabs=true
-      #   xwayland-grab-access-rules=['parsecd']
-      # '';
     };
 
     xdg = {
       portal = {
         enable = true;
-        # xdgOpenUsePortal = true;
-        # configPackages = [ pkgs.gnome-session ];
-        # extraPortals = with pkgs;
-        #   [
-        #     xdg-desktop-portal-gtk
-        #     # kdePackages.xdg-desktop-portal-kde
-        #     # xdg-dnesktop-portal-gnome
-        #     # lxqt.xdg-desktop-portal-lxqt
-        #   ];
       };
     };
 
@@ -387,10 +361,6 @@
 
     services.udev.packages = [ pkgs.gnome-settings-daemon ];
 
-    # Display manager (GDM) configuration handled by smind.display-manager module
-
-    # PAM keyring integration handled by smind.security.keyring module
-
     environment.systemPackages =
       (with pkgs; [
         adw-gtk3
@@ -403,13 +373,6 @@
         gnome-randr
       ]);
 
-
-    # systemd.services.gnome-remote-desktop = {
-    #   wantedBy = [ "graphical.target" ];
-    # };
-
-    # Suspend/hibernate quirks (targets, FREEZE workaround, GNOME idle reset) handled by power-suspend-quirks module
-
     services.gnome = {
       gnome-settings-daemon.enable = true;
       core-apps.enable = true;
@@ -419,12 +382,10 @@
       sushi.enable = true;
       localsearch.enable = config.smind.desktop.gnome.localsearch.enable;
       gnome-remote-desktop.enable = true;
-      # gnome-keyring and gcr-ssh-agent handled by smind.security.keyring module
     };
 
     programs.gnome-terminal.enable = true;
     programs.gnome-disks.enable = true;
-    # programs.file-roller.enable = true;
 
     environment.gnome.excludePackages =
       [ pkgs.orca ] ++
@@ -435,7 +396,6 @@
         gnome-characters
         gnome-clocks
         gnome-console
-        # gnome-font-viewer
         gnome-logs
         gnome-maps
         gnome-music

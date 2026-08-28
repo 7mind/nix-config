@@ -9,7 +9,6 @@
     fonts = {
       fontDir.enable = true;
       packages = with pkgs; [
-        # original apple fonts
         menlo
         nix-apple-fonts
       ];

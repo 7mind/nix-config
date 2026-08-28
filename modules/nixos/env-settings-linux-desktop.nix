@@ -45,8 +45,6 @@ in
         libnotify # notify-send command
 
         pulsemeeter
-        # neohtop # broken
-        # vkmark
         d-spy # needs gtk!!!
       ];
 

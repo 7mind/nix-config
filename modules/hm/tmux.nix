@@ -13,7 +13,6 @@
       plugins = with pkgs; [ tmuxPlugins.yank ];
 
       extraConfig = ''
-        # Mouse works as expected, incl. scrolling
         set-option -g mouse on
 
         # Forward OSC 52 clipboard writes to the outer terminal (no general passthrough).
@@ -47,7 +46,6 @@
         set -g @catppuccin_status_right_separator ""
         set -g @catppuccin_status_connect_separator "no"
 
-        # Load catppuccin (theme colors only, window formats skipped)
         run-shell ${pkgs.tmuxPlugins.catppuccin}/share/tmux-plugins/catppuccin/catppuccin.tmux
 
         # Remove stale hooks and variables from previous config versions
@@ -74,7 +72,6 @@
         set -gF @_smind_cfmt_narrow \
           "#[fg=#{@thm_crust},bg=#{@thm_mauve}] ##I "
 
-        # Set initial wide format
         set -gF window-status-format "#{@_smind_wfmt_wide}"
         set -gF window-status-current-format "#{@_smind_cfmt_wide}"
 

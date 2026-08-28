@@ -12,17 +12,10 @@
       onActivation.upgrade = true;
       onActivation.cleanup = "zap";
       caskArgs.no_quarantine = true;
-      taps = [
-        #"homebrew/cask-fonts" # dead
-      ];
+      taps = [ ];
 
       brews = [
         "mas"
-        # "radare2"
-        # "qt@5"
-        # "nasm"
-        # "bochs"
-        # "pandoc"
       ];
 
       casks = map (name: { name = name; greedy = true; }) [
@@ -50,25 +43,19 @@
         "ghidra"
         "iterm2"
         "jetbrains-toolbox"
-        # "jprofiler"
         "megasync"
         "microsoft-remote-desktop"
         "nordvpn"
         "rectangle"
-        # "skype"
-        # "steam"
         "sublime-merge"
         "imhex"
         "wireshark-app"
         "tailscale-app"
-        #"the-unarchiver"
         "keka"
         "crystalfetch"
         "ibkr"
         "trader-workstation"
-        # "horos"
         "wine-stable"
-        # "fman"
         "far2l"
         "linearmouse"
         "tunnelblick"
@@ -78,7 +65,6 @@
         "wezterm"
         "vscodium"
 
-        # hm version works
         "iina"
         "qbittorrent"
         "slack"
@@ -89,7 +75,6 @@
 
         "home-assistant"
 
-        # "vmware-fusion" # broken cask
         "86box"
 
         "wifiman"
@@ -101,16 +86,6 @@
         "winbox"
 
         "mqttx"
-
-        # don't need for now
-        # "dotnet-sdk"
-
-        # "utm"
-        # "protonvpn"
-        # "dosbox-x" # SDL1 build, can't maximize
-        # "zerotier-one"
-        # "transmission"
-        #"teamviewer"
       ];
       masApps = {
         "Audio Profile Manager" = 1484150558;

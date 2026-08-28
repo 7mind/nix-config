@@ -26,14 +26,12 @@ in
   };
 
   config = {
-    # Default group to owner if owner is set
     smind.host.group = lib.mkDefault (
       if config.smind.host.owner != null
       then config.smind.host.owner
       else "default"
     );
 
-    # Default fqn from networking.hostName + networking.domain if domain is set
     smind.host.fqn = lib.mkDefault (
       if netDomain != null && netHostName != null
       then "${netHostName}.${netDomain}"

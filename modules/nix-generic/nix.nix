@@ -88,7 +88,7 @@ in
           keep-outputs = true;
           keep-derivations = true;
           # unsupported on Lix
-          download-buffer-size = lib.mkIf (config.smind.nix.nix-impl != "lix") (1024 * 1024 * 1024); # 1 GiB;
+          download-buffer-size = lib.mkIf (config.smind.nix.nix-impl != "lix") (1024 * 1024 * 1024);
         };
       };
       nixpkgs.config.allowUnfree = true;

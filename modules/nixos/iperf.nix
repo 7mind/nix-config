@@ -33,19 +33,6 @@ in
 
     environment.systemPackages = with pkgs; [
       iperf
-
-      # (pkgs.stdenvNoCC.mkDerivation {
-      #     name = "iperfc";
-      #     src = pkgs.writeText "iperfc" ''#!/usr/bin/env sh
-      #     ${pkgs.iperf}/bin/iperf --username $user --rsa-public-key-path ${config.age.secrets.iperf-public-key.path}
-      #     '';
-
-      #     builder = pkgs.writeText "builder.sh" ''
-      #       mkdir -p $out/bin
-      #       cp $src $out/bin/$name
-      #       chmod +x $out/bin/$name
-      #     '';
-      #   })
     ] ++ (if (config.smind.age.active && config.smind.iperf.protected.client.enable) then [
       (writeShellScriptBin "iperfc" ''
         set -e

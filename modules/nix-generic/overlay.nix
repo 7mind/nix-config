@@ -3,17 +3,6 @@
 {
   nixpkgs.overlays = [
     (final: prev: {
-      # Downgrade wireplumber to 0.5.12 to fix GNOME crash when switching
-      # Bluetooth audio to handsfree/HSP/HFP profile.
-      # See: https://github.com/NixOS/nixpkgs/issues/475202
-      # wireplumber = prev.wireplumber.overrideAttrs (old: rec {
-      #   version = "0.5.12";
-      #   src = prev.fetchurl {
-      #     url = "https://gitlab.freedesktop.org/pipewire/wireplumber/-/archive/${version}/wireplumber-${version}.tar.gz";
-      #     hash = "sha256-DOXNSAh7xbVZ1+GpR+ngrbKptvHavZhK+AHzD7ul4Zw=";
-      #   };
-      # });
-
       # NOTE: claude-code and codex were vendored here; they now live in the cq
       # flake (inputs.cq.packages.<system>.{claude-code,codex}) and are consumed
       # directly by inputs.cq.homeManagerModules.dev-llm. Nothing else in this
@@ -91,7 +80,6 @@
         ];
       });
 
-      # Work around Python package regressions after nixpkgs update.
       pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
         (python-final: python-prev: {
           # web3's test-only py-evm dependency is archived and disabled on
@@ -161,13 +149,6 @@
               # used by the dashboard bootstrap in nixpkgs' package.nix
               override = args: skipZeroconf (python-prev.python-matter-server.override args);
             };
-
-          # construct-classes = python-prev.construct-classes.overridePythonAttrs (old: {
-          #   postPatch = (old.postPatch or "") + ''
-          #     substituteInPlace pyproject.toml \
-          #       --replace-fail "uv_build>=0.8.13,<0.9.0" "uv_build>=0.8.13,<0.11.0"
-          #   '';
-          # });
         })
       ];
     })

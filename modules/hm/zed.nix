@@ -70,7 +70,6 @@ in
         ];
 
         userSettings = {
-          #  base_keymap = "None";
           load_direnv = "direct";
           autosave = {
             after_delay = {
@@ -101,8 +100,6 @@ in
           ui_font_size = config.smind.hm.zed.uiFontSize;
           buffer_font_size = config.smind.hm.zed.bufferFontSize;
           buffer_line_height = { custom = 1.2; };
-          # ui_font_family = "";
-          # buffer_font_fallbacks
           auto_update = false;
           buffer_font_family = "FiraMono Nerd Font";
           terminal = {
@@ -117,25 +114,20 @@ in
           show_completion_documentation = true;
           hover_popover_enabled = true;
 
-          #         "use_autoclose" = true;
-          # "use_auto_surround" = true;
-          # "always_treat_brackets_as_autoclosed" = false;
-          #  "multi_cursor_modifier" = "alt";
           "scrollbar" = {
-            "show" = "auto"; # "auto" (default), "system", "always", "never"
-            "cursors" = true; # Show cursor positions.
-            "git_diff" = true; # Show git diff indicators.
-            "search_results" = true; # Show buffer search results.
-            "selected_symbol" = true; # Show selected symbol occurrences.
-            "diagnostics" = "warning"; # "hint", "information", "warning", "error"
+            "show" = "auto";
+            "cursors" = true;
+            "git_diff" = true;
+            "search_results" = true;
+            "selected_symbol" = true;
+            "diagnostics" = "warning";
           };
           "gutter" = {
-            "line_numbers" = true; # Show line numbers.
-            "runnables" = true; # Show runnables buttons.
-            "folds" = true; # Show fold buttons.
+            "line_numbers" = true;
+            "runnables" = true;
+            "folds" = true;
           };
 
-          # LSP configuration
           lsp = {
             nixd = {
               binary = {
@@ -198,8 +190,6 @@ in
 
         extraPackages = with pkgs; [
           # Rust
-          #rustc
-          #cargo
           rustup
           tree-sitter
           nodejs_22

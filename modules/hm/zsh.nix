@@ -1,8 +1,6 @@
 { config, lib, ... }:
 
 let
-  # WORDCHARS presets selected by smind.hm.zsh.wordchars; any unrecognised
-  # value is used verbatim as the WORDCHARS string.
   wordcharsPresets = {
     "default" = "*?_-.[]~=&;!#$%^(){}<>";  # zsh's built-in default
     "no-hash" = "*?_-.[]~=&;!$%^(){}<>";   # zsh default with '#' as a word boundary
@@ -50,10 +48,8 @@ in
 
     programs.carapace.enableZshIntegration = true;
 
-    # https://home-manager-options.extranix.com/?query=programs.zsh&release=master
     programs.zsh = {
       enable = true;
-      #zprof.enable = true;
 
       autocd = true;
       syntaxHighlighting.enable = true;
@@ -63,12 +59,6 @@ in
         share = true;
         size = 10000;
       };
-
-      # oh-my-zsh = {
-      #   enable = true;
-      #   theme = "kphoen";
-      #   plugins = [ "zsh-navigation-tools" ];
-      # };
 
       localVariables = {
         COMPLETION_WAITING_DOTS = true;

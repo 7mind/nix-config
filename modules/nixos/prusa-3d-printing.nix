@@ -15,7 +15,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # Prusa research USB serial devices
     services.udev.extraRules = ''
       # Original Prusa i3 MK2/MK2S/MK2.5
       SUBSYSTEM=="tty", ATTRS{idVendor}=="2c99", ATTRS{idProduct}=="0001", MODE="0660", GROUP="dialout", TAG+="uaccess"
@@ -32,10 +31,5 @@ in
     users.users = lib.genAttrs cfg.users (_: {
       extraGroups = [ "dialout" ];
     });
-
-    # Prusa-slicer package often provides its own rules if we include it in services.udev.packages
-    # but we will put it in the HM module for user apps.
-    # However, if it provides rules, we can add it here too.
-    # services.udev.packages = [ pkgs.prusa-slicer ];
   };
 }

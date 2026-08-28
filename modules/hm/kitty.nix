@@ -37,12 +37,6 @@
       };
 
       keybindings = {
-
-        #"ctrl+s" = "paste_from_selection";
-        # "ctrl+t" = "new_tab";
-        # "ctrl+w" = "close_tab";
-        # "ctrl+q" = "close_os_window";
-
         "kitty_mod+d" = "launch --location=hsplit";
         "kitty_mod+shift+d" = "launch --location=vsplit";
 
@@ -57,7 +51,6 @@
         "kitty_mod+c" = "copy_to_clipboard";
         "kitty_mod+v" = "paste_from_clipboard";
 
-        #"kitty_mod+s" = "paste_from_selection";
         "kitty_mod+t" = "new_tab";
         "kitty_mod+w" = "close_tab";
         "kitty_mod+q" = "close_os_window";

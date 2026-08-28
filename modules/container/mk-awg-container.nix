@@ -34,7 +34,6 @@ let
 
   containerRootUid = toString (65536 * privateUsersMultiplier);
 
-  # Age secret definitions for all AWG keys
   awgSecrets = {
     "${secretsPrefix}-server-key" = {
       rekeyFile = "${cfg-meta.paths.secrets}/generic/${secretsPrefix}-server-key.age";

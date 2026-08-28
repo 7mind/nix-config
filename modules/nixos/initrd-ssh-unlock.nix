@@ -54,7 +54,6 @@
     ];
 
     boot.initrd = {
-      # Load bridge module when using a bridge interface
       kernelModules = lib.mkIf (config.smind.initrd-unlock.bridge-slave != null) [ "bridge" ];
 
       systemd =
@@ -117,13 +116,11 @@
             };
 
             networks = {
-              # Bridge slave config (when using a bridge)
               "10-${config.smind.initrd-unlock.interface}-slave" = lib.mkIf (config.smind.initrd-unlock.bridge-slave != null) {
                 name = config.smind.initrd-unlock.bridge-slave;
                 bridge = [ config.smind.initrd-unlock.interface ];
               };
 
-              # DHCP config for bridge/interface
               "20-${config.smind.initrd-unlock.interface}" = {
                 enable = true;
                 name = config.smind.initrd-unlock.interface;
@@ -165,9 +162,6 @@
 
           # `ssh-keygen -t ed25519 -N "" -f /path/to/ssh_host_ed25519_key`
           # hostKeys = [ "/etc/secrets/initrd/ssh_host_ed25519_key" ];
-
-          # authorizedKeys = config.sshkeys.pavel-all
-          #   ++ [ config.sshkeys.initrd ];
         };
       };
     };

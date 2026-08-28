@@ -17,20 +17,8 @@
       "${config.home.homeDirectory}/.rd/bin"
     ];
 
-    # programs.zsh.envExtra = lib.mkIf cfg-meta.isDarwin ''
-    #   export PATH=$PATH:~/.rd/bin
-    # '';
-
-    # programs.bash = lib.mkIf cfg-meta.isDarwin {
-    #   enable = true;
-    #   initExtra = ''
-    #     export PATH=$PATH:~/.rd/bin
-    #   '';
-    # };
-
     programs.zsh.initContent = ''
       _direnv_project_zsh_autoload() {
-        # Only run if direnv has an active env
         [[ -z ''${DIRENV_FILE:-} ]] && return
 
         # Directory that contains the active .envrc
@@ -62,17 +50,12 @@
     home.packages = with pkgs;
       lib.optional (!config.smind.hm.electron-wrappers.slack.enable) slack
       ++ [
-      # zoom-us
-      # gitFull
-
       websocat
       jq
 
       tokei
       cloc
 
-      # bitwarden-cli
-      # rbw
       bws
 
       python3

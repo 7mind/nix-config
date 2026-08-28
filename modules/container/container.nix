@@ -2,7 +2,6 @@
 
 {
   imports = [
-    # ../../consts.nix
     "${cfg-meta.paths.modules}/nixos/ssh.nix"
   ];
 
@@ -42,7 +41,6 @@
   users = {
     users.root = {
       openssh.authorizedKeys.keys = cfg-const.ssh-keys-pavel;
-      #password = "nixos";
     };
   };
 

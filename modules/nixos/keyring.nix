@@ -1,12 +1,8 @@
 { config, lib, pkgs, ... }:
 
-# Unified keyring and SSH agent configuration
-# Used by desktop environments (GNOME, COSMIC) for consistent secret/SSH key management
-
 let
   cfg = config.smind.security.keyring;
 
-  # Script to enroll keyring password to TPM
   tpmEnrollKeyringScript = pkgs.writeShellScriptBin "tpm-enroll-keyring" ''
     set -euo pipefail
 
@@ -20,14 +16,12 @@ let
     echo "The credential will be stored at: $CRED_PATH"
     echo ""
 
-    # Ensure directory exists
     if [ ! -d "$CRED_DIR" ]; then
       echo "Creating credential directory..."
       sudo mkdir -p "$CRED_DIR"
       sudo chmod 755 "$CRED_DIR"
     fi
 
-    # Get password securely
     PASSWORD=$(${pkgs.systemd}/bin/systemd-ask-password "Enter your keyring/login password:")
 
     if [ -z "$PASSWORD" ]; then
@@ -91,7 +85,6 @@ let
     CRED_PATH="${cfg.tpmUnlock.credentialPath}"
     CONTROL_SOCKET="$XDG_RUNTIME_DIR/keyring/control"
 
-    # Wait for gnome-keyring control socket
     for i in $(seq 1 10); do
       [ -S "$CONTROL_SOCKET" ] && break
       sleep 0.2
@@ -100,7 +93,6 @@ let
 
     export GNOME_KEYRING_CONTROL="$XDG_RUNTIME_DIR/keyring"
 
-    # Decrypt password from TPM and unlock keyring
     ${pkgs.systemd}/bin/systemd-creds decrypt "$CRED_PATH" - 2>/dev/null | \
       ${pkgs.gnome-keyring}/bin/gnome-keyring-daemon --unlock >/dev/null 2>&1
   '';
@@ -110,17 +102,14 @@ let
     # PAM_USER is set by PAM to the user logging in
     [ -n "$PAM_USER" ] || exit 0
 
-    # Only run for users in tss group
     id -nG "$PAM_USER" 2>/dev/null | ${pkgs.gnugrep}/bin/grep -qw tss || exit 0
     id -nG "$PAM_USER" 2>/dev/null | ${pkgs.gnugrep}/bin/grep -qw users || exit 0
 
     CRED_PATH="${cfg.tpmUnlock.credentialPath}"
     [ -f "$CRED_PATH" ] || exit 0
 
-    # XDG_RUNTIME_DIR should be set
     [ -n "$XDG_RUNTIME_DIR" ] || exit 0
 
-    # Run the inner script as the actual user
     exec ${pkgs.su}/bin/su "$PAM_USER" -s /bin/sh -c "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR ${keyringUnlockInner}"
   '';
 in
@@ -205,7 +194,6 @@ in
     })
 
     (lib.mkIf config.smind.security.keyring.enable (lib.mkMerge [
-    # gnome-keyring backend
     (lib.mkIf (config.smind.security.keyring.backend == "gnome-keyring") {
       services.gnome.gnome-keyring.enable = true;
       programs.seahorse.enable = true;
@@ -222,7 +210,6 @@ in
       });
     })
 
-    # GCR SSH agent (requires gnome-keyring)
     (lib.mkIf (config.smind.security.keyring.sshAgent == "gcr") {
       assertions = [{
         assertion = config.smind.security.keyring.backend == "gnome-keyring";
@@ -248,7 +235,6 @@ in
       '';
     })
 
-    # KWallet
     (lib.mkIf (config.smind.security.keyring.backend == "kwallet") {
       # remove seahorse to prevent conflict with KWallet
       environment.gnome.excludePackages = [
@@ -266,7 +252,6 @@ in
       });
     })
 
-    # TPM-based keyring unlock (for fingerprint login)
     (lib.mkIf cfg.tpmUnlock.enable {
       assertions = [{
         assertion = cfg.backend == "gnome-keyring";
@@ -283,7 +268,6 @@ in
         });
       '';
 
-      # Enrollment script
       environment.systemPackages = [ tpmEnrollKeyringScript tpmUnenrollKeyringScript ];
 
       # Add pam_exec to login session to unlock keyring after pam_gnome_keyring starts the daemon

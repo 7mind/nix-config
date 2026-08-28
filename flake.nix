@@ -1,8 +1,6 @@
 {
   inputs = {
-    # nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable-small";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    # nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
 
     # nixpkgs.url = "github:LunNova/nixpkgs/push-nmzswnymunon";
 
@@ -203,13 +201,11 @@
         (hosts-public builders).darwin ++ (hosts-private builders).darwin
       );
 
-      # Default agenix-rekey for all hosts
       agenix-rekey = inputs.agenix-rekey.configure {
         userFlake = self;
         nixosConfigurations = self.nixosConfigurations // self.darwinConfigurations;
       };
 
-      # Per-host agenix-rekey configurations for selective rekeying
       agenix-rekey-hosts = builtins.mapAttrs (
         name: _:
         inputs.agenix-rekey.configure {

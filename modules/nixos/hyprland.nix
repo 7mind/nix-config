@@ -59,7 +59,6 @@
 
     security.polkit.enable = true;
 
-    # Polkit authentication agent
     systemd.user.services.polkit-gnome-authentication-agent-hyprland = {
       description = "polkit-gnome-authentication-agent-hyprland";
       wantedBy = [ "graphical-session.target" ];

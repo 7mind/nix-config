@@ -7,7 +7,6 @@
 
   config = lib.mkIf config.smind.environment.alien-filesystems.enable {
     boot.supportedFilesystems = [
-      # "apfs" # broken
       "ntfs"
     ];
 

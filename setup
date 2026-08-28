@@ -23,7 +23,6 @@ ROOTS=/nix/var/nix/gcroots/my-builds
 # Source private environment if it exists
 [[ -f "$SCRIPT_DIR/private/setup-env" ]] && source "$SCRIPT_DIR/private/setup-env"
 
-# Options
 HOSTS=()
 DO_REFRESH=false
 DO_SWITCH=false
@@ -40,7 +39,6 @@ DO_CHECK_SIGS=true
 MESSAGE=""
 VERBOSE=false
 
-# Cache for host metadata
 declare -A HOST_META
 
 # Per-host remote address overrides (host -> ssh target), set via
@@ -119,7 +117,6 @@ load_host_meta() {
     fi
     rm -f "$errfile"
 
-    # Parse JSON and populate HOST_META
     while IFS="=" read -r key value; do
         HOST_META["$key"]="$value"
     done < <(echo "$json" | jq -r 'to_entries[] | "\(.key)=\(.value | @json)"')
@@ -323,12 +320,10 @@ parse_args() {
         esac
     done
 
-    # Default to current host if none specified
     if [[ ${#HOSTS[@]} -eq 0 ]]; then
         HOSTS=("$THISHOST")
     fi
 
-    # Default commit message
     if [[ -z "$MESSAGE" ]]; then
         MESSAGE="autosave ($(hostname) / $(uname))"
     fi
@@ -458,7 +453,6 @@ get_master_identity() {
     AGE_DECRYPTED_KEY="$AGE_RUNTIME_KEY"
     trap 'rm -f "$AGE_DECRYPTED_KEY"' EXIT
 
-    # Linux: try TPM first
     if [[ "$(uname -s)" != "Darwin" ]]; then
         if decrypt_tpm_key; then
             return 0

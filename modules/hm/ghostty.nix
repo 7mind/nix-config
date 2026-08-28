@@ -54,7 +54,6 @@ in
   };
 
   config = lib.mkIf config.smind.hm.ghostty.enable {
-    # Custom WCAG-compliant theme
     xdg.configFile."ghostty/themes/7mind".text = ''
       # 7mind
       #
@@ -145,7 +144,6 @@ in
 
 
 
-    # Default Kitty theme
     xdg.configFile."ghostty/themes/kitty".text = ''
       # kitty default
       #
@@ -213,10 +211,6 @@ in
 
         app-notifications = false;
 
-        # TODO: enable when Ghostty 1.3+ is available
-        # scrollbar = "system";
-
-        # Don't dim inactive panes
         unfocused-split-opacity = 1;
 
         copy-on-select = config.smind.hm.ghostty.copy-on-select;
@@ -237,18 +231,14 @@ in
           "super+c=copy_to_clipboard"
           "super+v=paste_from_clipboard"
 
-          # Clear screen and scrollback
           "super+k=clear_screen"
 
-          # Splits
           "super+d=new_split:down"
           "super+shift+d=new_split:right"
 
-          # Navigate panes
           "super+up=goto_split:top"
           "super+down=goto_split:bottom"
 
-          # Resize panes
           "super+shift+up=resize_split:up,10"
           "super+shift+down=resize_split:down,10"
           "super+shift+left=resize_split:left,10"
@@ -262,16 +252,13 @@ in
           "super+n=new_window"
           "super+w=close_surface"
 
-          # Scrolling
           "shift+page_up=scroll_page_fractional:-0.5"
           "shift+page_down=scroll_page_fractional:0.5"
 
-          # Search
           "super+f=start_search"
           "super+g=navigate_search:next"
           "super+shift+g=navigate_search:previous"
 
-          # Essential defaults to keep
           "super+shift+comma=reload_config"
           "super+==increase_font_size:1"
           "super++=increase_font_size:1"
@@ -281,7 +268,6 @@ in
           "ctrl+left=previous_tab"
           "ctrl+right=next_tab"
         ] ++ lib.optionals config.smind.hm.ghostty.ctrl-keybindings [
-          # Additional Ctrl keybindings (in addition to Super)
           # Copy/Paste - performable: only triggers if there's a selection, otherwise passes through
           "performable:ctrl+c=copy_to_clipboard"
           "ctrl+v=paste_from_clipboard"

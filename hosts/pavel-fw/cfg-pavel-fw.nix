@@ -25,14 +25,9 @@ in
     hostPubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILVhIJvhBhZBZwwW+XNYWLRn5wL+ecMkWRYcuqmJVq1r";
   };
 
-  boot.kernelParams = [
-    #"usbcore.autosuspend=-1"
-  ];
-
   # Use systemd in initrd for proper LUKS + LVM + hibernate resume sequencing
   boot.initrd.systemd.enable = true;
 
-  # LUKS encryption with TPM2 auto-unlock
   # Re-enroll after UEFI/TPM changes: tpm-enroll-luks
   boot.initrd.luks.devices."enc" = {
     device = luksDevice;
@@ -88,7 +83,6 @@ in
     pkgs.video-trimmer
   ];
 
-  # Resume device for hibernation
   boot.resumeDevice = "/dev/vg/swap";
 
   boot.loader.efi.canTouchEfiVariables = true;

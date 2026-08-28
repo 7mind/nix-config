@@ -49,18 +49,7 @@ in
     environment.systemPackages = with pkgs; [
       stable-diffusion-cpp-rocm
 
-      #llama-cpp-rocm
-
-      # terminal clients
       gollama
-      #oterm
-
-      # repo ingestion - don't need
-      # yek
-      # gitingest # broken
-
-      # jan
-      # alpaca
     ];
 
     services.ollama = {
@@ -81,10 +70,6 @@ in
         OLLAMA_FLASH_ATTENTION = "1";
         OLLAMA_SCHED_SPREAD = "0";
       };
-
-      # ollama show <modelname> --modelfile > custom.modelfile
-      # ollama create <yourmodelname> -f custom.modelfile
-      # context size: PARAMETER num_ctx 8192
 
       loadModels = [
         "nomic-embed-text"
@@ -115,7 +100,6 @@ in
       };
       path = [ config.services.ollama.package pkgs.coreutils ];
       script = ''
-                # Wait for Ollama to be ready
                 for i in $(seq 1 30); do
                   ollama list && break
                   sleep 2
@@ -125,7 +109,6 @@ in
                 trap "rm -f $MODELFILE" EXIT
 
                 ${lib.concatMapStringsSep "\n" (model: ''
-                # Create custom model: ${model.name}
                 if ! ollama list | grep -Fq "${model.name}"; then
                   echo "Creating ${model.name} from ${model.baseName} with context ${toString model.contextLength}..."
                   cat > "$MODELFILE" << EOF

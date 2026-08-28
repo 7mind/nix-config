@@ -64,7 +64,7 @@
       enable = true;
       profiles.${config.smind.desktop.gnome.dconf.profile}.databases = [
         {
-          lockAll = true; # prevents overriding
+          lockAll = true;
           settings =
             let
               empty = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
@@ -138,7 +138,6 @@
                 shift-overview-up = empty;
                 shift-overview-down = empty;
 
-                #open-application-menu = empty;
                 toggle-application-view = empty;
                 toggle-message-tray = empty;
                 toggle-overview = [ toggleOverviewBinding ];
@@ -165,12 +164,6 @@
                 home = empty;
                 home-static = empty;
                 increase-text-size = empty;
-                # keyboard-brightness-down = empty;
-                # keyboard-brightness-down-static = empty;
-                # keyboard-brightness-toggle = [ "XF86KbdLightOnOff" ];
-                # keyboard-brightness-toggle-static = empty;
-                # keyboard-brightness-up = empty;
-                # keyboard-brightness-up-static = empty;
                 logout = empty;
                 magnifier = empty;
                 magnifier-zoom-in = empty;
@@ -182,18 +175,6 @@
                 next = empty;
                 next-static = empty;
                 on-screen-keyboard = empty;
-                # pause = empty;
-                # pause-static = empty;
-                # play = empty;
-                # play-static = empty;
-                # playback-forward = empty;
-                # playback-forward-static = empty;
-                # playback-random = empty;
-                # playback-random-static = empty;
-                # playback-repeat = empty;
-                # playback-repeat-static = empty;
-                # playback-rewind = empty;
-                # playback-rewind-static = empty;
                 power = empty;
                 power-static = empty;
                 previous = empty;

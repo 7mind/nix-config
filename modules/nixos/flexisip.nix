@@ -1275,7 +1275,6 @@ in
     })
 
     (mkIf cfg.presence.enable {
-      # Presence is a separate Flexisip server process on localhost.
       systemd.services.flexisip-presence = {
         description = "Flexisip presence server";
         wantedBy = [ "multi-user.target" ];

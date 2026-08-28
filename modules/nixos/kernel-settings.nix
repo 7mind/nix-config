@@ -30,11 +30,7 @@
         "kernel.kptr_restrict" = 0; # intellij profiler
         "dev.tty.legacy_tiocsti" = 0; # disable TIOCSTI injection; lets llm-sandbox drop --new-session so SIGWINCH reaches TUIs
       };
-      kernelParams = [
-        #"video=efifb:off"
-        # "pcie_aspm=off" # spurious interrupt?.. https://forum.proxmox.com/threads/kernel-pcieport-0000-c0-03-1-pme-spurious-native-interrupt.101338/
-        # "msr.allow_writes=on" # amd ?
-      ];
+      kernelParams = [ ];
 
       kernelModules = [ "r8169" ];
 

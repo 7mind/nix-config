@@ -45,25 +45,19 @@
     };
   };
 
-  # Helper functions for parsing "layout+variant" format
   config.lib.xkb = {
-    # Extract just the layout part from "layout+variant" or "layout"
     parseLayout = s:
       let parts = lib.splitString "+" s;
       in lib.head parts;
 
-    # Extract just the variant part from "layout+variant", or "" if no variant
     parseVariant = s:
       let parts = lib.splitString "+" s;
       in if lib.length parts > 1 then lib.elemAt parts 1 else "";
 
-    # Get list of layouts from config
     getLayouts = layouts: map config.lib.xkb.parseLayout layouts;
 
-    # Get list of variants from config
     getVariants = layouts: map config.lib.xkb.parseVariant layouts;
 
-    # Map a single modifier token to its GTK/GNOME accelerator representation
     modifierAccelTokens = {
       ctrl = "<Primary>";
       alt = "<Alt>";
@@ -76,10 +70,8 @@
     modifierType = lib.types.addCheck lib.types.str
       (s: lib.all (t: builtins.hasAttr t config.lib.xkb.modifierAccelTokens) (lib.splitString "-" s));
 
-    # Split a modifier spec into its individual tokens, e.g. "ctrl-alt" -> [ "ctrl" "alt" ]
     modifierTokens = spec: lib.splitString "-" spec;
 
-    # Turn a modifier spec + key into a GTK accelerator binding, e.g. "ctrl-alt" "m" -> "<Primary><Alt>m"
     modifierBinding = spec: key:
       (lib.concatMapStrings (t: config.lib.xkb.modifierAccelTokens.${t}) (lib.splitString "-" spec)) + key;
   };

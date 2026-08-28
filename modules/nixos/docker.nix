@@ -49,8 +49,6 @@ in
           enable = true;
           dockerCompat = true;
           dockerSocket.enable = !cfg.rootless.enable;
-          # extraPackages = with pkgs; [ aardvark-dns netavark zfs ];
-          # defaultNetwork.settings.dns_enabled = true;
         };
       }
       (lib.mkIf cfg.rootless.enable {

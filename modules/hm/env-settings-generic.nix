@@ -156,7 +156,6 @@
 
     programs.tealdeer = {
       enable = true;
-      # updateOnActivation = false;
       settings = { updates = { auto_update = true; }; };
     };
 

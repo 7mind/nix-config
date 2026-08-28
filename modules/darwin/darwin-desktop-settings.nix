@@ -6,7 +6,6 @@
   };
 
   config = lib.mkIf config.smind.darwin.sysconfig.enable {
-    #alf = { globalstate = 1; };
     networking.applicationFirewall = {
       enable = false;
       blockAllIncoming = false;
@@ -24,7 +23,6 @@
             "0.847059 0.847059 0.862745 Graphite"; # "Graphite/Gray accent/Highlight"
           "NSNavPanelExpandedStateForSaveMode" = true;
           "com.apple.mouse.tapBehavior" = 1;
-          # "com.apple.mouse.tapBehavior" = 1; # currenthost!
           "NSAutomaticTextCompletionEnabled" = false;
           "WebKitDeveloperExtras" =
             true; # "Adding a context menu item for showing the Web Inspector in web views"
@@ -74,20 +72,12 @@
             true; # "Allowing text selection in Quick Look/Preview in Finder by default"
           FXPreferredSearchViewStyle =
             "Nlsv"; # "Four-letter codes for the other view modes: `icnv`, `clmv`, `Flwv`"
-          # ShowExternalHardDrivesOnDesktop = true;
-          # ShowRemovableMediaOnDesktop = true;
-          # ShowPathBar = true;
-          # ShowTabView = true;
         };
 
         "com.apple.dock" = {
           "scroll-to-open" =
             true; # "While hovering over top of an icon in the Dock, use the scroll wheel on the mouse, or use the scroll gesture on the track pad to expose all the windows in the app"
         };
-
-        # "com.apple.menuextra.battery" = {
-        #   ShowPercent = true; # "Show Percent Battery in menu bar"
-        # };
 
         "com.apple.TimeMachine" = {
           DoNotOfferNewDisksForBackup =
@@ -125,11 +115,6 @@
           "NSStatusItem Visible WiFi" = 1;
         };
 
-        # need sudo
-        # "/Library/Preferences/com.apple.SoftwareUpdate.plist" = {
-        #   "AutomaticDownload" = true;
-        # };
-        # "com.apple.ImageCapture" = { disableHotPlug = true; }; # currentHost
       };
 
       NSGlobalDomain = {
@@ -197,25 +182,6 @@
           "This Mac is a property of Septimal Mind Ltd. Please email team@7mind.io if you found it.";
       };
     };
-
-    # fonts = {
-    #   #  fontDir.enable = true;
-    #   packages = with pkgs;
-    #     [
-    #       (nerdfonts.override {
-    #         fonts = [
-    #           "DroidSansMono"
-    #           "FiraCode"
-    #           "Hack"
-    #           "Iosevka"
-    #           "FiraMono"
-    #           "JetBrainsMono"
-    #           "RobotoMono"
-    #           "Meslo"
-    #         ];
-    #       })
-    #     ];
-    # };
 
     fonts = {
       packages = (with pkgs.nerd-fonts;

@@ -33,12 +33,10 @@
           "applications:io.missioncenter.MissionCenter"
         ];
       };
-      #themes = { };
       extensions = with cfg-meta.inputs.vicinae-extensions.packages.${pkgs.stdenv.hostPlatform.system}; [
         fuzzy-files
         nix
         it-tools
-        # bluetooth # broken
         agenda
       ] ++ lib.optional outerConfig.smind.desktop.kde.enable kde-system-settings;
     };
@@ -66,14 +64,11 @@
 
       pdftk
 
-      # tgeraser # error: telethon-1.42.0 not supported for interpreter python3.14
       geekbench
 
       # mcus
       rpi-imager
     ]);
-
-    #programs.librewolf.enable = lib.mkIf cfg-meta.isLinux true;
 
     programs.chromium = lib.mkIf cfg-meta.isLinux {
       enable = true;
@@ -84,19 +79,8 @@
 
     xdg = lib.mkIf cfg-meta.isLinux (lib.mkMerge [
       {
-        # mimeApps = {
-        #   enable = true;
-        #   associations = {
-        #     added = {
-        #       #"mimetype1" = [ "foo1.desktop" "foo2.desktop" "foo3.desktop" ];
-        #     };
-        #     removed = { };
-        #   };
-        # };
         userDirs = {
           enable = true;
-          # see
-          # https://github.com/nix-community/home-manager/blob/master/modules/misc/xdg-user-dirs.nix
         };
       }
 

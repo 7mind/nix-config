@@ -9,7 +9,6 @@
     home.packages = with pkgs; [
 
     ] ++ (if (cfg-meta.isLinux) then with pkgs; [
-      # https://github.com/NixOS/nixpkgs/issues/413845
       unityhub
     ] else [ ]);
 

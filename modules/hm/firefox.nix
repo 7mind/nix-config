@@ -16,7 +16,6 @@ let
               if (!keyset || !cmdset) return;
 
               ${lib.optionalString cfg.macPrivateWindowKey.enable ''
-              // Remove both old keys
               const undoKey = doc.getElementById("key_undoCloseWindow");
               if (undoKey) undoKey.remove();
               const oldPrivateKey = doc.getElementById("key_privatebrowsing");
@@ -24,7 +23,6 @@ let
               const privateCommand = oldPrivateKey?.getAttribute("command");
               if (oldPrivateKey) oldPrivateKey.remove();
 
-              // Create replacement with new binding
               const newPrivateKey = doc.createXULElement("key");
               newPrivateKey.id = "key_privatebrowsing";
               newPrivateKey.setAttribute("key", "N");
@@ -216,12 +214,6 @@ in
             "devtools.selfxss.count" = 5; # Allow pasting into console
             "devtools.theme" = "dark";
             # FirefoxSync breaks when Push notifications are disabled
-            #
-            # "dom.push.enabled" = false;
-            # "dom.pushconnection.enabled" = false;
-            # "dom.webnotifications.enabled" = false;
-            # "dom.webnotifications.serviceworker.enabled" = false;
-            #
             "dom.push.enabled" = true;
             "dom.pushconnection.enabled" = true;
             "dom.webnotifications.enabled" = true;
@@ -238,10 +230,6 @@ in
             "widget.use-xdg-desktop-portal.location" = 1;
             "widget.use-xdg-desktop-portal.settings" = 1;
             "widget.use-xdg-desktop-portal.open-uri" = 1;
-
-            #"gfx.webrender.all" = true;
-            #"gfx.webrender.compositor" = true;
-            #browser.uiCustomization.state" = builtins.toJSON { };
 
             # betterfox / fastfox
             "browser.cache.memory.max_entry_size" = 153600;
@@ -341,8 +329,6 @@ in
             # Disable Mozilla spyware https://support.mozilla.org/en-US/kb/privacy-preserving-attribution?as=u&utm_source=inproduct
             "dom.private-attribution.submission.enabled" = false;
 
-            # "network.dns.http3_echconfig.enabled" = true;
-            # "network.dns.echconfig.enabled" = true;
             "network.dns.preferIPv6" = true;
             "network.trr.mode" = 2;
             "network.trr.custom_uri" = "https://dns.adguard-dns.com/dns-query";
@@ -376,8 +362,6 @@ in
               "google"
               "perplexity"
               "claude"
-              # "qwant"
-              # "kagi"
               "nixpkgs"
               "nixopts"
               "hm"
@@ -458,23 +442,6 @@ in
                 definedAliases = [ "@c" ];
               };
 
-              # qwant = {
-              #   name = "Qwant";
-              #   urls = [{
-              #     template = "https://www.qwant.com/";
-              #     params = [{
-              #       name = "q";
-              #       value = "{searchTerms}";
-              #     }
-              #       {
-              #         name = "t";
-              #         value = "web";
-              #       }];
-              #   }];
-              #   icon = "https://www.qwant.com/favicon.ico";
-              #   definedAliases = [ "@q" ];
-              # };
-
               hf = {
                 name = "Hugging Face Models";
                 urls = [{
@@ -492,32 +459,6 @@ in
                 definedAliases = [ "@hf" ];
               };
 
-              # kagi = {
-              #   name = "Kagi";
-              #   urls = [{
-              #     template = "https://kagi.com/search";
-              #     params = [{
-              #       name = "q";
-              #       value = "{searchTerms}";
-              #     }];
-              #   }];
-              #   icon = "https://kagi.com/favicon.ico";
-              #   definedAliases = [ "@k" ];
-              # };
-
-              # leta = {
-              #   name = "Leta";
-              #   urls = [{
-              #     template = "https://leta.mullvad.net/search";
-              #     params = [{
-              #       name = "q";
-              #       value = "{searchTerms}";
-              #     }];
-              #   }];
-              #   icon = "https://leta.mullvad.net/favicon.ico";
-              #   definedAliases = [ "@l" ];
-              # };
-
               maven = {
                 name = "Maven";
                 urls = [{
@@ -528,7 +469,6 @@ in
                   }];
                 }];
                 icon = "http://search.maven.org/favicon.ico";
-                #icon = "${pkgs.nixos-icons}/share/icons/hicolor/scalable/apps/nix-snowflake.svg";
                 definedAliases = [ "@m2" ];
               };
 
@@ -551,7 +491,6 @@ in
                     }
                   ];
                 }];
-                #icon = "${pkgs.nixos-icons}/share/icons/hicolor/scalable/apps/nix-snowflake.svg";
                 icon = "https://github.com/favicon.ico";
                 definedAliases = [ "@gh" ];
               };
@@ -667,8 +606,6 @@ in
                 icon = "https://ollama.com/public/icon-32x32.png";
                 definedAliases = [ "@llm" ];
               };
-
-              # missing searches: nur, flakehub
 
               btdig = {
                 name = "btdig";

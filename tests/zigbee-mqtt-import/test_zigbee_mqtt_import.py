@@ -17,9 +17,6 @@ import zigbee_mqtt_import  # type: ignore[import-not-found]
 from conftest import publish_bridge_devices
 
 
-# ---------- helpers ----------
-
-
 def _client(mosquitto: tuple[str, int]) -> zigbee_mqtt_import.Z2mDevicesClient:
     host, port = mosquitto
     return zigbee_mqtt_import.Z2mDevicesClient(
@@ -29,9 +26,6 @@ def _client(mosquitto: tuple[str, int]) -> zigbee_mqtt_import.Z2mDevicesClient:
         password="anything",
         timeout_s=3.0,
     )
-
-
-# ---------- build_mapping unit-level checks ----------
 
 
 def test_build_mapping_extracts_typed_entries_keyed_by_ieee() -> None:
@@ -100,9 +94,6 @@ def test_build_mapping_rejects_duplicate_friendly_name() -> None:
     ]
     with pytest.raises(ValueError, match="duplicate friendly_name"):
         zigbee_mqtt_import.build_mapping(devices)
-
-
-# ---------- type inference ----------
 
 
 def _device_with_exposes(exposes: list[dict]) -> dict:
@@ -249,9 +240,6 @@ def test_build_mapping_threads_inferred_type_through() -> None:
     }
 
 
-# ---------- end-to-end via real mosquitto ----------
-
-
 def test_fetch_devices_reads_retained_bridge_devices(
     mosquitto: tuple[str, int],
 ) -> None:
@@ -319,9 +307,6 @@ def test_fetch_devices_rejects_non_list_payload(
             client.fetch_devices()
     finally:
         client.close()
-
-
-# ---------- top-level integration: fetch + build_mapping ----------
 
 
 def test_end_to_end_produces_sorted_mapping(
