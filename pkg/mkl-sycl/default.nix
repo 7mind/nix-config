@@ -9,17 +9,14 @@
 #   - Our only consumer is `pkg/llama-cpp-sycl/`. We pass this in via the
 #     `mkl` argument override — the upstream package keeps 2023.1.
 #
-# Why 2025.3.1 specifically?
-#   intel-llvm@unstable-2025-11-14 (in nixpkgs) ships `libsycl.so.8`.
-#   Probed Intel's yum repo for which `libmkl_sycl_blas.so.*` matches:
-#     - mkl@2023.1.0 → NEEDED libsycl.so.6  (✗ pkg already in nixpkgs)
-#     - mkl@2025.0.x → NEEDED libsycl.so.8  (✓)
-#     - mkl@2025.1.x → NEEDED libsycl.so.8  (✓)
-#     - mkl@2025.2.x → NEEDED libsycl.so.8  (✓)
-#     - mkl@2025.3.x → NEEDED libsycl.so.8  (✓)
-#     - mkl@2026.0.0 → NEEDED libsycl.so.9  (✗ would need intel-llvm bump)
-#   2025.3.1 is the latest 2025.x and gets the most recent bug fixes
-#   while remaining ABI-compatible with our intel-llvm pin.
+# Why 2026.1.0 specifically?
+#   nixpkgs `intel-llvm` is now 7.0.1 and ships `libsycl.so.9`.
+#   mkl@2025.3.x NEEDs `libsycl.so.8`; dlopen of libggml-sycl.so then
+#   fails (`libsycl.so.8 => not found`), llama.cpp reports "no usable
+#   GPU", and the B70 falls back to CPU (~0.6 t/s on 27B).
+#     - mkl@2025.3.x → NEEDED libsycl.so.8  (✗ vs intel-llvm 7.0.1)
+#     - mkl@2026.1.0 → NEEDED libsycl.so.9  (✓ verified on
+#       libmkl_sycl_blas.so.6 from the 2026.1.0-236 rpm)
 #
 # Layout differences from nixpkgs mkl@2023.1.0:
 #   - oneMKL ≥ 2024.0 splits the SYCL implementation per-domain
@@ -37,9 +34,9 @@
 }:
 
 let
-  mklVer    = "2025.3";
-  mklRel    = "2025.3.1-8";
-  openmpRel = "2025.3.3-30";
+  mklVer    = "2026.1";
+  mklRel    = "2026.1.0-236";
+  openmpRel = "2026.1.1-325";
   tbbVer    = "2022.3";
   tbbRel    = "2022.3.1-400";
 
@@ -53,36 +50,36 @@ let
     # Runtime: libmkl_core.so, libmkl_intel_*, libmkl_*_thread.so, libmkl_rt.so, etc.
     mkl-core = fetchRpm
       "intel-oneapi-mkl-core-${mklVer}-${mklRel}.x86_64.rpm"
-      "sha256-gTSZDJT86YEqIXU73PCg+1d07/LEA+bw67gGBLQw6F8=";
+      "sha256-fgZE+cZ93gPsAMKgvyYpB7kdg6JCNclVg69IZC2srhc=";
 
     # CMake config (MKLConfig.cmake), pkg-config files. Required by
     # ggml-sycl's `find_package(MKL REQUIRED)`.
     mkl-core-devel = fetchRpm
       "intel-oneapi-mkl-core-devel-${mklVer}-${mklRel}.x86_64.rpm"
-      "sha256-4J3a/vpljVAX5b+gUooyO4BeoRZnRgq/KwhWAAh6ByQ=";
+      "sha256-YiAUZ6mzITc+N6yQCPKlUgBpPjTFZb5CwxfPCUya5Io=";
 
     # Classic C/Fortran headers — `mkl.h`, `mkl_blas.h`, etc. Pulled in
     # transitively via `oneapi/mkl/blas.hpp`.
     mkl-classic-include = fetchRpm
       "intel-oneapi-mkl-classic-include-${mklVer}-${mklRel}.x86_64.rpm"
-      "sha256-W9+SAleIS7/YKbrn1Ib1jfUVFwku/1n+lbDEkdAwA2I=";
+      "sha256-L6txBebgH6pvvIh6f3EMBHX/WYh7H1cgLxVl8KYuZEY=";
 
-    # libmkl_sycl_blas.so.5 — the per-domain SYCL BLAS implementation
+    # libmkl_sycl_blas.so.6 — the per-domain SYCL BLAS implementation
     # ggml-sycl actually links against.
     mkl-sycl-blas = fetchRpm
       "intel-oneapi-mkl-sycl-blas-${mklVer}-${mklRel}.x86_64.rpm"
-      "sha256-l85MSBS3ZrXJAOPuzJMgj4bJe77sS5GzHHW0z+z8d60=";
+      "sha256-jIXH6t/VNPtUGe0OOcFteDvCj5wMfkclAbj/jImRbK4=";
 
     # SYCL headers: `oneapi/mkl.hpp`, `oneapi/mkl/blas.hpp`, …
     mkl-sycl-include = fetchRpm
       "intel-oneapi-mkl-sycl-include-${mklVer}-${mklRel}.x86_64.rpm"
-      "sha256-6MsuM9wi11k6cdsbD5AkNdWz+VHflgbYDGteVtIkH0s=";
+      "sha256-QcRzl2G2MQTMnw/eGF14nMoGIqN92mkKROZFESJJ10w=";
 
     # libiomp5.so — Intel OpenMP runtime, MKL's `intel_thread` backend.
     # We ship it but ggml-sycl uses the tbb_thread backend by default.
     openmp = fetchRpm
       "intel-oneapi-openmp-${mklVer}-${openmpRel}.x86_64.rpm"
-      "sha256-8+1KTEY5H0cPsodo26yozJRXJxTVNjY1NBWqLrYfPVM=";
+      "sha256-v+DG7g+DU2TYitM6YqmotLt0ZNk1VqefQ7V+e6ADXx0=";
 
     # libtbb.so.12 — MKL's default tbb_thread backend at runtime.
     tbb = fetchRpm
@@ -114,8 +111,8 @@ stdenvNoCC.mkDerivation {
   '';
 
   # Layout produced by rpmextract:
-  #   opt/intel/oneapi/mkl/2025.3/{lib,include,lib/cmake,lib/pkgconfig}
-  #   opt/intel/oneapi/compiler/2025.3/lib/libiomp5.so   (from openmp rpm)
+  #   opt/intel/oneapi/mkl/2026.1/{lib,include,lib/cmake,lib/pkgconfig}
+  #   opt/intel/oneapi/compiler/2026.1/lib/libiomp5.so   (from openmp rpm)
   #   opt/intel/oneapi/tbb/2022.3/{lib,include}
   #
   # We flatten everything into $out/{lib,include,lib/cmake,lib/pkgconfig}
@@ -128,18 +125,23 @@ stdenvNoCC.mkDerivation {
 
     mkdir -p $out/lib $out/include $out/lib/cmake $out/lib/pkgconfig
 
-    cp -a opt/intel/oneapi/mkl/${mklVer}/lib/*${shlibExt}*  $out/lib/
-    cp -r opt/intel/oneapi/mkl/${mklVer}/include/*          $out/include/
-    cp -r opt/intel/oneapi/mkl/${mklVer}/lib/cmake/*        $out/lib/cmake/
-    cp -a opt/intel/oneapi/mkl/${mklVer}/lib/pkgconfig/*.pc $out/lib/pkgconfig/
+    # Globs under nullglob (nixpkgs stdenv) vanish when they match nothing
+    # and `cp` then sees only the destination. Use find.
+    find opt/intel/oneapi/mkl/${mklVer}/lib -maxdepth 1 -name '*${shlibExt}*' \
+      -exec cp -a {} $out/lib/ \;
+    cp -r opt/intel/oneapi/mkl/${mklVer}/include/. $out/include/
+    cp -r opt/intel/oneapi/mkl/${mklVer}/lib/cmake/. $out/lib/cmake/
+    find opt/intel/oneapi/mkl/${mklVer}/lib/pkgconfig -maxdepth 1 -name '*.pc' \
+      -exec cp -a {} $out/lib/pkgconfig/ \;
 
-    # OpenMP runtime — only libiomp5.so + its support libs needed at runtime
-    cp -a opt/intel/oneapi/compiler/${mklVer}/lib/libiomp5${shlibExt}* $out/lib/
-    cp -a opt/intel/oneapi/compiler/${mklVer}/lib/libhwloc${shlibExt}* $out/lib/ || true
+    find opt/intel/oneapi/compiler/${mklVer}/lib -maxdepth 1 \
+      \( -name 'libiomp5${shlibExt}*' -o -name 'libhwloc${shlibExt}*' \) \
+      -exec cp -a {} $out/lib/ \;
 
-    cp -a opt/intel/oneapi/tbb/${tbbVer}/lib/libtbb${shlibExt}*    $out/lib/
-    cp -a opt/intel/oneapi/tbb/${tbbVer}/lib/libhwloc${shlibExt}*  $out/lib/ || true
-    cp -r opt/intel/oneapi/tbb/${tbbVer}/include/*                 $out/include/
+    find opt/intel/oneapi/tbb/${tbbVer}/lib -maxdepth 1 \
+      \( -name 'libtbb${shlibExt}*' -o -name 'libhwloc${shlibExt}*' \) \
+      -exec cp -a {} $out/lib/ \;
+    cp -r opt/intel/oneapi/tbb/${tbbVer}/include/. $out/include/
 
     # Rewrite pkg-config + CMake to point at our flattened $out instead of
     # the MKLROOT placeholder Intel embeds.
@@ -165,7 +167,7 @@ stdenvNoCC.mkDerivation {
   dontPatchELF = true;
 
   meta = with lib; {
-    description = "Intel oneMKL 2025.3.1 with SYCL backend (libsycl.so.8 ABI)";
+    description = "Intel oneMKL 2026.1.0 with SYCL backend (libsycl.so.9 ABI)";
     homepage = "https://www.intel.com/content/www/us/en/developer/tools/oneapi/onemkl.html";
     license = licenses.issl;
     sourceProvenance = with sourceTypes; [ binaryNativeCode ];

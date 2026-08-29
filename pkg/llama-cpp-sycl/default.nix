@@ -282,7 +282,7 @@ stdenv.mkDerivation (finalAttrs: {
                llama-debug-template-parser; do
       if [ -e "$out/bin/$bin" ]; then
         wrapProgram "$out/bin/$bin" \
-          --suffix LD_LIBRARY_PATH : /run/opengl-driver/lib
+          --suffix LD_LIBRARY_PATH : /run/opengl-driver/lib:${lib.makeLibraryPath [ intel-llvm ]}
       fi
     done
   '';

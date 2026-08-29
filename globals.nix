@@ -170,11 +170,10 @@ rec {
                     # in passAsFile alongside buildCommand.
                     passAsFile = [ "buildCommand" "paths" ];
                   });
-                  # Intel oneMKL 2025.3.1 — newer than nixpkgs `mkl@2023.1.0`
-                  # and ABI-matched to intel-llvm@unstable-2025-11-14
-                  # (libsycl.so.8). Sister-package, not an override of
-                  # `mkl`, so the rest of nixpkgs (numpy/scipy/octave)
-                  # keeps using 2023.1.
+                  # Intel oneMKL 2026.1.0 — ABI-matched to nixpkgs
+                  # intel-llvm 7.0.1 (libsycl.so.9). Sister-package, not
+                  # an override of `mkl`, so the rest of nixpkgs
+                  # (numpy/scipy/octave) keeps using 2023.1.
                   mkl-sycl = final.callPackage ./pkg/mkl-sycl/default.nix { };
 
                   # llama.cpp built with the SYCL backend, pinned to the same
