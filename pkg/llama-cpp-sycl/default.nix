@@ -27,7 +27,6 @@
   ocl-icd,
   curl,
   mkl,
-  oneDNN,
   tbb,
   perl,
 }:
@@ -166,7 +165,6 @@ stdenv.mkDerivation (finalAttrs: {
     ocl-icd
     curl
     mkl
-    oneDNN
     tbb
   ];
 
@@ -197,11 +195,11 @@ stdenv.mkDerivation (finalAttrs: {
     # keep it OFF until we verify a regression-free run on B70.)
     (lib.cmakeBool "GGML_SYCL_GRAPH"    false)
 
-    # oneDNN — Hal9000's kit enables it. Patch #4 routes small f32
-    # matmuls to oneMKL *bypassing* oneDNN, so DNN is still used for
-    # the larger paths. Without this flag the patch's branch is dead
-    # code and we lose Gemma 4 / Qwen3 attention QKV speedups.
-    (lib.cmakeBool "GGML_SYCL_DNN"      true)
+    # nixpkgs `onednn` is CPU-only. Enabling this links `libdnnl.so.3`
+    # which does not export `dnnl_sycl_interop_stream_create`; dlopen of
+    # libggml-sycl.so then fails (`undefined symbol`, fatal) and llama.cpp
+    # reports no GPU. Re-enable when we ship a SYCL-enabled oneDNN.
+    (lib.cmakeBool "GGML_SYCL_DNN"      false)
 
     # Host-memory fallback — gated by patch #6 (RAII temp buffer +
     # macro guard). When VRAM is tight (loading ~30 GB models on the
