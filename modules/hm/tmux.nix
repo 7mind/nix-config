@@ -14,6 +14,7 @@
 
       extraConfig = ''
         set-option -g mouse on
+        set -g renumber-windows on
 
         # Forward OSC 52 clipboard writes to the outer terminal (no general passthrough).
         set -g set-clipboard on
@@ -62,13 +63,15 @@
         set -gu @_smind_window_current_text_style
         set -gu @_smind_window_current_text_suffix
 
-        # Window tab format variants (## escapes keep format codes for display time)
+        # Window tab format variants (## escapes keep format codes for display time).
+        # rename-window disables automatic-rename on that window; treat that as a
+        # user-set name and show it instead of path:command.
         set -gF @_smind_wfmt_wide \
-          "#[fg=#{@thm_crust},bg=#{@thm_overlay_2}] ##I #[fg=#{@thm_fg},bg=#{@thm_surface_0}]##{b:pane_current_path}:##{pane_current_command} "
+          "#[fg=#{@thm_crust},bg=#{@thm_overlay_2}] ##I #[fg=#{@thm_fg},bg=#{@thm_surface_0}]##{?automatic-rename,##{b:pane_current_path}:##{pane_current_command},##{window_name}} "
         set -gF @_smind_wfmt_narrow \
           "#[fg=#{@thm_crust},bg=#{@thm_overlay_2}] ##I "
         set -gF @_smind_cfmt_wide \
-          "#[fg=#{@thm_crust},bg=#{@thm_mauve}] ##I #[fg=#{@thm_fg},bg=#{@thm_surface_1}]##{b:pane_current_path}:##{pane_current_command} "
+          "#[fg=#{@thm_crust},bg=#{@thm_mauve}] ##I #[fg=#{@thm_fg},bg=#{@thm_surface_1}]##{?automatic-rename,##{b:pane_current_path}:##{pane_current_command},##{window_name}} "
         set -gF @_smind_cfmt_narrow \
           "#[fg=#{@thm_crust},bg=#{@thm_mauve}] ##I "
 
