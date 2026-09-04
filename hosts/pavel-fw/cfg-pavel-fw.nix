@@ -6,6 +6,7 @@ in
 {
   imports = [
     ./hardware-configuration.nix
+    ./llama-swap.nix
   ];
 
   nixpkgs.config.permittedInsecurePackages = [
@@ -177,13 +178,8 @@ in
     hw.cpu.isAmd = true;
     hw.amd.gpu.enable = true;
 
-    # LLM/Ollama - use Vulkan for Strix Point (RDNA 3.5)
-    # Alternative: ollama-rocm with rocmOverrideGfx = "11.5.0" (gfx1150)
     llm.enable = true;
-    llm.ollama.package = pkgs.ollama-vulkan;
-    llm.ollama.customModels = [
-    ];
-    llm.ollama.customContextLength = 131072;
+    llm.ollama.customModels = [ ];
 
     gaming.steam.enable = true;
 
@@ -207,11 +203,6 @@ in
       subvolumePath = ".";
     };
   };
-
-  # Prefer RTX 5060 first while still allowing fallback to Radeon 890M.
-  services.ollama.environmentVariables.GGML_VK_VISIBLE_DEVICES = lib.mkForce "1,0";
-
-  systemd.services.ollama.serviceConfig.MemoryDenyWriteExecute = lib.mkForce false;
 
   networking.hostId = "a1b2c3d4";
   networking.hostName = cfg-meta.hostname;

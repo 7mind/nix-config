@@ -22,6 +22,8 @@ ROOTS=/nix/var/nix/gcroots/my-builds
 [[ -f "$SCRIPT_DIR/private/setup-env" ]] && source "$SCRIPT_DIR/private/setup-env"
 
 HOSTS=()
+BUILD_ON_HOSTS=()
+BUILD_ON_ARGS=()
 DO_REFRESH=false
 DO_SWITCH=false
 DO_BOOT=false
@@ -69,6 +71,8 @@ Options:
                     Override the remote deploy address for HOST (repeatable).
                     Takes precedence over the configured FQDN; only affects
                     remote switch/boot (nix copy + ssh), not the build.
+  --build-on HOST   Restrict builds to this configured builder (repeatable).
+                    Local builds are disabled unless HOST is this machine.
   --offline         Pass --offline to nix build (no network fetches)
   -nrs, --no-resock Skip SSH_AUTH_SOCK probing (keep whatever the shell set)
   -ncs, --no-check-sigs
@@ -96,6 +100,8 @@ Examples:
                               # Build + switch pavel-fw, deploying to a specific address
   $(basename "$0") +infra -s --host-override o1=10.0.0.1 --host-override o2=10.0.0.2
                               # Deploy a group with per-host address overrides
+  $(basename "$0") --build-on pavel-trx40
+                              # Build the current host only on pavel-trx40
   $(basename "$0") -n               # Build without git operations
 EOF
     exit 0
@@ -228,6 +234,15 @@ add_host_override() {
     HOST_OVERRIDES["$h"]="$addr"
 }
 
+add_build_on_host() {
+    local host="$1"
+    if [[ -z "$host" || "$host" == -* ]]; then
+        echo "Error: --build-on expects a host name" >&2
+        exit 1
+    fi
+    BUILD_ON_HOSTS+=("$host")
+}
+
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -285,6 +300,14 @@ parse_args() {
                 ;;
             --host-override=*)
                 add_host_override "${1#*=}"
+                shift
+                ;;
+            --build-on)
+                add_build_on_host "$2"
+                shift 2
+                ;;
+            --build-on=*)
+                add_build_on_host "${1#*=}"
                 shift
                 ;;
             --offline)
@@ -354,6 +377,104 @@ validate_overrides() {
             echo "Warning: --host-override '$h=${HOST_OVERRIDES[$h]}' given but '$h' is not in the target host list; it will be ignored" >&2
         fi
     done
+}
+
+get_configured_builder_specs() {
+    local configured
+    configured="$(nix config show builders)"
+
+    if [[ "$configured" == @* ]]; then
+        local builder_file="${configured#@}"
+        if [[ ! -r "$builder_file" ]]; then
+            echo "Error: Configured builders file '$builder_file' is not readable" >&2
+            return 1
+        fi
+        tr ';' '\n' < "$builder_file"
+    else
+        printf '%s\n' "$configured" | tr ';' '\n'
+    fi
+}
+
+get_builder_hostname() {
+    local uri="${1%%[[:space:]]*}"
+    uri="${uri#*://}"
+    uri="${uri#*@}"
+    uri="${uri%%/*}"
+    uri="${uri%%:*}"
+    printf '%s\n' "$uri"
+}
+
+configure_build_on() {
+    [[ ${#BUILD_ON_HOSTS[@]} -gt 0 ]] || return 0
+
+    local configured
+    configured="$(get_configured_builder_specs)" || return 1
+
+    local -a specs=()
+    local -a available=()
+    local -A seen_available=()
+    local spec builder_host
+    while IFS= read -r spec; do
+        spec="${spec#"${spec%%[![:space:]]*}"}"
+        [[ -n "$spec" && "$spec" != \#* ]] || continue
+        specs+=("$spec")
+        builder_host="$(get_builder_hostname "$spec")"
+        if [[ -z "${seen_available[$builder_host]:-}" ]]; then
+            available+=("$builder_host")
+            seen_available["$builder_host"]=true
+        fi
+    done <<< "$configured"
+
+    local current_fqdn
+    current_fqdn="$(hostname -f 2>/dev/null || hostname)"
+
+    local allow_local=false
+    local -a selected_specs=()
+    local -A seen_specs=()
+    local selection matched_host matched
+    for selection in "${BUILD_ON_HOSTS[@]}"; do
+        if [[ "$selection" == "$THISHOST" || "$selection" == "$current_fqdn" ]]; then
+            allow_local=true
+            continue
+        fi
+
+        matched=false
+        matched_host=""
+        for spec in "${specs[@]}"; do
+            builder_host="$(get_builder_hostname "$spec")"
+            if [[ "$selection" == "$builder_host" || ( "$selection" != *.* && "$selection" == "${builder_host%%.*}" ) ]]; then
+                if [[ -n "$matched_host" && "$matched_host" != "$builder_host" ]]; then
+                    echo "Error: --build-on '$selection' is ambiguous; use a fully qualified builder name" >&2
+                    return 1
+                fi
+                matched=true
+                matched_host="$builder_host"
+                if [[ -z "${seen_specs[$spec]:-}" ]]; then
+                    selected_specs+=("$spec")
+                    seen_specs["$spec"]=true
+                fi
+            fi
+        done
+
+        if [[ "$matched" != "true" ]]; then
+            echo "Error: --build-on '$selection' is not a configured builder on this machine" >&2
+            if [[ ${#available[@]} -gt 0 ]]; then
+                echo "Configured remote builders: ${available[*]}" >&2
+            fi
+            return 1
+        fi
+    done
+
+    local selected_config=""
+    for spec in "${selected_specs[@]}"; do
+        selected_config+="${selected_config:+;}${spec}"
+    done
+    BUILD_ON_ARGS=(--builders "$selected_config")
+    if [[ "$allow_local" != "true" ]]; then
+        BUILD_ON_ARGS+=(--max-jobs 0)
+    fi
+
+    echo "==> Restricting builds to: ${BUILD_ON_HOSTS[*]}"
 }
 
 add_all() {
@@ -533,7 +654,7 @@ do_build() {
     add_all
     mkdir -p "$ROOTS"
 
-    local -a build_args=()
+    local -a build_args=("${BUILD_ON_ARGS[@]}")
     if [[ "$DO_OFFLINE" == "true" ]]; then
         build_args+=(--offline)
     fi
@@ -689,6 +810,7 @@ main() {
 
     cd "$SCRIPT_DIR"
     do_resock
+    configure_build_on
     load_host_meta
     expand_host_specifiers
     validate_hosts

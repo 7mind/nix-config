@@ -13,8 +13,11 @@
 }:
 
 let
-  qwenModelId = "qwen3.8-27b-q8";
   llamaSwapBaseUrl = "http://127.0.0.1:${toString outerConfig.services.llama-swap.port}/v1";
+  llamaSwapModels = [
+    { id = "qwen3.8-27b-q8"; name = "Qwen3.8 27B Q8 local"; }
+    { id = "qwen3.8-27b-q8-abliterated"; name = "Qwen3.8 27B Q8 abliterated local"; }
+  ];
 in
 {
   imports = smind-hm.imports ++ [
@@ -33,8 +36,8 @@ in
       message = "The pavel-am5 Pi model provider requires services.llama-swap.enable";
     }
     {
-      assertion = builtins.hasAttr qwenModelId outerConfig.services.llama-swap.settings.models;
-      message = "The Pi model ${qwenModelId} must exist in services.llama-swap.settings.models";
+      assertion = builtins.all (m: builtins.hasAttr m.id outerConfig.services.llama-swap.settings.models) llamaSwapModels;
+      message = "Pi models must exist in services.llama-swap.settings.models: ${lib.concatMapStringsSep ", " (m: m.id) llamaSwapModels}";
     }
   ];
 
@@ -54,35 +57,32 @@ in
           maxTokensField = "max_tokens";
         };
 
-        models = [
-          {
-            id = qwenModelId;
-            name = "Qwen3.8 27B Q8 local";
-            reasoning = true;
-            input = [ "text" ];
-            contextWindow = 262144;
-            maxTokens = 32768;
+        models = map (m: {
+          inherit (m) id name;
+          reasoning = true;
+          input = [ "text" ];
+          contextWindow = 262144;
+          maxTokens = 32768;
 
-            thinkingLevelMap = {
-              off = "none";
-              minimal = null;
-              low = null;
-              medium = null;
-              high = null;
-              xhigh = "xhigh";
-              max = null;
-            };
+          thinkingLevelMap = {
+            off = "none";
+            minimal = null;
+            low = null;
+            medium = null;
+            high = null;
+            xhigh = "xhigh";
+            max = null;
+          };
 
-            samplingParams = {
-              temperature = 1.0;
-              top_p = 0.95;
-              top_k = 20;
-              min_p = 0.0;
-              presence_penalty = 0.0;
-              repeat_penalty = 1.0;
-            };
-          }
-        ];
+          samplingParams = {
+            temperature = 1.0;
+            top_p = 0.95;
+            top_k = 20;
+            min_p = 0.0;
+            presence_penalty = 0.0;
+            repeat_penalty = 1.0;
+          };
+        }) llamaSwapModels;
       };
     };
 

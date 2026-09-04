@@ -56,44 +56,68 @@ in
       port = 11435;
       openFirewall = true;
 
-      settings = {
-        healthCheckTimeout = 600;
-        globalTTL = 900;
+      settings =
+        let
+          proxy = "http://127.0.0.1:\${PORT}";
+          # Shared llama-server flags. Abliterated sibling is the same
+          # Qwen3.8-27B recipe (qwen35, 866 tensors, nextn_predict_layers=1)
+          # so MTP / KV / ctx stay identical; only the HF GGUF changes.
+          mkCmd = hfArgs:
+            lib.escapeShellArgs (
+              [
+                llamaServer
+                "--host"
+                "127.0.0.1"
+                "--port"
+                "\${PORT}"
+              ] ++ hfArgs ++ [
+                "--no-mmproj"
+                "-dev"
+                "ROCm0"
+                "-ngl"
+                "99"
+                "-fa"
+                "on"
+                "-ctk"
+                "q8_0"
+                "-ctv"
+                "q8_0"
+                "--spec-type"
+                "draft-mtp"
+                "--spec-draft-n-max"
+                "3"
+                "-ctkd"
+                "q8_0"
+                "-ctvd"
+                "q8_0"
+                "--threads"
+                "12"
+                "-c"
+                "262144"
+              ]
+            );
+        in
+        {
+          # 600s is tight for a cold 29 GB HF fetch (abliterated Q8_0).
+          healthCheckTimeout = 1800;
+          globalTTL = 900;
 
-        models."qwen3.8-27b-q8".cmd = lib.escapeShellArgs [
-          llamaServer
-          "--host"
-          "127.0.0.1"
-          "--port"
-          "\${PORT}"
-          "-hf"
-          "bartowski/Qwen3.8-27B-GGUF:Q8_0"
-          "--no-mmproj"
-          "-dev"
-          "ROCm0"
-          "-ngl"
-          "99"
-          "-fa"
-          "on"
-          "-ctk"
-          "q8_0"
-          "-ctv"
-          "q8_0"
-          "--spec-type"
-          "draft-mtp"
-          "--spec-draft-n-max"
-          "3"
-          "-ctkd"
-          "q8_0"
-          "-ctvd"
-          "q8_0"
-          "--threads"
-          "12"
-          "-c"
-          "262144"
-        ];
-        models."qwen3.8-27b-q8".proxy = "http://127.0.0.1:\${PORT}";
-      };
+          models."qwen3.8-27b-q8" = {
+            cmd = mkCmd [ "-hf" "bartowski/Qwen3.8-27B-GGUF:Q8_0" ];
+            inherit proxy;
+          };
+          # huihui Q8_0, not Q8_0_L (38.8 GB). --hf-file pins the filename
+          # because `:Q8_0` also matches Q8_0_L.
+          models."qwen3.8-27b-q8-abliterated" = {
+            cmd = mkCmd [
+              "-hf"
+              "huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF"
+              "--hf-file"
+              "Huihui-Qwen3.8-27B-abliterated-Q8_0.gguf"
+            ];
+            inherit proxy;
+          };
+        };
     };
 
     ollama.enable = lib.mkForce false;
