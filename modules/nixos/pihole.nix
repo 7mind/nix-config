@@ -5,7 +5,7 @@ let
   netCfg = config.smind.net;
 
   # The bridge interfaces this host exposes (main bridge + any bridged VLANs).
-  # DNS and the web UI are reachable only on these.
+  # DNS and the web UI are exposed to the LAN only on these.
   bridgeIfaces =
     lib.optional netCfg.bridge.enable netCfg.main-bridge
     ++ lib.mapAttrsToList (_: v: v.bridge.name)
@@ -27,9 +27,10 @@ in
           its built-in single-interface modes (SINGLE/BIND) cannot cover more
           than one bridge. We therefore set listeningMode = "NONE" and drive the
           bind from misc.dnsmasq_lines with `bind-dynamic`: each listed
-          interface is bound on every address it has (v4 + v6), loopback is left
-          untouched (so resolved keeps 127.0.0.53), and addresses assigned later
-          (e.g. the DHCP-reserved lease) are picked up without a restart.
+          interface is bound on every address it has (v4 + v6), and addresses
+          assigned later (e.g. the DHCP-reserved lease) are picked up without a
+          restart. An explicit 127.0.0.1 listener supports Pi-hole's CLI API
+          discovery while leaving resolved's 127.0.0.53, 127.0.0.54 and ::1 alone.
         '';
         example = [ "br-infra" ];
       };
@@ -177,7 +178,9 @@ in
         # auto-adds the loopback interface (dnsmasq.8), so it would try to bind
         # [::1]:53 — which systemd-resolved's stub listener already holds — and
         # the failed bind is fatal ("FAILED to start up"), taking the whole DNS
-        # listener down. Excluding lo leaves resolved's 127.0.0.53 / [::1] alone.
+        # listener down. Explicit listen-address entries bypass except-interface,
+        # so 127.0.0.1 can serve the CLI's local.api.ftl discovery query without
+        # binding resolved's 127.0.0.53, 127.0.0.54 or [::1].
         #
         # `no-hosts` is REQUIRED too: dnsmasq reads /etc/hosts by default, and
         # NixOS writes the host's own FQDN there as a loopback entry
@@ -188,7 +191,7 @@ in
         # instead. Pi-hole's own local records use `dns.hosts`, not /etc/hosts.
         misc.dnsmasq_lines =
           (map (i: "interface=${i}") cfg.interfaces)
-          ++ [ "except-interface=lo" "bind-dynamic" "no-hosts" ];
+          ++ [ "except-interface=lo" "listen-address=127.0.0.1" "bind-dynamic" "no-hosts" ];
 
         # The upstream module hardens the unit with ProtectSystem=strict but
         # provisions no writable runtime dir, so FTL cannot write its default
@@ -222,21 +225,23 @@ in
     };
 
     # Upstream setup is WantedBy every FTL start (so every nixos-rebuild
-    # switch). Its script only retries the FTL API 3×0.5s — raspi5l often
-    # loses that race (more interfaces to bind) and the oneshot fails the
-    # activation. Wait until :webPort answers.
+    # switch). Its script only retries the FTL API 3×0.5s. Check the same DNS
+    # discovery and HTTP API path as the CLI; the web root alone can respond
+    # while local.api.ftl queries to 127.0.0.1:53 fail.
     systemd.services.pihole-ftl-setup = {
       after = [ "pihole-ftl.service" ];
       serviceConfig.ExecStartPre = pkgs.writeShellScript "wait-pihole-ftl-api" ''
         set -eu
         for _ in $(${pkgs.coreutils}/bin/seq 1 30); do
-          if ${pkgs.curl}/bin/curl -sf -o /dev/null --max-time 1 \
-              "http://127.0.0.1:${toString cfg.webPort}/"; then
+          if ${pkgs.coreutils}/bin/timeout 2 ${pkgs.bash}/bin/bash -c '
+              source ${config.services.pihole-ftl.piholePackage}/share/pihole/advanced/Scripts/api.sh
+              TestAPIAvailability
+          '; then
             exit 0
           fi
           ${pkgs.coreutils}/bin/sleep 1
         done
-        echo "pihole-FTL web API not ready on :${toString cfg.webPort} after 30s" >&2
+        echo "pihole-FTL local API discovery not ready after 30 attempts" >&2
         exit 1
       '';
     };
