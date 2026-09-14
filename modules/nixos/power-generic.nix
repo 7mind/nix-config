@@ -13,6 +13,12 @@ in
       description = "Enable AMD-specific power management (amd_pstate, auto-epp)";
     };
 
+    amd.mode = lib.mkOption {
+      type = lib.types.enum [ "active" "passive" "guided" ];
+      default = "active";
+      description = "AMD P-State driver mode when AMD-specific power management is enabled";
+    };
+
     suspend.enable = lib.mkOption {
       type = lib.types.bool;
       default = config.smind.isLaptop;
@@ -79,7 +85,7 @@ in
 
     (lib.mkIf cfg.amd.enable {
       boot.kernelParams = [
-        "amd_pstate=active"
+        "amd_pstate=${cfg.amd.mode}"
       ];
     })
 
