@@ -182,10 +182,13 @@ fn LightTileInner(sig: RwSignal<LightSnapshot>, fallback_on: bool) -> impl IntoV
                 let pct = (b as u16 * 100 / 254) as u8;
                 format!("{pct}%")
             });
+            let target = l.target.filter(|target| target.phase != "unset")
+                .map(|target| format!("{} · {}", target.owner, target.phase));
             view! {
                 <span class=dot_class></span>
                 {brightness.map(|b| view! { <span class="light-brightness">{b}</span> })}
                 {staleness.map(|s| view! { <span class="badge inhibited light-stale">{s}</span> })}
+                {target.map(|text| view! { <span class="badge muted">{text}</span> })}
             }
         }}
     }
@@ -265,35 +268,35 @@ fn RoomMotionSensors(signal: RwSignal<RoomSnapshot>) -> impl IntoView {
             let r = signal.get();
             // Subscribe to the 1s tick so relative time labels refresh.
             let _ = tick.get();
-            if r.motion_sensors.is_empty() {
-                return ().into_any();
-            }
-            let sensors = r.motion_sensors.clone();
-            let cooldown_remaining = r.motion_cooldown_remaining_secs;
-            let cooldown_total = r.motion_off_cooldown_secs;
-            let mode = r.motion_mode;
-            view! {
-                <div class="motion-section">
-                    <div class="section-label">
-                        "Motion"
-                        {(!mode.is_default()).then(|| view! {
-                            <span class="badge muted" style="margin-left:0.4em">
-                                {format!("mode: {}", mode.as_label())}
-                            </span>
-                        })}
-                    </div>
-                    {cooldown_remaining.map(|remaining| view! {
-                        <div class="cooldown-row">
-                            <span class="badge inhibited">
-                                {format!("cooldown: {remaining}s / {cooldown_total}s")}
-                            </span>
+            r.motion_rules.into_iter().map(|rule| {
+                let mode = rule.mode;
+                let target_text = rule.targets.join(", ");
+                let session_text = rule.session_targets.join(", ");
+                let cooldown_total = rule.off_cooldown_secs;
+                view! {
+                    <div class="motion-section">
+                        <div class="section-label">
+                            {format!("Motion · {}", rule.name)}
+                            {(!mode.is_default()).then(|| view! {
+                                <span class="badge muted">{mode.as_label()}</span>
+                            })}
                         </div>
-                    })}
-                    <div class="motion-list">
-                        {sensors.into_iter().map(|s| view! { <MotionSensorRow info=s /> }).collect::<Vec<_>>()}
+                        <div class="motion-meta">{format!("{} → {}", rule.active_slot.unwrap_or_default(), target_text)}</div>
+                        {rule.max_illuminance.map(|max| view! { <div class="motion-meta">{format!("Activate below {max} lx")}</div> })}
+                        {(!session_text.is_empty()).then(|| view! {
+                            <div class="motion-meta">{format!("Session: {session_text}")}</div>
+                        })}
+                        {rule.cooldown_remaining_secs.map(|remaining| view! {
+                            <div class="cooldown-row"><span class="badge inhibited">
+                                {format!("cooldown: {remaining}s / {cooldown_total}s")}
+                            </span></div>
+                        })}
+                        <div class="motion-list">
+                            {rule.sensors.into_iter().map(|sensor| view! { <MotionSensorRow info=sensor /> }).collect::<Vec<_>>()}
+                        </div>
                     </div>
-                </div>
-            }.into_any()
+                }
+            }).collect::<Vec<_>>()
         }}
     }
 }
@@ -315,7 +318,6 @@ fn MotionSensorRow(info: mqtt_controller_wire::MotionSensorInfo) -> impl IntoVie
     let illuminance = info.illuminance.map(|l| format!("{l} lx"));
     let timeout_text = (info.occupancy_timeout_secs > 0)
         .then(|| format!("timeout {}s", info.occupancy_timeout_secs));
-    let max_illum_text = info.max_illuminance.map(|m| format!("max {m} lx"));
 
     let device_title = info.device.clone();
     view! {
@@ -329,7 +331,6 @@ fn MotionSensorRow(info: mqtt_controller_wire::MotionSensorInfo) -> impl IntoVie
                     .then(|| view! { <span class="badge inhibited">{freshness}</span> })}
                 {illuminance.map(|l| view! { <span>{format!("·{l}")}</span> })}
                 {timeout_text.map(|t| view! { <span class="muted">{format!("·{t}")}</span> })}
-                {max_illum_text.map(|m| view! { <span class="muted">{format!("·{m}")}</span> })}
             </span>
         </div>
     }

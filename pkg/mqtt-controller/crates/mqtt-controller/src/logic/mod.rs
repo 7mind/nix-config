@@ -179,111 +179,6 @@ impl EventProcessor {
         plug.actual.update(PlugActual { on, power }, ts);
     }
 
-    /// Turn off all motion-controlled rooms that are physically on at startup.
-    ///
-    /// Per-mode behaviour:
-    ///   * [`MotionMode::OnOff`] — always force off. Motion has full
-    ///     authority for both on and off, so discarding retained-on
-    ///     state at startup is safe; motion will re-trigger if someone
-    ///     is in the room.
-    ///   * [`MotionMode::OnOnly`] — never force off. Motion never owns
-    ///     the off path, so a startup auto-off would contradict the
-    ///     mode.
-    ///   * [`MotionMode::OffOnly`] — conditional on seed state. Two
-    ///     competing failure modes pull in opposite directions:
-    ///     (a) cached occupancy can be minutes stale, so blindly
-    ///         preserving a retained-on room based on seeded "occupied"
-    ///         can leave an empty room lit for up to the Hue sensor's
-    ///         timeout;
-    ///     (b) unconditionally forcing off loses the active session
-    ///         when someone is still in the room — a later manual ON
-    ///         would be user-owned and the eventual vacancy ignored.
-    ///     We accept (a) as the lesser evil: if any bound sensor is
-    ///     seeded-occupied, adopt `Motion + On` so the first live
-    ///     vacancy still authorises state_off; otherwise fail safe by
-    ///     forcing off. Stale seeded-true self-resolves within one
-    ///     Hue-timeout window (≈ 60 s) when the sensor publishes a
-    ///     live `occupied=false`.
-    pub fn startup_turn_off_motion_zones(&mut self, ts: Instant) -> Vec<Effect> {
-        use crate::config::MotionMode;
-        use crate::domain::action::Payload;
-        use crate::entities::light_zone::{LightZoneActual, LightZoneTarget};
-        use crate::tass::Owner;
-
-        let mut out = Vec::new();
-        for (room_idx, room) in self.topology.rooms_with_idx() {
-            let zone = self.world.light_zone(&room.name);
-            if !zone.actual_is_on() {
-                continue;
-            }
-            if !room.has_motion_sensor() {
-                tracing::info!(
-                    room = %room.name,
-                    "startup: room is physically on; leaving user-owned (no motion sensor)"
-                );
-                continue;
-            }
-            match room.motion_mode {
-                MotionMode::OnOnly => {
-                    tracing::info!(
-                        room = %room.name,
-                        "startup: on-only motion-equipped zone is physically on; preserving retained state"
-                    );
-                    continue;
-                }
-                MotionMode::OffOnly => {
-                    let any_sensor_seeded_occupied =
-                        room.bound_motion.iter().any(|bm| {
-                            self.world
-                                .motion_sensors
-                                .get(&bm.sensor)
-                                .is_some_and(|s| s.is_occupied())
-                        });
-                    if any_sensor_seeded_occupied {
-                        tracing::info!(
-                            room = %room.name,
-                            "startup: off-only zone physically on and a bound sensor is seeded occupied; adopting motion ownership so vacancy can authorise off"
-                        );
-                        let zone = self.world.light_zone(&room.name);
-                        zone.target.adopt(
-                            LightZoneTarget::On { scene_id: 0, cycle_idx: 0 },
-                            Owner::Motion,
-                            ts,
-                        );
-                        continue;
-                    }
-                    tracing::info!(
-                        room = %room.name,
-                        group = %room.group_name,
-                        transition = room.off_transition_seconds,
-                        "startup: off-only zone physically on but no bound sensor seeded occupied → fail-safe OFF"
-                    );
-                }
-                MotionMode::OnOff => {
-                    tracing::info!(
-                        room = %room.name,
-                        group = %room.group_name,
-                        transition = room.off_transition_seconds,
-                        "startup: turning off motion-controlled zone (no cooldown)"
-                    );
-                }
-            }
-            let zone = self.world.light_zone(&room.name);
-            zone.target
-                .set_and_command(LightZoneTarget::Off, Owner::System, ts);
-            // Deliberate TASS bypass: fabricate actual=Off at startup so
-            // motion sensors can immediately re-trigger if someone is in
-            // the room. Without this, actual stays On (from retained echo)
-            // and motion-on gates block.
-            zone.actual.update(LightZoneActual::Off, ts);
-            out.push(Effect::PublishGroupSet {
-                room: room_idx,
-                payload: Payload::state_off(room.off_transition_seconds),
-            });
-        }
-        out
-    }
-
     /// Pre-arm kill switch rules for all plugs that are currently ON.
     /// Delegates to the shared per-plug arming helper used by the
     /// runtime off→on path; only the log messages differ.
@@ -310,6 +205,20 @@ impl EventProcessor {
         };
         let room = self.topology.room(room_idx);
         let group_name = room.group_name.clone();
+        let Some(scene) = room
+            .scenes
+            .scenes
+            .iter()
+            .find(|scene| scene.id == scene_id)
+            .cloned()
+        else {
+            tracing::warn!(
+                room = room_name,
+                scene = scene_id,
+                "web: unknown scene rejected"
+            );
+            return Vec::new();
+        };
 
         let cycle_idx = scenes_for_now
             .iter()
@@ -339,6 +248,15 @@ impl EventProcessor {
             ts,
         );
         zone.last_press_at = Some(ts);
+        self.record_group_light_command(
+            room_name,
+            crate::entities::light::LightTarget::On {
+                brightness: scene.brightness,
+                color_temp: scene.color_temp,
+            },
+            Owner::WebUI,
+            ts,
+        );
         self.propagate_to_descendants(room_name, true, ts);
         vec![effect]
     }
@@ -425,6 +343,14 @@ impl EventProcessor {
                 tracing::info!(room = name.as_str(), "{msg}");
             }
         }
+        for (name, light) in &mut self.world.lights {
+            if light
+                .target
+                .mark_stale_if_old(now, Self::TARGET_STALE_THRESHOLD)
+            {
+                tracing::info!(light = name.as_str(), "{msg}");
+            }
+        }
         for (name, plug) in &mut self.world.plugs {
             if plug.target.mark_stale_if_old(now, Self::TARGET_STALE_THRESHOLD) {
                 tracing::info!(plug = name.as_str(), "{msg}");
@@ -473,72 +399,24 @@ impl EventProcessor {
             }
         }
 
-        // Re-evaluate motion-off for rooms affected by newly stale sensors.
-        // A sensor going stale while occupied=true means is_occupied() now
-        // returns false, so if all other sensors are also inactive/stale,
-        // the motion-owned room should turn off.
+        let rules: Vec<_> = self
+            .topology
+            .motion_rules()
+            .iter()
+            .filter(|rule| {
+                rule.sensors
+                    .iter()
+                    .any(|sensor| newly_stale_sensors.contains(&sensor.sensor))
+            })
+            .cloned()
+            .collect();
         let mut actions = Vec::new();
-        for sensor_name in newly_stale_sensors {
-            let room_idxs: Vec<crate::topology::RoomIdx> = self
-                .topology
-                .rooms_for_motion(&sensor_name)
-                .to_vec();
-            let rooms: Vec<String> = room_idxs
-                .iter()
-                .map(|&idx| self.topology.room(idx).name.clone())
-                .collect();
-            for room_name in &rooms {
-                let zone = self.world.light_zones.get(room_name);
-                let is_motion_owned = zone.is_some_and(|z| z.is_motion_owned());
-                let is_on = zone.is_some_and(|z| z.is_on());
-                if !is_motion_owned || !is_on {
-                    continue;
-                }
-                // Check if ALL sensors for this room are now inactive/stale.
-                let all_inactive = self
-                    .topology
-                    .room_by_name(room_name)
-                    .map_or(true, |room| {
-                        room.bound_motion.iter().all(|bm| {
-                            !self
-                                .world
-                                .motion_sensors
-                                .get(&bm.sensor)
-                                .is_some_and(|s| s.is_occupied())
-                        })
-                    });
-                if all_inactive {
-                    if let Some(room_idx) = self.topology.room_idx(room_name) {
-                        let room = self.topology.room(room_idx);
-                        let off_transition = room.off_transition_seconds;
-                        tracing::info!(
-                            room = room_name.as_str(),
-                            sensor = sensor_name.as_str(),
-                            "stale sensor triggered motion-off (all sensors inactive/stale)"
-                        );
-                        actions.push(Effect::PublishGroupSet {
-                            room: room_idx,
-                            payload: crate::domain::action::Payload::state_off(off_transition),
-                        });
-                        // Only set target — do NOT fabricate actual=Off.
-                        // Actual state updates come from z2m group echoes
-                        // (handle_group_state). If the OFF command is lost,
-                        // actual stays On and the mismatch is visible.
-                        let zone = self.world.light_zone(room_name);
-                        zone.target.set_and_command(
-                            crate::entities::light_zone::LightZoneTarget::Off,
-                            crate::tass::Owner::System,
-                            now,
-                        );
-                        // Arm the motion cooldown — the stale sweep's
-                        // state_off is still motion-driven (treating a
-                        // silent sensor as vacancy).
-                        zone.last_off_at = Some(now);
-                        zone.last_motion_off_at = Some(now);
-                    }
-                }
+        for rule in rules {
+            if !self.motion_rule_occupied(&rule) {
+                actions.extend(self.finish_motion_session(&rule, now, crate::tass::Owner::System));
             }
         }
+
         actions
     }
 

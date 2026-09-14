@@ -335,15 +335,15 @@ impl EventProcessor {
                 transition,
             } => {
                 let room_name = self.topology.room(*room).name.clone();
-                self.execute_brightness_step(&room_name, *step, *transition)
+                self.execute_brightness_step(&room_name, *step, *transition, ts)
             }
             ResolvedEffect::BrightnessMove { room, rate } => {
                 let room_name = self.topology.room(*room).name.clone();
-                self.execute_brightness_move(&room_name, *rate)
+                self.execute_brightness_move(&room_name, *rate, ts)
             }
             ResolvedEffect::BrightnessStop { room } => {
                 let room_name = self.topology.room(*room).name.clone();
-                self.execute_brightness_stop(&room_name)
+                self.execute_brightness_stop(&room_name, ts)
             }
             ResolvedEffect::Toggle {
                 plug,

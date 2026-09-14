@@ -50,7 +50,6 @@ fn motion_sensor_dev(ieee: &str) -> DeviceCatalogEntry {
             options: BTreeMap::new(),
         },
         occupancy_timeout_seconds: 60,
-        max_illuminance: None,
     }
 }
 
@@ -97,11 +96,9 @@ fn kitchen_room(
         id,
         members: members.iter().map(|m| (*m).into()).collect(),
         parent: parent.map(String::from),
-        motion_sensors: vec![],
+
         scenes: day_scenes(vec![1, 2, 3]),
         off_transition_seconds: 0.8,
-        motion_off_cooldown_seconds: 0,
-        motion_mode: Default::default(),
     }
 }
 
@@ -111,6 +108,7 @@ fn kitchen_room(
 ///   * `kitchen-all`    — parent, tap button 1
 pub fn kitchen_config() -> Config {
     Config {
+        motion_rules: vec![],
         name_by_address: BTreeMap::new(),
         devices: BTreeMap::from([
             ("hue-l-cooker".into(), light("0xa")),
@@ -173,6 +171,7 @@ fn button_binding(name: &str, device: &str, button: &str, gesture: Gesture, effe
 /// Used for the double-tap suppression regression test.
 pub fn kitchen_with_sonoff_config() -> Config {
     Config {
+        motion_rules: vec![],
         name_by_address: BTreeMap::new(),
         devices: BTreeMap::from([
             ("hue-l-bedroom".into(), light("0xe")),
@@ -206,6 +205,20 @@ pub fn kitchen_with_motion_config() -> Config {
     let cooker = cfg.rooms.iter_mut()
         .find(|r| r.name == "kitchen-cooker")
         .expect("kitchen-cooker room");
-    cooker.motion_sensors.push("hue-ms-kitchen".into());
+    cfg.motion_rules.push(mqtt_controller::config::MotionRule {
+        name: "kitchen-motion".into(),
+        sensors: vec!["hue-ms-kitchen".into()],
+        mode: mqtt_controller::config::MotionMode::OnOff,
+        scenes: cooker.scenes.clone(),
+        targets_by_slot: BTreeMap::from([(
+            "day".into(),
+            mqtt_controller::config::MotionTarget::Group {
+                group: cooker.name.clone(),
+            },
+        )]),
+        off_transition_seconds: 0.8,
+        off_cooldown_seconds: 0,
+        max_illuminance: None,
+    });
     cfg
 }

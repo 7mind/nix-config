@@ -7,6 +7,7 @@
 pub mod heating_zone;
 pub mod light;
 pub mod light_zone;
+pub mod motion_rule;
 pub mod motion_sensor;
 pub mod plug;
 pub mod trv;
@@ -40,6 +41,7 @@ pub struct WorldState {
     pub lights: BTreeMap<String, LightEntity>,
     pub plugs: BTreeMap<String, PlugEntity>,
     pub motion_sensors: BTreeMap<String, MotionSensorEntity>,
+    pub motion_rules: BTreeMap<String, motion_rule::MotionRuleState>,
     pub heating_zones: BTreeMap<String, HeatingZoneEntity>,
     pub trvs: BTreeMap<String, TrvEntity>,
 
@@ -61,6 +63,7 @@ impl WorldState {
             lights: BTreeMap::new(),
             plugs: BTreeMap::new(),
             motion_sensors: BTreeMap::new(),
+            motion_rules: BTreeMap::new(),
             heating_zones: BTreeMap::new(),
             trvs: BTreeMap::new(),
             pending_presses: BTreeMap::new(),

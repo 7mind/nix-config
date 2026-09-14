@@ -61,6 +61,21 @@ fn hue_dimmer_model() -> SwitchModel {
 
 fn small_topology() -> Arc<Topology> {
     let cfg = Config {
+        motion_rules: vec![crate::config::MotionRule {
+            name: "study-motion".into(),
+            sensors: vec!["hue-ms-study".into()],
+            mode: crate::config::MotionMode::OnOff,
+            scenes: day_scenes(),
+            targets_by_slot: BTreeMap::from([(
+                "day".into(),
+                crate::config::MotionTarget::Group {
+                    group: "study".into(),
+                },
+            )]),
+            off_transition_seconds: 0.8,
+            off_cooldown_seconds: 0,
+            max_illuminance: None,
+        }],
         name_by_address: BTreeMap::new(),
         devices: BTreeMap::from([
             (
@@ -91,7 +106,6 @@ fn small_topology() -> Arc<Topology> {
                         options: BTreeMap::new(),
                     },
                     occupancy_timeout_seconds: 60,
-                    max_illuminance: None,
                 },
             ),
             (
@@ -132,11 +146,9 @@ fn small_topology() -> Arc<Topology> {
             id: 1,
             members: vec!["hue-l-a/11".into()],
             parent: None,
-            motion_sensors: vec!["hue-ms-study".into()],
+
             scenes: day_scenes(),
             off_transition_seconds: 0.8,
-            motion_off_cooldown_seconds: 0,
-            motion_mode: Default::default(),
         }],
         bindings: vec![
             Binding {

@@ -23,7 +23,7 @@ pub struct TouchedEntities {
     pub rooms: BTreeSet<RoomIdx>,
     pub plugs: BTreeSet<PlugIdx>,
     pub heating_zones: BTreeSet<ZoneIdx>,
-    /// Individual lights whose actual state changed.
+    /// Individual lights whose target or actual state changed.
     pub lights: BTreeSet<DeviceIdx>,
 }
 
@@ -102,6 +102,9 @@ pub fn touched_from_event(event: &Event, topology: &Topology) -> TouchedEntities
     let mut touched = TouchedEntities::new();
     match event {
         Event::Occupancy { sensor, .. } => {
+            for idx in topology.motion_rules_for_sensor(sensor) {
+                for light in &topology.motion_rule(*idx).lights { touched.touch_light(light.device); }
+            }
             for &room in topology.rooms_for_motion(sensor) {
                 touched.touch_room(room);
             }
@@ -109,11 +112,12 @@ pub fn touched_from_event(event: &Event, topology: &Topology) -> TouchedEntities
         Event::GroupState { group, .. } => {
             if let Some(room) = topology.room_idx_by_group(group) {
                 touched.touch_room(room);
-                // Group state changes propagate to rule-bearing
-                // descendant rooms (`handle_group_state` calls
-                // `propagate_to_descendants`); reflect that in the
-                // touched set so the dashboard updates the whole
-                // affected subtree, not just the parent.
+                for light in &topology.room(room).light_members {
+                    touched.touch_light(light.device);
+                    for related in topology.light_rooms(light.device) {
+                        touched.touch_room(related);
+                    }
+                }
                 for &desc in topology.descendants_of(room) {
                     touched.touch_room(desc);
                 }
@@ -127,6 +131,9 @@ pub fn touched_from_event(event: &Event, topology: &Topology) -> TouchedEntities
         Event::LightState { device, .. } => {
             if let Some(dev) = topology.device_idx(device) {
                 touched.touch_light(dev);
+                for room in topology.light_rooms(dev) {
+                    touched.touch_room(room);
+                }
             }
         }
         Event::TrvState { device, .. } => {
@@ -174,8 +181,22 @@ async fn dispatch_one(
     touched: &mut TouchedEntities,
 ) -> Result<(), MqttError> {
     match effect {
+        Effect::PublishLightSet { light, payload } => {
+            touched.touch_light(light.device);
+            for room in topology.light_rooms(light.device) {
+                touched.touch_room(room);
+            }
+            let name = format!("{}/{}", topology.device_name(light.device), light.endpoint);
+            bridge.publish_device_set(&name, payload, false).await
+        }
         Effect::PublishGroupSet { room, payload } => {
             touched.touch_room(*room);
+            for light in &topology.room(*room).light_members {
+                touched.touch_light(light.device);
+                for related in topology.light_rooms(light.device) {
+                    touched.touch_room(related);
+                }
+            }
             // Logic propagates state to rule-bearing descendant rooms
             // (`propagate_to_descendants` / `publish_off`) when a room
             // turns on or off, so the dashboard needs updates for those

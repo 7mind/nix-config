@@ -9,6 +9,8 @@ use super::{FriendlyName, RoomName};
 /// as the daemon's startup error.
 #[derive(Debug, Error, PartialEq)]
 pub enum TopologyError {
+    #[error("motion rule {rule:?}: {reason}")]
+    InvalidMotionRule { rule: String, reason: String },
     #[error("duplicate room name {0:?}")]
     DuplicateRoomName(RoomName),
 
@@ -44,22 +46,6 @@ pub enum TopologyError {
 
     #[error("parent chain cycle: {chain}")]
     ParentChainCycle { chain: String },
-
-    #[error("room {room:?} references motion sensor {sensor:?} which is not in the device catalog")]
-    MotionSensorNotInCatalog {
-        room: RoomName,
-        sensor: FriendlyName,
-    },
-
-    #[error(
-        "room {room:?} references motion sensor {sensor:?} but it is a {kind} \
-         (expected motion-sensor)"
-    )]
-    MotionSensorWrongKind {
-        room: RoomName,
-        sensor: FriendlyName,
-        kind: &'static str,
-    },
 
     #[error(
         "room {room:?} member {member:?} references friendly name {bulb:?} which is \

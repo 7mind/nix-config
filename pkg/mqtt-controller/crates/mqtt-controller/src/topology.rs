@@ -18,20 +18,21 @@
 //! defense-in-depth check at startup. They should agree; disagreement is
 //! a bug.
 
+use crate::config::MotionMode;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::config::DeviceCatalogEntry;
 use crate::config::catalog::PlugProtocol;
-use crate::config::room::MotionMode;
 use crate::config::switch_model::{Gesture, SwitchModel};
 
 mod build;
 mod error;
 mod index;
+mod motion;
 mod resolved;
 
 pub use error::TopologyError;
-pub use index::{BindingIdx, DeviceIdx, PlugIdx, RoomIdx, ZoneIdx};
+pub use index::{BindingIdx, DeviceIdx, MotionRuleIdx, PlugIdx, RoomIdx, ZoneIdx};
 pub use resolved::{ResolvedEffect, ResolvedTrigger};
 
 /// Stable name → resolved room data. Built from the raw `Config::rooms`
@@ -41,16 +42,11 @@ pub type RoomName = String;
 /// Friendly name of a switch, light, or motion sensor.
 pub type FriendlyName = String;
 
-/// One motion sensor → room binding. Carries the per-sensor settings the
-/// controller needs at runtime (timeout, luminance gate). Lifted out of
-/// the catalog so the controller doesn't have to keep doing catalog
-/// lookups in the hot path.
+/// A sensor referenced by a motion rule, with its reporting timeout.
 #[derive(Debug, Clone)]
 pub struct MotionBinding {
     pub sensor: FriendlyName,
-    pub room: RoomName,
     pub occupancy_timeout_seconds: u32,
-    pub max_illuminance: Option<u32>,
 }
 
 /// Validated, indexed view of one room. Holds everything the controller
@@ -61,22 +57,46 @@ pub struct ResolvedRoom {
     pub group_name: FriendlyName,
     pub id: u8,
     pub members: Vec<String>,
+    pub light_members: Vec<LightEndpoint>,
     pub parent: Option<RoomName>,
     pub scenes: crate::config::SceneSchedule,
     pub off_transition_seconds: f64,
-    pub motion_off_cooldown_seconds: u32,
-    /// How motion events drive this room. See [`MotionMode`].
-    pub motion_mode: MotionMode,
 
-    /// Motion sensors bound to this room. Empty if none.
+    /// Derived sensors from rules that can target this group's members.
     pub bound_motion: Vec<MotionBinding>,
 }
 
 impl ResolvedRoom {
-    /// Quick check used by the runtime to gate motion-cooldown logic.
+    /// Whether any motion rule can affect this room.
     pub fn has_motion_sensor(&self) -> bool {
         !self.bound_motion.is_empty()
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct LightEndpoint {
+    pub device: DeviceIdx,
+    pub endpoint: u8,
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedMotionTarget {
+    pub group: Option<RoomIdx>,
+    pub lights: Vec<LightEndpoint>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedMotionRule {
+    pub name: String,
+    pub sensors: Vec<MotionBinding>,
+    pub mode: MotionMode,
+    pub scenes: crate::config::SceneSchedule,
+    pub targets_by_slot: BTreeMap<String, ResolvedMotionTarget>,
+    pub off_transition_seconds: f64,
+    pub off_cooldown_seconds: u32,
+    pub max_illuminance: Option<u32>,
+    pub lights: Vec<LightEndpoint>,
+    pub rooms: Vec<RoomIdx>,
 }
 
 /// One resolved binding, ready for runtime dispatch.
@@ -216,6 +236,9 @@ pub struct Topology {
     /// old switch_index; production has each sensor in one room.
     pub(in crate::topology) motion_index: BTreeMap<DeviceIdx, Vec<RoomIdx>>,
 
+    pub(in crate::topology) motion_rules: Vec<ResolvedMotionRule>,
+    pub(in crate::topology) motion_rule_index: BTreeMap<DeviceIdx, Vec<MotionRuleIdx>>,
+
     /// Validated heating config (if present). Stored for the controller.
     pub(in crate::topology) heating_config: Option<crate::config::HeatingConfig>,
 }
@@ -259,6 +282,30 @@ impl Topology {
     /// Look up a room's index by its z2m group friendly_name.
     pub fn room_idx_by_group(&self, group_name: &str) -> Option<RoomIdx> {
         self.room_by_group_name.get(group_name).copied()
+    }
+
+    pub fn motion_rules(&self) -> &[ResolvedMotionRule] {
+        &self.motion_rules
+    }
+
+    pub fn motion_rule(&self, idx: MotionRuleIdx) -> &ResolvedMotionRule {
+        &self.motion_rules[idx.as_usize()]
+    }
+
+    pub fn motion_rules_for_sensor(&self, sensor: &str) -> &[MotionRuleIdx] {
+        self.device_idx(sensor)
+            .and_then(|idx| self.motion_rule_index.get(&idx))
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
+    pub fn light_rooms(&self, device: DeviceIdx) -> impl Iterator<Item = RoomIdx> + '_ {
+        self.rooms_with_idx().filter_map(move |(idx, room)| {
+            room.light_members
+                .iter()
+                .any(|light| light.device == device)
+                .then_some(idx)
+        })
     }
 
     /// Rooms driven by a motion sensor (by name).

@@ -42,7 +42,6 @@ fn motion(ieee: &str) -> DeviceCatalogEntry {
             options: BTreeMap::new(),
         },
         occupancy_timeout_seconds: 60,
-        max_illuminance: None,
     }
 }
 
@@ -68,24 +67,16 @@ fn day_scenes() -> SceneSchedule {
     }
 }
 
-fn room(
-    name: &str,
-    id: u8,
-    members: Vec<&str>,
-    motion_sensors: Vec<&str>,
-    parent: Option<&str>,
-) -> Room {
+fn room(name: &str, id: u8, members: Vec<&str>, parent: Option<&str>) -> Room {
     Room {
         name: name.into(),
         group_name: format!("hue-lz-{name}"),
         id,
         members: members.into_iter().map(String::from).collect(),
         parent: parent.map(String::from),
-        motion_sensors: motion_sensors.into_iter().map(String::from).collect(),
+
         scenes: day_scenes(),
         off_transition_seconds: 0.8,
-        motion_off_cooldown_seconds: 0,
-        motion_mode: Default::default(),
     }
 }
 
@@ -102,11 +93,9 @@ fn room_with_group_name(
         id,
         members: members.into_iter().map(String::from).collect(),
         parent: parent.map(String::from),
-        motion_sensors: vec![],
+
         scenes: day_scenes(),
         off_transition_seconds: 0.8,
-        motion_off_cooldown_seconds: 0,
-        motion_mode: Default::default(),
     }
 }
 
@@ -199,6 +188,7 @@ fn config_with_bindings(
         .map(|(n, e)| (n.to_string(), e))
         .collect();
     Config {
+        motion_rules: vec![],
         name_by_address: BTreeMap::new(),
         devices,
         switch_models: default_switch_models(),
@@ -232,11 +222,8 @@ fn empty_config_builds() {
 #[test]
 fn room_with_switch_binding_builds_and_indexes() {
     let cfg = config_with_bindings(
-        vec![
-            ("hue-l-a", light("0xa")),
-            ("hue-s-a", switch_dev("0x1")),
-        ],
-        vec![room("study", 1, vec!["hue-l-a/11"], vec![], None)],
+        vec![("hue-l-a", light("0xa")), ("hue-s-a", switch_dev("0x1"))],
+        vec![room("study", 1, vec!["hue-l-a/11"], None)],
         vec![Binding {
             name: "study-on".into(),
             trigger: Trigger::Button {
@@ -263,13 +250,11 @@ fn room_with_switch_binding_builds_and_indexes() {
 
 #[test]
 fn motion_sensor_binding_routes_to_room() {
-    let cfg = config(
-        vec![
-            ("hue-l-a", light("0xa")),
-            ("hue-ms-a", motion("0x3")),
-        ],
-        vec![room("study", 1, vec!["hue-l-a/11"], vec!["hue-ms-a"], None)],
+    let mut cfg = config(
+        vec![("hue-l-a", light("0xa")), ("hue-ms-a", motion("0x3"))],
+        vec![room("study", 1, vec!["hue-l-a/11"], None)],
     );
+    cfg.motion_rules.push(motion_rule("study", "hue-ms-a"));
     let topo = Topology::build(&cfg).unwrap();
     let r = topo.room_by_name("study").unwrap();
     assert!(r.has_motion_sensor());
@@ -281,25 +266,24 @@ fn motion_sensor_binding_routes_to_room() {
 
 #[test]
 fn motion_sensor_not_in_catalog_rejected() {
-    let cfg = config(
+    let mut cfg = config(
         vec![("hue-l-a", light("0xa"))],
-        vec![room("study", 1, vec!["hue-l-a/11"], vec!["hue-ms-ghost"], None)],
+        vec![room("study", 1, vec!["hue-l-a/11"], None)],
     );
+    cfg.motion_rules.push(motion_rule("study", "hue-ms-ghost"));
     let err = Topology::build(&cfg).unwrap_err();
-    assert!(matches!(err, TopologyError::MotionSensorNotInCatalog { .. }));
+    assert!(matches!(err, TopologyError::InvalidMotionRule { .. }));
 }
 
 #[test]
 fn motion_sensor_wrong_kind_rejected() {
-    let cfg = config(
-        vec![
-            ("hue-l-a", light("0xa")),
-            ("hue-s-a", switch_dev("0x1")),
-        ],
-        vec![room("study", 1, vec!["hue-l-a/11"], vec!["hue-s-a"], None)],
+    let mut cfg = config(
+        vec![("hue-l-a", light("0xa")), ("hue-s-a", switch_dev("0x1"))],
+        vec![room("study", 1, vec!["hue-l-a/11"], None)],
     );
+    cfg.motion_rules.push(motion_rule("study", "hue-s-a"));
     let err = Topology::build(&cfg).unwrap_err();
-    assert!(matches!(err, TopologyError::MotionSensorWrongKind { kind: "switch", .. }));
+    assert!(matches!(err, TopologyError::InvalidMotionRule { .. }));
 }
 
 #[test]
@@ -311,14 +295,8 @@ fn button_binding_routes_to_correct_index() {
             ("hue-ts-foo", switch_dev_model("0x1", "test-tap")),
         ],
         vec![
-            room(
-                "kitchen-cooker", 1, vec!["hue-l-a/11"], vec![],
-                Some("kitchen-all"),
-            ),
-            room(
-                "kitchen-all", 2, vec!["hue-l-a/11", "hue-l-b/11"], vec![],
-                None,
-            ),
+            room("kitchen-cooker", 1, vec!["hue-l-a/11"], Some("kitchen-all")),
+            room("kitchen-all", 2, vec!["hue-l-a/11", "hue-l-b/11"], None),
         ],
         vec![
             Binding {
@@ -360,13 +338,10 @@ fn button_binding_routes_to_correct_index() {
 #[test]
 fn duplicate_group_id_rejected() {
     let cfg = config(
+        vec![("hue-l-a", light("0xa")), ("hue-l-b", light("0xb"))],
         vec![
-            ("hue-l-a", light("0xa")),
-            ("hue-l-b", light("0xb")),
-        ],
-        vec![
-            room("a", 1, vec!["hue-l-a/11"], vec![], None),
-            room("b", 1, vec!["hue-l-b/11"], vec![], None),
+            room("a", 1, vec!["hue-l-a/11"], None),
+            room("b", 1, vec!["hue-l-b/11"], None),
         ],
     );
     let err = Topology::build(&cfg).unwrap_err();
@@ -384,11 +359,9 @@ fn duplicate_group_friendly_name_rejected() {
                 id: 1,
                 members: vec!["hue-l-a/11".into()],
                 parent: None,
-                motion_sensors: vec![],
+
                 scenes: day_scenes(),
                 off_transition_seconds: 0.8,
-                motion_off_cooldown_seconds: 0,
-                motion_mode: Default::default(),
             },
             Room {
                 name: "b".into(),
@@ -396,11 +369,9 @@ fn duplicate_group_friendly_name_rejected() {
                 id: 2,
                 members: vec!["hue-l-a/11".into()],
                 parent: None,
-                motion_sensors: vec![],
+
                 scenes: day_scenes(),
                 off_transition_seconds: 0.8,
-                motion_off_cooldown_seconds: 0,
-                motion_mode: Default::default(),
             },
         ],
     );
@@ -432,7 +403,7 @@ fn group_name_device_collision_rejected() {
 fn unknown_parent_rejected() {
     let cfg = config(
         vec![("hue-l-a", light("0xa"))],
-        vec![room("child", 1, vec!["hue-l-a/11"], vec![], Some("ghost"))],
+        vec![room("child", 1, vec!["hue-l-a/11"], Some("ghost"))],
     );
     let err = Topology::build(&cfg).unwrap_err();
     assert!(matches!(err, TopologyError::UnknownParent { .. }));
@@ -442,7 +413,7 @@ fn unknown_parent_rejected() {
 fn self_parent_rejected() {
     let cfg = config(
         vec![("hue-l-a", light("0xa"))],
-        vec![room("loop", 1, vec!["hue-l-a/11"], vec![], Some("loop"))],
+        vec![room("loop", 1, vec!["hue-l-a/11"], Some("loop"))],
     );
     let err = Topology::build(&cfg).unwrap_err();
     assert!(matches!(err, TopologyError::SelfParent(_)));
@@ -451,13 +422,10 @@ fn self_parent_rejected() {
 #[test]
 fn parent_chain_cycle_rejected() {
     let cfg = config(
+        vec![("hue-l-a", light("0xa")), ("hue-l-b", light("0xb"))],
         vec![
-            ("hue-l-a", light("0xa")),
-            ("hue-l-b", light("0xb")),
-        ],
-        vec![
-            room("a", 1, vec!["hue-l-a/11"], vec![], Some("b")),
-            room("b", 2, vec!["hue-l-b/11"], vec![], Some("a")),
+            room("a", 1, vec!["hue-l-a/11"], Some("b")),
+            room("b", 2, vec!["hue-l-b/11"], Some("a")),
         ],
     );
     let err = Topology::build(&cfg).unwrap_err();
@@ -468,7 +436,7 @@ fn parent_chain_cycle_rejected() {
 fn member_referencing_non_light_rejected() {
     let cfg = config(
         vec![("hue-s-a", switch_dev("0x1"))],
-        vec![room("a", 1, vec!["hue-s-a/11"], vec![], None)],
+        vec![room("a", 1, vec!["hue-s-a/11"], None)],
     );
     let err = Topology::build(&cfg).unwrap_err();
     assert!(matches!(err, TopologyError::UnknownMemberLight { .. }));
@@ -478,7 +446,7 @@ fn member_referencing_non_light_rejected() {
 fn malformed_member_rejected() {
     let cfg = config(
         vec![("hue-l-a", light("0xa"))],
-        vec![room("a", 1, vec!["hue-l-a"], vec![], None)],
+        vec![room("a", 1, vec!["hue-l-a"], None)],
     );
     let err = Topology::build(&cfg).unwrap_err();
     assert!(matches!(err, TopologyError::MalformedMember { .. }));
@@ -492,7 +460,7 @@ fn binding_toggle_plug_builds_and_indexes() {
             ("hue-ts-foo", switch_dev_model("0x1", "test-tap")),
             ("z2m-p-printer", plug_dev("0xf", "sonoff-power", &["on-off", "power"])),
         ],
-        vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+        vec![room("a", 1, vec!["hue-l-a/11"], None)],
         vec![Binding {
             name: "printer-toggle".into(),
             trigger: Trigger::Button {
@@ -521,7 +489,7 @@ fn binding_switch_on_off_builds_and_indexes() {
             ("hue-s-office", switch_dev("0x1")),
             ("z2m-p-lamp", plug_dev("0xf", "sonoff-basic", &["on-off"])),
         ],
-        vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+        vec![room("a", 1, vec!["hue-l-a/11"], None)],
         vec![
             Binding {
                 name: "lamp-on".into(),
@@ -559,7 +527,7 @@ fn binding_power_below_builds_and_indexes() {
             ("hue-l-a", light("0xa")),
             ("z2m-p-printer", plug_dev("0xf", "sonoff-power", &["on-off", "power"])),
         ],
-        vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+        vec![room("a", 1, vec!["hue-l-a/11"], None)],
         vec![Binding {
             name: "printer-kill".into(),
             trigger: Trigger::PowerBelow {
@@ -583,7 +551,7 @@ fn binding_power_below_without_capability_rejected() {
             ("hue-l-a", light("0xa")),
             ("z2m-p-basic", plug_dev("0xf", "sonoff-basic", &["on-off"])),
         ],
-        vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+        vec![room("a", 1, vec!["hue-l-a/11"], None)],
         vec![Binding {
             name: "kill".into(),
             trigger: Trigger::PowerBelow {
@@ -605,7 +573,7 @@ fn binding_trigger_wrong_device_kind_rejected() {
             ("hue-l-a", light("0xa")),
             ("z2m-p-printer", plug_dev("0xf", "sonoff-power", &["on-off", "power"])),
         ],
-        vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+        vec![room("a", 1, vec!["hue-l-a/11"], None)],
         vec![Binding {
             name: "bad".into(),
             trigger: Trigger::Button {
@@ -628,7 +596,7 @@ fn binding_button_not_in_model_rejected() {
             ("hue-ts-foo", switch_dev_model("0x1", "test-tap")),
             ("z2m-p-a", plug_dev("0xf", "sonoff-basic", &["on-off"])),
         ],
-        vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+        vec![room("a", 1, vec!["hue-l-a/11"], None)],
         vec![Binding {
             name: "bad".into(),
             trigger: Trigger::Button {
@@ -650,7 +618,7 @@ fn binding_effect_not_plug_rejected() {
             ("hue-l-a", light("0xa")),
             ("hue-ts-foo", switch_dev_model("0x1", "test-tap")),
         ],
-        vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+        vec![room("a", 1, vec!["hue-l-a/11"], None)],
         vec![Binding {
             name: "bad".into(),
             trigger: Trigger::Button {
@@ -673,7 +641,7 @@ fn duplicate_binding_name_rejected() {
             ("hue-ts-foo", switch_dev_model("0x1", "test-tap")),
             ("z2m-p-a", plug_dev("0xf", "sonoff-basic", &["on-off"])),
         ],
-        vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+        vec![room("a", 1, vec!["hue-l-a/11"], None)],
         vec![
             Binding {
                 name: "dupe".into(),
@@ -706,7 +674,7 @@ fn binding_trigger_unknown_device_rejected() {
             ("hue-l-a", light("0xa")),
             ("z2m-p-a", plug_dev("0xf", "sonoff-basic", &["on-off"])),
         ],
-        vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+        vec![room("a", 1, vec!["hue-l-a/11"], None)],
         vec![Binding {
             name: "bad".into(),
             trigger: Trigger::Button {
@@ -728,7 +696,7 @@ fn binding_effect_unknown_device_rejected() {
             ("hue-l-a", light("0xa")),
             ("hue-ts-foo", switch_dev_model("0x1", "test-tap")),
         ],
-        vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+        vec![room("a", 1, vec!["hue-l-a/11"], None)],
         vec![Binding {
             name: "bad".into(),
             trigger: Trigger::Button {
@@ -746,11 +714,8 @@ fn binding_effect_unknown_device_rejected() {
 #[test]
 fn binding_room_not_found_rejected() {
     let cfg = config_with_bindings(
-        vec![
-            ("hue-l-a", light("0xa")),
-            ("hue-s-a", switch_dev("0x1")),
-        ],
-        vec![room("study", 1, vec!["hue-l-a/11"], vec![], None)],
+        vec![("hue-l-a", light("0xa")), ("hue-s-a", switch_dev("0x1"))],
+        vec![room("study", 1, vec!["hue-l-a/11"], None)],
         vec![Binding {
             name: "ghost-room".into(),
             trigger: Trigger::Button {
@@ -776,19 +741,14 @@ fn descendants_filter_rule_less_rooms() {
             ("hue-s-all", switch_dev("0x2")),
         ],
         vec![
-            room(
-                "kitchen-cooker", 1, vec!["hue-l-a/11"], vec![],
-                Some("kitchen-all"),
-            ),
+            room("kitchen-cooker", 1, vec!["hue-l-a/11"], Some("kitchen-all")),
             // Rule-less child: no bindings, no motion sensors.
+            room("kitchen-empty", 2, vec!["hue-l-b/11"], Some("kitchen-all")),
             room(
-                "kitchen-empty", 2, vec!["hue-l-b/11"], vec![],
-                Some("kitchen-all"),
-            ),
-            room(
-                "kitchen-all", 3,
+                "kitchen-all",
+                3,
                 vec!["hue-l-a/11", "hue-l-b/11", "hue-l-c/11"],
-                vec![], None,
+                None,
             ),
         ],
         vec![
@@ -827,7 +787,7 @@ fn power_below_cross_target_rejected() {
             ("z2m-p-monitor", plug_dev("0xf1", "sonoff-power", &["on-off", "power"])),
             ("z2m-p-target", plug_dev("0xf2", "sonoff-power", &["on-off", "power"])),
         ],
-        vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+        vec![room("a", 1, vec!["hue-l-a/11"], None)],
         vec![Binding {
             name: "cross-kill".into(),
             trigger: Trigger::PowerBelow {
@@ -854,9 +814,9 @@ fn transitive_descendants_through_rule_less_intermediate() {
             ("hue-s-grand", switch_dev("0x2")),
         ],
         vec![
-            room("child", 1, vec!["hue-l-a/11"], vec![], Some("parent")),
-            room("parent", 2, vec!["hue-l-b/11"], vec![], Some("grand")),
-            room("grand", 3, vec!["hue-l-c/11"], vec![], None),
+            room("child", 1, vec!["hue-l-a/11"], Some("parent")),
+            room("parent", 2, vec!["hue-l-b/11"], Some("grand")),
+            room("grand", 3, vec!["hue-l-c/11"], None),
         ],
         vec![
             Binding {
@@ -892,12 +852,13 @@ fn transitive_descendants_through_rule_less_intermediate() {
 #[test]
 fn negative_double_tap_suppression_rejected() {
     let cfg = Config {
+        motion_rules: vec![],
         name_by_address: BTreeMap::new(),
         devices: BTreeMap::from([
             ("hue-l-a".into(), light("0xa")),
         ]),
         switch_models: default_switch_models(),
-        rooms: vec![room("r", 1, vec!["hue-l-a/11"], vec![], None)],
+        rooms: vec![room("r", 1, vec!["hue-l-a/11"], None)],
         bindings: vec![],
         defaults: Defaults {
             double_tap_suppression_seconds: -1.0,
@@ -916,11 +877,8 @@ fn negative_double_tap_suppression_rejected() {
 #[test]
 fn soft_double_tap_buttons_tracked() {
     let cfg = config_with_bindings(
-        vec![
-            ("hue-l-a", light("0xa")),
-            ("hue-s-a", switch_dev("0x1")),
-        ],
-        vec![room("study", 1, vec!["hue-l-a/11"], vec![], None)],
+        vec![("hue-l-a", light("0xa")), ("hue-s-a", switch_dev("0x1"))],
+        vec![room("study", 1, vec!["hue-l-a/11"], None)],
         vec![
             Binding {
                 name: "study-on".into(),
@@ -955,7 +913,7 @@ fn hw_double_tap_buttons_tracked() {
             ("hue-l-a", light("0xa")),
             ("sonoff-orb", switch_dev_model("0x1", "test-hw-dbl")),
         ],
-        vec![room("study", 1, vec!["hue-l-a/11"], vec![], None)],
+        vec![room("study", 1, vec!["hue-l-a/11"], None)],
         vec![Binding {
             name: "orb-1".into(),
             trigger: Trigger::Button {
@@ -988,13 +946,14 @@ fn hw_double_tap_is_per_button() {
     let mut models = default_switch_models();
     models.insert("partial-dbl".into(), partial_model);
     let cfg = Config {
+        motion_rules: vec![],
         name_by_address: BTreeMap::new(),
         switch_models: models,
         devices: BTreeMap::from([
             ("hue-l-a".into(), light("0xa")),
             ("sw-partial".into(), switch_dev_model("0x1", "partial-dbl")),
         ]),
-        rooms: vec![room("study", 1, vec!["hue-l-a/11"], vec![], None)],
+        rooms: vec![room("study", 1, vec!["hue-l-a/11"], None)],
         bindings: vec![Binding {
             name: "partial-1".into(),
             trigger: Trigger::Button {
@@ -1018,11 +977,8 @@ fn hw_double_tap_is_per_button() {
 #[test]
 fn switch_model_lookup() {
     let cfg = config_with_bindings(
-        vec![
-            ("hue-l-a", light("0xa")),
-            ("hue-s-a", switch_dev("0x1")),
-        ],
-        vec![room("study", 1, vec!["hue-l-a/11"], vec![], None)],
+        vec![("hue-l-a", light("0xa")), ("hue-s-a", switch_dev("0x1"))],
+        vec![room("study", 1, vec!["hue-l-a/11"], None)],
         vec![],
     );
     let topo = Topology::build(&cfg).unwrap();
@@ -1046,10 +1002,11 @@ fn unknown_switch_model_rejected() {
         }),
     ]);
     let cfg = Config {
+        motion_rules: vec![],
         name_by_address: BTreeMap::new(),
         devices,
         switch_models: default_switch_models(),
-        rooms: vec![room("study", 1, vec!["hue-l-a/11"], vec![], None)],
+        rooms: vec![room("study", 1, vec!["hue-l-a/11"], None)],
         bindings: vec![],
         defaults: Default::default(),
         heating: None,
@@ -1068,7 +1025,7 @@ fn all_switch_device_names_populated() {
             ("hue-s-a", switch_dev("0x1")),
             ("hue-s-b", switch_dev("0x2")),
         ],
-        vec![room("study", 1, vec!["hue-l-a/11"], vec![], None)],
+        vec![room("study", 1, vec!["hue-l-a/11"], None)],
         vec![],
     );
     let topo = Topology::build(&cfg).unwrap();
@@ -1085,9 +1042,27 @@ fn zwave_plug_indexed_by_node_id() {
             ("hue-l-a", light("0xa")),
             ("z2m-p-zw", zwave_plug_dev(7, "neo-nas-wr01ze", &["on-off", "power"])),
         ],
-        vec![room("a", 1, vec!["hue-l-a/11"], vec![], None)],
+        vec![room("a", 1, vec!["hue-l-a/11"], None)],
     );
     let topo = Topology::build(&cfg).unwrap();
     let map = topo.zwave_node_id_to_name();
     assert_eq!(map.get(&7), Some(&"z2m-p-zw"));
+}
+
+fn motion_rule(group: &str, sensor: &str) -> crate::config::MotionRule {
+    crate::config::MotionRule {
+        name: format!("{group}-motion"),
+        sensors: vec![sensor.into()],
+        mode: crate::config::MotionMode::OnOff,
+        scenes: day_scenes(),
+        targets_by_slot: BTreeMap::from([(
+            "day".into(),
+            crate::config::MotionTarget::Group {
+                group: group.into(),
+            },
+        )]),
+        off_transition_seconds: 0.8,
+        off_cooldown_seconds: 0,
+        max_illuminance: None,
+    }
 }

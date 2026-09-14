@@ -65,7 +65,6 @@ fn motion_sensor(ieee: &str) -> DeviceCatalogEntry {
             options: BTreeMap::new(),
         },
         occupancy_timeout_seconds: 60,
-        max_illuminance: None,
     }
 }
 
@@ -127,6 +126,21 @@ fn always_on_schedule() -> TemperatureSchedule {
 /// with a TRV and wall thermostat.
 fn make_topology_simple() -> Arc<Topology> {
     let cfg = Config {
+        motion_rules: vec![crate::config::MotionRule {
+            name: "parent-motion".into(),
+            sensors: vec!["hue-ms-parent".into()],
+            mode: crate::config::MotionMode::OnOff,
+            scenes: day_scenes(),
+            targets_by_slot: BTreeMap::from([(
+                "day".into(),
+                crate::config::MotionTarget::Group {
+                    group: "parent".into(),
+                },
+            )]),
+            off_transition_seconds: 0.8,
+            off_cooldown_seconds: 0,
+            max_illuminance: None,
+        }],
         name_by_address: BTreeMap::new(),
         devices: BTreeMap::from([
             ("hue-l-parent".into(), light("0xa")),
@@ -164,11 +178,9 @@ fn make_topology_simple() -> Arc<Topology> {
                 id: 1,
                 members: vec!["hue-l-parent/11".into(), "hue-l-child/11".into()],
                 parent: None,
-                motion_sensors: vec!["hue-ms-parent".into()],
+
                 scenes: day_scenes(),
                 off_transition_seconds: 0.8,
-                motion_off_cooldown_seconds: 0,
-                motion_mode: Default::default(),
             },
             Room {
                 name: "child".into(),
@@ -176,11 +188,9 @@ fn make_topology_simple() -> Arc<Topology> {
                 id: 2,
                 members: vec!["hue-l-child/11".into()],
                 parent: Some("parent".into()),
-                motion_sensors: vec![],
+
                 scenes: day_scenes(),
                 off_transition_seconds: 0.8,
-                motion_off_cooldown_seconds: 0,
-                motion_mode: Default::default(),
             },
         ],
         bindings: vec![

@@ -69,8 +69,7 @@ pub enum DeviceCatalogEntry {
     },
 
     /// Hue motion sensor. Per-sensor options get written by the
-    /// provisioner; the runtime needs the timeout (for the auto-off
-    /// cooldown gate) and the max illuminance (luminance gate on motion-on).
+    /// provisioner; the runtime displays the configured occupancy timeout.
     #[serde(rename = "motion-sensor")]
     MotionSensor {
         #[serde(flatten)]
@@ -79,12 +78,6 @@ pub enum DeviceCatalogEntry {
         /// to fire its motion-off handler. Defaults to 60 in production.
         #[serde(default = "default_occupancy_timeout")]
         occupancy_timeout_seconds: u32,
-
-        /// Max illuminance (in lux) at which motion-on is still allowed
-        /// to fire. Above this threshold the room is "bright enough" and
-        /// motion is suppressed. `None` disables the gate entirely.
-        #[serde(default)]
-        max_illuminance: Option<u32>,
     },
 
     /// Thermostatic radiator valve. Controlled by the heating subsystem —

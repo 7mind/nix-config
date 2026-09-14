@@ -40,7 +40,6 @@ in
               kind = "motion-sensor";
               ieee_address = "0x...";
               occupancy_timeout_seconds = 60;
-              max_illuminance = 30;
               options = { occupancy_timeout = 60; motion_sensitivity = "high"; };
             };
             ...
@@ -52,13 +51,21 @@ in
               id = 15;
               members = [ "hue-l-cooker-bottom/11" ... ];
               parent = "kitchen-all";
-              devices = [ { device = "hue-ts-foo"; button = 2; } ];
               scenes = { ... };
               off_transition_seconds = 0.8;
-              motion_off_cooldown_seconds = 0;
             }
             ...
           ];
+          motion_rules = [ {
+            name = "kitchen-motion";
+            sensors = [ "hue-ms-foo" ];
+            mode = "on-off";
+            scenes = { ... };
+            targets_by_slot = { day = { group = "kitchen-cooker"; }; };
+            off_transition_seconds = 0.8;
+            off_cooldown_seconds = 30;
+            max_illuminance = 15;
+          } ];
           defaults = {
             cycle_window_seconds = 1.0;
             wall_switch = {

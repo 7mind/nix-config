@@ -50,6 +50,7 @@ macro_rules! define_idx {
 }
 
 define_idx!(RoomIdx, "Index into `Topology::rooms`.");
+define_idx!(MotionRuleIdx, "Index into `Topology::motion_rules`.");
 define_idx!(DeviceIdx, "Index into `Topology::devices` (any device kind).");
 define_idx!(BindingIdx, "Index into `Topology::bindings`.");
 define_idx!(ZoneIdx, "Index into `HeatingConfig::zones`.");

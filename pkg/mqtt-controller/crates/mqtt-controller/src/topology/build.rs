@@ -7,7 +7,7 @@
 //! `private/hosts/raspi5m/mqtt-controller-tools.nix` — the Rust layer
 //! runs its own as a defense-in-depth check at startup.
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
 use crate::config::catalog::PlugProtocol;
@@ -15,9 +15,8 @@ use crate::config::switch_model::Gesture;
 use crate::config::{Config, DeviceCatalogEntry, Effect, Room, Trigger};
 
 use super::{
-    BindingIdx, DeviceIdx, DeviceInfo, DeviceKind, FriendlyName, MotionBinding, PlugIdx,
-    ResolvedBinding, ResolvedEffect, ResolvedRoom, ResolvedTrigger, RoomIdx, RoomName, Topology,
-    TopologyError,
+    BindingIdx, DeviceIdx, DeviceInfo, DeviceKind, FriendlyName, PlugIdx, ResolvedBinding,
+    ResolvedEffect, ResolvedRoom, ResolvedTrigger, RoomIdx, RoomName, Topology, TopologyError,
 };
 
 impl Topology {
@@ -251,50 +250,6 @@ impl Topology {
             zwave_node_id_to_device.insert(node_id, idx);
         }
 
-        let mut motion_index: BTreeMap<DeviceIdx, Vec<RoomIdx>> = BTreeMap::new();
-        let mut bound_motion_per_room: BTreeMap<RoomName, Vec<MotionBinding>> = BTreeMap::new();
-
-        for (room_pos, room) in config.rooms.iter().enumerate() {
-            let room_idx = RoomIdx::new(room_pos as u32);
-            for sensor_name in &room.motion_sensors {
-                let catalog = config.devices.get(sensor_name).ok_or_else(|| {
-                    TopologyError::MotionSensorNotInCatalog {
-                        room: room.name.clone(),
-                        sensor: sensor_name.clone(),
-                    }
-                })?;
-                match catalog {
-                    DeviceCatalogEntry::MotionSensor {
-                        occupancy_timeout_seconds,
-                        max_illuminance,
-                        ..
-                    } => {
-                        bound_motion_per_room
-                            .entry(room.name.clone())
-                            .or_default()
-                            .push(MotionBinding {
-                                sensor: sensor_name.clone(),
-                                room: room.name.clone(),
-                                occupancy_timeout_seconds: *occupancy_timeout_seconds,
-                                max_illuminance: *max_illuminance,
-                            });
-                        let sensor_idx = device_by_name[sensor_name];
-                        motion_index
-                            .entry(sensor_idx)
-                            .or_default()
-                            .push(room_idx);
-                    }
-                    other => {
-                        return Err(TopologyError::MotionSensorWrongKind {
-                            room: room.name.clone(),
-                            sensor: sensor_name.clone(),
-                            kind: kind_label(other),
-                        });
-                    }
-                }
-            }
-        }
-
         let mut room_by_name: BTreeMap<RoomName, RoomIdx> = BTreeMap::new();
         let mut room_by_group_name: BTreeMap<FriendlyName, RoomIdx> = BTreeMap::new();
         for (i, room) in config.rooms.iter().enumerate() {
@@ -519,73 +474,38 @@ impl Topology {
 
         let mut rooms: Vec<ResolvedRoom> = Vec::with_capacity(config.rooms.len());
         for room in &config.rooms {
-            let bound_motion = bound_motion_per_room
-                .remove(&room.name)
-                .unwrap_or_default();
             rooms.push(ResolvedRoom {
                 name: room.name.clone(),
                 group_name: room.group_name.clone(),
                 id: room.id,
                 members: room.members.clone(),
+                light_members: room
+                    .members
+                    .iter()
+                    .map(|member| {
+                        let (name, endpoint) = parse_member_key(member).expect("validated member");
+                        let endpoint = u8::try_from(endpoint)
+                            .ok()
+                            .filter(|e| (1..=240).contains(e))
+                            .ok_or_else(|| TopologyError::MalformedMember {
+                                room: room.name.clone(),
+                                member: member.clone(),
+                            })?;
+                        Ok(super::LightEndpoint {
+                            device: device_by_name[name],
+                            endpoint,
+                        })
+                    })
+                    .collect::<Result<_, TopologyError>>()?,
                 parent: room.parent.clone(),
                 scenes: room.scenes.clone(),
                 off_transition_seconds: room.off_transition_seconds,
-                motion_off_cooldown_seconds: room.motion_off_cooldown_seconds,
-                motion_mode: room.motion_mode,
-                bound_motion,
+                bound_motion: Vec::new(),
             });
         }
 
         let room_has_bindings: Vec<bool> = (0..rooms.len())
             .map(|i| room_has_bindings_set.contains(&RoomIdx::new(i as u32)))
-            .collect();
-
-        // Propagate only to rule-bearing transitive descendants.
-        let mut direct_children: BTreeMap<RoomIdx, Vec<RoomIdx>> = BTreeMap::new();
-        for (i, room) in rooms.iter().enumerate() {
-            let idx = RoomIdx::new(i as u32);
-            if let Some(parent_name) = &room.parent {
-                let parent_idx = room_by_name[parent_name];
-                direct_children.entry(parent_idx).or_default().push(idx);
-            }
-        }
-        let room_has_rules_vec: Vec<bool> = rooms
-            .iter()
-            .enumerate()
-            .map(|(i, room)| {
-                !room.bound_motion.is_empty() || room_has_bindings[i]
-            })
-            .collect();
-
-        let descendants_by_room: Vec<Vec<RoomIdx>> = (0..rooms.len())
-            .map(|i| {
-                let parent_idx = RoomIdx::new(i as u32);
-                let mut out: Vec<RoomIdx> = Vec::new();
-                let mut seen: HashSet<RoomIdx> = HashSet::new();
-                let mut stack: Vec<RoomIdx> = direct_children
-                    .get(&parent_idx)
-                    .cloned()
-                    .unwrap_or_default();
-                while let Some(curr) = stack.pop() {
-                    if !seen.insert(curr) {
-                        continue;
-                    }
-                    if room_has_rules_vec[curr.as_usize()] {
-                        out.push(curr);
-                    }
-                    if let Some(grandkids) = direct_children.get(&curr) {
-                        stack.extend(grandkids.iter().copied());
-                    }
-                }
-                // Sort by name for deterministic test output (matches old
-                // BTreeMap-ordered behavior).
-                out.sort_by(|a, b| {
-                    rooms[a.as_usize()]
-                        .name
-                        .cmp(&rooms[b.as_usize()].name)
-                });
-                out
-            })
             .collect();
 
         let trv_names_set: BTreeSet<&str> = trv_devices
@@ -808,11 +728,11 @@ impl Topology {
             return Err(TopologyError::MissingLocationForSunExpressions);
         }
 
-        Ok(Self {
+        let mut topology = Self {
             rooms,
             room_by_name,
             room_by_group_name,
-            descendants_by_room,
+            descendants_by_room: Vec::new(),
             room_has_bindings,
             devices,
             device_by_name,
@@ -830,9 +750,13 @@ impl Topology {
             bindings: resolved_bindings,
             button_binding_index,
             power_below_index,
-            motion_index,
+            motion_index: BTreeMap::new(),
+            motion_rules: Vec::new(),
+            motion_rule_index: BTreeMap::new(),
             heating_config,
-        })
+        };
+        topology.build_motion_rules(config)?;
+        Ok(topology)
     }
 }
 

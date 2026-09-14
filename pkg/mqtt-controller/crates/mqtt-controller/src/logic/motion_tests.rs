@@ -10,7 +10,7 @@ use crate::config::scenes::{Scene, SceneSchedule, Slot};
 use crate::config::switch_model::{ActionMapping, Gesture, SwitchModel};
 use crate::config::{
     Binding, CommonFields, Config, Defaults, DeviceCatalogEntry, Effect as CfgEffect, MotionMode,
-    Room, TimeExpr, Trigger as CfgTrigger,
+    MotionRule, MotionTarget, Room, TimeExpr, Trigger as CfgTrigger,
 };
 use crate::domain::Effect;
 use crate::domain::action::Payload;
@@ -40,10 +40,6 @@ fn day_scenes() -> SceneSchedule {
 }
 
 fn motion_sensor(ieee: &str) -> DeviceCatalogEntry {
-    motion_sensor_with(ieee, None)
-}
-
-fn motion_sensor_with(ieee: &str, max_illuminance: Option<u32>) -> DeviceCatalogEntry {
     DeviceCatalogEntry::MotionSensor {
         common: CommonFields {
             ieee_address: ieee.into(),
@@ -51,7 +47,6 @@ fn motion_sensor_with(ieee: &str, max_illuminance: Option<u32>) -> DeviceCatalog
             options: BTreeMap::new(),
         },
         occupancy_timeout_seconds: 60,
-        max_illuminance,
     }
 }
 
@@ -86,6 +81,30 @@ fn single_button_model() -> SwitchModel {
 
 /// Build a processor with one motion-sensor-equipped room in the given mode.
 /// Also wires a button-press binding so we can exercise the user-press path.
+fn motion_rule(
+    group: &str,
+    sensors: Vec<String>,
+    mode: MotionMode,
+    cooldown: u32,
+    max_lux: Option<u32>,
+) -> MotionRule {
+    MotionRule {
+        name: group.into(),
+        sensors,
+        mode,
+        scenes: day_scenes(),
+        targets_by_slot: BTreeMap::from([(
+            "day".into(),
+            MotionTarget::Group {
+                group: group.into(),
+            },
+        )]),
+        off_transition_seconds: 0.8,
+        off_cooldown_seconds: cooldown,
+        max_illuminance: max_lux,
+    }
+}
+
 fn make_processor(mode: MotionMode) -> EventProcessor {
     make_processor_with(mode, None, 0)
 }
@@ -96,10 +115,17 @@ fn make_processor_with(
     cooldown_secs: u32,
 ) -> EventProcessor {
     let cfg = Config {
+        motion_rules: vec![motion_rule(
+            "room",
+            vec!["hue-ms-room".into()],
+            mode,
+            cooldown_secs,
+            max_illuminance,
+        )],
         name_by_address: BTreeMap::new(),
         devices: BTreeMap::from([
             ("hue-l-a".into(), light("0xa")),
-            ("hue-ms-room".into(), motion_sensor_with("0xc", max_illuminance)),
+            ("hue-ms-room".into(), motion_sensor("0xc")),
             ("hue-s-room".into(), switch_dev("0xd", "single")),
         ]),
         switch_models: BTreeMap::from([("single".into(), single_button_model())]),
@@ -109,11 +135,9 @@ fn make_processor_with(
             id: 1,
             members: vec!["hue-l-a/11".into()],
             parent: None,
-            motion_sensors: vec!["hue-ms-room".into()],
+
             scenes: day_scenes(),
             off_transition_seconds: 0.8,
-            motion_off_cooldown_seconds: cooldown_secs,
-            motion_mode: mode,
         }],
         bindings: vec![Binding {
             name: "room-on".into(),
@@ -138,6 +162,13 @@ fn make_processor_with(
 /// turn-off effect against an off-only zone.
 fn make_processor_with_bedtime(mode: MotionMode) -> EventProcessor {
     let cfg = Config {
+        motion_rules: vec![motion_rule(
+            "room",
+            vec!["hue-ms-room".into()],
+            mode,
+            0,
+            None,
+        )],
         name_by_address: BTreeMap::new(),
         devices: BTreeMap::from([
             ("hue-l-a".into(), light("0xa")),
@@ -152,11 +183,9 @@ fn make_processor_with_bedtime(mode: MotionMode) -> EventProcessor {
             id: 1,
             members: vec!["hue-l-a/11".into()],
             parent: None,
-            motion_sensors: vec!["hue-ms-room".into()],
+
             scenes: day_scenes(),
             off_transition_seconds: 0.8,
-            motion_off_cooldown_seconds: 0,
-            motion_mode: mode,
         }],
         bindings: vec![
             Binding {
@@ -626,7 +655,7 @@ fn off_only_startup_echo_race_does_not_arm_cooldown() {
     );
 }
 
-/// Subagent round 3: a parent in `OnOff` mode propagating motion-on
+/// A parent group propagating a manual scene command
 /// to its descendants must NOT clobber an off-only child's live
 /// motion claim. Without the `off_only_session_live` preserve-motion
 /// check in `propagate_to_descendants`, the parent's motion-on writes
@@ -635,6 +664,13 @@ fn off_only_startup_echo_race_does_not_arm_cooldown() {
 #[test]
 fn propagation_preserves_off_only_child_motion_claim() {
     let cfg = Config {
+        motion_rules: vec![motion_rule(
+            "child",
+            vec!["hue-ms-child".into()],
+            MotionMode::OffOnly,
+            0,
+            None,
+        )],
         name_by_address: BTreeMap::new(),
         devices: BTreeMap::from([
             ("hue-l-parent".into(), light("0xa")),
@@ -650,11 +686,9 @@ fn propagation_preserves_off_only_child_motion_claim() {
                 id: 1,
                 members: vec!["hue-l-parent/11".into(), "hue-l-child/11".into()],
                 parent: None,
-                motion_sensors: vec!["hue-ms-parent".into()],
+
                 scenes: day_scenes(),
                 off_transition_seconds: 0.8,
-                motion_off_cooldown_seconds: 0,
-                motion_mode: MotionMode::OnOff,
             },
             Room {
                 name: "child".into(),
@@ -662,11 +696,9 @@ fn propagation_preserves_off_only_child_motion_claim() {
                 id: 2,
                 members: vec!["hue-l-child/11".into()],
                 parent: Some("parent".into()),
-                motion_sensors: vec!["hue-ms-child".into()],
+
                 scenes: day_scenes(),
                 off_transition_seconds: 0.8,
-                motion_off_cooldown_seconds: 0,
-                motion_mode: MotionMode::OffOnly,
             },
         ],
         bindings: vec![],
@@ -690,10 +722,10 @@ fn propagation_preserves_off_only_child_motion_claim() {
     let _ = p.handle_event(occupancy("hue-ms-child", true, t0));
     assert!(p.world.light_zones.get("child").unwrap().is_motion_owned());
 
-    // Parent fires motion-on. Its dispatch path propagates to the
+    // Parent recalls a scene. Its dispatch path propagates to the
     // child. Before the fix, this overwrote the child's target to
     // System-owned, killing the session.
-    let _ = p.handle_event(occupancy("hue-ms-parent", true, t0 + Duration::from_secs(1)));
+    let _ = p.web_recall_scene("parent", 1, t0 + Duration::from_secs(1));
 
     let child = p.world.light_zones.get("child").unwrap();
     assert_eq!(
@@ -703,9 +735,12 @@ fn propagation_preserves_off_only_child_motion_claim() {
     );
 
     // Child's own vacancy must still authorise state_off even though
-    // the parent claimed motion-on concurrently.
-    let effects =
-        p.handle_event(occupancy("hue-ms-child", false, t0 + Duration::from_secs(30)));
+    // the parent received a manual command concurrently.
+    let effects = p.handle_event(occupancy(
+        "hue-ms-child",
+        false,
+        t0 + Duration::from_secs(30),
+    ));
     expect_state_off(&effects);
 }
 
@@ -720,6 +755,22 @@ fn shared_motion_sensor_fans_vacancy_to_all_rooms() {
 
     // Build a two-room topology with one shared sensor.
     let cfg = Config {
+        motion_rules: vec![
+            motion_rule(
+                "room-a",
+                vec!["hue-ms-shared".into()],
+                MotionMode::OnOff,
+                0,
+                None,
+            ),
+            motion_rule(
+                "room-b",
+                vec!["hue-ms-shared".into()],
+                MotionMode::OnOff,
+                0,
+                None,
+            ),
+        ],
         name_by_address: BTreeMap::new(),
         devices: BTreeMap::from([
             ("hue-l-a".into(), light("0xa")),
@@ -734,11 +785,9 @@ fn shared_motion_sensor_fans_vacancy_to_all_rooms() {
                 id: 1,
                 members: vec!["hue-l-a/11".into()],
                 parent: None,
-                motion_sensors: vec!["hue-ms-shared".into()],
+
                 scenes: day_scenes(),
                 off_transition_seconds: 0.8,
-                motion_off_cooldown_seconds: 0,
-                motion_mode: MotionMode::OnOff,
             },
             Room {
                 name: "room-b".into(),
@@ -746,11 +795,9 @@ fn shared_motion_sensor_fans_vacancy_to_all_rooms() {
                 id: 2,
                 members: vec!["hue-l-b/11".into()],
                 parent: None,
-                motion_sensors: vec!["hue-ms-shared".into()],
+
                 scenes: day_scenes(),
                 off_transition_seconds: 0.8,
-                motion_off_cooldown_seconds: 0,
-                motion_mode: MotionMode::OnOff,
             },
         ],
         bindings: vec![],
@@ -1295,8 +1342,6 @@ fn off_only_zombie_claim_cleared_by_gate_suppressed_new_session() {
 /// path is for dark, truly-ended sessions — not live lights.
 #[test]
 fn off_only_gate_suppressed_new_sensor_does_not_release_live_session() {
-    use crate::entities::light_zone::LightZoneActual;
-
     let mut p = make_processor_with(MotionMode::OffOnly, Some(50), 0);
     let t0 = Instant::now();
 
@@ -1772,6 +1817,13 @@ fn stale_to_fresh_occupied_true_is_treated_as_new_session() {
 fn multi_sensor_room_dedups_per_sensor_not_per_room() {
     // Build a room with two sensors.
     let cfg = Config {
+        motion_rules: vec![motion_rule(
+            "room",
+            vec!["hue-ms-a".into(), "hue-ms-b".into()],
+            MotionMode::OnOff,
+            0,
+            None,
+        )],
         name_by_address: BTreeMap::new(),
         devices: BTreeMap::from([
             ("hue-l-a".into(), light("0xa")),
@@ -1785,11 +1837,9 @@ fn multi_sensor_room_dedups_per_sensor_not_per_room() {
             id: 1,
             members: vec!["hue-l-a/11".into()],
             parent: None,
-            motion_sensors: vec!["hue-ms-a".into(), "hue-ms-b".into()],
+
             scenes: day_scenes(),
             off_transition_seconds: 0.8,
-            motion_off_cooldown_seconds: 0,
-            motion_mode: MotionMode::OnOff,
         }],
         bindings: vec![],
         defaults: Defaults::default(),
@@ -2008,4 +2058,20 @@ fn high_lux_heartbeats_do_not_re_evaluate_luminance_gate() {
     ));
     let since_2 = p.world.motion_sensors.get("hue-ms-room").unwrap().actual.since();
     assert_ne!(since_1, since_2);
+}
+
+#[test]
+fn manual_brightness_takes_over_motion_lights() {
+    let mut p = make_processor(MotionMode::OnOff);
+    let ts = Instant::now();
+    p.handle_event(occupancy("hue-ms-room", true, ts));
+    p.execute_brightness_step("room", 10, 0.2, ts);
+    assert!(
+        p.handle_event(occupancy(
+            "hue-ms-room",
+            false,
+            ts + Duration::from_secs(60)
+        ))
+        .is_empty()
+    );
 }

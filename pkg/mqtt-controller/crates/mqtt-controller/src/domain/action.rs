@@ -16,6 +16,15 @@ pub enum Payload {
     /// `{"scene_recall": N}` — recall a numbered scene on this group.
     SceneRecall { scene_recall: u8 },
 
+    LightOn {
+        state: &'static str,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        brightness: Option<u8>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        color_temp: Option<u16>,
+        transition: f64,
+    },
+
     /// `{"state": "OFF", "transition": T}` — turn the group off with a
     /// fade. The state field is a fixed string so it serializes as a
     /// JSON string literal, not an enum tag.
@@ -72,6 +81,14 @@ pub enum Payload {
 }
 
 impl Payload {
+    pub fn light_on(scene: &crate::config::Scene) -> Self {
+        Self::LightOn {
+            state: "ON",
+            brightness: scene.brightness,
+            color_temp: scene.color_temp,
+            transition: scene.transition,
+        }
+    }
     pub fn scene_recall(id: u8) -> Self {
         Self::SceneRecall { scene_recall: id }
     }

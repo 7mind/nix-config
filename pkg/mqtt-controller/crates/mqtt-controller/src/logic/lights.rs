@@ -6,9 +6,9 @@
 
 use std::time::{Duration, Instant};
 
-use crate::config::room::MotionMode;
 use crate::domain::Effect;
 use crate::domain::action::Payload;
+use crate::entities::light::LightTarget;
 use crate::entities::light_zone::{LightZoneActual, LightZoneTarget};
 use crate::tass::Owner;
 use crate::topology::{RoomIdx, RoomName};
@@ -16,45 +16,13 @@ use crate::topology::{RoomIdx, RoomName};
 use super::EventProcessor;
 
 impl EventProcessor {
-    /// True when a room is in the middle of a live off-only occupancy
-    /// session — the central invariant guarding Motion ownership
-    /// across user presses, OFF-echoes, and ancestor propagation.
-    /// All three conditions must hold:
-    ///
-    ///   * the room is configured as `MotionMode::OffOnly`;
-    ///   * the zone's target is currently motion-owned (a claim was
-    ///     actually made — lux/cooldown-suppressed events stay
-    ///     non-motion-owned, so they don't get backdoored);
-    ///   * at least one bound sensor is currently fresh+occupied
-    ///     (no zombie claim from a past session whose sensor went
-    ///     stale without publishing `occupied=false`).
-    ///
-    /// Every place that could silently wipe a Motion claim consults
-    /// this helper: [`Self::resolve_zone_owner`], the preserve-motion
-    /// branch of [`Self::handle_group_state`], and descendant
-    /// propagation in [`Self::propagate_to_descendants`] and
-    /// [`Self::soft_propagate_to_descendants`].
     pub(super) fn off_only_session_live(&self, room_name: &str) -> bool {
-        let Some(room) = self.topology.room_by_name(room_name) else {
-            return false;
-        };
-        if room.motion_mode != MotionMode::OffOnly {
-            return false;
-        }
-        let zone_motion_owned = self
-            .world
-            .light_zones
-            .get(room_name)
-            .and_then(|z| z.target.owner())
-            == Some(Owner::Motion);
-        if !zone_motion_owned {
-            return false;
-        }
-        room.bound_motion.iter().any(|bm| {
-            self.world
-                .motion_sensors
-                .get(&bm.sensor)
-                .is_some_and(|s| s.is_occupied())
+        self.topology.room_by_name(room_name).is_some_and(|room| {
+            !room.light_members.is_empty()
+                && room
+                    .light_members
+                    .iter()
+                    .all(|light| self.light_has_off_only_claim(light.device))
         })
     }
 
@@ -278,7 +246,13 @@ impl EventProcessor {
     }
 
     /// `BrightnessStep` effect -- step brightness up or down.
-    pub(super) fn execute_brightness_step(&mut self, room_name: &str, step: i16, transition: f64) -> Vec<Effect> {
+    pub(super) fn execute_brightness_step(
+        &mut self,
+        room_name: &str,
+        step: i16,
+        transition: f64,
+        ts: Instant,
+    ) -> Vec<Effect> {
         let Some(room_idx) = self.topology.room_idx(room_name) else {
             return Vec::new();
         };
@@ -291,6 +265,7 @@ impl EventProcessor {
             transition,
             "brightness_step"
         );
+        self.take_over_group_brightness(room_name, ts);
         vec![Effect::PublishGroupSet {
             room: room_idx,
             payload: Payload::brightness_step(step, transition),
@@ -298,7 +273,12 @@ impl EventProcessor {
     }
 
     /// `BrightnessMove` effect -- start continuous brightness change (hold).
-    pub(super) fn execute_brightness_move(&mut self, room_name: &str, rate: i16) -> Vec<Effect> {
+    pub(super) fn execute_brightness_move(
+        &mut self,
+        room_name: &str,
+        rate: i16,
+        ts: Instant,
+    ) -> Vec<Effect> {
         let Some(room_idx) = self.topology.room_idx(room_name) else {
             return Vec::new();
         };
@@ -310,6 +290,7 @@ impl EventProcessor {
             rate,
             "brightness_move"
         );
+        self.take_over_group_brightness(room_name, ts);
         vec![Effect::PublishGroupSet {
             room: room_idx,
             payload: Payload::brightness_move(rate),
@@ -318,7 +299,7 @@ impl EventProcessor {
 
     /// `BrightnessStop` effect -- stop continuous brightness change
     /// (hold release). Implemented as brightness_move with rate 0.
-    pub(super) fn execute_brightness_stop(&mut self, room_name: &str) -> Vec<Effect> {
+    pub(super) fn execute_brightness_stop(&mut self, room_name: &str, ts: Instant) -> Vec<Effect> {
         let Some(room_idx) = self.topology.room_idx(room_name) else {
             return Vec::new();
         };
@@ -329,12 +310,47 @@ impl EventProcessor {
             group = %group_name,
             "brightness_stop"
         );
+        self.take_over_group_brightness(room_name, ts);
         vec![Effect::PublishGroupSet {
             room: room_idx,
             payload: Payload::brightness_move(0),
         }]
     }
 
+    fn take_over_group_brightness(&mut self, room_name: &str, ts: Instant) {
+        let lights = self
+            .topology
+            .room_by_name(room_name)
+            .expect("known room")
+            .light_members
+            .clone();
+        for endpoint in lights {
+            let owner = if self.light_has_off_only_claim(endpoint.device) {
+                Owner::Motion
+            } else {
+                Owner::User
+            };
+            let name = self.topology.device_name(endpoint.device).to_string();
+            let light = self.world.light(&name);
+            if light.is_on() {
+                light.target.set_and_command(
+                    LightTarget::On {
+                        brightness: None,
+                        color_temp: None,
+                    },
+                    owner,
+                    ts,
+                );
+            } else {
+                light.target.reassign_owner(owner, ts);
+            }
+        }
+        let owner = self.resolve_zone_owner(room_name, Owner::User);
+        self.world
+            .light_zone(room_name)
+            .target
+            .reassign_owner(owner, ts);
+    }
 
     pub(super) fn publish_off(
         &mut self,
@@ -355,7 +371,32 @@ impl EventProcessor {
 
     /// TASS write-after-on: set target to On with the given owner,
     /// update last_press_at.
-    fn write_after_on(&mut self, room_name: &str, ts: Instant, cycle_idx: usize, scene_id: u8, owner: Owner) {
+    fn write_after_on(
+        &mut self,
+        room_name: &str,
+        ts: Instant,
+        cycle_idx: usize,
+        scene_id: u8,
+        owner: Owner,
+    ) {
+        let scene = self
+            .topology
+            .room_by_name(room_name)
+            .expect("known room")
+            .scenes
+            .scenes
+            .iter()
+            .find(|scene| scene.id == scene_id)
+            .expect("validated scene");
+        self.record_group_light_command(
+            room_name,
+            LightTarget::On {
+                brightness: scene.brightness,
+                color_temp: scene.color_temp,
+            },
+            owner,
+            ts,
+        );
         let zone = self.world.light_zone(room_name);
         zone.target.set_and_command(
             LightZoneTarget::On { scene_id, cycle_idx },
@@ -368,6 +409,7 @@ impl EventProcessor {
     /// TASS write-after-off: set target to Off with the given owner,
     /// update timestamps.
     fn write_after_off(&mut self, room_name: &str, ts: Instant, owner: Owner) {
+        self.record_group_light_command(room_name, LightTarget::Off, owner, ts);
         let zone = self.world.light_zone(room_name);
         zone.target.set_and_command(LightZoneTarget::Off, owner, ts);
         zone.last_press_at = Some(ts);
@@ -376,8 +418,7 @@ impl EventProcessor {
 
     /// Process z2m group state echo. Updates the light zone's actual
     /// state. On off-transitions, clears motion ownership and resets
-    /// cycle state. Uses soft propagation to descendants (preserves
-    /// cycle state in children).
+    /// cycle state. OFF transitions also invalidate the affected member state.
     pub(super) fn handle_group_state(
         &mut self,
         group_name: &str,
@@ -389,6 +430,7 @@ impl EventProcessor {
         };
         let room_name = room.name.clone();
 
+        let members = room.light_members.clone();
         let zone = self.world.light_zone(&room_name);
         let new_actual = if on { LightZoneActual::On } else { LightZoneActual::Off };
         // Use is_on() (target OR actual) not actual_is_on() — the target
@@ -413,6 +455,49 @@ impl EventProcessor {
                 "group state echo → no transition"
             );
             return Vec::new();
+        }
+
+        if !on {
+            let descendants: Vec<_> = self
+                .topology
+                .rooms()
+                .filter(|other| {
+                    other.name != room_name
+                        && !other.light_members.is_empty()
+                        && other
+                            .light_members
+                            .iter()
+                            .all(|light| members.contains(light))
+                })
+                .map(|other| other.name.clone())
+                .collect();
+            for name in descendants {
+                let owner = self.resolve_zone_owner(&name, Owner::System);
+                let zone = self.world.light_zone(&name);
+                zone.actual.update(LightZoneActual::Off, ts);
+                if zone.target_is_on() {
+                    zone.target.set_and_command(LightZoneTarget::Off, owner, ts);
+                    zone.target.confirm(ts);
+                    zone.last_off_at = Some(ts);
+                }
+            }
+            for endpoint in members {
+                let name = self.topology.device_name(endpoint.device).to_string();
+                let previous = self
+                    .world
+                    .lights
+                    .get(&name)
+                    .and_then(|light| light.actual.value())
+                    .cloned();
+                self.handle_light_state(
+                    &name,
+                    false,
+                    previous.as_ref().and_then(|actual| actual.brightness),
+                    previous.as_ref().and_then(|actual| actual.color_temp),
+                    previous.and_then(|actual| actual.color_xy),
+                    ts,
+                );
+            }
         }
 
         if on {
@@ -447,13 +532,6 @@ impl EventProcessor {
                 "group state echo → on→off transition"
             );
         }
-
-        // Propagate only the physical on/off flag to descendants so
-        // child rooms track the parent's physical state.  Use the
-        // *soft* variant that preserves cycle state (last_press_at,
-        // cycle_idx) -- a group echo is NOT an explicit button press,
-        // so it must not destroy a child's in-progress scene cycle.
-        self.soft_propagate_to_descendants(&room_name, on, ts);
 
         Vec::new()
     }
@@ -514,58 +592,6 @@ impl EventProcessor {
         }
     }
 
-    /// Soft propagation: update only actual state (and last_off_at on off
-    /// transitions) for descendants. Does NOT reset last_press_at or
-    /// cycle_idx.
-    ///
-    /// Used by `handle_group_state` where the echo is a side-effect of
-    /// z2m aggregating member states, not an explicit user action. If
-    /// we cleared cycle state here, a child room's tap-press cycle
-    /// window would be destroyed every time z2m re-publishes the
-    /// parent group's state after the child turned on.
-    fn soft_propagate_to_descendants(&mut self, ancestor: &str, on: bool, ts: Instant) {
-        let Some(ancestor_idx) = self.topology.room_idx(ancestor) else {
-            return;
-        };
-        let descendant_idxs: Vec<RoomIdx> =
-            self.topology.descendants_of(ancestor_idx).to_vec();
-        if descendant_idxs.is_empty() {
-            return;
-        }
-        let descendants: Vec<RoomName> = descendant_idxs
-            .iter()
-            .map(|&idx| self.topology.room(idx).name.clone())
-            .collect();
-        tracing::debug!(
-            ancestor,
-            descendants = ?descendants,
-            physically_on = on,
-            "group echo: soft-propagating physical state to descendants \
-             (preserving cycle state)"
-        );
-        for desc in descendants {
-            // Same off-only-session carve-out as the non-soft
-            // propagation: preserve Motion on the descendant when its
-            // occupancy session is still live, so the child's own
-            // vacancy can still fire state_off.
-            let preserve_motion = self.off_only_session_live(&desc);
-            let owner = if preserve_motion { Owner::Motion } else { Owner::System };
-            let zone = self.world.light_zone(&desc);
-            let new_actual = if on { LightZoneActual::On } else { LightZoneActual::Off };
-            zone.actual.update(new_actual, ts);
-            if !on {
-                // Clear descendant target on OFF echo — prevents stale
-                // target=On from making is_on() return true after the
-                // parent group physically went off.
-                zone.target.set_and_command(LightZoneTarget::Off, owner, ts);
-                zone.last_off_at = Some(ts);
-            }
-        }
-    }
-
-    /// Record per-light state as published by z2m. Read-only update; no
-    /// commands, no propagation. The group-level [`LightZoneEntity`] is
-    /// unaffected — it receives its own update via [`Event::GroupState`].
     pub(super) fn handle_light_state(
         &mut self,
         device: &str,
@@ -575,15 +601,45 @@ impl EventProcessor {
         color_xy: Option<(f64, f64)>,
         ts: Instant,
     ) {
+        let preserve_motion = self
+            .topology
+            .device_idx(device)
+            .is_some_and(|idx| self.light_has_off_only_claim(idx));
         let light = self.world.light(device);
-        light.actual.update(
-            crate::entities::light::LightActual {
-                on,
-                brightness,
-                color_temp,
-                color_xy,
-            },
-            ts,
-        );
+        light
+            .target
+            .mark_stale_if_old(ts, Self::TARGET_STALE_THRESHOLD);
+        if !on
+            && matches!(light.target.value(), Some(LightTarget::On { .. }))
+            && !light.target.is_actionable()
+        {
+            light.target.adopt(
+                LightTarget::Off,
+                if preserve_motion {
+                    Owner::Motion
+                } else {
+                    Owner::System
+                },
+                ts,
+            );
+        }
+        let actual = crate::entities::light::LightActual {
+            on,
+            brightness,
+            color_temp,
+            color_xy,
+        };
+        if light
+            .target
+            .value()
+            .is_some_and(|target| target.matches(&actual))
+            && matches!(
+                light.target.phase(),
+                crate::tass::TargetPhase::Commanded | crate::tass::TargetPhase::Stale
+            )
+        {
+            light.target.confirm(ts);
+        }
+        light.actual.update(actual, ts);
     }
 }

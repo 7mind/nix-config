@@ -11,7 +11,7 @@
 use crate::domain::action::Payload;
 use crate::domain::ha_discovery;
 use crate::mqtt::topics;
-use crate::topology::{DeviceIdx, RoomIdx, Topology, ZoneIdx};
+use crate::topology::{DeviceIdx, LightEndpoint, RoomIdx, Topology, ZoneIdx};
 
 /// One thing the controller wants to publish to MQTT, expressed in
 /// terms of typed topology indexes.
@@ -23,6 +23,10 @@ pub enum Effect {
 
     /// Publish to `zigbee2mqtt/<device>/set` for the device.
     PublishDeviceSet { device: DeviceIdx, payload: Payload },
+    PublishLightSet {
+        light: LightEndpoint,
+        payload: Payload,
+    },
 
     /// Publish `{"state":""}` to `zigbee2mqtt/<device>/get` to force
     /// z2m to query and re-publish the device's current state. Used at
@@ -53,7 +57,8 @@ impl Effect {
     pub fn payload(&self) -> Option<&Payload> {
         match self {
             Effect::PublishGroupSet { payload, .. }
-            | Effect::PublishDeviceSet { payload, .. } => Some(payload),
+            | Effect::PublishDeviceSet { payload, .. }
+            | Effect::PublishLightSet { payload, .. } => Some(payload),
             _ => None,
         }
     }
@@ -62,6 +67,7 @@ impl Effect {
     /// computation.
     pub fn target_device(&self) -> Option<DeviceIdx> {
         match self {
+            Effect::PublishLightSet { light, .. } => Some(light.device),
             Effect::PublishDeviceSet { device, .. }
             | Effect::PublishDeviceGet { device }
             | Effect::PublishHaDiscoveryTrv { trv: device }
@@ -83,6 +89,11 @@ impl Effect {
     /// the typed `MqttBridge` methods.
     pub fn topic(&self, topology: &Topology) -> String {
         match self {
+            Effect::PublishLightSet { light, .. } => topics::set_topic(&format!(
+                "{}/{}",
+                topology.device_name(light.device),
+                light.endpoint
+            )),
             Effect::PublishGroupSet { room, .. } => {
                 topics::set_topic(&topology.room(*room).group_name)
             }
@@ -120,7 +131,8 @@ impl Effect {
     pub fn payload_string(&self) -> String {
         match self {
             Effect::PublishGroupSet { payload, .. }
-            | Effect::PublishDeviceSet { payload, .. } => {
+            | Effect::PublishDeviceSet { payload, .. }
+            | Effect::PublishLightSet { payload, .. } => {
                 serde_json::to_string(payload).unwrap_or_default()
             }
             Effect::PublishDeviceGet { .. } => r#"{"state":""}"#.into(),

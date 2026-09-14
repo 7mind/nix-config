@@ -14,11 +14,9 @@ fn deserialize_motion_sensor_with_defaults() {
     match entry {
         DeviceCatalogEntry::MotionSensor {
             occupancy_timeout_seconds,
-            max_illuminance,
             ..
         } => {
             assert_eq!(occupancy_timeout_seconds, 60);
-            assert_eq!(max_illuminance, None);
         }
         other => panic!("expected MotionSensor, got {other:?}"),
     }
@@ -29,18 +27,15 @@ fn deserialize_motion_sensor_with_overrides() {
     let json = r#"{
         "kind": "motion-sensor",
         "ieee_address": "0xaa",
-        "occupancy_timeout_seconds": 180,
-        "max_illuminance": 25
+        "occupancy_timeout_seconds": 180
     }"#;
     let entry: DeviceCatalogEntry = serde_json::from_str(json).unwrap();
     match entry {
         DeviceCatalogEntry::MotionSensor {
             occupancy_timeout_seconds,
-            max_illuminance,
             ..
         } => {
             assert_eq!(occupancy_timeout_seconds, 180);
-            assert_eq!(max_illuminance, Some(25));
         }
         other => panic!("expected MotionSensor, got {other:?}"),
     }
@@ -225,7 +220,6 @@ fn classifier_helpers() {
             options: BTreeMap::new(),
         },
         occupancy_timeout_seconds: 60,
-        max_illuminance: None,
     };
     assert!(ms.is_motion_sensor());
 }

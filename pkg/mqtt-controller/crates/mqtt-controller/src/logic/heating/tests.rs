@@ -121,6 +121,7 @@ fn make_config(
         }
     }
     Config {
+        motion_rules: vec![],
         name_by_address: BTreeMap::new(),
         devices,
         rooms: vec![],

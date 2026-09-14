@@ -84,6 +84,17 @@ pub struct HeatingZoneActualValue {
     pub temperature: Option<f64>,
 }
 
+/// Target value shared by group and individual light commands.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum LightTargetValue {
+    Off,
+    On {
+        brightness: Option<u8>,
+        color_temp: Option<u16>,
+    },
+}
+
 /// Actual value for an individual light.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LightActualValue {
@@ -154,9 +165,6 @@ pub struct MotionSensorInfo {
     /// will report unoccupied after motion stops).
     #[serde(default, skip_serializing_if = "is_zero_u32")]
     pub occupancy_timeout_secs: u32,
-    /// Configured max_illuminance gate (lux), or `None` if unset.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub max_illuminance: Option<u32>,
 }
 
 /// One light in a light zone. Topology info only — membership list.
@@ -166,11 +174,13 @@ pub struct LightInfo {
     pub device: String,
 }
 
-/// Per-bulb live state. Individual lights are read-only from the
-/// controller's perspective (the group is the control surface) so only
-/// an actual-state summary is exposed.
+/// Per-bulb target and observed state.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LightSnapshot {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<TassTargetInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_value: Option<LightTargetValue>,
     pub device: String,
     /// Which zone this light belongs to, if any. Lets the frontend
     /// route updates to the correct room card without a topology lookup.
@@ -233,24 +243,23 @@ pub struct RoomSnapshot {
     /// Switches bound to this room.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub switches: Vec<SwitchInfo>,
-    /// Motion sensors for this room with their current state.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub motion_sensors: Vec<MotionSensorInfo>,
-    /// Individual member lights. No per-light state (lights inherit
-    /// the zone); this is the device inventory only.
+    pub motion_rules: Vec<MotionRuleInfo>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub lights: Vec<LightInfo>,
-    /// Configured `motion_off_cooldown_seconds` for the room. 0 = no cooldown.
-    #[serde(default, skip_serializing_if = "is_zero_u32")]
-    pub motion_off_cooldown_secs: u32,
-    /// Remaining seconds of cooldown after the most recent OFF.
-    /// `None` once the cooldown has expired (or if no OFF recorded).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub motion_cooldown_remaining_secs: Option<u64>,
-    /// How motion events drive this room's lights. See the Rust-side
-    /// `MotionMode` enum. Serialised as `"on-off" | "on-only" | "off-only"`.
-    #[serde(default, skip_serializing_if = "MotionMode::is_default")]
-    pub motion_mode: MotionMode,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MotionRuleInfo {
+    pub max_illuminance: Option<u32>,
+    pub name: String,
+    pub sensors: Vec<MotionSensorInfo>,
+    pub mode: MotionMode,
+    pub active_slot: Option<String>,
+    pub targets: Vec<String>,
+    pub session_targets: Vec<String>,
+    pub off_cooldown_secs: u32,
+    pub cooldown_remaining_secs: Option<u64>,
 }
 
 /// Frontend mirror of the config-side `MotionMode`. Kept in this crate so
@@ -640,11 +649,8 @@ mod tests {
                 actual: None,
                 actual_value: None,
                 switches: vec![],
-                motion_sensors: vec![],
+                motion_rules: vec![],
                 lights: vec![],
-                motion_off_cooldown_secs: 0,
-                motion_cooldown_remaining_secs: None,
-                motion_mode: MotionMode::OnOff,
             }],
             plugs: vec![PlugSnapshot {
                 device: "z2m-p-printer".into(),
@@ -689,6 +695,8 @@ mod tests {
                 actual_value: None,
             }],
             lights: vec![LightSnapshot {
+                target: None,
+                target_value: None,
                 device: "hue-l-kitchen-1".into(),
                 room: Some("kitchen".into()),
                 actual: None,
@@ -791,11 +799,8 @@ mod tests {
                 actual: None,
                 actual_value: None,
                 switches: vec![],
-                motion_sensors: vec![],
+                motion_rules: vec![],
                 lights: vec![],
-                motion_off_cooldown_secs: 0,
-                motion_cooldown_remaining_secs: None,
-                motion_mode: MotionMode::OnOff,
                 active_slot: None,
                 scene_ids: vec![],
             },
@@ -808,6 +813,8 @@ mod tests {
     #[test]
     fn entity_update_light_round_trip() {
         let msg = ServerMessage::Entity(EntityUpdate::Light(LightSnapshot {
+            target: None,
+            target_value: None,
             device: "hue-l-a".into(),
             room: Some("study".into()),
             actual: Some(TassActualInfo {

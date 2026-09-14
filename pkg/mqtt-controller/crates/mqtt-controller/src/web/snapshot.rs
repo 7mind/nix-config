@@ -7,9 +7,9 @@ use std::time::{Duration, Instant};
 use mqtt_controller_wire::{
     FullStateSnapshot, HeatingZoneActualValue, HeatingZoneInfo, HeatingZoneSnapshot,
     HeatingZoneTargetValue, KillSwitchRuleInfo, LightActualValue, LightInfo, LightSnapshot,
-    MotionMode as WireMotionMode, MotionSensorInfo, PlugActualValue, PlugSnapshot, PlugTargetValue,
-    RoomActualValue, RoomInfo, RoomSnapshot, RoomTargetValue, SlotInfo, SwitchActionInfo,
-    SwitchButtonInfo, SwitchInfo, TopologyInfo, TrvSnapshot, TrvTargetValue,
+    MotionMode as WireMotionMode, MotionRuleInfo, MotionSensorInfo, PlugActualValue, PlugSnapshot,
+    PlugTargetValue, RoomActualValue, RoomInfo, RoomSnapshot, RoomTargetValue, SlotInfo,
+    SwitchActionInfo, SwitchButtonInfo, SwitchInfo, TopologyInfo, TrvSnapshot, TrvTargetValue,
 };
 
 use crate::entities::heating_zone::{HeatingZoneActual as HzActual, HeatingZoneTarget as HzTarget};
@@ -107,6 +107,21 @@ fn light_snapshot_from(
     now: Instant,
 ) -> LightSnapshot {
     LightSnapshot {
+        target: entity.map(|light| tass_target_info(&light.target, now)),
+        target_value: entity
+            .and_then(|light| light.target.value())
+            .map(|value| match value {
+                crate::entities::light::LightTarget::Off => {
+                    mqtt_controller_wire::LightTargetValue::Off
+                }
+                crate::entities::light::LightTarget::On {
+                    brightness,
+                    color_temp,
+                } => mqtt_controller_wire::LightTargetValue::On {
+                    brightness: *brightness,
+                    color_temp: *color_temp,
+                },
+            }),
         device: device.to_string(),
         room,
         actual: entity.map(|l| tass_actual_info(&l.actual, now)),
@@ -189,30 +204,80 @@ fn room_snapshot_from(
 
     let switches = build_room_switches(processor.topology(), &room.name);
 
-    let motion_sensors = build_room_motion_sensors(
-        &room.bound_motion,
-        processor.world(),
-        now,
-    );
-
-    let lights = build_room_lights(processor.topology(), room);
-    // Reflect the actual gate: cooldown only counts when the last off
-    // was motion-driven. Other offs (user press, startup fail-safe,
-    // ancestor propagation) don't arm this cooldown.
-    let motion_cooldown_remaining_secs = zone
-        .and_then(|z| z.last_motion_off_at)
-        .and_then(|last_off| {
-            let cooldown = Duration::from_secs(room.motion_off_cooldown_seconds as u64);
-            let elapsed = now.duration_since(last_off);
-            cooldown.checked_sub(elapsed).map(|d| d.as_secs())
+    let motion_rules: Vec<MotionRuleInfo> = processor
+        .topology()
+        .motion_rules()
+        .iter()
+        .filter(|rule| {
+            rule.rooms
+                .iter()
+                .any(|idx| processor.topology().room(*idx).name == room.name)
         })
-        .filter(|&s| s > 0);
+        .map(|rule| {
+            let state = processor.world().motion_rules.get(&rule.name);
+            let active_slot = rule
+                .scenes
+                .slot_for_time(hour, minute, sun)
+                .map(|(name, _)| name.clone());
+            let target = active_slot.as_ref().map(|slot| &rule.targets_by_slot[slot]);
+            let render = |light: &crate::topology::LightEndpoint| {
+                format!(
+                    "{}/{}",
+                    processor.topology().device_name(light.device),
+                    light.endpoint
+                )
+            };
+            MotionRuleInfo {
+                name: rule.name.clone(),
+                mode: wire_motion_mode(rule.mode),
+                max_illuminance: rule.max_illuminance,
+                sensors: build_room_motion_sensors(&rule.sensors, processor.world(), now),
+                active_slot,
+                targets: target
+                    .map(|target| target.lights.iter().map(render).collect())
+                    .unwrap_or_default(),
+                session_targets: state
+                    .and_then(|state| state.session.as_ref())
+                    .map(|session| {
+                        session
+                            .target
+                            .lights
+                            .iter()
+                            .filter(|light| {
+                                session.claimed.contains(&light.device)
+                                    && processor
+                                        .world()
+                                        .lights
+                                        .get(processor.topology().device_name(light.device))
+                                        .is_some_and(|entity| {
+                                            entity.target.owner()
+                                                == Some(crate::tass::Owner::Motion)
+                                        })
+                            })
+                            .map(render)
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                off_cooldown_secs: rule.off_cooldown_seconds,
+                cooldown_remaining_secs: state
+                    .and_then(|state| state.last_motion_off_at)
+                    .and_then(|last| {
+                        Duration::from_secs(u64::from(rule.off_cooldown_seconds))
+                            .checked_sub(now.duration_since(last))
+                    })
+                    .map(|duration| duration.as_secs())
+                    .filter(|seconds| *seconds > 0),
+            }
+        })
+        .collect();
+    let lights = build_room_lights(processor.topology(), room);
 
     RoomSnapshot {
         name: room.name.clone(),
         group_name: room.group_name.clone(),
         physically_on: zone.map_or(false, |z| z.is_on()),
-        motion_owned: zone.map_or(false, |z| z.is_motion_owned()),
+        motion_owned: motion_rules.iter().any(|rule|
+            rule.session_targets.iter().any(|target| room.members.contains(target))),
         cycle_idx: zone.map_or(0, |z| z.cycle_idx()),
         last_press_ago_ms: zone
             .and_then(|z| z.last_press_at)
@@ -232,11 +297,8 @@ fn room_snapshot_from(
             .and_then(|z| z.actual.value())
             .map(room_actual_value),
         switches,
-        motion_sensors,
+        motion_rules,
         lights,
-        motion_off_cooldown_secs: room.motion_off_cooldown_seconds,
-        motion_cooldown_remaining_secs,
-        motion_mode: wire_motion_mode(room.motion_mode),
     }
 }
 
@@ -628,7 +690,6 @@ fn build_room_motion_sensors(
                 freshness,
                 since_ago_ms,
                 occupancy_timeout_secs: mb.occupancy_timeout_seconds,
-                max_illuminance: mb.max_illuminance,
             }
         })
         .collect()

@@ -13,6 +13,11 @@ use crate::topology::Topology;
 /// Convert an [`Effect`] to a wire DTO for the event log.
 pub fn effect_to_dto(effect: &Effect, topology: &Topology) -> ActionDto {
     match effect {
+        Effect::PublishLightSet { light, payload } => ActionDto {
+            target: format!("{}/{}", topology.device_name(light.device), light.endpoint),
+            target_kind: "device".into(),
+            payload_json: serde_json::to_string(payload).expect("light payload serializes"),
+        },
         Effect::PublishGroupSet { room, payload } => {
             let target = topology.room(*room).group_name.clone();
             ActionDto {
@@ -223,6 +228,9 @@ pub fn finish_involved_entities(
 ) -> Vec<String> {
     for effect in effects {
         match effect {
+            Effect::PublishLightSet { light, .. } => {
+                entities.push(topology.device_name(light.device).to_string());
+            }
             Effect::PublishGroupSet { room, .. } => {
                 let r = topology.room(*room);
                 entities.push(r.group_name.clone());
