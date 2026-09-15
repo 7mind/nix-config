@@ -122,6 +122,7 @@ in
     };
     desktop.gnome.fractional-scaling.enable = true;
     desktop.gnome.vrr.enable = true;
+    desktop.gnome.extensions.classic-app-switcher.enable = true;
     desktop.gnome.gdm.monitors-xml = ./monitors.xml;
     desktop.gnome.touchpad.disableWhileTyping = true;
 

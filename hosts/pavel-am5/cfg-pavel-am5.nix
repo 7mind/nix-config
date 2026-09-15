@@ -218,6 +218,7 @@ in
 
   smind = {
     roles.desktop.generic-gnome = true;
+    desktop.gnome.extensions.classic-app-switcher.enable = true;
     desktop.gnome.gdm.monitors-xml = ./monitors.xml;
     desktop.gnome.switch-input-source-keybinding = [ "<Ctrl><Alt><Super>space" ];
 

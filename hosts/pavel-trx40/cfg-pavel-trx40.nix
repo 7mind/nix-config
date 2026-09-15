@@ -133,5 +133,5 @@
   home-manager.users.pavel = import ./home-pavel.nix;
   home-manager.users.root = import ./home-root.nix;
 
-  environment.systemPackages = with pkgs; [ ];
+  environment.systemPackages = with pkgs; [ git ];
 }
