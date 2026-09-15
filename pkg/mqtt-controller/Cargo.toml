@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/*"]
+members = ["crates/mqtt-controller", "crates/mqtt-controller-wire"]
 resolver = "3"
 
 [workspace.package]

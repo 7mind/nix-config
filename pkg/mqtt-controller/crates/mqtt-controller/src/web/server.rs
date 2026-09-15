@@ -1,4 +1,4 @@
-//! axum HTTP/WebSocket server. Serves the Leptos frontend as static
+//! axum HTTP/WebSocket server. Serves the TypeScript frontend as static
 //! files and provides a WebSocket endpoint for real-time state and
 //! control.
 //!
@@ -38,7 +38,8 @@ use tokio::time::{interval, Duration, MissedTickBehavior};
 use tower_http::services::ServeDir;
 use turso::Database;
 
-use mqtt_controller_wire::{ClientMessage, FullStateSnapshot, ServerMessage, TopologyInfo};
+use mqtt_controller_wire::{ClientMessage, ControlCommand, FullStateSnapshot, ServerMessage, TopologyInfo};
+use super::history::{HeatingHistory, HISTORY_WINDOW_MS};
 
 use crate::audit::AuditWriterHandle;
 
@@ -50,6 +51,8 @@ const PING_INTERVAL: Duration = Duration::from_secs(15);
 /// the connection. One missed ping is normal under brief stalls (GC, a
 /// long event handler); two in a row means the client is genuinely gone.
 const MAX_MISSED_PINGS: u32 = 2;
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+const HEARTBEAT_RECHECK_DELAY: Duration = Duration::from_millis(1);
 
 /// Command sent from a WebSocket handler to the daemon event loop.
 pub enum WsCommand {
@@ -62,12 +65,10 @@ pub enum WsCommand {
     RequestTopology {
         reply: oneshot::Sender<TopologyInfo>,
     },
-    /// Recall a specific scene in a room (published to MQTT by the daemon).
-    RecallScene { room: String, scene_id: u8 },
-    /// Turn a room's group OFF (published to MQTT by the daemon).
-    SetRoomOff { room: String },
-    /// Toggle a smart plug (published to MQTT by the daemon).
-    TogglePlug { device: String },
+    Control {
+        command: ControlCommand,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
 }
 
 /// Handle passed from main into daemon::run so the event loop can
@@ -91,6 +92,7 @@ struct AppState {
     /// loop (queries are read-only and do not need to be serialized
     /// against state writes).
     audit_db: Option<Database>,
+    history: HeatingHistory,
 }
 
 /// Bind the TCP listener synchronously and spawn the web server.
@@ -105,11 +107,13 @@ pub async fn bind_and_start_web_server(
     broadcast_tx: broadcast::Sender<ServerMessage>,
     assets_dir: PathBuf,
     audit_db: Option<Database>,
+    history: HeatingHistory,
 ) -> anyhow::Result<(SocketAddr, tokio::task::JoinHandle<anyhow::Result<()>>)> {
     let state = Arc::new(AppState {
         ws_cmd_tx,
         broadcast_tx,
         audit_db,
+        history,
     });
 
     let app = Router::new()
@@ -134,7 +138,7 @@ async fn ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_ws_connection(socket, state))
+    ws.max_message_size(16 * 1024).on_upgrade(move |socket| handle_ws_connection(socket, state))
 }
 
 /// Heartbeat liveness tracking. The writer task generates nonces; the
@@ -171,7 +175,7 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
     // side liveness heartbeat. Returns once the connection should close
     // (peer gone, channel error, or heartbeat budget exhausted).
     let writer_heartbeat = Arc::clone(&heartbeat);
-    let write_handle = tokio::spawn(async move {
+    let mut write_handle = tokio::spawn(async move {
         let mut hb_interval = interval(PING_INTERVAL);
         // First tick fires immediately; consume it so we don't ping on
         // connect (the snapshot we just sent is enough proof of life).
@@ -180,7 +184,6 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
 
         loop {
             tokio::select! {
-                biased;
                 result = broadcast_rx.recv() => {
                     match result {
                         Ok(msg) => {
@@ -189,8 +192,12 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
                             }
                         }
                         Err(broadcast::error::RecvError::Lagged(n)) => {
-                            tracing::warn!(skipped = n, "ws client lagged, skipping messages");
-                            continue;
+                            tracing::warn!(skipped = n, "ws client lagged; reconnect required for a fresh snapshot");
+                            let _ = ws_tx.send(Message::Close(Some(CloseFrame {
+                                code: 1013,
+                                reason: "state updates lost; reconnect for a snapshot".into(),
+                            }))).await;
+                            break;
                         }
                         Err(broadcast::error::RecvError::Closed) => break,
                     }
@@ -206,6 +213,9 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
                     }
                 }
                 _ = hb_interval.tick() => {
+                    // Let buffered pongs run through the independent reader before
+                    // confirming a timeout after a scheduler or system pause.
+                    tokio::time::sleep(HEARTBEAT_RECHECK_DELAY).await;
                     // Examine + advance the heartbeat state atomically:
                     // if the previous nonce is still pending, count a
                     // miss; otherwise rotate in a fresh nonce.
@@ -245,13 +255,46 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
         }
     });
 
+    // Keep controller/database waits out of the heartbeat reader. One bounded
+    // worker preserves command order and prevents unbounded per-client tasks.
+    let (request_tx, mut request_rx) = mpsc::channel(16);
+    let worker_state = Arc::clone(&state);
+    let worker_direct = direct_tx.clone();
+    let mut request_worker = tokio::spawn(async move {
+        while let Some(message) = request_rx.recv().await {
+            if tokio::time::timeout(REQUEST_TIMEOUT * 2,
+                handle_client_message(&worker_state, message, &worker_direct)).await.is_err() {
+                tracing::warn!("web request exceeded its deadline; closing connection");
+                break;
+            }
+        }
+    });
+
     // Reader loop: parse client messages, dispatch commands, clear
     // heartbeat state on matching pongs.
-    while let Some(Ok(msg)) = ws_rx.next().await {
+    loop {
+        let msg = tokio::select! {
+            _ = &mut write_handle => break,
+            _ = &mut request_worker => break,
+            message = ws_rx.next() => message,
+        };
+        let Some(Ok(msg)) = msg else { break; };
         match msg {
             Message::Text(text) => {
-                if let Ok(client_msg) = serde_json::from_str::<ClientMessage>(&text) {
-                    handle_client_message(&state, client_msg, &direct_tx).await;
+                match serde_json::from_str::<ClientMessage>(&text) {
+                    Ok(client_msg @ ClientMessage::Ping { .. }) => {
+                        handle_client_message(&state, client_msg, &direct_tx).await;
+                    }
+                    Ok(client_msg) => {
+                        if request_tx.try_send(client_msg).is_err() {
+                            tracing::warn!("web request queue is full; closing connection");
+                            break;
+                        }
+                    }
+                    Err(error) => {
+                        tracing::warn!(%error, "invalid web request; closing connection");
+                        break;
+                    }
                 }
             }
             Message::Pong(bytes) => {
@@ -280,6 +323,7 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
     }
 
     write_handle.abort();
+    request_worker.abort();
 }
 
 async fn handle_client_message(
@@ -303,23 +347,32 @@ async fn handle_client_message(
                 let _ = direct_tx.send(ServerMessage::Topology(topo)).await;
             }
         }
-        ClientMessage::RecallScene { room, scene_id } => {
-            let _ = state
-                .ws_cmd_tx
-                .send(WsCommand::RecallScene { room, scene_id })
-                .await;
+        ClientMessage::Command { request_id, command } => {
+            let result = tokio::time::timeout(REQUEST_TIMEOUT, async {
+                let (reply, response) = oneshot::channel();
+                state.ws_cmd_tx.send(WsCommand::Control { command, reply }).await
+                    .map_err(|_| "Controller is unavailable".to_string())?;
+                response.await.map_err(|_| "Controller closed before acknowledging the command".to_string())?
+            }).await;
+            let error = match result {
+                Ok(result) => result.err(),
+                Err(_) => Some("Command acknowledgement timed out; its outcome is unknown".into()),
+            };
+            let _ = direct_tx.send(ServerMessage::CommandResult { request_id, error }).await;
         }
-        ClientMessage::SetRoomOff { room } => {
-            let _ = state
-                .ws_cmd_tx
-                .send(WsCommand::SetRoomOff { room })
-                .await;
-        }
-        ClientMessage::TogglePlug { device } => {
-            let _ = state
-                .ws_cmd_tx
-                .send(WsCommand::TogglePlug { device })
-                .await;
+        ClientMessage::GetValveHistory { request_id, device } => {
+            let now = chrono::Utc::now().timestamp_millis();
+            let (points, error) = match state.history.fetch(&device, now).await {
+                Ok(result) => result,
+                Err(error) => {
+                    tracing::error!(%error, %device, "valve history query failed");
+                    (Vec::new(), Some("Valve history could not be read".into()))
+                }
+            };
+            let _ = direct_tx.send(ServerMessage::ValveHistory {
+                request_id, device, from_epoch_ms: now - HISTORY_WINDOW_MS,
+                to_epoch_ms: now, points, error,
+            }).await;
         }
         ClientMessage::GetEntityLog {
             entity,
@@ -387,15 +440,14 @@ async fn handle_client_message(
 async fn request_snapshot(
     ws_cmd_tx: &mpsc::Sender<WsCommand>,
 ) -> Option<FullStateSnapshot> {
-    let (tx, rx) = oneshot::channel();
-    ws_cmd_tx
-        .send(WsCommand::RequestSnapshot { reply: tx })
-        .await
-        .ok()?;
-    rx.await.ok()
+    tokio::time::timeout(REQUEST_TIMEOUT, async {
+        let (tx, rx) = oneshot::channel();
+        ws_cmd_tx.send(WsCommand::RequestSnapshot { reply: tx }).await.ok()?;
+        rx.await.ok()
+    }).await.ok().flatten()
 }
 
-/// Trunk uses content-hashed filenames for all assets except index.html.
+/// Vite uses content-hashed filenames for all assets except index.html.
 /// Mark index.html as non-cacheable so browsers always fetch the latest
 /// asset references after a deploy.
 async fn cache_control(request: Request, next: middleware::Next) -> Response {

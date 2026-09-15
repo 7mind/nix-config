@@ -284,30 +284,29 @@ impl EventProcessor {
         out
     }
 
-    /// Web UI: toggle a smart plug.
-    pub fn web_toggle_plug(&mut self, device: &str, ts: Instant) -> Vec<Effect> {
+    /// Web UI: set a smart plug to an explicit state.
+    pub fn web_set_plug_power(&mut self, device: &str, on: bool, ts: Instant) -> Vec<Effect> {
         use crate::domain::action::Payload;
         use crate::entities::plug::PlugTarget;
         use crate::tass::Owner;
 
         let Some(device_idx) = self.topology.device_idx(device) else {
-            tracing::warn!(device, "web: toggle plug rejected — unknown device");
+            tracing::warn!(device, "web: set plug power rejected — unknown device");
             return Vec::new();
         };
         if !self.topology.is_plug_idx(device_idx) {
-            tracing::warn!(device, "web: toggle plug rejected — not a plug");
+            tracing::warn!(device, "web: set plug power rejected — not a plug");
             return Vec::new();
         }
-        let is_on = self.world.plugs.get(device).is_some_and(|p| p.is_on());
-        let (new_target, payload) = if is_on {
-            (PlugTarget::Off, Payload::device_off())
-        } else {
+        let (new_target, payload) = if on {
             (PlugTarget::On, Payload::device_on())
+        } else {
+            (PlugTarget::Off, Payload::device_off())
         };
         let plug = self.world.plug(device);
         plug.target.set_and_command(new_target, Owner::WebUI, ts);
 
-        tracing::info!(device, target_state = !is_on, "web: toggle plug");
+        tracing::info!(device, target_state = on, "web: set plug power");
         vec![Effect::PublishDeviceSet { device: device_idx, payload }]
     }
 

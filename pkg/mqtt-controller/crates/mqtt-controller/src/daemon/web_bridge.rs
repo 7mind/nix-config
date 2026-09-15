@@ -4,6 +4,7 @@
 use std::time::Instant;
 
 use tokio::sync::{broadcast, mpsc};
+use mqtt_controller_wire::ControlCommand;
 
 use crate::effect_dispatch;
 use crate::logic::EventProcessor;
@@ -42,20 +43,15 @@ pub(super) async fn handle_ws_command(
             let topo = snapshot::build_topology_info(processor.topology());
             let _ = reply.send(topo);
         }
-        WsCommand::RecallScene { room, scene_id } => {
-            let effects = processor.web_recall_scene(&room, scene_id, clock.now());
-            let topology = processor.topology().clone();
-            effect_dispatch::dispatch(bridge, &topology, &effects).await;
-        }
-        WsCommand::SetRoomOff { room } => {
-            let effects = processor.web_set_room_off(&room, clock.now());
-            let topology = processor.topology().clone();
-            effect_dispatch::dispatch(bridge, &topology, &effects).await;
-        }
-        WsCommand::TogglePlug { device } => {
-            let effects = processor.web_toggle_plug(&device, clock.now());
-            let topology = processor.topology().clone();
-            effect_dispatch::dispatch(bridge, &topology, &effects).await;
+        WsCommand::Control { command, reply } => {
+            match control_effects(processor, command, clock.now()) {
+                Ok(effects) => {
+                    let topology = processor.topology().clone();
+                    effect_dispatch::dispatch(bridge, &topology, &effects).await;
+                    let _ = reply.send(Ok(()));
+                }
+                Err(error) => { let _ = reply.send(Err(error)); }
+            }
         }
     }
 
@@ -63,6 +59,32 @@ pub(super) async fn handle_ws_command(
     // the effect immediately (before the z2m state callback arrives).
     if let Some(tx) = &broadcast_tx {
         broadcast_state_updates(processor, tx, clock.now());
+    }
+}
+
+pub(crate) fn control_effects(
+    processor: &mut EventProcessor,
+    command: ControlCommand,
+    now: Instant,
+) -> Result<Vec<crate::domain::Effect>, String> {
+    let topology = processor.topology();
+    match command {
+        ControlCommand::RecallScene { room, scene_id } => {
+            let index = topology.room_idx(&room).ok_or_else(|| format!("Unknown light group: {room}"))?;
+            if !topology.room(index).scenes.scenes.iter().any(|scene| scene.id == scene_id) {
+                return Err(format!("Unknown scene {scene_id} for {room}"));
+            }
+            Ok(processor.web_recall_scene(&room, scene_id, now))
+        }
+        ControlCommand::SetRoomOff { room } => {
+            topology.room_idx(&room).ok_or_else(|| format!("Unknown light group: {room}"))?;
+            Ok(processor.web_set_room_off(&room, now))
+        }
+        ControlCommand::SetPlugPower { device, on } => {
+            let index = topology.device_idx(&device).ok_or_else(|| format!("Unknown plug: {device}"))?;
+            if !topology.is_plug_idx(index) { return Err(format!("Device is not a plug: {device}")); }
+            Ok(processor.web_set_plug_power(&device, on, now))
+        }
     }
 }
 

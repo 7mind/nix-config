@@ -356,7 +356,7 @@ in
             --zwave-ws-url ${zwaveWsUrl} \
             --timezone ${cfg.timezone} \
             ${lib.optionalString cfg.web.enable
-              "--web-port ${toString cfg.web.port} --web-assets-dir ${cfg.package}/share/mqtt-controller/web"}
+              "--web-port ${toString cfg.web.port} --web-assets-dir ${cfg.package}/share/mqtt-controller/web --web-history-db /var/lib/mqtt-controller/heating-history.db"}
         '';
         serviceConfig = {
           Type = "simple";

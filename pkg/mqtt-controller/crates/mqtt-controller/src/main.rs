@@ -150,10 +150,12 @@ struct DaemonArgs {
     #[arg(long)]
     web_port: Option<u16>,
 
-    /// Directory containing the pre-built WASM frontend assets
-    /// (index.html + *.wasm + *.js). Required when --web-port is set.
+    /// Directory containing the built dashboard assets. Required with --web-port.
     #[arg(long)]
     web_assets_dir: Option<PathBuf>,
+    /// Persistent 24-hour valve history database. Required with --web-port.
+    #[arg(long)]
+    web_history_db: Option<PathBuf>,
 }
 
 /// Initialize the tracing subscriber.
@@ -282,6 +284,10 @@ async fn run_daemon(args: DaemonArgs) -> Result<()> {
 
         let (ws_cmd_tx, ws_cmd_rx) = tokio::sync::mpsc::channel(64);
         let (broadcast_tx, _) = tokio::sync::broadcast::channel(256);
+        let history_path = args.web_history_db.context("--web-history-db is required when --web-port is set")?;
+        let history = mqtt_controller::web::history::HeatingHistory::open(&history_path).await
+            .with_context(|| format!("opening valve history {}", history_path.display()))?;
+        let _history_sampler = history.spawn_sampler(ws_cmd_tx.clone());
 
         // Audit log is opt-in via the `audit_log` config block. Only
         // enabled alongside the web subsystem because the persisted
@@ -322,6 +328,7 @@ async fn run_daemon(args: DaemonArgs) -> Result<()> {
                 broadcast_tx.clone(),
                 assets_dir,
                 audit_db,
+                history,
             )
             .await
             .with_context(|| format!("binding web server on {addr}"))?;

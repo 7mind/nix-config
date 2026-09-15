@@ -1,0 +1,53 @@
+{
+  "type": "StateSnapshot",
+  "timestamp_epoch_ms": 1700000000000,
+  "rooms": [{
+    "name": "ensuite", "group_name": "hue-lz-ensuite", "physically_on": true,
+    "motion_owned": true, "cycle_idx": 0, "active_slot": "evening", "scene_ids": [3, 2, 1],
+    "last_press_ago_ms": null, "last_off_ago_ms": null, "motion_active_sensors": ["hue-ms-ensuite"],
+    "target": { "phase": "confirmed", "owner": "motion", "since_ago_ms": 1000 },
+    "target_value": { "kind": "on", "scene_id": 3, "cycle_idx": 0 },
+    "actual": { "freshness": "fresh", "since_ago_ms": 1000 }, "actual_value": "on",
+    "lights": [{"device":"hue-l-ensuite-wall"}, {"device":"hue-l-ensuite-ceiling"}],
+    "motion_rules": [{
+      "name":"ensuite-motion", "mode":"on-off", "active_slot":"evening",
+      "targets":["hue-l-ensuite-wall/11"], "session_targets":["hue-l-ensuite-wall/11"],
+      "max_illuminance":15, "off_cooldown_secs":30, "cooldown_remaining_secs":null,
+      "sensors":[{"device":"hue-ms-ensuite", "occupied":true, "illuminance":3, "freshness":"fresh", "since_ago_ms":1000, "occupancy_timeout_secs":180}]
+    }]
+  }],
+  "lights": [{
+    "device":"hue-l-ensuite-wall", "room":"ensuite",
+    "target":{"phase":"confirmed","owner":"motion","since_ago_ms":1000},
+    "target_value":{"kind":"on","brightness":100,"color_temp":400},
+    "actual":{"freshness":"fresh","since_ago_ms":1000},
+    "actual_value":{"on":true,"brightness":100,"color_temp":400}
+  }, {
+    "device":"hue-l-ensuite-ceiling", "room":"ensuite",
+    "target":{"phase":"unset"}, "actual":{"freshness":"unknown"}
+  }],
+  "plugs": [{
+    "device":"sonoff-p-printer", "on":true, "idle_since_ago_ms":null, "power_watts":84.2,
+    "target":{"phase":"confirmed","owner":"user","since_ago_ms":1000}, "target_value":"on",
+    "actual":{"freshness":"fresh","since_ago_ms":1000}, "actual_value":{"on":true,"power":84.2},
+    "kill_switch_rules":[{"rule_name":"printer-idle","state":"armed","threshold_watts":10,"holdoff_secs":120}]
+  }],
+  "heating_zones": [{
+    "name":"first-floor", "relay_device":"bosch-wt-first-floor", "relay_on":true, "relay_state_known":true,
+    "relay_temperature":20.8, "target":{"phase":"confirmed","owner":"schedule","since_ago_ms":1000},
+    "target_value":"heating", "actual":{"freshness":"fresh","since_ago_ms":1000},
+    "actual_value":{"relay_on":true,"temperature":20.8},
+    "trvs":[{
+      "device":"sonoff-trv-ensuite", "local_temperature":20.8, "pi_heating_demand":45, "running_state":"heat",
+      "setpoint":21, "battery":80, "inhibited":false, "forced":false, "schedule":"bathrooms",
+      "schedule_summary":"00:00–06:00 → 18°C, 06:00–23:00 → 21°C, 23:00–24:00 → 18°C",
+      "target":{"phase":"confirmed","owner":"schedule","since_ago_ms":1000},
+      "target_value":{"kind":"setpoint","temperature":21}, "actual":{"freshness":"fresh","since_ago_ms":1000}
+    }, {
+      "device":"bosch-trv-bedroom", "local_temperature":18.3, "pi_heating_demand":0, "running_state":"idle",
+      "setpoint":18, "battery":0, "inhibited":true, "schedule":"bedroom", "schedule_summary":"All day → 18°C",
+      "target":{"phase":"commanded","owner":"rule","since_ago_ms":5000},
+      "target_value":{"kind":"inhibited"}, "actual":{"freshness":"stale","since_ago_ms":7200000}
+    }]
+  }]
+}

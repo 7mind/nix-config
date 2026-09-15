@@ -1,12 +1,32 @@
-# The mqtt-controller-frontend WASM bundle is built via crane in the nixpkgs
-# overlay (modules/nixos/overlay.nix) rather than as a standalone
-# derivation, because crane needs a Rust toolchain with the
-# wasm32-unknown-unknown target provided by rust-overlay.
-#
-# See overlay.nix for the actual build definition using
-# craneLib.buildTrunkPackage.
-#
-# For local development without Nix:
-#   cd crates/mqtt-controller-frontend
-#   trunk serve  # (requires rustup target add wasm32-unknown-unknown)
-throw "mqtt-controller-frontend is built via crane in overlay.nix, not as a standalone derivation"
+{ lib, buildNpmPackage, nodejs_24 }:
+
+buildNpmPackage {
+  pname = "mqtt-controller-frontend";
+  version = "0.1.0";
+  nodejs = nodejs_24;
+  src = lib.cleanSourceWith {
+    src = ./frontend;
+    filter = name: type:
+      !(type == "directory" && builtins.elem (baseNameOf name) [
+        "node_modules" "dist" "test-results" "playwright-report"
+      ]);
+  };
+  npmDepsHash = "sha256-vFMfzt4vlv8q0HCg0BasHHvXRRNOeNYE2wpPz3/DUYI=";
+  npmBuildScript = "build";
+  doCheck = true;
+  checkPhase = ''
+    runHook preCheck
+    npm test
+    runHook postCheck
+  '';
+  installPhase = ''
+    runHook preInstall
+    cp -r dist $out
+    runHook postInstall
+  '';
+  meta = {
+    description = "TypeScript dashboard for the MQTT controller";
+    license = lib.licenses.mit;
+    platforms = lib.platforms.linux;
+  };
+}

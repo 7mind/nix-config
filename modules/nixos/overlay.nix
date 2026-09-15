@@ -23,7 +23,7 @@
             let
               baseName = baseNameOf (toString name);
             in
-            !(type == "directory" && baseName == "target");
+            !(type == "directory" && builtins.elem baseName [ "target" "frontend" ]);
         };
       in
       {
@@ -88,44 +88,10 @@
 
         mqtt-controller-frontend =
           let
-            # Frontend output (WASM + JS/CSS/HTML) is arch-independent. Pin build
-            # pkgs to x86_64-linux so aarch64 hosts (raspi5m) reuse the same closure
-            # instead of rebuilding under emulation; their postInstall just cp -r's it.
-            pkgsBuild = import inputs.nixpkgs {
-              system = "x86_64-linux";
-              overlays = [ inputs.rust-overlay.overlays.default ];
-            };
-            craneLib = (inputs.crane.mkLib pkgsBuild).overrideToolchain (
-              p:
-              p.rust-bin.stable.latest.minimal.override {
-                targets = [ "wasm32-unknown-unknown" ];
-              }
-            );
-            commonArgs = {
-              src = mqtt-controller-src;
-              cargoToml = "${mqtt-controller-src}/crates/mqtt-controller-frontend/Cargo.toml";
-              cargoExtraArgs = "-p mqtt-controller-frontend";
-            };
-            cargoArtifacts = craneLib.buildDepsOnly (
-              commonArgs
-              // {
-                CARGO_BUILD_TARGET = "wasm32-unknown-unknown";
-                doCheck = false;
-              }
-            );
+            # Static assets are architecture-independent; all hosts reuse this build.
+            pkgsBuild = import inputs.nixpkgs { system = "x86_64-linux"; };
           in
-          craneLib.buildTrunkPackage (
-            commonArgs
-            // {
-              inherit cargoArtifacts;
-              wasm-bindgen-cli = pkgsBuild.wasm-bindgen-cli;
-              # trunk must run from the frontend crate dir to find its [package]
-              # Cargo.toml; cd there and adjust the install path accordingly.
-              preBuild = "cd crates/mqtt-controller-frontend";
-              trunkIndexPath = "./index.html";
-              installPhaseCommand = "cp -r dist $out";
-            }
-          );
+          pkgsBuild.callPackage ../../pkg/mqtt-controller/frontend.nix { };
 
         mqtt-controller =
           let

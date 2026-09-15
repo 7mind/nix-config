@@ -7,6 +7,7 @@
 pub mod decision_capture;
 pub mod event_log;
 pub mod server;
+pub mod history;
 pub mod snapshot;
 
 pub use server::{WebHandle, WsCommand, bind_and_start_web_server};

@@ -1,9 +1,7 @@
 //! Shared wire types for the mqtt-controller WebSocket API.
 //!
 //! This crate defines the JSON message types exchanged between the
-//! mqtt-controller daemon's WebSocket server and the Leptos frontend.
-//! It depends only on `serde` / `serde_json` so it compiles for both
-//! native and `wasm32-unknown-unknown` targets.
+//! mqtt-controller daemon's WebSocket server and the TypeScript dashboard.
 
 use serde::{Deserialize, Serialize};
 
@@ -513,12 +511,8 @@ pub enum ClientMessage {
     GetState,
     /// Request the static topology info.
     GetTopology,
-    /// Recall a specific scene in a room.
-    RecallScene { room: String, scene_id: u8 },
-    /// Turn a room's lights off.
-    SetRoomOff { room: String },
-    /// Toggle a smart plug on/off.
-    TogglePlug { device: String },
+    Command { request_id: String, command: ControlCommand },
+    GetValveHistory { request_id: String, device: String },
     /// Request the persisted decision-log history for one entity
     /// (room name, group name, device, or heating zone). Backs the
     /// per-entity log popup. Pagination cursor: pass the timestamp of
@@ -555,6 +549,16 @@ pub enum ClientMessage {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum ServerMessage {
+    /// Acceptance by the controller, not confirmation from the device.
+    CommandResult { request_id: String, error: Option<String> },
+    ValveHistory {
+        request_id: String,
+        device: String,
+        from_epoch_ms: i64,
+        to_epoch_ms: i64,
+        points: Vec<ValveHistoryPoint>,
+        error: Option<String>,
+    },
     /// Full state snapshot (response to [`ClientMessage::GetState`]).
     StateSnapshot(FullStateSnapshot),
     /// Static topology (response to [`ClientMessage::GetTopology`]).
@@ -598,6 +602,26 @@ pub enum EntityUpdate {
     Light(LightSnapshot),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind")]
+pub enum ControlCommand {
+    RecallScene { room: String, scene_id: u8 },
+    SetRoomOff { room: String },
+    SetPlugPower { device: String, on: bool },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ValveHistoryPoint {
+    pub timestamp_epoch_ms: i64,
+    pub observed_at_epoch_ms: Option<i64>,
+    pub local_temperature: Option<f64>,
+    pub reported_setpoint: Option<f64>,
+    pub target: Option<TrvTargetValue>,
+    pub heating_demand: Option<u8>,
+    pub battery: Option<u8>,
+    pub freshness: String,
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -608,16 +632,19 @@ mod tests {
         let msgs = vec![
             ClientMessage::GetState,
             ClientMessage::GetTopology,
-            ClientMessage::RecallScene {
-                room: "kitchen".into(),
-                scene_id: 3,
+            ClientMessage::Command {
+                request_id: "scene-1".into(),
+                command: ControlCommand::RecallScene { room: "kitchen".into(), scene_id: 3 },
             },
-            ClientMessage::SetRoomOff {
-                room: "bedroom".into(),
+            ClientMessage::Command {
+                request_id: "off-1".into(),
+                command: ControlCommand::SetRoomOff { room: "bedroom".into() },
             },
-            ClientMessage::TogglePlug {
-                device: "z2m-p-printer".into(),
+            ClientMessage::Command {
+                request_id: "plug-1".into(),
+                command: ControlCommand::SetPlugPower { device: "z2m-p-printer".into(), on: false },
             },
+            ClientMessage::GetValveHistory { request_id: "history-1".into(), device: "trv-bedroom".into() },
             ClientMessage::Ping {
                 nonce: "abc123".into(),
                 client_ts_ms: 1_700_000_000_000,
@@ -773,12 +800,13 @@ mod tests {
         assert!(json.contains(r#""type":"GetState""#));
 
         let json =
-            serde_json::to_string(&ClientMessage::RecallScene {
-                room: "x".into(),
-                scene_id: 1,
+            serde_json::to_string(&ClientMessage::Command {
+                request_id: "example".into(),
+                command: ControlCommand::RecallScene { room: "x".into(), scene_id: 1 },
             })
             .unwrap();
-        assert!(json.contains(r#""type":"RecallScene""#));
+        assert!(json.contains(r#""type":"Command""#));
+        assert!(json.contains(r#""kind":"RecallScene""#));
         assert!(json.contains(r#""room":"x""#));
     }
 
