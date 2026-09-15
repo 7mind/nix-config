@@ -2,7 +2,9 @@ import { ConnectionManager, type Health, type Runtime } from './connection';
 import type { ControlCommand, HeatingZone, Light, Plug, Room, ServerMessage, ValveHistory } from './protocol';
 
 export interface Timed<T> { value: T; receivedAt: number }
-export interface CommandStatus { state: 'pending' | 'accepted' | 'error'; message: string }
+export type CommandStatus =
+  | { state: 'pending' | 'accepted'; message: string; command: ControlCommand; confirmed: boolean }
+  | { state: 'error'; message: string };
 export interface HistoryStatus { loading: boolean; data: ValveHistory | null; error: string | null }
 export interface DashboardState {
   health: Health; ready: boolean; receivedAt: number | null;
@@ -54,7 +56,7 @@ export class DashboardClient {
       this.commandStatus(key, { state: 'error', message: 'No acknowledgement. Check the reported state before trying again.' });
     }, COMMAND_TIMEOUT_MS);
     this.pendingCommands.set(request_id, { key, timer });
-    this.commandStatus(key, { state: 'pending', message: 'Sending command…' });
+    this.commandStatus(key, { state: 'pending', message: 'Sending command…', command, confirmed: false });
     try { this.connection.send({ type: 'Command', request_id, command }); }
     catch (error) {
       this.runtime.cancel(timer);
@@ -107,10 +109,38 @@ export class DashboardClient {
     catch { /* The connection manager exposes the failure and schedules recovery. */ }
   }
 
-  private commandStatus(key: string, status: CommandStatus): void {
+  private commandStatus(key: string, status: CommandStatus | undefined): void {
     const commands = new Map(this.state.commands);
-    commands.set(key, status);
+    if (status === undefined) commands.delete(key);
+    else commands.set(key, status);
     this.publish({ commands });
+  }
+
+  // Only subsequent entity updates can confirm a submitted command; cached
+  // confirmation may belong to a previous request for the same target.
+  private confirmTargets(rooms: Room[], plugs: Plug[]): ReadonlyMap<string, CommandStatus> {
+    const commands = new Map(this.state.commands);
+    for (const [key, status] of commands) {
+      if (status.state === 'error') continue;
+      const command = status.command;
+      let confirmed: boolean;
+      if (command.kind === 'SetPlugPower') {
+        const plug = plugs.find(plug => plug.device === command.device);
+        if (plug === undefined) continue;
+        confirmed = plug.target != null && plug.target.phase === 'confirmed'
+          && plug.target_value === (command.on ? 'on' : 'off');
+      } else {
+        const room = rooms.find(room => room.name === command.room);
+        if (room === undefined) continue;
+        const target = room.target_value;
+        confirmed = room.target != null && room.target.phase === 'confirmed' && target != null
+          && (command.kind === 'SetRoomOff' ? target.kind === 'off'
+            : target.kind === 'on' && target.scene_id === command.scene_id);
+      }
+      if (status.state === 'accepted' && confirmed) commands.delete(key);
+      else if (confirmed !== status.confirmed) commands.set(key, { ...status, confirmed });
+    }
+    return commands;
   }
 
   private historyStatus(device: string, status: HistoryStatus): void {
@@ -149,13 +179,14 @@ export class DashboardClient {
           ready: true, receivedAt,
           rooms: message.rooms.map(value => ({ value, receivedAt })), plugs: message.plugs.map(value => ({ value, receivedAt })),
           lights: message.lights.map(value => ({ value, receivedAt })), heating: message.heating_zones.map(value => ({ value, receivedAt })),
+          commands: this.confirmTargets(message.rooms, message.plugs),
         });
         break;
       case 'Entity':
         if (!this.state.ready) break;
         switch (message.kind) {
-          case 'Room': this.publish({ rooms: replace(this.state.rooms, message.data, receivedAt, room => room.name) }); break;
-          case 'Plug': this.publish({ plugs: replace(this.state.plugs, message.data, receivedAt, plug => plug.device) }); break;
+          case 'Room': this.publish({ rooms: replace(this.state.rooms, message.data, receivedAt, room => room.name), commands: this.confirmTargets([message.data], []) }); break;
+          case 'Plug': this.publish({ plugs: replace(this.state.plugs, message.data, receivedAt, plug => plug.device), commands: this.confirmTargets([], [message.data]) }); break;
           case 'Light': this.publish({ lights: replace(this.state.lights, message.data, receivedAt, light => light.device) }); break;
           case 'HeatingZone': this.publish({ heating: replace(this.state.heating, message.data, receivedAt, zone => zone.name) }); break;
         }
@@ -165,8 +196,10 @@ export class DashboardClient {
         if (pending === undefined) break;
         this.runtime.cancel(pending.timer);
         this.pendingCommands.delete(message.request_id);
+        const status = this.state.commands.get(pending.key);
+        if (status === undefined || status.state !== 'pending') throw new Error('Pending command status invariant violated');
         this.commandStatus(pending.key, message.error === null
-          ? { state: 'accepted', message: 'Command accepted. Reported state updates when the device responds.' }
+          ? status.confirmed ? undefined : { ...status, state: 'accepted', message: 'Command accepted. Reported state updates when the device responds.' }
           : { state: 'error', message: message.error });
         break;
       }

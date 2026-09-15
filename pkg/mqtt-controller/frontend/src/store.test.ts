@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import fixture from '../tests/snapshot.json';
 import { DashboardClient } from './store';
 import { TestRuntime } from './test-runtime';
-import { snapshotSchema } from './protocol';
+import { snapshotSchema, type ControlCommand } from './protocol';
 
 function setup() {
   const runtime = new TestRuntime();
@@ -43,6 +43,56 @@ describe('dashboard state and commands', () => {
     expect(client.getSnapshot().rooms[0]!.value.actual_value).toBe('on');
     socket.receive({ type: 'Entity', kind: 'Room', data: { ...fixture.rooms[0], actual_value: 'off', physically_on: false, target_value: { kind: 'off' } } });
     expect(client.getSnapshot().rooms[0]!.value.actual_value).toBe('off');
+    expect(client.getSnapshot().commands.has('room:ensuite')).toBe(false);
+    client.destroy();
+  });
+  it.each(['ack-first', 'confirmation-first'])('dismisses a matching confirmed scene with %s ordering', order => {
+    const { client, socket } = setup();
+    client.command('room:ensuite', { kind: 'RecallScene', room: 'ensuite', scene_id: 2 });
+    const request = socket.sent.at(-1)!;
+    if (request.type !== 'Command') throw new Error('Expected a command');
+    const acknowledge = () => socket.receive({ type: 'CommandResult', request_id: request.request_id, error: null });
+    const confirm = () => socket.receive({ type: 'Entity', kind: 'Room', data: {
+      ...fixture.rooms[0], target_value: { kind: 'on', scene_id: 2, cycle_idx: 0 },
+      target: { phase: 'confirmed', owner: 'webui', since_ago_ms: 0 },
+    } });
+    if (order === 'ack-first') {
+      acknowledge();
+      expect(client.getSnapshot().commands.get('room:ensuite')!.state).toBe('accepted');
+      confirm();
+    } else {
+      confirm();
+      expect(client.getSnapshot().commands.get('room:ensuite')!.state).toBe('pending');
+      acknowledge();
+    }
+    expect(client.getSnapshot().commands.has('room:ensuite')).toBe(false);
+    client.destroy();
+  });
+  it('keeps acknowledgement for an unconfirmed target or a different confirmed scene', () => {
+    const { client, socket } = setup();
+    client.command('room:ensuite', { kind: 'RecallScene', room: 'ensuite', scene_id: 2 });
+    const request = socket.sent.at(-1)!;
+    if (request.type !== 'Command') throw new Error('Expected a command');
+    socket.receive({ type: 'CommandResult', request_id: request.request_id, error: null });
+    for (const [phase, scene_id] of [['commanded', 2], ['stale', 2], ['confirmed', 3]] as const) {
+      socket.receive({ type: 'Entity', kind: 'Room', data: {
+        ...fixture.rooms[0], target_value: { kind: 'on', scene_id, cycle_idx: 0 },
+        target: { phase, owner: 'webui', since_ago_ms: 0 },
+      } });
+      expect(client.getSnapshot().commands.get('room:ensuite')!.state).toBe('accepted');
+    }
+    client.destroy();
+  });
+  it.each([false, true])('dismisses plug power %s after a confirming snapshot, without reusing the old confirmation', on => {
+    const { client, socket } = setup();
+    const command: ControlCommand = { kind: 'SetPlugPower', device: 'sonoff-p-printer', on };
+    client.command('plug:printer', command);
+    const request = socket.sent.at(-1)!;
+    if (request.type !== 'Command') throw new Error('Expected a command');
+    socket.receive({ type: 'CommandResult', request_id: request.request_id, error: null });
+    expect(client.getSnapshot().commands.get('plug:printer')!.state).toBe('accepted');
+    socket.receive({ ...fixture, plugs: [{ ...fixture.plugs[0], target_value: on ? 'on' : 'off' }] });
+    expect(client.getSnapshot().commands.has('plug:printer')).toBe(false);
     client.destroy();
   });
   it('surfaces rejection and timeout without replaying a command', () => {
@@ -51,9 +101,11 @@ describe('dashboard state and commands', () => {
     const message = socket.sent.at(-1)!;
     if (message.type !== 'Command') throw new Error('Expected a command');
     socket.receive({ type: 'CommandResult', request_id: message.request_id, error: 'Unknown plug' });
+    socket.receive({ ...fixture, plugs: [{ ...fixture.plugs[0], target_value: 'off' }] });
     expect(client.getSnapshot().commands.get('plug:printer')!.message).toBe('Unknown plug');
     client.command('plug:printer', { kind: 'SetPlugPower', device: 'sonoff-p-printer', on: false });
     runtime.advance(8000);
+    socket.receive({ ...fixture, plugs: [{ ...fixture.plugs[0], target_value: 'off' }] });
     expect(client.getSnapshot().commands.get('plug:printer')!.state).toBe('error');
     expect(socket.sent.filter(message => message.type === 'Command')).toHaveLength(2);
     client.destroy();
