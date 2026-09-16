@@ -1,0 +1,14 @@
+diff --git a/v3src/CMakeLists.txt b/v3src/CMakeLists.txt
+--- a/v3src/CMakeLists.txt
++++ b/v3src/CMakeLists.txt
+@@ -90,7 +90,9 @@ else()
+   set(AOTRITON_ENABLE_FP32 0)
+ endif()
+
+-if(NOT AOTRITON_NOIMAGE_MODE)
++if(NOT AOTRITON_NOIMAGE_MODE AND DEFINED AOTRITON_AITER_SOURCE)
++  file(CREATE_LINK "${AOTRITON_AITER_SOURCE}" "${AOTRITON_V2_BUILD_DIR}/aiter" SYMBOLIC)
++elseif(NOT AOTRITON_NOIMAGE_MODE)
+   find_package(Git REQUIRED)
+   ## Handle aiter.txt
+   # CAVEAT: MUST USE GIT TAG OTHERWISE GIT_SHALLOW WILL NOT WORK

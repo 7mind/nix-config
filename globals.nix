@@ -110,8 +110,8 @@ rec {
                 inputs.rust-overlay.overlays.default
                 (final: prev: {
                   # Patch intel-graphics-compiler into the RPATH of the Level
-                  # Zero driver `libze_intel_gpu.so.1` (`drivers` split
-                  # output). nixpkgs postFixup only fixes RPATH on the OpenCL
+                  # Zero driver `libze_intel_gpu.so.1` in `$out/lib`.
+                  # nixpkgs postFixup only fixes RPATH on the OpenCL
                   # ICD (`libigdrcl.so`), leaving the L0 driver without IGC on
                   # any search path; NEO's runtime dlopen of `libigdfcl.so.2`/
                   # `libigc.so.2` during eager device init then fails via
@@ -119,10 +119,10 @@ rec {
                   # Verified: putting `${intel-graphics-compiler}/lib` on
                   # LD_LIBRARY_PATH yields clean `zeInit = 0x0`, device
                   # enumeration, and USM allocations. The former 26.18 source
-                  # pin is dropped — locked nixpkgs is already 26.27.39122.11.
+                  # pin is dropped — locked nixpkgs is already 26.31.39395.13.
                   intel-compute-runtime = prev.intel-compute-runtime.overrideAttrs (oldAttrs: {
                     postFixup = (oldAttrs.postFixup or "") + ''
-                      for lib in "$drivers"/lib/libze_intel*.so* ; do
+                      for lib in "$out"/lib/libze_intel*.so* ; do
                         # symlinks have no headers — skip cleanly
                         [ -L "$lib" ] && continue
                         patchelf --set-rpath ${

@@ -200,7 +200,7 @@ in
 
       environment.systemPackages = with pkgs; [
         seahorse
-        gcr
+        gcr_3
         libsecret # provides secret-tool for manual NetworkPassword seeding
       ];
 

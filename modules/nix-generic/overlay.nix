@@ -62,21 +62,46 @@
       # man pages. fwupd depends on the tools, not their documentation.
       tpm2-tools = prev.tpm2-tools.override { enableManpages = false; };
 
-      # CGAL 6.2 emits a non-null-terminated .debug_gdb_scripts section, which
-      # LLVM 21's linker rejects during OpenSCAD's ThinLTO link.
-      cgal = prev.cgal.overrideAttrs (old: {
-        patches = (old.patches or [ ]) ++ [
-          (prev.fetchpatch {
-            name = "cgal-gdb-autoload-null-termination.patch";
-            url = "https://github.com/CGAL/cgal/commit/eb2257df4da4c52c75fe384e803d9a6376057b8a.patch";
-            stripLen = 1;
-            hash = "sha256-3YMYX3/Ioiwk10ixNTRdYGNWrO5q7S9hDHOTcJRXBAk=";
-          })
-        ];
+      # Match the AOTriton API pinned by PyTorch 2.13's own build configuration.
+      rocmPackages = prev.rocmPackages.overrideScope (_: rocm-prev: {
+        aotriton = rocm-prev.aotriton.overrideAttrs (old: {
+          version = "0.12b";
+          src = prev.fetchFromGitHub {
+            owner = "ROCm";
+            repo = "aotriton";
+            tag = "0.12b";
+            hash = "sha256-KOc+xAoWABjokIEq5n9olpln3JUqVFYGADLwqV/H2Zc=";
+          };
+          patches = (old.patches or [ ]) ++ [ ../../pkg/aotriton/aiter-source.patch ];
+          cmakeFlags = old.cmakeFlags ++ [
+            (prev.lib.cmakeFeature "AOTRITON_AITER_SOURCE" (toString (prev.fetchFromGitHub {
+              owner = "ROCm";
+              repo = "aiter";
+              tag = "v0.1.11";
+              hash = "sha256-e1C/baFYkm1/iuLUCcCLyiHfivRgBb96lnVGH9mOmM0=";
+            })))
+          ];
+          env = old.env // {
+            AOTRITON_CI_SUPPLIED_SHA1 = "269036897bcee4292f4e928767df1e3dd0e3c8bd";
+            AOTRITON_GIT_TREESHA1 = "35bfbd0ebe2fd774e97cdc12421592c23f59abfe";
+          };
+        });
       });
 
       pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
         (python-final: python-prev: {
+          ifcopenshell = python-prev.ifcopenshell.overrideAttrs (old: {
+            patches = old.patches ++ [ ../../pkg/ifcopenshell/boost-optional.patch ];
+          });
+
+          # CMake executes this ROCm code generator before the fixup-phase shebang hook.
+          torch = python-prev.torch.overrideAttrs (old:
+            prev.lib.optionalAttrs old.passthru.rocmSupport {
+              postPatch = old.postPatch + ''
+                patchShebangs --build aten/src/ATen/native/transformers/hip/flash_attn/ck/add_make_kernel_pt.sh
+              '';
+            });
+
           # web3's test-only py-evm dependency is archived and disabled on
           # Python 3.14. Trezor needs web3 at runtime, not its EVM test backend.
           # pyunormalize remains a declared runtime dependency in its wheel.

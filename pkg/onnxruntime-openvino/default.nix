@@ -29,7 +29,7 @@
 #
 # Runtime requirements (provided by hardware.graphics.extraPackages on
 # the consuming host/container — see private/hosts/vm/containers/immich.nix):
-#   - intel-compute-runtime + .drivers : libze_intel_gpu.so, libigc, NEO
+#   - intel-compute-runtime            : libze_intel_gpu.so, libigc, NEO
 #   - level-zero                       : libze_loader.so.1
 #   - ocl-icd                          : libOpenCL.so.1
 #   The wheel's bundled .so files dlopen these via SONAME, so we link

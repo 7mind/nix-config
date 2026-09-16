@@ -115,9 +115,7 @@
 
       services.fstrim.enable = true;
 
-      services.journald.extraConfig = ''
-        MaxRetentionSec=1month
-      '';
+      services.journald.settings.Journal.MaxRetentionSec = "1month";
     })
 
     (lib.mkIf config.smind.environment.linux.serial-debug.enable {

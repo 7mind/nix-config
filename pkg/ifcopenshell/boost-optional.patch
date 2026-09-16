@@ -1,0 +1,182 @@
+Boost 1.91 makes converting optional constructors explicit. Use direct
+initialization for profile fillet radii while retaining disengaged optionals
+for vertices that do not specify a radius.
+
+diff --git a/src/ifcgeom/mapping/IfcCShapeProfileDef.cpp b/src/ifcgeom/mapping/IfcCShapeProfileDef.cpp
+--- a/src/ifcgeom/mapping/IfcCShapeProfileDef.cpp
++++ b/src/ifcgeom/mapping/IfcCShapeProfileDef.cpp
+@@ -57,17 +57,17 @@
+ 	}
+
+ 	return profile_helper(m4, {
+-		{{-x,-y},{f2}},
+-		{{x,-y},{f2}},
++		{{-x,-y},boost::optional<double>{f2}},
++		{{x,-y},boost::optional<double>{f2}},
+ 		{{x,-y + d2}},
+ 		{{x - d1,-y + d2}},
+-		{{x - d1,-y + d1},{f1}},
+-		{{-x + d1,-y + d1},{f1}},
+-		{{-x + d1,y - d1},{f1}},
+-		{{x - d1,y - d1},{f1}},
++		{{x - d1,-y + d1},boost::optional<double>{f1}},
++		{{-x + d1,-y + d1},boost::optional<double>{f1}},
++		{{-x + d1,y - d1},boost::optional<double>{f1}},
++		{{x - d1,y - d1},boost::optional<double>{f1}},
+ 		{{x - d1,y - d2}},
+ 		{{x,y - d2}},
+-		{{x,y},{f2}},
+-		{{-x,y},{f2}}
++		{{x,y},boost::optional<double>{f2}},
++		{{-x,y},boost::optional<double>{f2}}
+ 	});
+ }
+diff --git a/src/ifcgeom/mapping/IfcIShapeProfileDef.cpp b/src/ifcgeom/mapping/IfcIShapeProfileDef.cpp
+--- a/src/ifcgeom/mapping/IfcIShapeProfileDef.cpp
++++ b/src/ifcgeom/mapping/IfcIShapeProfileDef.cpp
+@@ -97,15 +97,15 @@
+ 	return profile_helper(m4, {
+ 		{{-x1,-y}},
+ 		{{x1,-y}},
+-		{{x1,-y + ft1}, {fe1}},
+-		{{d1,-y + ft1 + dy},{ f1} },
+-		{{d1,y - ft2 - dy},{f2} },
+-		{{x2,y - ft2}, {fe2}},
++		{{x1,-y + ft1}, boost::optional<double>{fe1}},
++		{{d1,-y + ft1 + dy},boost::optional<double>{ f1} },
++		{{d1,y - ft2 - dy},boost::optional<double>{f2} },
++		{{x2,y - ft2}, boost::optional<double>{fe2}},
+ 		{{x2,y}},
+ 		{{-x2,y}},
+-		{{-x2,y - ft2}, {fe2}},
+-		{{-d1,y - ft2 - dy},{f2} },
+-		{{-d1,-y + ft1 + dy},{f1} },
+-		{{-x1,-y + ft1}, {fe1}}
++		{{-x2,y - ft2}, boost::optional<double>{fe2}},
++		{{-d1,y - ft2 - dy},boost::optional<double>{f2} },
++		{{-d1,-y + ft1 + dy},boost::optional<double>{f1} },
++		{{-x1,-y + ft1}, boost::optional<double>{fe1}}
+ 	});
+ }
+diff --git a/src/ifcgeom/mapping/IfcLShapeProfileDef.cpp b/src/ifcgeom/mapping/IfcLShapeProfileDef.cpp
+--- a/src/ifcgeom/mapping/IfcLShapeProfileDef.cpp
++++ b/src/ifcgeom/mapping/IfcLShapeProfileDef.cpp
+@@ -97,9 +97,9 @@
+ 	return profile_helper(m4, {
+ 		{{-x,-y}},
+ 		{{x,-y}},
+-		{{x,-y + d - dy1},{f2} },
+-		{{xx, xy},{f1} },
+-		{{-x + d - dx1,y},{f2} },
++		{{x,-y + d - dy1},boost::optional<double>{f2} },
++		{{xx, xy},boost::optional<double>{f1} },
++		{{-x + d - dx1,y},boost::optional<double>{f2} },
+ 		{{-x,y}}
+ 	});
+ }
+diff --git a/src/ifcgeom/mapping/IfcRectangleHollowProfileDef.cpp b/src/ifcgeom/mapping/IfcRectangleHollowProfileDef.cpp
+--- a/src/ifcgeom/mapping/IfcRectangleHollowProfileDef.cpp
++++ b/src/ifcgeom/mapping/IfcRectangleHollowProfileDef.cpp
+@@ -51,17 +51,17 @@
+ 	}
+
+ 	auto s1 = profile_helper(m4, {
+-		{{-x ,-y},{ r1} },
+-		{{x, -y}, {r1} },
+-		{{x, y}, {r1} },
+-		{{-x, y}, {r1} }
++		{{-x ,-y},boost::optional<double>{ r1} },
++		{{x, -y}, boost::optional<double>{r1} },
++		{{x, y}, boost::optional<double>{r1} },
++		{{-x, y}, boost::optional<double>{r1} }
+ 	});
+
+ 	auto s2 = profile_helper(m4, {
+-		{{-x + d, -y + d}, { r2}},
+-		{{x - d, -y + d}, { r2}},
+-		{{x - d, y - d}, { r2}},
+-		{{-x + d, y - d}, { r2}}
++		{{-x + d, -y + d}, boost::optional<double>{ r2}},
++		{{x - d, -y + d}, boost::optional<double>{ r2}},
++		{{x - d, y - d}, boost::optional<double>{ r2}},
++		{{-x + d, y - d}, boost::optional<double>{ r2}}
+ 	});
+
+ 	if (!s1 || !s2) {
+diff --git a/src/ifcgeom/mapping/IfcRoundedRectangleProfileDef.cpp b/src/ifcgeom/mapping/IfcRoundedRectangleProfileDef.cpp
+--- a/src/ifcgeom/mapping/IfcRoundedRectangleProfileDef.cpp
++++ b/src/ifcgeom/mapping/IfcRoundedRectangleProfileDef.cpp
+@@ -45,9 +45,9 @@
+ 	}
+
+ 	return profile_helper(m4, {
+-		{{-x,-y}, {r}},
+-		{{x,-y}, {r}},
+-		{{x,y}, {r}},
+-		{{-x,y}, {r}}
++		{{-x,-y}, boost::optional<double>{r}},
++		{{x,-y}, boost::optional<double>{r}},
++		{{x,y}, boost::optional<double>{r}},
++		{{-x,y}, boost::optional<double>{r}}
+ 	});
+ }
+diff --git a/src/ifcgeom/mapping/IfcTShapeProfileDef.cpp b/src/ifcgeom/mapping/IfcTShapeProfileDef.cpp
+--- a/src/ifcgeom/mapping/IfcTShapeProfileDef.cpp
++++ b/src/ifcgeom/mapping/IfcTShapeProfileDef.cpp
+@@ -109,13 +109,13 @@
+ 	}
+
+ 	return profile_helper(m4, {
+-		{{d1 / 2. - dx2,-y},{ f2} },
+-		{{xx,xy},{ f1}},
+-		{{x,y - d2 + dy2},{ f3}},
++		{{d1 / 2. - dx2,-y},boost::optional<double>{ f2} },
++		{{xx,xy},boost::optional<double>{ f1}},
++		{{x,y - d2 + dy2},boost::optional<double>{ f3}},
+ 		{{x,y}},
+ 		{{-x,y}},
+-		{{-x,y - d2 + dy2},{f3}},
+-		{{-xx,xy},{f1}},
+-		{{-d1 / 2. + dx2,-y},{f2}}
++		{{-x,y - d2 + dy2},boost::optional<double>{f3}},
++		{{-xx,xy},boost::optional<double>{f1}},
++		{{-d1 / 2. + dx2,-y},boost::optional<double>{f2}}
+ 	});
+ }
+diff --git a/src/ifcgeom/mapping/IfcUShapeProfileDef.cpp b/src/ifcgeom/mapping/IfcUShapeProfileDef.cpp
+--- a/src/ifcgeom/mapping/IfcUShapeProfileDef.cpp
++++ b/src/ifcgeom/mapping/IfcUShapeProfileDef.cpp
+@@ -70,10 +70,10 @@
+ 	return profile_helper(m4, {
+ 		{{-x,-y}},
+ 		{{x,-y}},
+-		{{x,-y + d2 - dy2},{f2} },
+-		{{-x + d1,-y + d2 + dy1},{ f1}},
+-		{{-x + d1,y - d2 - dy1},{ f1}},
+-		{{x,y - d2 + dy2},{ f2}},
++		{{x,-y + d2 - dy2},boost::optional<double>{f2} },
++		{{-x + d1,-y + d2 + dy1},boost::optional<double>{ f1}},
++		{{-x + d1,y - d2 - dy1},boost::optional<double>{ f1}},
++		{{x,y - d2 + dy2},boost::optional<double>{ f2}},
+ 		{{x,y}},
+ 		{{-x,y}}
+ 	});
+diff --git a/src/ifcgeom/mapping/IfcZShapeProfileDef.cpp b/src/ifcgeom/mapping/IfcZShapeProfileDef.cpp
+--- a/src/ifcgeom/mapping/IfcZShapeProfileDef.cpp
++++ b/src/ifcgeom/mapping/IfcZShapeProfileDef.cpp
+@@ -61,11 +61,11 @@
+ 	return profile_helper(m4, {
+ 		{{-dx,-y}},
+ 		{{x,-y}},
+-		{{x,-y + dy},{ f2}},
+-		{{dx,-y + dy},{ f1}},
++		{{x,-y + dy},boost::optional<double>{ f2}},
++		{{dx,-y + dy},boost::optional<double>{ f1}},
+ 		{{dx,y}},
+ 		{{-x,y}},
+-		{{-x,y - dy},{ f2}},
+-		{{-dx,y - dy},{ f1}}
++		{{-x,y - dy},boost::optional<double>{ f2}},
++		{{-dx,y - dy},boost::optional<double>{ f1}}
+ 	});
+ }

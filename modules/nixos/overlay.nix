@@ -12,6 +12,29 @@
       # Standalone ghostty terminfo, avoiding the full GUI app (gtk4, libadwaita,
       # gstreamer, ...). Parses the terminfo from ghostty's Zig source, tic-compiles.
       ghostty-terminfo = prev.callPackage ../../pkg/ghostty-terminfo { };
+
+      # nixpkgs' 0.3.38 accesses struct nilfs internals removed in nilfs-utils 2.3.
+      partclone = prev.partclone.overrideAttrs (old: {
+        version = "0.3.50";
+        src = prev.fetchFromGitHub {
+          owner = "Thomas-Tsai";
+          repo = "partclone";
+          rev = "0.3.50";
+          hash = "sha256-k63VP/F8mGdE17CWMBTuJeJ9W2MdPLcG4bxsWm08VcA=";
+        };
+        nativeBuildInputs = old.nativeBuildInputs ++ [
+          prev.gettext
+          prev.libxslt
+          prev.docbook_xsl
+          prev.docbook_xml_dtd_45
+        ];
+        buildInputs = old.buildInputs ++ [
+          prev.xxhash
+          prev.liburcu
+          prev.zlib
+          prev.zstd
+        ];
+      });
     })
     (
       self: super:

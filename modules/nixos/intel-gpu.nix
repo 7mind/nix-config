@@ -189,20 +189,15 @@ in
         enable = true;
         enable32Bit = true;
         extraPackages = lib.optionals cfg.compute.enable (with pkgs; [
-          intel-compute-runtime
-          # The `drivers` output is a separate split in nixpkgs
-          # (intel-compute-runtime/package.nix moves libze_intel*.so
-          # out of `$out/lib` into `$drivers/lib`). Without adding it
-          # here, `/run/opengl-driver/lib/` is missing the Level Zero
-          # driver and `zeInitDrivers` reports "0 Drivers Discovered".
-          # Our overlay (see globals.nix) also patches
+          # The Level Zero driver is included in the main runtime output.
+          # Our overlay (see globals.nix) patches
           # intel-graphics-compiler into the Level Zero driver's RPATH
           # so NEO can dlopen libigdfcl.so.2 / libigc.so.2 during
           # eager device init — without that fix, NEO's
           # `abortUnrecoverable` routes through
           # `gmm_helper/resource_info.cpp:15` on first allocation,
           # which masquerades as upstream `intel/compute-runtime#922`.
-          intel-compute-runtime.drivers
+          intel-compute-runtime
           level-zero
           ocl-icd
         ]) ++ lib.optionals cfg.media.enable (with pkgs; [

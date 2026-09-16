@@ -33,7 +33,7 @@
       # OpenZFS 2.4.4 META already declares Linux-Maximum: 7.2 (nixpkgs
       # kernelMaxSupportedMajorMinor matches). The previous 7.0 → 7.1
       # substituteInPlace is stale and fails --replace-fail against 2.4.4.
-      linux-kernel = pkgs.linuxKernel.packages.linux_7_1;
+      linux-kernel = pkgs.linuxKernel.packages.linux_7_2;
     };
 
 

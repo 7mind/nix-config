@@ -18,7 +18,7 @@
 
       intel-compute-runtime = prev.intel-compute-runtime.overrideAttrs (oldAttrs: {
         postFixup = (oldAttrs.postFixup or "") + ''
-          for lib in "$drivers"/lib/libze_intel*.so* ; do
+          for lib in "$out"/lib/libze_intel*.so* ; do
             [ -L "$lib" ] && continue
             patchelf --set-rpath ${
               prev.lib.makeLibraryPath [

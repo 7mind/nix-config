@@ -1,14 +1,16 @@
 JSON Schema patterns commonly contain ECMAScript shorthand character
-classes. Passing those escapes through verbatim produces invalid GBNF and
-causes llama-server to reject the entire tool set.
+classes. Expand supported shorthand classes into GBNF character classes
+instead of falling back to an unconstrained string when parsing them.
 
 Upstream: https://github.com/ggml-org/llama.cpp/issues/27580
 
 diff --git a/common/json-schema-to-grammar.cpp b/common/json-schema-to-grammar.cpp
-index b18607cd..aa8135e5 100644
 --- a/common/json-schema-to-grammar.cpp
 +++ b/common/json-schema-to-grammar.cpp
-@@ -283,0 +284,25 @@ static std::unordered_set<char> ESCAPED_IN_REGEXPS_BUT_NOT_IN_LITERALS = {'^', '
+@@ -282,6 +282,31 @@
+ static std::unordered_set<char> NON_LITERAL_SET = {'|', '.', '(', ')', '[', ']', '{', '}', '*', '+', '?', '^', '$'};
+ static std::unordered_set<char> ESCAPED_IN_REGEXPS_BUT_NOT_IN_LITERALS = {'^', '$', '.', '[', ']', '(', ')', '|', '{', '}', '*', '+', '?'};
+
 +static const char * regex_shorthand_rule(char shorthand) {
 +    switch (shorthand) {
 +        case 'd': return "[0-9]";
@@ -34,11 +36,20 @@ index b18607cd..aa8135e5 100644
 +    return shorthand == 'D' || shorthand == 'W' || shorthand == 'S';
 +}
 +
-@@ -445,0 +471,3 @@ private:
+ static std::string replacePattern(const std::string & input, const std::regex & regex, const std::function<std::string(const std::smatch  &)> & replacement) {
+     std::smatch match;
+     std::string result;
+@@ -490,11 +515,22 @@
+                     return join_seq();
+                 } else if (c == '^' || c == '$') {
+                     throw unsupported_pattern("anchor inside the pattern");
 +                } else if (c == '\\' && i + 1 < length && regex_shorthand_rule(sub_pattern[i + 1]) != nullptr) {
 +                    seq.emplace_back(regex_shorthand_rule(sub_pattern[i + 1]), false);
 +                    i += 2;
-@@ -450 +478,9 @@ private:
+                 } else if (c == '[') {
+                     std::string square_brackets = std::string(1, c);
+                     i++;
+                     while (i < length && sub_pattern[i] != ']') {
 -                        if (sub_pattern[i] == '\\') {
 +                        if (sub_pattern[i] == '\\' && i + 1 < length && regex_shorthand_range(sub_pattern[i + 1]) != nullptr) {
 +                            square_brackets += regex_shorthand_range(sub_pattern[i + 1]);
@@ -48,18 +59,28 @@ index b18607cd..aa8135e5 100644
 +                                "Negated regex shorthand classes inside character classes are not supported"
 +                            );
 +                            i += 2;
-+                        } else if (sub_pattern[i] == '\\' && i + 1 < length) {
-@@ -526 +562,3 @@ private:
--                        if (sub_pattern[i] == '\\' && i < length - 1) {
++                        } else if (sub_pattern[i] == '\\') {
+                             auto escape_length = gbnf_escape_length(sub_pattern, i);
+                             if (escape_length == 0) {
+                                 throw unsupported_pattern("unsupported escape in character class: " + sub_pattern.substr(i, 2));
+@@ -580,7 +616,9 @@
+                         return NON_LITERAL_SET.find(c) != NON_LITERAL_SET.end();
+                     };
+                     while (i < length) {
+-                        if (sub_pattern[i] == '\\') {
 +                        if (sub_pattern[i] == '\\' && i + 1 < length && regex_shorthand_rule(sub_pattern[i + 1]) != nullptr) {
 +                            break;
-+                        } else if (sub_pattern[i] == '\\' && i < length - 1) {
++                        } else if (sub_pattern[i] == '\\') {
+                             if (i == length - 1) {
+                                 throw invalid_pattern("trailing backslash");
+                             }
 diff --git a/tests/test-grammar-integration.cpp b/tests/test-grammar-integration.cpp
-index 4d5d13dd..7e518a4a 100644
 --- a/tests/test-grammar-integration.cpp
 +++ b/tests/test-grammar-integration.cpp
-@@ -1202,0 +1203,54 @@ static void test_json_schema() {
-+    test_schema(
+@@ -1201,6 +1201,60 @@
+     );
+
+     test_schema(
 +        "pattern with positive shorthand classes",
 +        R"""({
 +            "pattern": "^G\\d+\\w+\\s+$"
@@ -113,3 +134,23 @@ index 4d5d13dd..7e518a4a 100644
 +        }
 +    );
 +
++    test_schema(
+         "",
+         // Schema
+         R"""(
+diff --git a/tests/test-json-schema-to-grammar.cpp b/tests/test-json-schema-to-grammar.cpp
+--- a/tests/test-json-schema-to-grammar.cpp
++++ b/tests/test-json-schema-to-grammar.cpp
+@@ -1583,10 +1583,10 @@
+         // the rules of the partial conversion (here "root-0") must not leak into the grammar
+         run({
+             SUCCESS,
+-            "regexp with unsupported shorthand",
++            "regexp with unsupported boundary escape",
+             R"""({
+                 "type": "string",
+-                "pattern": "^[0-9]{3}\\w$"
++                "pattern": "^[0-9]{3}\\b$"
+             })""",
+             R"""(
+                 char ::= [^"\\\x7F\x00-\x1F] | [\\] (["\\bfnrt] | "u" [0-9a-fA-F]{4})
