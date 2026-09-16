@@ -1,4 +1,10 @@
-{ config, lib, pkgs, cfg-meta, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  cfg-meta,
+  ...
+}:
 
 {
   options = {
@@ -47,22 +53,25 @@
       };
     };
 
-    home.packages = with pkgs;
-      lib.optional (!config.smind.hm.electron-wrappers.slack.enable) slack
+    home.packages =
+      with pkgs;
+      lib.optional (
+        config.smind.hm.roles.desktop && !config.smind.hm.electron-wrappers.slack.enable
+      ) slack
       ++ [
-      websocat
-      jq
+        websocat
+        jq
 
-      tokei
-      cloc
+        tokei
+        cloc
 
-      bws
+        bws
 
-      python3
+        python3
 
-      asciinema
-    ] ++ (if config.smind.hm.dev.tex.enable then [ texlive.combined.scheme-full ] else [ ]);
+        asciinema
+      ]
+      ++ (if config.smind.hm.dev.tex.enable then [ texlive.combined.scheme-full ] else [ ]);
   };
-
 
 }

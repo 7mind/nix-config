@@ -1,4 +1,9 @@
-{ pkgs, smind-hm, cfg-meta, ... }:
+{
+  pkgs,
+  smind-hm,
+  cfg-meta,
+  ...
+}:
 
 {
   imports = smind-hm.imports ++ [
@@ -12,6 +17,7 @@
     # codex, yolo wrapper, …). The full bundle
     # normally rides in via roles.desktop; enable it directly here.
     dev.llm.enable = true;
+    dev.generic.enable = true;
   };
 
   programs.direnv = {
