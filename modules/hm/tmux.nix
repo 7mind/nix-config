@@ -8,13 +8,13 @@ let
       export LC_ALL=C
       ${if pkgs.stdenv.hostPlatform.isLinux then ''
         mpstat 1 1 | awk '
-          $1 == "Average:" && $2 == "all" { printf "%.0f%%", 100 - $NF; found = 1 }
+          $1 == "Average:" && $2 == "all" { printf "%3.0f%%", 100 - $NF; found = 1 }
           END { if (!found) exit 1 }
         '
       '' else ''
         /usr/bin/top -l 2 -n 0 -s 1 -F -R | awk '
           /^CPU usage:/ { idle = $7; found = 1 }
-          END { if (!found) exit 1; printf "%.0f%%", 100 - idle }
+          END { if (!found) exit 1; printf "%3.0f%%", 100 - idle }
         '
       ''}
     '';
