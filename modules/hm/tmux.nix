@@ -1,23 +1,28 @@
 { config, lib, pkgs, ... }:
 
 let
-  cpuUsage = pkgs.writeShellApplication {
-    name = "tmux-cpu-usage";
-    runtimeInputs = [ pkgs.gawk ] ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.sysstat ];
-    text = ''
-      export LC_ALL=C
-      ${if pkgs.stdenv.hostPlatform.isLinux then ''
-        mpstat 1 1 | awk '
-          $1 == "Average:" && $2 == "all" { printf "%3.0f%%", 100 - $NF; found = 1 }
-          END { if (!found) exit 1 }
-        '
-      '' else ''
-        /usr/bin/top -l 2 -n 0 -s 1 -F -R | awk '
-          /^CPU usage:/ { idle = $7; found = 1 }
-          END { if (!found) exit 1; printf "%3.0f%%", 100 - idle }
-        '
-      ''}
-    '';
+  usageConfig = module: pkgs.writeText "tmux-${lib.toLower module.type}.json" (builtins.toJSON {
+    logo.type = "none";
+    display = {
+      pipe = true;
+      showErrors = true;
+      key.type = "none";
+      percent = {
+        type = 1;
+        ndigits = 0;
+        width = 3;
+      };
+    };
+    modules = [ module ];
+  });
+  cpuUsageConfig = usageConfig {
+    type = "CPUUsage";
+    format = "{avg}";
+    waitTime = 1000;
+  };
+  memoryUsageConfig = usageConfig {
+    type = "Memory";
+    format = "{percentage}";
   };
 in
 {
@@ -108,10 +113,10 @@ in
             "set -Fg window-status-format \"#{@_smind_wfmt_narrow}\" ; set -Fg window-status-current-format \"#{@_smind_cfmt_narrow}\"" \
             "set -Fg window-status-format \"#{@_smind_wfmt_wide}\" ; set -Fg window-status-current-format \"#{@_smind_cfmt_wide}\""'
 
-        # Status right: user@host:<dirname> and CPU utilization when wide, nothing when narrow
+        # Status right: user@host:<dirname> and CPU/memory utilization when wide, nothing when narrow
         set -g status-interval 5
         set -g status-right-length 100
-        set -gF @_custom_status_right "#[fg=#{@thm_fg},bg=#{@thm_surface_0}] ##(whoami)@##h:##{b:pane_current_path} |  ##(${lib.getExe cpuUsage}) "
+        set -gF @_custom_status_right "#[fg=#{@thm_fg},bg=#{@thm_surface_0}] ##(whoami)@##h:##{b:pane_current_path} |  ##(${lib.getExe pkgs.fastfetch-unwrapped} --config ${cpuUsageConfig}) |  ##(${lib.getExe pkgs.fastfetch-unwrapped} --config ${memoryUsageConfig}) "
         set -g status-right "#{?#{e|<|:#{client_width},80},,#{E:@_custom_status_right}}"
       '';
     };
