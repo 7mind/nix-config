@@ -17,7 +17,6 @@ let
   });
 
   hibernateExtensionPatched = patchGnomeExtension pkgs.gnomeExtensions.hibernate-status-button;
-  roundedWindowCornersRebornPatched = patchGnomeExtension pkgs.gnomeExtensions.rounded-window-corners-reborn;
 
   ghosttyCfg = config.smind.desktop.gnome.ghostty-toggle;
 
@@ -37,7 +36,7 @@ let
   ++ lib.optional extCfg.vicinae.enable pkgs.gnomeExtensions.vicinae
   ++ lib.optional extCfg.steal-my-focus-window.enable pkgs.gnomeExtensions.steal-my-focus-window
   ++ lib.optional extCfg.dim-completed-calendar-events.enable pkgs.gnomeExtensions.dim-completed-calendar-events
-  ++ lib.optional extCfg.rounded-window-corners-reborn.enable roundedWindowCornersRebornPatched
+  ++ lib.optional extCfg.rounded-window-corners-reborn.enable pkgs.gnomeExtensions.rounded-window-corners-reborn
   ++ lib.optional extCfg.tiling-shell.enable pkgs.gnomeExtensions.tiling-shell
   ++ lib.optional extCfg.open-bar.enable pkgs.gnomeExtensions.open-bar
   ++ lib.optional extCfg.grand-theft-focus.enable pkgs.gnomeExtensions.grand-theft-focus

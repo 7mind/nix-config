@@ -37,8 +37,8 @@ let
   mklVer    = "2026.1";
   mklRel    = "2026.1.0-236";
   openmpRel = "2026.1.1-325";
-  tbbVer    = "2022.3";
-  tbbRel    = "2022.3.1-400";
+  tbbVer    = "2023.1";
+  tbbRel    = "2023.1.0-151";
 
   baseUrl = "https://yum.repos.intel.com/oneapi";
   fetchRpm = name: hash: fetchurl {
@@ -84,13 +84,13 @@ let
     # libtbb.so.12 — MKL's default tbb_thread backend at runtime.
     tbb = fetchRpm
       "intel-oneapi-tbb-${tbbVer}-${tbbRel}.x86_64.rpm"
-      "sha256-OELnyp9df9un6y8LGV+1O1RtXPa3oMRgvXEOyp9yeec=";
+      "sha256-iyURDyN0rpfPnLAT7lmlfSsHjjzjWaEyMplVjOFh09E=";
 
     # TBB headers — required at MKL configure time even though ggml-sycl
     # itself doesn't directly include them.
     tbb-devel = fetchRpm
       "intel-oneapi-tbb-devel-${tbbVer}-${tbbRel}.x86_64.rpm"
-      "sha256-My0Xqc/HrqXdubedsnys5jmSJ8l+2AUvqqEow7KKU2g=";
+      "sha256-oqcs23FkACX5ucymFOiKohKDwIwPzV+Ql7zAWGI6dMY=";
   };
 
   shlibExt = stdenvNoCC.hostPlatform.extensions.sharedLibrary;
@@ -113,7 +113,7 @@ stdenvNoCC.mkDerivation {
   # Layout produced by rpmextract:
   #   opt/intel/oneapi/mkl/2026.1/{lib,include,lib/cmake,lib/pkgconfig}
   #   opt/intel/oneapi/compiler/2026.1/lib/libiomp5.so   (from openmp rpm)
-  #   opt/intel/oneapi/tbb/2022.3/{lib,include}
+  #   opt/intel/oneapi/tbb/2023.1/{lib,include}
   #
   # We flatten everything into $out/{lib,include,lib/cmake,lib/pkgconfig}
   # so MKLConfig.cmake's `find_path` / `find_library` lookups land in one

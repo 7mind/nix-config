@@ -2,14 +2,14 @@
 # (Battlemage / Xe2).
 #
 # Architecture (rewritten for ollama ≥ 0.30): ride the *clean* nixpkgs
-# `ollama` (0.32.14) and PLANT `pkg/llama-cpp-sycl`'s prebuilt
+# `ollama` (0.33.3) and PLANT `pkg/llama-cpp-sycl`'s prebuilt
 # `libggml-sycl.so` into ollama's backend dir. ollama's Go engine loads
 # ggml backends via GGML_BACKEND_DL — it globs `libggml-*.so` out of
 # `lib/ollama/` and registers whatever it finds (this is exactly how the
 # stock cuda/rocm/vulkan flavors ship their `libggml-{cuda,hip,vulkan}.so`).
 #
-# Why planting is ABI-safe here: nixpkgs ollama 0.32.14 vendors llama.cpp
-# at b10434 via FetchContent, and llama-cpp-sycl is built from that same
+# Why planting is ABI-safe here: nixpkgs ollama 0.33.3 vendors llama.cpp
+# at b10760 via FetchContent, and llama-cpp-sycl is built from that same
 # tag. Our `libggml-sycl.so` NEEDs `libggml-base.so.0`, which ollama
 # provides unchanged. The whole stack is one ggml version.
 #
@@ -30,12 +30,12 @@
 
 ollama.overrideAttrs (oldAttrs: {
   pname = "ollama-sycl";
-  # version inherited from nixpkgs ollama (0.32.14).
+  # version inherited from nixpkgs ollama (0.33.3).
 
   nativeBuildInputs = (oldAttrs.nativeBuildInputs or [ ]) ++ [ makeWrapper ];
 
   # Drop the SYCL ggml backend next to ollama's own libggml-*.so. It is
-  # already fully RPATH'd (mkl-sycl, intel-llvm libsycl.so.8, level-zero,
+  # already fully RPATH'd (mkl-sycl, intel-llvm libsycl.so.9, level-zero,
   # intel-compute-runtime, oneDNN, tbb + autoAddDriverRunpath for
   # /run/opengl-driver/lib) by the llama-cpp-sycl build, so it is
   # self-contained — no extra LD_LIBRARY_PATH needed for the backend.
@@ -61,6 +61,6 @@ ollama.overrideAttrs (oldAttrs: {
   '';
 
   meta = (oldAttrs.meta or { }) // {
-    description = "Ollama with SYCL backend (Intel Arc / Battlemage / Xe2) — llama.cpp@b10434";
+    description = "Ollama with SYCL backend (Intel Arc / Battlemage / Xe2) — llama.cpp@${llama-cpp-sycl.version}";
   };
 })

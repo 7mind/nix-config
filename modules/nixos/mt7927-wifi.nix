@@ -1,7 +1,7 @@
 # MediaTek MT7927 (Filogic 380, PCI 14c3:7927, internally MT6639) WiFi 7 +
 # Bluetooth. Mainline 7.2 has the MT7927 WiFi series; we still vendor
-# jetm v2.14-6 so 7.0/7.1 hosts get that source plus the remaining AP-mode
-# patches and pre-7.2 compat shims. Drop this module once the host kernel
+# jetm v2.15-1 so 7.0/7.1 hosts get that source plus the remaining AP-mode
+# patches, teardown fixes and pre-7.2 compat shims. Drop this module once the host kernel
 # is 7.2+ *and* the four AP-mode additions have landed (or are unneeded).
 { config, lib, pkgs, cfg-meta, ... }:
 
@@ -33,7 +33,7 @@ in
       {
         assertion = lib.elem kernelMM [ "7.0" "7.1" "7.2" ];
         message =
-          "smind.hw.mt7927: the vendored mt76 patch set (jetm v2.14-6, linux 7.2 source) "
+          "smind.hw.mt7927: the vendored mt76 patch set (jetm v2.15-1, linux 7.2 source) "
           + "supports linux 7.0–7.2, but the kernel is ${kernel.version}. "
           + "Re-validate the patches (pkg/mt7927) against the new kernel, or drop "
           + "this module if the remaining AP-mode patches have reached mainline.";

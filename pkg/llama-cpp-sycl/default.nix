@@ -1,8 +1,8 @@
 # llama.cpp built with the SYCL backend, using nixpkgs `intel-llvm` as the
 # DPC++ toolchain.
 #
-# Pinned to llama.cpp `b10434` / `7e4c0a96` — the exact tag nixpkgs
-# ollama 0.32.14 vendors via FetchContent (`LLAMA_CPP_VERSION`). Planting
+# Uses the llama.cpp source pinned by nixpkgs ollama's FetchContent
+# (`LLAMA_CPP_VERSION`). Planting
 # this package's `libggml-sycl.so` into ollama-sycl is only ABI-safe
 # while both share that ggml version.
 #
@@ -11,7 +11,7 @@
 {
   lib,
   stdenv,
-  fetchFromGitHub,
+  ollama,
   cmake,
   makeWrapper,
   pkg-config,
@@ -40,14 +40,8 @@
 # nativeBuildInput and pointing CC/CXX at it explicitly in preConfigure.
 stdenv.mkDerivation (finalAttrs: {
   pname = "llama-cpp-sycl";
-  version = "b10434";
-
-  src = fetchFromGitHub {
-    owner = "ggml-org";
-    repo = "llama.cpp";
-    rev = "7e4c0a96880dae4fc4268ad441f8a6446bd5460a";
-    hash = "sha256-Sz0kW1q91YzdrKbZUqMbFJ0DLZrzARSGheUrtCKcoQo=";
-  };
+  version = ollama.llamaCppVersion;
+  src = ollama.llamaCppSrc;
 
   patches = [ ];
 
@@ -88,10 +82,8 @@ stdenv.mkDerivation (finalAttrs: {
   # `sycl::ext::oneapi::bfloat16(float)` constructor — IGC has native
   # SPIR-V intrinsics for that path that don't need IMF bitcode.
   #
-  # Note: this patches the WRITE path (set_rows.cpp); Hal9000's
-  # patch #1 (`Add BF16 support to GET_ROWS operation`) covers the
-  # READ path (getrows.cpp / ggml-sycl.cpp). Both are needed for full
-  # bf16 model support — different ops, different files.
+  # This patches the WRITE path (set_rows.cpp); upstream already supports
+  # BF16 on the READ path (getrows.cpp / ggml-sycl.cpp).
   #
   # perl -0777 (slurp mode) handles the multi-line pattern cleanly;
   # `substituteInPlace` would need exact-byte indentation and Nix
@@ -201,10 +193,9 @@ stdenv.mkDerivation (finalAttrs: {
     # reports no GPU. Re-enable when we ship a SYCL-enabled oneDNN.
     (lib.cmakeBool "GGML_SYCL_DNN"      false)
 
-    # Host-memory fallback — gated by patch #6 (RAII temp buffer +
-    # macro guard). When VRAM is tight (loading ~30 GB models on the
+    # Host-memory fallback. When VRAM is tight (loading ~30 GB models on the
     # 32 GB B70), the SYCL allocator falls back to pinned host memory
-    # instead of returning OOM. Documented by patch #8.
+    # instead of returning OOM.
     (lib.cmakeBool "GGML_SYCL_HOST_MEM_FALLBACK" true)
 
     # Shared libraries + ggml backend dlopen plugins. The plugins go to

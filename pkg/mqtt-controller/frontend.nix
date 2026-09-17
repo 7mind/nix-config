@@ -11,7 +11,7 @@ buildNpmPackage {
         "node_modules" "dist" "test-results" "playwright-report"
       ]);
   };
-  npmDepsHash = "sha256-vFMfzt4vlv8q0HCg0BasHHvXRRNOeNYE2wpPz3/DUYI=";
+  npmDepsHash = "sha256-p9phcqpBr60o1snHyEwufx4s/c4Oy2i8R440ZgkKMU8=";
   npmBuildScript = "build";
   doCheck = true;
   checkPhase = ''

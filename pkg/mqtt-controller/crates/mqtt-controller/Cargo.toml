@@ -44,21 +44,21 @@ mqtt-controller-wire = { path = "../mqtt-controller-wire" }
 
 axum = { version = "0.8", features = ["ws"] }
 
-tower-http = { version = "0.6", features = ["fs"] }
+tower-http = { version = "0.7", features = ["fs"] }
 
 futures-util = "0.3"
 
-tokio-tungstenite = { version = "0.26", features = ["connect"] }
+tokio-tungstenite = { version = "0.30", features = ["connect"] }
 
 # Disable the C mimalloc dependency and unused FTS support.
-turso = { version = "0.5", default-features = false }
+turso = { version = "0.7", default-features = false }
 
 [dev-dependencies]
-rumqttd = "0.19"
+rumqttd = "0.20"
 
 tempfile = "3"
 
-rstest = "0.23"
+rstest = "0.27"
 
 pretty_assertions = "1"
 

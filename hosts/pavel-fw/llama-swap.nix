@@ -15,9 +15,6 @@ let
     patches = (old.patches or [ ]) ++ [ ../pavel-am5/llama-cpp-json-schema-regex-shorthand.patch ];
   });
   llamaServer = lib.getExe' llamaCpp "llama-server";
-  llamaSwap = pkgs.llama-swap.overrideAttrs (old: {
-    patches = (old.patches or [ ]) ++ [ ../pavel-am5/llama-swap-ttl-from-ready.patch ];
-  });
   qwenModelId = "qwen3.8-27b-q4";
   qwenAbliteratedModelId = "qwen3.8-27b-q4-abliterated";
 in
@@ -29,7 +26,7 @@ in
 
   services.llama-swap = {
     enable = true;
-    package = llamaSwap;
+    package = pkgs.llama-swap;
     listenAddress = "127.0.0.1";
     port = 11435;
     openFirewall = false;

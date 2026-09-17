@@ -27,17 +27,17 @@ let
 
   iHaveAdhdPlugin = pkgs.fetchFromGitHub {
     pname = "i-have-adhd";
-    version = "0.2.0";
+    version = "0.3.0";
     owner = "ayghri";
     repo = "i-have-adhd";
-    rev = "1fa9c7cc4b8a4e1e247388d213214bdc83ce8e67";
-    hash = "sha256-qkMHSn5/dka10iMzk5A0AGgwkknQROH3Wp5qwwfvuyg=";
+    rev = "b15d0be58f55b33972ba3e39709e0e5208ef30cb";
+    hash = "sha256-wnD5crIal23Vtk6GReG2vCkjDuhrpmhWXvrNUq5mZfE=";
   };
 
   cavemanSkill = pkgs.fetchurl {
     name = "caveman";
-    url = "https://raw.githubusercontent.com/JuliusBrussee/caveman/2c67abb9833689b48c7abba88afaa77c39a18657/skills/caveman/SKILL.md";
-    hash = "sha256-2vnOxJbr0DmAnYI2+Z8X+htL6q34zk4tUy0NpR1wr84=";
+    url = "https://raw.githubusercontent.com/JuliusBrussee/caveman/880114a42067d045b91dffe6a553f6ab2cc399ad/skills/caveman/SKILL.md";
+    hash = "sha256-C/CaCpoBfQBKgdS2k+Wi2DDhooIwpYhd93Ph7ZwFccw=";
   };
 
   claudeAlwaysEnabledMarker = "${config.programs.claude-code.configDir}/.i-have-adhd-always";

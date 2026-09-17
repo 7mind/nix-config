@@ -146,11 +146,7 @@ rec {
                   # `ls $(nix eval --raw nixpkgs#intel-llvm.outPath)/bin`
                   # should list clang/clang++/clang-22 etc.
                   intel-llvm = (prev.intel-llvm.overrideScope (_: intelPrev: {
-                    unwrapped = (intelPrev.unwrapped.override {
-                      wrapCC = cc: prev.wrapCC (cc.overrideAttrs (old: {
-                        passthru = (old.passthru or { }) // { langCC = true; };
-                      }));
-                    }).overrideAttrs (old: {
+                    unwrapped = intelPrev.unwrapped.overrideAttrs (old: {
                       # LLVM detects x86_64-pc-linux-gnu from GCC, but Nix's
                       # compiler wrapper targets x86_64-unknown-linux-gnu.
                       # Libdevice passes LLVM's detected triple explicitly,
@@ -160,7 +156,6 @@ rec {
                         (prev.lib.cmakeFeature "LLVM_HOST_TRIPLE" prev.stdenv.hostPlatform.config)
                         (prev.lib.cmakeFeature "LLVM_DEFAULT_TARGET_TRIPLE" prev.stdenv.hostPlatform.config)
                       ];
-                      passthru = old.passthru // { langCC = true; };
                     });
                   })).overrideAttrs (old: {
                     __structuredAttrs = false;
@@ -177,7 +172,7 @@ rec {
                   mkl-sycl = final.callPackage ./pkg/mkl-sycl/default.nix { };
 
                   # llama.cpp built with the SYCL backend, pinned to the same
-                  # llama.cpp tag nixpkgs ollama vendors (b10434). Linux-only —
+                  # llama.cpp tag nixpkgs ollama vendors (b10760). Linux-only —
                   # needs intel-llvm + intel-compute-runtime + level-zero, none
                   # of which exist on Darwin.
                   llama-cpp-sycl = final.callPackage ./pkg/llama-cpp-sycl/default.nix {
@@ -186,12 +181,12 @@ rec {
 
                   # ollama with the GGML SYCL backend wired in for the Intel
                   # Arc Pro B70. Plants llama-cpp-sycl's libggml-sycl.so into
-                  # the nixpkgs ollama (0.32.14) backend dir. Both share llama.cpp
-                  # b10434 so the planted .so is ABI-matched to ollama's ggml-base.
+                  # the nixpkgs ollama (0.33.3) backend dir. Both share llama.cpp
+                  # b10760 so the planted .so is ABI-matched to ollama's ggml-base.
                   ollama-sycl = final.callPackage ./pkg/ollama-sycl/default.nix { };
 
                   # Stock ollama flavors (ollama/-cuda/-rocm/-vulkan) ride
-                  # nixpkgs' own version (0.32.14), matching the in-container
+                  # nixpkgs' own version (0.33.3), matching the in-container
                   # ollama-sycl server.
                 })
               ];

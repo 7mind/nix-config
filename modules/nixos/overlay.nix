@@ -13,6 +13,39 @@
       # gstreamer, ...). Parses the terminfo from ghostty's Zig source, tic-compiles.
       ghostty-terminfo = prev.callPackage ../../pkg/ghostty-terminfo { };
 
+      llama-swap = (prev.llama-swap.override {
+        buildGoModule = prev.buildGo127Module;
+      }).overrideAttrs (old: {
+        version = "256";
+        src = old.src.override {
+          tag = "v256";
+          hash = "sha256-midZ5/eq4ULDhCC3wtzman0OdH5bHMIO8FsmzizU8sc=";
+        };
+        vendorHash = "sha256-R9VOAmoRXet7zoEYo7LW/awJludS4AxRlFDR6skPxbo=";
+        excludedPackages = [
+          "cmd/misc"
+          "cmd/fake-model"
+          "cmd/monitor-test"
+          "cmd/test-concurrency"
+          "cmd/vllm-wrapper"
+        ] ++ prev.lib.optionals (!prev.stdenv.buildPlatform.canExecute prev.stdenv.hostPlatform) [
+          "cmd/simple-responder"
+        ];
+        passthru = old.passthru // {
+          ui = old.passthru.ui.overrideAttrs (ui:
+            let
+              sourceRoot = "${ui.src.name}/ui";
+              npmDepsHash = "sha256-lmhRJ8275PIQ+7vHdr9aZ31lYeXUkXrWnlvuwOadjRQ=";
+            in {
+              inherit sourceRoot npmDepsHash;
+              npmDeps = ui.npmDeps.overrideAttrs {
+                inherit sourceRoot;
+                outputHash = npmDepsHash;
+              };
+            });
+        };
+      });
+
       # nixpkgs' 0.3.38 accesses struct nilfs internals removed in nilfs-utils 2.3.
       partclone = prev.partclone.overrideAttrs (old: {
         version = "0.3.50";
@@ -185,12 +218,12 @@
 
         # nixpkgs still ships 22.8.2. Use the complete upstream security release
         # rather than carrying one advisory's patch while leaving the other fixes
-        # from 22.9.0-22.10.1 absent.
+        # from 22.9.0 onward absent.
         asterisk = super.asterisk.overrideAttrs (old: rec {
-          version = "22.10.1";
+          version = "22.11.0";
           src = super.fetchurl {
             url = "https://downloads.asterisk.org/pub/telephony/asterisk/old-releases/asterisk-${version}.tar.gz";
-            hash = "sha256-CVNWTET6SYJ/PJ1wym6A24OCjJhIRAhSxr5EyWGFU1M=";
+            hash = "sha256-O9XuBAUJo9PNmxupUgwY5uwKfnmBymjEV9zTa6PFTZQ=";
           };
           preConfigure = (old.preConfigure or "") + ''
             chmod +w externals_cache
@@ -277,25 +310,16 @@
           })
         );
 
-        # GCC 15 enables -Wunterminated-string-initialization by default which breaks wimboot
-        # The BOOTAPP_SIGNATURE arrays intentionally lack null terminators
-        # Use EXTRA_CFLAGS (not CFLAGS) to avoid overriding Makefile's internal CFLAGS (which sets VERSION)
-        wimboot = super.wimboot.overrideAttrs (old: {
-          makeFlags = (old.makeFlags or [ ]) ++ [
-            "EXTRA_CFLAGS=-Wno-unterminated-string-initialization"
-          ];
-        });
-
         smfc = super.python3Packages.buildPythonApplication rec {
           pname = "smfc";
-          version = "6.2.1";
+          version = "6.4.2";
           pyproject = true;
 
           src = super.fetchFromGitHub {
             owner = "petersulyok";
             repo = "smfc";
             tag = "v${version}";
-            hash = "sha256-FyNmHAvxn2v7xRQzythxMutzyuBBePc01QZf2fNuZws=";
+            hash = "sha256-2YRQnHiG+4vWKJ3CZ+jyra5A6i+wAz2x+1ET1gas41o=";
           };
 
           build-system = [ super.python3Packages.setuptools ];

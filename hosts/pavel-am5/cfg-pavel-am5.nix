@@ -8,9 +8,6 @@ let
     patches = (old.patches or [ ]) ++ [ ./llama-cpp-json-schema-regex-shorthand.patch ];
   });
   llamaServer = lib.getExe' llamaCppRocm "llama-server";
-  llamaSwap = pkgs.llama-swap.overrideAttrs (old: {
-    patches = (old.patches or [ ]) ++ [ ./llama-swap-ttl-from-ready.patch ];
-  });
 in
 {
   imports = [
@@ -51,7 +48,7 @@ in
   services = {
     llama-swap = {
       enable = true;
-      package = llamaSwap;
+      package = pkgs.llama-swap;
       listenAddress = "0.0.0.0";
       port = 11435;
       openFirewall = true;
