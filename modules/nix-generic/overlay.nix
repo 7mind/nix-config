@@ -131,6 +131,15 @@
               ];
             });
 
+          rich = python-prev.rich.overridePythonAttrs (old:
+            prev.lib.optionalAttrs prev.stdenv.hostPlatform.isAarch64 {
+              # The producer can finish before `head -1` closes the pipe, in
+              # which case exit 0 is valid and the broken-pipe assertion races.
+              disabledTests = (old.disabledTests or [ ]) ++ [
+                "test_brokenpipeerror"
+              ];
+            });
+
           websockets = python-prev.websockets.overridePythonAttrs (old:
             prev.lib.optionalAttrs prev.stdenv.hostPlatform.isAarch64 {
               # unittestCheckHook ignores disabledTests, so make these two
