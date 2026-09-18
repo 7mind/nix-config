@@ -29,11 +29,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    smind = {
-      url = "github:7mind/7mind-nix/master";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
     pylontech = {
       url = "github:pshirshov/mqtt-pylontech";
       inputs.nixpkgs.follows = "nixpkgs";

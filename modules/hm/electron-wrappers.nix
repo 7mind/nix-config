@@ -109,7 +109,7 @@ in
 
       # Wrapper that waits for StatusNotifierWatcher D-Bus service before launching
       waitForTrayWrapper = app: timeout: pkgs.writeShellScript "wait-for-tray-${app.name}" ''
-        # Wait for the StatusNotifierWatcher D-Bus service (provided by AppIndicator extension)
+        # Wait for the StatusNotifierWatcher D-Bus service provided by the GNOME tray extension
         ${pkgs.glib}/bin/gdbus wait --session --timeout=${toString timeout} org.kde.StatusNotifierWatcher || true
         exec ${app}/bin/${app.meta.mainProgram or app.name}
       '';

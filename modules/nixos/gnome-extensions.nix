@@ -29,7 +29,9 @@ let
     gnome-shortcut-inhibitor
   ]
   ++ lib.optional extCfg.run-or-raise.enable pkgs.gnomeExtensions.run-or-raise
-  ++ lib.optional extCfg.appindicator.enable pkgs.gnomeExtensions.appindicator
+  # AppIndicator v64 registers SNI items but does not render them on GNOME 50: https://github.com/ubuntu/gnome-shell-extension-appindicator/issues/628
+  # ++ lib.optional extCfg.appindicator.enable pkgs.gnomeExtensions.appindicator
+  ++ lib.optional extCfg.status-tray.enable pkgs.gnomeExtensions.status-tray
   ++ lib.optional extCfg.gsconnect.enable pkgs.gnomeExtensions.gsconnect
   ++ lib.optional extCfg.native-window-placement.enable pkgs.gnomeExtensions.native-window-placement
   ++ lib.optional extCfg.caffeine.enable pkgs.gnomeExtensions.caffeine
@@ -56,7 +58,7 @@ in
     smind.desktop.gnome.allow-local-extensions = lib.mkEnableOption "local installation of GNOME Shell extensions (non-declaratively). When false, extension settings are locked via dconf";
 
     smind.desktop.gnome.extensions = {
-      appindicator.enable = lib.mkEnableOption "AppIndicator/KStatusNotifierItem support for the GNOME Shell" // { default = true; };
+      status-tray.enable = lib.mkEnableOption "Status Tray support for AppIndicator/KStatusNotifierItem applications" // { default = true; };
       gsconnect.enable = lib.mkEnableOption "GSConnect - KDE Connect implementation for GNOME" // {
         default = config.smind.kdeconnect.selectedBackend == "gsconnect";
       };

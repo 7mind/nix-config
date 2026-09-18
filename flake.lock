@@ -1204,7 +1204,6 @@
         "pylontech": "pylontech",
         "qendercore-adapter": "qendercore-adapter",
         "rust-overlay": "rust-overlay_3",
-        "smind": "smind",
         "touchpad-gesture-customization-app-expose": "touchpad-gesture-customization-app-expose",
         "vicinae-extensions": "vicinae-extensions",
         "zimt": "zimt"
@@ -1269,27 +1268,6 @@
       "original": {
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "type": "github"
-      }
-    },
-    "smind": {
-      "inputs": {
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1734363997,
-        "narHash": "sha256-A7HvHVXQ2RlQxgM1EfrkY8PSmlofcUxcEX1Pu9v48Cg=",
-        "owner": "7mind",
-        "repo": "7mind-nix",
-        "rev": "8eb424f13073650eb3d8431c18dda38edf0cb310",
-        "type": "github"
-      },
-      "original": {
-        "owner": "7mind",
-        "ref": "master",
-        "repo": "7mind-nix",
         "type": "github"
       }
     },
