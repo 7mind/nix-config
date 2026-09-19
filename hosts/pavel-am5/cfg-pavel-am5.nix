@@ -5,7 +5,7 @@ let
     rocmSupport = true;
     rocmGpuTargets = [ "gfx1100" ];
   }).overrideAttrs (old: {
-    patches = (old.patches or [ ]) ++ [ ./llama-cpp-json-schema-regex-shorthand.patch ];
+    patches = (old.patches or [ ]) ++ [ ../../pkg/llama-cpp/json-schema-regex-shorthand.patch ];
   });
   llamaServer = lib.getExe' llamaCppRocm "llama-server";
 in

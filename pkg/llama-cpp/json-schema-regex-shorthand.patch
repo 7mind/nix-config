@@ -1,4 +1,4 @@
-JSON Schema patterns commonly contain ECMAScript shorthand character
+JSON Schema patterns commonly use ECMAScript shorthand character
 classes. Expand supported shorthand classes into GBNF character classes
 instead of falling back to an unconstrained string when parsing them.
 

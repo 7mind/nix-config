@@ -12,7 +12,7 @@ let
     cudaSupport = true;
     vulkanSupport = true;
   }).overrideAttrs (old: {
-    patches = (old.patches or [ ]) ++ [ ../pavel-am5/llama-cpp-json-schema-regex-shorthand.patch ];
+    patches = (old.patches or [ ]) ++ [ ../../pkg/llama-cpp/json-schema-regex-shorthand.patch ];
   });
   llamaServer = lib.getExe' llamaCpp "llama-server";
   qwenModelId = "qwen3.8-27b-q4";
