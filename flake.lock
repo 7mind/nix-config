@@ -75,11 +75,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1782740912,
-        "narHash": "sha256-YRrGdfV1+FQc2FRAY6ze1rVWbp7THKXsX2W2+E0NMak=",
+        "lastModified": 1789748845,
+        "narHash": "sha256-1O1pRY/TGuIH1yqprFQ07t7SDLHmnm3UOKc2LedUJmg=",
         "owner": "pshirshov",
         "repo": "browservice",
-        "rev": "ba58d1dcaf88a50053602a65a2ac70108d691482",
+        "rev": "c68eabe158749e3d4562fd5f0c12b41aecf01de3",
         "type": "github"
       },
       "original": {
@@ -586,11 +586,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1780255668,
-        "narHash": "sha256-2PAZv+PiJJdmt0kuSB/CCtAXDCFpIpHQntWwNZ+ICTs=",
+        "lastModified": 1789752695,
+        "narHash": "sha256-lSwsQNxwbJ3VWLpSURjDt4kwSzf3oLeb0Cl3niXwjCQ=",
         "ref": "wip/full-patchset",
-        "rev": "d237c30e3566f96f470f3e6ff3812d6a8c169a77",
-        "revCount": 3220,
+        "rev": "1731413bca349954d9e5e1fc56b88b9b4af9fa9f",
+        "revCount": 3282,
         "type": "git",
         "url": "https://gitlab.gnome.org/pshirshov/fractal.git"
       },
@@ -723,11 +723,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1776211307,
-        "narHash": "sha256-W20aU2VVAnkYPVtukQ9gbGPWAnV2MEcehigrUXtK/Ls=",
+        "lastModified": 1789748816,
+        "narHash": "sha256-WbH8vTDr3PIsuz9K9Ve3fszG4PN+LINIbqfpgo9EqU4=",
         "owner": "pshirshov",
         "repo": "mqtt-spc",
-        "rev": "f1deb19781c8c4ae4b9588b164e55a8ac1d514a8",
+        "rev": "80019c33c4484d8209c9260308afae33c455ee0a",
         "type": "github"
       },
       "original": {
@@ -1140,11 +1140,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1776210020,
-        "narHash": "sha256-TSwDbbUnM8sD3fpJ1AG5l3Wre0kdSPr4WDSFDEGuqow=",
+        "lastModified": 1789748816,
+        "narHash": "sha256-HyvbLtHKB2OGTnSuINweRQFoHuYuWRvvlmcovXtAUTs=",
         "owner": "pshirshov",
         "repo": "mqtt-pylontech",
-        "rev": "6dc68860d92233b7dd0043838bb0397ff2fec1a1",
+        "rev": "2986128203af4b0e184049eaf8c806276d28e3fe",
         "type": "github"
       },
       "original": {
@@ -1163,11 +1163,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1780651237,
-        "narHash": "sha256-mNv9wVPIClhODPDSwEmnW1bAugjj+v83tEef5F3PYJw=",
+        "lastModified": 1789748816,
+        "narHash": "sha256-jijlRPjpPgsp6Et8hIAyZMKQOYX9NXVHArz+sbOZlVU=",
         "owner": "pshirshov",
         "repo": "mqtt-qendercore",
-        "rev": "acedabb6543b0dfbeaa442319d2474c4161643b7",
+        "rev": "bf14b72c3dbbdaef7678c9ed79a7012b1be9c314",
         "type": "github"
       },
       "original": {
@@ -1611,11 +1611,11 @@
         "nixpkgs": "nixpkgs_7"
       },
       "locked": {
-        "lastModified": 1781019623,
-        "narHash": "sha256-s8g5X9mr1G6gTL40M++jaHEzLYvA55Wmyqn3L4PS26g=",
+        "lastModified": 1789777217,
+        "narHash": "sha256-YW3Iz9aJg/F0sX3DFW/9T+F2qhXT55CRcLIiYisWg3E=",
         "owner": "pshirshov",
         "repo": "zimt",
-        "rev": "946e0f48eb82566881bbb6b2fb23f58349a2895e",
+        "rev": "3e58a2192a39ddaa7eda0b7996541dca5bcd92e6",
         "type": "github"
       },
       "original": {

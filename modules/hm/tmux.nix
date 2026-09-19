@@ -10,7 +10,7 @@ let
       percent = {
         type = 1;
         ndigits = 0;
-        width = 3;
+        width = 2;
       };
     };
     modules = [ module ];
@@ -113,10 +113,10 @@ in
             "set -Fg window-status-format \"#{@_smind_wfmt_narrow}\" ; set -Fg window-status-current-format \"#{@_smind_cfmt_narrow}\"" \
             "set -Fg window-status-format \"#{@_smind_wfmt_wide}\" ; set -Fg window-status-current-format \"#{@_smind_cfmt_wide}\""'
 
-        # Status right: user@host:<dirname> and CPU/memory utilization when wide, nothing when narrow
+        # Status right: user@host and CPU/memory utilization when wide, nothing when narrow
         set -g status-interval 5
         set -g status-right-length 100
-        set -gF @_custom_status_right "#[fg=#{@thm_fg},bg=#{@thm_surface_0}] ##(whoami)@##h:##{b:pane_current_path} |  ##(${lib.getExe pkgs.fastfetch-unwrapped} --config ${cpuUsageConfig}) |  ##(${lib.getExe pkgs.fastfetch-unwrapped} --config ${memoryUsageConfig}) "
+        set -gF @_custom_status_right "#[fg=#{@thm_fg},bg=#{@thm_surface_0}] ##(whoami)@##h |  ##(${lib.getExe pkgs.fastfetch-unwrapped} --config ${cpuUsageConfig}) |  ##(${lib.getExe pkgs.fastfetch-unwrapped} --config ${memoryUsageConfig}) "
         set -g status-right "#{?#{e|<|:#{client_width},80},,#{E:@_custom_status_right}}"
       '';
     };
