@@ -716,6 +716,32 @@
         "type": "github"
       }
     },
+    "mqtt-controller": {
+      "inputs": {
+        "crane": [
+          "crane"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "rust-overlay": [
+          "rust-overlay"
+        ]
+      },
+      "locked": {
+        "lastModified": 1789820418,
+        "narHash": "sha256-nn+GNZWeZ5c2WV2HQsbt4+uohuh/xHJlVCngK/Dkyf0=",
+        "owner": "pshirshov",
+        "repo": "mqtt-controller",
+        "rev": "3db0423282e7f4a7fcc6a1dd38e91a7fbeedb0ab",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pshirshov",
+        "repo": "mqtt-controller",
+        "type": "github"
+      }
+    },
     "mqtt-spc": {
       "inputs": {
         "nixpkgs": [
@@ -1193,6 +1219,7 @@
         "kanata-switcher": "kanata-switcher",
         "lanzaboote": "lanzaboote",
         "mac-app-util": "mac-app-util",
+        "mqtt-controller": "mqtt-controller",
         "mqtt-spc": "mqtt-spc",
         "niri": "niri",
         "nix-apple-fonts": "nix-apple-fonts",

@@ -104,6 +104,7 @@ rec {
           ] ++ pkgs.lib.optional (inputs ? determinate) inputs.determinate.nixosModules.default ++ [
             inputs.kanata-switcher.nixosModules.default
             inputs.noctalia.nixosModules.default
+            inputs.mqtt-controller.nixosModules.default
 
             { nixpkgs.overlays = [
                 inputs.nix-vscode-extensions.overlays.default
