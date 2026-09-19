@@ -8,12 +8,7 @@
 # already CUDA0). Context is 32k, not the 262k used on am5/vm. Listen on
 # localhost — this is a laptop.
 let
-  llamaCpp = (pkgs.llama-cpp.override {
-    cudaSupport = true;
-    vulkanSupport = true;
-  }).overrideAttrs (old: {
-    patches = (old.patches or [ ]) ++ [ ../../pkg/llama-cpp/json-schema-regex-shorthand.patch ];
-  });
+  llamaCpp = pkgs.llama-cpp-cuda-vulkan;
   llamaServer = lib.getExe' llamaCpp "llama-server";
   qwenModelId = "qwen3.8-27b-q4";
   qwenAbliteratedModelId = "qwen3.8-27b-q4-abliterated";

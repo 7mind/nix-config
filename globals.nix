@@ -108,7 +108,13 @@ rec {
             { nixpkgs.overlays = [
                 inputs.nix-vscode-extensions.overlays.default
                 inputs.rust-overlay.overlays.default
-                (final: prev: {
+                (final: prev:
+                  let
+                    llamaCppPatches = [ ./pkg/llama-cpp/json-schema-regex-shorthand.patch ];
+                    patchLlamaCpp = package: package.overrideAttrs (old: {
+                      patches = (old.patches or [ ]) ++ llamaCppPatches;
+                    });
+                  in {
                   # Patch intel-graphics-compiler into the RPATH of the Level
                   # Zero driver `libze_intel_gpu.so.1` in `$out/lib`.
                   # nixpkgs postFixup only fixes RPATH on the OpenCL
@@ -171,12 +177,24 @@ rec {
                   # (numpy/scipy/octave) keeps using 2023.1.
                   mkl-sycl = final.callPackage ./pkg/mkl-sycl/default.nix { };
 
+                  llama-cpp = patchLlamaCpp prev.llama-cpp;
+                  llama-cpp-rocm-gfx1100 = patchLlamaCpp (prev.llama-cpp.override {
+                    rocmSupport = true;
+                    rocmGpuTargets = [ "gfx1100" ];
+                  });
+                  llama-cpp-cuda-vulkan = patchLlamaCpp (prev.llama-cpp.override {
+                    cudaSupport = true;
+                    rocmSupport = false;
+                    vulkanSupport = true;
+                  });
+
                   # llama.cpp built with the SYCL backend, pinned to the same
                   # llama.cpp tag nixpkgs ollama vendors (b10760). Linux-only —
                   # needs intel-llvm + intel-compute-runtime + level-zero, none
                   # of which exist on Darwin.
                   llama-cpp-sycl = final.callPackage ./pkg/llama-cpp-sycl/default.nix {
                     mkl = final.mkl-sycl;
+                    inherit llamaCppPatches;
                   };
 
                   # ollama with the GGML SYCL backend wired in for the Intel

@@ -27,6 +27,7 @@
   ocl-icd,
   curl,
   mkl,
+  llamaCppPatches,
   tbb,
   perl,
 }:
@@ -43,7 +44,7 @@ stdenv.mkDerivation (finalAttrs: {
   version = ollama.llamaCppVersion;
   src = ollama.llamaCppSrc;
 
-  patches = [ ];
+  patches = llamaCppPatches;
 
   nativeBuildInputs = [ cmake pkg-config autoAddDriverRunpath intel-llvm makeWrapper perl ];
 

@@ -13,6 +13,8 @@
       # gstreamer, ...). Parses the terminfo from ghostty's Zig source, tic-compiles.
       ghostty-terminfo = prev.callPackage ../../pkg/ghostty-terminfo { };
 
+      fastfetch-minimal = prev.callPackage ../../pkg/fastfetch-minimal { };
+
       llama-swap = (prev.llama-swap.override {
         buildGoModule = prev.buildGo127Module;
       }).overrideAttrs (old: {
@@ -237,12 +239,7 @@
           '';
         });
 
-        fractal = cfg-flakes.fractal.fractal-tray.overrideAttrs (old: {
-          cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
-            inherit (old) src;
-            hash = "sha256-pC3kTRO3FSaA4IAdfYwnW6oeQXVc4dj7SmMxzw9SVjA=";
-          };
-        });
+        fractal = cfg-flakes.fractal.fractal-tray;
 
         # Fix for black screen on resume (remove lock screen animation during suspend)
         # MR !3742: https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/3742

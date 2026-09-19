@@ -24,6 +24,27 @@ let
     type = "Memory";
     format = "{percentage}";
   };
+  toggleHtop = pkgs.writeShellApplication {
+    name = "tmux-toggle-htop";
+    runtimeInputs = [ pkgs.tmux pkgs.htop ];
+    text = ''
+      session_id="$(tmux display-message -p '#{session_id}')"
+      window_id="$(tmux show-options -qv -t "$session_id" @smind_htop_window)"
+      existing_window_id=""
+      if [[ -n "$window_id" ]]; then
+        existing_window_id="$(tmux list-windows -t "$session_id" -f "#{==:#{window_id},$window_id}" -F '#{window_id}')"
+      fi
+
+      if [[ "$existing_window_id" == "$window_id" ]] && [[ -n "$window_id" ]]; then
+        tmux kill-window -t "$window_id"
+        tmux set-option -qu -t "$session_id" @smind_htop_window
+      else
+        tmux set-option -qu -t "$session_id" @smind_htop_window
+        window_id="$(tmux new-window -P -F '#{window_id}' -t "$session_id:" -n htop htop)"
+        tmux set-option -q -t "$session_id" @smind_htop_window "$window_id"
+      fi
+    '';
+  };
 in
 {
   options = {
@@ -116,7 +137,8 @@ in
         # Status right: user@host and CPU/memory utilization when wide, nothing when narrow
         set -g status-interval 5
         set -g status-right-length 100
-        set -gF @_custom_status_right "#[fg=#{@thm_fg},bg=#{@thm_surface_0}] ##(whoami)@##h |  ##(${lib.getExe pkgs.fastfetch-unwrapped} --config ${cpuUsageConfig}) |  ##(${lib.getExe pkgs.fastfetch-unwrapped} --config ${memoryUsageConfig}) "
+        bind-key -n MouseDown1Control0 run-shell ${lib.getExe toggleHtop}
+        set -gF @_custom_status_right "#[fg=#{@thm_fg},bg=#{@thm_surface_0}] ##(whoami)@##h | #[range=control|0] ##(${lib.getExe pkgs.fastfetch-minimal} --config ${cpuUsageConfig})#[norange] | #[range=control|0] ##(${lib.getExe pkgs.fastfetch-minimal} --config ${memoryUsageConfig})#[norange] "
         set -g status-right "#{?#{e|<|:#{client_width},80},,#{E:@_custom_status_right}}"
       '';
     };
