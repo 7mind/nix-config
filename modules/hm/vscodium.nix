@@ -189,8 +189,6 @@ in
           "editor.inlineSuggest.enabled" = true;
           "security.workspace.trust.banner" = "always";
           "telemetry.telemetryLevel" = "off";
-          "telemetry.enableTelemetry" = false;
-          "telemetry.enableCrashReporter" = false;
           "security.workspace.trust.untrustedFiles" = "open";
 
           "docker.showStartPage" = false;
@@ -198,7 +196,7 @@ in
 
 
           "nix.enableLanguageServer" = true;
-          "nix.formatterPath" = "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt";
+          "nix.formatterPath" = "nixpkgs-fmt";
           "nix.serverPath" = "${pkgs.nixd}/bin/nixd";
           "nix.serverSettings" = {
             "nil" = {
@@ -215,9 +213,6 @@ in
           "metals.enableIndentOnPaste" = true;
           "metals.enableSemanticHighlighting" = true;
           "metals.enableStripMarginOnTypeFormatting" = true;
-          "metals.showInferredType" = true;
-          "metals.showImplicitConversionsAndClasses" = false;
-          "metals.showImplicitArguments" = false;
           "metals.javaHome" = "${pkgs.graalvmPackages.graalvm-ce}";
           "metals.serverVersion" = "${pkgs.metals.version}";
 
@@ -234,7 +229,7 @@ in
 
           "java.configuration.runtimes" = [
             {
-              "name" = "Main JDK";
+              "name" = "JavaSE-25";
               "path" = "${cfg-packages.jdk-main}";
               default = true;
             }
