@@ -729,11 +729,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789900527,
-        "narHash": "sha256-Mft/9XyBnSiiZJKz0zc6gaSIJ+kxFeCLdxyiyFjBL2k=",
+        "lastModified": 1789926283,
+        "narHash": "sha256-NKLn1Z6f49Cr5Z1ixBbs0t/dfP4sCZ5q/LVz/nkGfuE=",
         "owner": "pshirshov",
         "repo": "mqtt-controller",
-        "rev": "b12ba0d0240a659a0c2b6156deb3553be3c17603",
+        "rev": "c57405c5cc1a8859d2e26fb6edc82991215e387f",
         "type": "github"
       },
       "original": {
