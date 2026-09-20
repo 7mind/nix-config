@@ -220,7 +220,7 @@ in
           "xml.server.workDir" = "~/.cache/lemminx";
 
           "update.mode" = "none";
-          "extensions.autoUpdate" = false;
+          "extensions.autoUpdate" = "off";
           "extensions.autoCheckUpdates" = false;
 
           "makefile.configureOnOpen" = true;
