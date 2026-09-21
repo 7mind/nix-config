@@ -1,4 +1,20 @@
-{ pkgs, lib, config, ... }: {
+{ pkgs, lib, config, ... }:
+
+let
+  zludaRun = pkgs.writeShellApplication {
+    name = "zluda-run";
+    text = ''
+      if (( $# == 0 )); then
+        echo "Usage: zluda-run PROGRAM [ARGUMENT ...]" >&2
+        exit 64
+      fi
+
+      export LD_LIBRARY_PATH="${config.hardware.amdgpu.zluda.package}/lib''${LD_LIBRARY_PATH:+:''${LD_LIBRARY_PATH}}"
+      exec "$@"
+    '';
+  };
+in
+{
   options = {
     smind.hw.amd.rocm.enable = lib.mkOption {
       type = lib.types.bool;
@@ -54,6 +70,8 @@
       radeontop
       radeontools
 
+    ] ++ lib.optionals config.hardware.amdgpu.zluda.enable [
+      zludaRun
     ] ++ (if config.smind.hw.amd.rocm.enable then [
       rocmPackages.rocminfo
       rocmPackages.rocm-smi
