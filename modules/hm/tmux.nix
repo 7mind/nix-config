@@ -24,6 +24,12 @@ let
     type = "Memory";
     format = "{percentage}";
   };
+  networkTrafficConfig = usageConfig {
+    type = "NetIO";
+    format = "↓{rx-size} ↑{tx-size}";
+    defaultRouteOnly = true;
+    waitTime = 1000;
+  };
   toggleHtop = pkgs.writeShellApplication {
     name = "tmux-toggle-htop";
     runtimeInputs = [ pkgs.tmux pkgs.htop ];
@@ -42,6 +48,27 @@ let
         tmux set-option -qu -t "$session_id" @smind_htop_window
         window_id="$(tmux new-window -P -F '#{window_id}' -t "$session_id:" -n htop htop)"
         tmux set-option -q -t "$session_id" @smind_htop_window "$window_id"
+      fi
+    '';
+  };
+  toggleBandwhich = pkgs.writeShellApplication {
+    name = "tmux-toggle-bandwhich";
+    runtimeInputs = [ pkgs.tmux ];
+    text = ''
+      session_id="$(tmux display-message -p '#{session_id}')"
+      window_id="$(tmux show-options -qv -t "$session_id" @smind_bandwhich_window)"
+      existing_window_id=""
+      if [[ -n "$window_id" ]]; then
+        existing_window_id="$(tmux list-windows -t "$session_id" -f "#{==:#{window_id},$window_id}" -F '#{window_id}')"
+      fi
+
+      if [[ "$existing_window_id" == "$window_id" ]] && [[ -n "$window_id" ]]; then
+        tmux kill-window -t "$window_id"
+        tmux set-option -qu -t "$session_id" @smind_bandwhich_window
+      else
+        tmux set-option -qu -t "$session_id" @smind_bandwhich_window
+        window_id="$(tmux new-window -P -F '#{window_id}' -t "$session_id:" -n bandwhich bandwhich)"
+        tmux set-option -q -t "$session_id" @smind_bandwhich_window "$window_id"
       fi
     '';
   };
@@ -138,7 +165,8 @@ in
         set -g status-interval 5
         set -g status-right-length 100
         bind-key -n MouseDown1Control0 run-shell ${lib.getExe toggleHtop}
-        set -gF @_custom_status_right "#[fg=#{@thm_fg},bg=#{@thm_surface_0}] ##(whoami)@##h | #[range=control|0] ##(${lib.getExe pkgs.fastfetch-minimal} --config ${cpuUsageConfig})#[norange] | #[range=control|0] ##(${lib.getExe pkgs.fastfetch-minimal} --config ${memoryUsageConfig})#[norange] "
+        bind-key -n MouseDown1Control1 run-shell ${lib.getExe toggleBandwhich}
+        set -gF @_custom_status_right "#[fg=#{@thm_fg},bg=#{@thm_surface_0}] ##(whoami)@##h | #[range=control|0] ##(${lib.getExe pkgs.fastfetch-minimal} --config ${cpuUsageConfig})#[norange] | #[range=control|0] ##(${lib.getExe pkgs.fastfetch-minimal} --config ${memoryUsageConfig})#[norange] | #[range=control|1]󰾆 ##(${lib.getExe pkgs.fastfetch-minimal} --config ${networkTrafficConfig})#[norange] "
         set -g status-right "#{?#{e|<|:#{client_width},80},,#{E:@_custom_status_right}}"
       '';
     };
