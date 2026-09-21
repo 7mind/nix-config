@@ -96,7 +96,7 @@ in
           pkgs.open-vsx.jeanp413.open-remote-ssh
           pkgs.open-vsx.devmikeua.mikrotik-routeros-script
           pkgs.open-vsx.rszyma.vscode-kanata
-          pkgs.open-vsx.toppymicroservices.vscode-pdfviewer-secure
+          pkgs.vscode-marketplace-release.toppymicroservices.vscode-pdfviewer-secure
           silurus.office-open-xml-viewer
 
           thenuprojectcontributors.vscode-nushell-lang
