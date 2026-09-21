@@ -26,9 +26,17 @@ let
   };
   networkTrafficConfig = usageConfig {
     type = "NetIO";
-    format = "↓{rx-size} ↑{tx-size}";
+    format = "{rx-bytes} {tx-bytes}";
     defaultRouteOnly = true;
     waitTime = 1000;
+  };
+  networkTraffic = pkgs.writeShellApplication {
+    name = "tmux-network-traffic";
+    runtimeInputs = [ pkgs.fastfetch-minimal pkgs.gawk ];
+    text = ''
+      export LC_ALL=C
+      fastfetch --config ${networkTrafficConfig} | awk '{ printf "↓%7.2f ↑%7.2f", $1 / (1024 * 1024), $2 / (1024 * 1024) }'
+    '';
   };
   toggleHtop = pkgs.writeShellApplication {
     name = "tmux-toggle-htop";
@@ -166,7 +174,7 @@ in
         set -g status-right-length 100
         bind-key -n MouseDown1Control0 run-shell ${lib.getExe toggleHtop}
         bind-key -n MouseDown1Control1 run-shell ${lib.getExe toggleBandwhich}
-        set -gF @_custom_status_right "#[fg=#{@thm_fg},bg=#{@thm_surface_0}] ##(whoami)@##h | #[range=control|0] ##(${lib.getExe pkgs.fastfetch-minimal} --config ${cpuUsageConfig})#[norange] | #[range=control|0] ##(${lib.getExe pkgs.fastfetch-minimal} --config ${memoryUsageConfig})#[norange] | #[range=control|1]󰾆 ##(${lib.getExe pkgs.fastfetch-minimal} --config ${networkTrafficConfig})#[norange] "
+        set -gF @_custom_status_right "#[fg=#{@thm_fg},bg=#{@thm_surface_0}] ##(whoami)@##h | #[range=control|0] ##(${lib.getExe pkgs.fastfetch-minimal} --config ${cpuUsageConfig})#[norange] | #[range=control|0] ##(${lib.getExe pkgs.fastfetch-minimal} --config ${memoryUsageConfig})#[norange] | #[range=control|1]󰾆 ##(${lib.getExe networkTraffic})#[norange] "
         set -g status-right "#{?#{e|<|:#{client_width},80},,#{E:@_custom_status_right}}"
       '';
     };
