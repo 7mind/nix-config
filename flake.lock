@@ -729,11 +729,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790000372,
-        "narHash": "sha256-01wPVPXxAN4FIFuFxd4kXDzN7lYIm50xEiFIMCFpiuU=",
+        "lastModified": 1790001571,
+        "narHash": "sha256-BO7JSsRwf6wjD0JpCSwz1XqHaypEU/8EHT63AgHEDeY=",
         "owner": "pshirshov",
         "repo": "mqtt-controller",
-        "rev": "01ef79dfe97f85993cb80df9b8bcb272fa74de47",
+        "rev": "7e9eb3b58b329daf624494652b5dbd03377f3166",
         "type": "github"
       },
       "original": {
@@ -1038,11 +1038,11 @@
     },
     "nixpkgs_7": {
       "locked": {
-        "lastModified": 1778869304,
-        "narHash": "sha256-30sZNZoA1cqF5JNO9fVX+wgiQYjB7HJqqJ4ztCDeBZE=",
+        "lastModified": 1789921291,
+        "narHash": "sha256-Ft/BRnIqw1MywFoXydKobjjWmDFgDdYtSpJliE8+yUw=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "d233902339c02a9c334e7e593de68855ad26c4cb",
+        "rev": "44a91898084f46797b5fac650c7e8c9ac38c43d4",
         "type": "github"
       },
       "original": {
@@ -1638,11 +1638,11 @@
         "nixpkgs": "nixpkgs_7"
       },
       "locked": {
-        "lastModified": 1789777217,
-        "narHash": "sha256-YW3Iz9aJg/F0sX3DFW/9T+F2qhXT55CRcLIiYisWg3E=",
+        "lastModified": 1790005838,
+        "narHash": "sha256-M26d3GYRemx4r/YYIyCpd6zgZkbtCaOIZeo1cDHiXdc=",
         "owner": "pshirshov",
         "repo": "zimt",
-        "rev": "3e58a2192a39ddaa7eda0b7996541dca5bcd92e6",
+        "rev": "fd8d3a0cd8deb6315c265666a5420d7d59aa0177",
         "type": "github"
       },
       "original": {
