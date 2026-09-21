@@ -28,6 +28,13 @@ in
 
   environment.systemPackages = [ llamaCppRocm ];
 
+  hardware.amdgpu.zluda.enable = true;
+
+  programs.nix-required-mounts = {
+    enable = true;
+    presets.zluda.enable = true;
+  };
+
   virtualisation.vmware.host.enable = true;
 
   # VMware hardcodes paths to /usr/bin for various utilities
