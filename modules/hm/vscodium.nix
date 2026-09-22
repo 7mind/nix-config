@@ -1,7 +1,31 @@
-{ config, lib, pkgs, cfg-packages, cfg-meta, outerConfig, override_pkg, cfg-args, ... }:
+{ config, lib, pkgs, cfg-packages, cfg-meta, outerConfig, cfg-args, ... }:
 
 let
   defaultTerminalFontFamily = "'${outerConfig.smind.fonts.terminal}'";
+  vscodiumLdLibraries = [ pkgs.icu pkgs.openssl ];
+  archiveAddFile = ''n.addFile(a.localPath,a.path)'';
+  ownerWriteBit = 128; # S_IWUSR (octal 0200)
+  ownerWritableArchiveAddFile =
+    ''n.addFile(a.localPath,a.path,{mode:require("fs").statSync(a.localPath).mode|${toString ownerWriteBit}})'';
+  vscodiumPackage = pkgs.vscodium.overrideAttrs (oldAttrs: {
+    buildInputs = (oldAttrs.buildInputs or [ ]) ++ vscodiumLdLibraries;
+    nativeBuildInputs = (oldAttrs.nativeBuildInputs or [ ]) ++ [ pkgs.makeWrapper ];
+    postFixup = ''
+      ${lib.optionalString cfg-meta.isLinux ''
+        # Remote extension installation preserves archive modes, then rewrites
+        # package.json. Nix store mode 0444 therefore fails with EACCES.
+        for bundle in \
+          "$out/lib/vscode/resources/app/out/vs/code/node/cliProcessMain.js" \
+          "$out/lib/vscode/resources/app/out/vs/code/electron-utility/sharedProcess/sharedProcessMain.js"
+        do
+          substituteInPlace "$bundle" \
+            --replace-fail '${archiveAddFile}' '${ownerWritableArchiveAddFile}'
+        done
+      ''}
+      wrapProgram $out/bin/codium \
+        --set LD_LIBRARY_PATH ${lib.makeLibraryPath vscodiumLdLibraries}
+    '';
+  });
 in
 {
   options = {
@@ -62,11 +86,7 @@ in
       {
         enable = true;
         mutableExtensionsDir = config.smind.hm.vscodium.mutableConfig;
-        package = override_pkg {
-          pkg = pkgs.vscodium;
-          path = "bin/codium";
-          ld-libs = [ pkgs.icu pkgs.openssl ];
-        };
+        package = vscodiumPackage;
       }
 
       (lib.mkIf (!config.smind.hm.vscodium.mutableConfig) {
