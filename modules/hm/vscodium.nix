@@ -3,10 +3,12 @@
 let
   defaultTerminalFontFamily = "'${outerConfig.smind.fonts.terminal}'";
   vscodiumLdLibraries = [ pkgs.icu pkgs.openssl ];
+  archiveFsImport = ''import{createWriteStream as'';
+  ownerWritableArchiveFsImport = ''import{statSync as nixStatSync,createWriteStream as'';
   archiveAddFile = ''n.addFile(a.localPath,a.path)'';
   ownerWriteBit = 128; # S_IWUSR (octal 0200)
   ownerWritableArchiveAddFile =
-    ''n.addFile(a.localPath,a.path,{mode:require("fs").statSync(a.localPath).mode|${toString ownerWriteBit}})'';
+    ''n.addFile(a.localPath,a.path,{mode:nixStatSync(a.localPath).mode|${toString ownerWriteBit}})'';
   vscodiumPackage = pkgs.vscodium.overrideAttrs (oldAttrs: {
     buildInputs = (oldAttrs.buildInputs or [ ]) ++ vscodiumLdLibraries;
     nativeBuildInputs = (oldAttrs.nativeBuildInputs or [ ]) ++ [ pkgs.makeWrapper ];
@@ -19,6 +21,7 @@ let
           "$out/lib/vscode/resources/app/out/vs/code/electron-utility/sharedProcess/sharedProcessMain.js"
         do
           substituteInPlace "$bundle" \
+            --replace-fail '${archiveFsImport}' '${ownerWritableArchiveFsImport}' \
             --replace-fail '${archiveAddFile}' '${ownerWritableArchiveAddFile}'
         done
       ''}
