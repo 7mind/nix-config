@@ -9,6 +9,40 @@ let
   ownerWriteBit = 128; # S_IWUSR (octal 0200)
   ownerWritableArchiveAddFile =
     ''n.addFile(a.localPath,a.path,{mode:nixStatSync(a.localPath).mode|${toString ownerWriteBit}})'';
+  extensionId = extension: "${extension.vscodeExtPublisher}.${extension.vscodeExtName}";
+  remoteSshExtension = pkgs.open-vsx.jeanp413.open-remote-ssh;
+  managedExtensions = with pkgs.vscode-marketplace; with pkgs.vscode-extensions; [
+    codezombiech.gitignore
+
+    scalameta.metals
+    scala-lang.scala
+
+    jnoortheen.nix-ide
+    mkhl.direnv
+
+    mads-hartmann.bash-ide-vscode
+
+    dbaeumer.vscode-eslint
+
+    redhat.vscode-xml
+    redhat.vscode-yaml
+    redhat.java
+
+    ocamllabs.ocaml-platform
+
+    septimalmind.baboon-vscode
+    septimalmind.idealingua1
+    pkgs.open-vsx.septimalmind.grandmaster-builds
+
+    remoteSshExtension
+    pkgs.open-vsx.devmikeua.mikrotik-routeros-script
+    pkgs.open-vsx.rszyma.vscode-kanata
+    pkgs.vscode-marketplace-release.toppymicroservices.vscode-pdfviewer-secure
+    silurus.office-open-xml-viewer
+  ];
+  remoteDefaultExtensionIds = builtins.filter
+    (id: id != extensionId remoteSshExtension)
+    (map extensionId managedExtensions);
   vscodiumPackage = pkgs.vscodium.overrideAttrs (oldAttrs: {
     buildInputs = (oldAttrs.buildInputs or [ ]) ++ vscodiumLdLibraries;
     nativeBuildInputs = (oldAttrs.nativeBuildInputs or [ ]) ++ [ pkgs.makeWrapper ];
@@ -93,39 +127,10 @@ in
       }
 
       (lib.mkIf (!config.smind.hm.vscodium.mutableConfig) {
-        profiles.default.extensions = with pkgs.vscode-marketplace; with pkgs.vscode-extensions; [
-          codezombiech.gitignore
-
-          scalameta.metals
-          scala-lang.scala
-
-          jnoortheen.nix-ide
-          mkhl.direnv
-
-          mads-hartmann.bash-ide-vscode
-
-          dbaeumer.vscode-eslint
-
-          redhat.vscode-xml
-          redhat.vscode-yaml
-          redhat.java
-
-          ocamllabs.ocaml-platform
-
-          septimalmind.baboon-vscode
-          septimalmind.idealingua1
-          pkgs.open-vsx.septimalmind.grandmaster-builds
-
-          pkgs.open-vsx.jeanp413.open-remote-ssh
-          pkgs.open-vsx.devmikeua.mikrotik-routeros-script
-          pkgs.open-vsx.rszyma.vscode-kanata
-          pkgs.vscode-marketplace-release.toppymicroservices.vscode-pdfviewer-secure
-          silurus.office-open-xml-viewer
-
-          thenuprojectcontributors.vscode-nushell-lang
-        ];
+        profiles.default.extensions = managedExtensions;
 
         profiles.default.userSettings = {
+          "remote.SSH.defaultExtensions" = remoteDefaultExtensionIds;
           "window.titleBarStyle" = "native";
           "workbench.startupEditor" = "newUntitledFile";
           "ooxmlViewer.useGoogleFonts" = false;
