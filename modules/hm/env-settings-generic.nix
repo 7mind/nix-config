@@ -143,8 +143,8 @@
         enter_accept = false;
         prefers_reduced_motion = true;
 
-        smart_sort = true;
-        search_mode = "skim";
+        smart_sort = false;
+        search_mode = "fulltext";
         style = "full";
         inline_height = 0; # use alternate terminal mode
       };
