@@ -173,11 +173,11 @@
         "openai-codex-plugin": "openai-codex-plugin"
       },
       "locked": {
-        "lastModified": 1790113553,
-        "narHash": "sha256-nr1sbLgAUXYJSffTuxRxclOlHB9GnKlbDc7WwTFQ6EU=",
+        "lastModified": 1790174209,
+        "narHash": "sha256-Ti7YF6WBXBBIeetPZYLgRYkqwWUY/5oPye+6fGWhQvA=",
         "owner": "7mind",
         "repo": "cq",
-        "rev": "df88248c8f581b51c026abeed3c4e71d57b2c962",
+        "rev": "8459551a6f563bdc1bef5ab60b3b7f347cdfac39",
         "type": "github"
       },
       "original": {
@@ -1481,11 +1481,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1787687279,
-        "narHash": "sha256-NvU/+e8AvgwlKdHS/0h0SDxb0+I8SzR7KRRO+Vg86b4=",
+        "lastModified": 1790183411,
+        "narHash": "sha256-FcXSTqr2PlvMViNXT/OyoIo6fnZ8llRbRmxjRXtjePg=",
         "owner": "7mind",
         "repo": "touchpad-gesture-customization-app-expose",
-        "rev": "25586d5538346925bca3b9fc5883df8e7bede150",
+        "rev": "5ec92fcbf1e6f5000532dd2c864b0048865f0b48",
         "type": "github"
       },
       "original": {

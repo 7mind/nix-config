@@ -138,6 +138,7 @@ in
                 # so 3-finger stays free for linux-3-finger-drag.
                 overview-navigation-states = "APPLICATION_OVERVIEW_ON_DOWN";
                 vertical-swipe-4-fingers-gesture = "OVERVIEW_NAVIGATION";
+                group-overview-by-application = true;
               }
               # Move GNOME's default 3-finger swipe gestures to NONE, freeing
               # 3-finger input for linux-3-finger-drag.
