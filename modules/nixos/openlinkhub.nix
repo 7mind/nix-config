@@ -35,6 +35,17 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    environment.systemPackages = [
+      package
+      (pkgs.makeDesktopItem {
+        name = "openlinkhub";
+        desktopName = "OpenLinkHub";
+        exec = "${pkgs.xdg-utils}/bin/xdg-open http://127.0.0.1:27003/";
+        icon = "${package}/opt/OpenLinkHub/static/img/192.png";
+        categories = [ "Settings" ];
+      })
+    ];
+
     users.groups.openlinkhub = { };
     users.users.openlinkhub = {
       isSystemUser = true;
