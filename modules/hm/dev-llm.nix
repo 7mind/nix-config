@@ -46,16 +46,6 @@ in
       fi
     '';
 
-    # Add the Xiaomi MiMo provider to Pi's package set. Registers the
-    # `xiaomi-mimo` provider (models mimo-v2-pro/omni/tts) against the
-    # OpenAI-compatible endpoint; auth via `/login xiaomi-mimo` OAuth or the
-    # XIAOMI_MIMO_API_KEY env var. The list merges with cq's base packages
-    # (pi-search-hub + any enabled inference-provider packages).
-    # Self-contained: its only imports are `import type` of the host pi API
-    # packages (erased at runtime), so Pi's managed --legacy-peer-deps install
-    # resolves it with no extra runtime deps.
-    programs.pi.settings.packages = [ "npm:pi-xiaomi-mimo-provider" ];
-
     # GPU passthrough for the yolo sandbox, wired from this host's detected GPU
     # vendor(s) (cq no longer builds this in; the `--gpu`/`--no-gpu`/`--no-dev`
     # CLI flags are gone — GPU is bound statically whenever a vendor is present,
