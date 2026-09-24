@@ -19,6 +19,13 @@ THISHOST="$(hostname -s)"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOTS=/nix/var/nix/gcroots/my-builds
 
+# The entry point may be invoked from a parent directory where .envrc is not
+# active. Re-enter in this flake's dev shell before any setup work begins.
+if [[ "${NIX_CONFIG_DEV_SHELL:-}" != 1 ]]; then
+    cd "$SCRIPT_DIR"
+    exec nix develop ".?submodules=1" --command env NIX_CONFIG_DEV_SHELL=1 "$SCRIPT_DIR/setup" "$@"
+fi
+
 [[ -f "$SCRIPT_DIR/private/setup-env" ]] && source "$SCRIPT_DIR/private/setup-env"
 
 HOSTS=()

@@ -247,6 +247,9 @@
             flexisip-file-transfer = import ./tests/flexisip.nix { inherit pkgs; };
           };
       devShells.default = pkgs.mkShell {
+        shellHook = ''
+          export NIX_CONFIG_DEV_SHELL=1
+        '';
         packages = with pkgs; [
           # Plain `agenix` can't see host pubkeys from our `private/` git
           # submodule without `--extra-flake-params '?submodules=1'`; without
