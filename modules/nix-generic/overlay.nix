@@ -2,7 +2,21 @@
 
 {
   nixpkgs.overlays = [
+    (import ../../pkg/openlinkhub/overlay.nix)
     (final: prev: {
+      # NetRocks (via Samba) and the xdg-utils wrapper pull X11 into a TTY build.
+      far2l-noui = (prev.far2l.override {
+        withGUI = false;
+        withTTYX = false;
+        withNetRocks = false;
+      }).overrideAttrs (old: let
+        xdgSuffix = "\\\n  --suffix PATH : ${prev.lib.makeBinPath [ prev.xdg-utils ]}";
+        cleanedPostInstall = builtins.replaceStrings [ xdgSuffix ] [ "" ] old.postInstall;
+      in {
+        postInstall = assert builtins.stringLength cleanedPostInstall < builtins.stringLength old.postInstall;
+          cleanedPostInstall;
+      });
+
       # ripgrep's `misc::compressed_{brotli,lz4,zstd}` integration tests fail
       # with exit 2 / empty stderr when an aarch64 build runs under qemu-user
       # binfmt on an x86_64 remote builder (nix sees buildPlatform ==

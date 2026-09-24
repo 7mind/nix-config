@@ -35,6 +35,7 @@
 
     environment.systemPackages = with pkgs; [
       mc
+      (if config.smind.isDesktop then far2l else far2l-noui)
       nnn
 
       nano

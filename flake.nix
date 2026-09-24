@@ -234,7 +234,7 @@
     // inputs.flake-utils.lib.eachDefaultSystem (system: rec {
       pkgs = import inputs.nixpkgs {
         localSystem = system;
-        overlays = [ inputs.agenix-rekey.overlays.default ];
+        overlays = [ inputs.agenix-rekey.overlays.default (import ./pkg/openlinkhub/overlay.nix) ];
       };
       checks =
         inputs.nixpkgs.lib.optionalAttrs
@@ -245,6 +245,7 @@
           {
             asterisk-linphone-fallback = import ./tests/asterisk-linphone-fallback.nix { inherit pkgs; };
             flexisip-file-transfer = import ./tests/flexisip.nix { inherit pkgs; };
+            openlinkhub = import ./tests/openlinkhub.nix { inherit pkgs; };
           };
       devShells.default = pkgs.mkShell {
         shellHook = ''

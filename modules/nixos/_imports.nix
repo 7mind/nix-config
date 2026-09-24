@@ -59,6 +59,7 @@
   ./nix-ld.nix
   ./nushell.nix
   ./oracle-cloud.nix
+  ./openlinkhub.nix
   ./overlay.nix
   ./pantheon.nix
   ./pylontech.nix
