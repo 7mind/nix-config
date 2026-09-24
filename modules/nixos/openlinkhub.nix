@@ -28,7 +28,11 @@ let
   '';
 in
 {
-  options.services.openlinkhub.enable = lib.mkEnableOption "OpenLinkHub device controller and WebUI";
+  options.services.openlinkhub.enable = lib.mkOption {
+    type = lib.types.bool;
+    default = lib.attrByPath [ "smind" "isDesktop" ] false config;
+    description = "Enable OpenLinkHub device controller and WebUI";
+  };
 
   config = lib.mkIf cfg.enable {
     users.groups.openlinkhub = { };
