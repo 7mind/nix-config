@@ -162,8 +162,6 @@
     },
     "cq": {
       "inputs": {
-        "claude-code-sandbox": "claude-code-sandbox",
-        "codegraph": "codegraph",
         "flake-utils": [
           "flake-utils"
         ],
@@ -171,14 +169,14 @@
           "nixpkgs"
         ],
         "nixpkgs-bun": "nixpkgs-bun",
-        "openai-codex-plugin": "openai-codex-plugin"
+        "ponygirls": "ponygirls"
       },
       "locked": {
-        "lastModified": 1790281438,
-        "narHash": "sha256-eypSUHCf/VWLQ6ypBWArWEUVcymPBX2Q/+LMw2HlGbk=",
+        "lastModified": 1790285137,
+        "narHash": "sha256-NEHvsMvX2K/mZkm0q15mBsC7nftKtWg57wktZG0rzVM=",
         "owner": "7mind",
         "repo": "cq",
-        "rev": "2fca9738fc85349e816cc931b3740da4a6ed147f",
+        "rev": "68d190e3c330aa2eca2d1bb977a11d7daf45ed75",
         "type": "github"
       },
       "original": {
@@ -1125,6 +1123,34 @@
       "original": {
         "owner": "pjones",
         "repo": "plasma-manager",
+        "type": "github"
+      }
+    },
+    "ponygirls": {
+      "inputs": {
+        "claude-code-sandbox": "claude-code-sandbox",
+        "codegraph": "codegraph",
+        "flake-utils": [
+          "cq",
+          "flake-utils"
+        ],
+        "nixpkgs": [
+          "cq",
+          "nixpkgs"
+        ],
+        "openai-codex-plugin": "openai-codex-plugin"
+      },
+      "locked": {
+        "lastModified": 1790283129,
+        "narHash": "sha256-B3CNr1PPjSy9M/Rv045uKLKDFpQJWzzQnQKni2OxcwY=",
+        "owner": "7mind",
+        "repo": "ponygirls",
+        "rev": "eb436e4d6e22f9cecd3b4c2928c9c3c7dea7b67b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "7mind",
+        "repo": "ponygirls",
         "type": "github"
       }
     },
