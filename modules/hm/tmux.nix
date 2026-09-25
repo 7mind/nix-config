@@ -122,7 +122,7 @@ in
         run-shell ${pkgs.tmuxPlugins.catppuccin}/share/tmux-plugins/catppuccin/catppuccin.tmux
 
         # Darken inactive panes while preserving the active pane's terminal background.
-        set -gF window-style "bg=#{@thm_mantle}"
+        set -gF window-style "bg=#{@thm_crust}"
         set -g window-active-style "bg=terminal"
 
         # Remove stale hooks and variables from previous config versions
