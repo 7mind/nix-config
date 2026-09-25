@@ -8,7 +8,19 @@
 # To bump to a newer master commit: update `version`, `rev` and `hash` below.
 # `hash` is the NAR hash of the fetched tree as reported by:
 #   nix flake prefetch github:searxng/searxng/<rev> --json
-final: prev: {
+final: prev:
+let
+  # Keep this aligned with upstream requirements.txt; nixpkgs currently lags.
+  curlCffi = final.python3.pkgs.curl-cffi.overridePythonAttrs (previousAttrs: rec {
+    version = "0.16.3";
+
+    src = previousAttrs.src.override {
+      tag = "v${version}";
+      hash = "sha256-KagVuHhsHmA5/CY/1y5GLOFXx2ETPud6xk2vn4sG1hI=";
+    };
+  });
+in
+{
   searxng = prev.searxng.overrideAttrs (finalAttrs: previousAttrs: {
     version = "0-unstable-2026-09-25";
 
@@ -22,7 +34,7 @@ final: prev: {
       dependencies = with final.python3.pkgs; [
         babel
         certifi
-        curl-cffi
+        curlCffi
         flask
         flask-babel
         isodate

@@ -119,6 +119,10 @@ in
         set -g @catppuccin_status_right_separator ""
         set -g @catppuccin_status_connect_separator "no"
 
+        set -g @catppuccin_pane_border_style "fg=#{@thm_surface_1}"
+        set -g @catppuccin_pane_active_border_style "fg=#{@thm_mauve}"
+        set -g pane-border-indicators both
+
         run-shell ${pkgs.tmuxPlugins.catppuccin}/share/tmux-plugins/catppuccin/catppuccin.tmux
 
         # Remove stale hooks and variables from previous config versions
