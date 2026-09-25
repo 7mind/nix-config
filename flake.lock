@@ -169,7 +169,9 @@
           "nixpkgs"
         ],
         "nixpkgs-bun": "nixpkgs-bun",
-        "ponygirls": "ponygirls"
+        "ponygirls": [
+          "ponygirls"
+        ]
       },
       "locked": {
         "lastModified": 1790354525,
@@ -1131,21 +1133,19 @@
         "claude-code-sandbox": "claude-code-sandbox",
         "codegraph": "codegraph",
         "flake-utils": [
-          "cq",
           "flake-utils"
         ],
         "nixpkgs": [
-          "cq",
           "nixpkgs"
         ],
         "openai-codex-plugin": "openai-codex-plugin"
       },
       "locked": {
-        "lastModified": 1790283129,
-        "narHash": "sha256-B3CNr1PPjSy9M/Rv045uKLKDFpQJWzzQnQKni2OxcwY=",
+        "lastModified": 1790357867,
+        "narHash": "sha256-vCy/emn8eUKoyuFhVbUrvQucfGxGbEsQzuKHN6+vcMg=",
         "owner": "7mind",
         "repo": "ponygirls",
-        "rev": "eb436e4d6e22f9cecd3b4c2928c9c3c7dea7b67b",
+        "rev": "051f80d71933cb8eff3c61ee2be848f73e26353f",
         "type": "github"
       },
       "original": {
@@ -1271,6 +1271,7 @@
         "nixpkgs": "nixpkgs_6",
         "noctalia": "noctalia",
         "plasma-manager": "plasma-manager",
+        "ponygirls": "ponygirls",
         "pylontech": "pylontech",
         "qendercore-adapter": "qendercore-adapter",
         "rust-overlay": "rust-overlay_3",

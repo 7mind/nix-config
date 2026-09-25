@@ -101,6 +101,7 @@ rec {
             inputs.home-manager.nixosModules.home-manager
             inputs.agenix.nixosModules.default
             inputs.agenix-rekey.nixosModules.default
+            inputs.ponygirls.nixosModules.podman
           ] ++ pkgs.lib.optional (inputs ? determinate) inputs.determinate.nixosModules.default ++ [
             inputs.kanata-switcher.nixosModules.default
             inputs.noctalia.nixosModules.default

@@ -25,7 +25,6 @@
   ./gatus.nix
   ./framework-laptop.nix
   ./cups.nix
-  ./docker.nix
   ./env-settings-linux-desktop.nix
   ./env-settings-linux.nix
   ./gnome.nix

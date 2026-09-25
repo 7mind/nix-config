@@ -1,14 +1,7 @@
 # Supplies host-only facts that the portable cq module cannot access.
-{ config, lib, pkgs, cfg-meta, outerConfig, inputs, ... }:
+{ config, lib, pkgs, outerConfig, inputs, ... }:
 let
   cfg = config.smind.hm.dev.llm;
-
-  rootlessPodmanEnabled =
-    cfg-meta.isLinux
-    && (outerConfig.smind.containers.docker.enable or false)
-    && (outerConfig.smind.containers.docker.rootless.enable or false);
-  rootlessPodmanSocketPathValue = outerConfig.smind.containers.docker.rootless.llmSocketPath or null;
-  rootlessPodmanSocketUriValue = outerConfig.smind.containers.docker.rootless.llmSocketUri or null;
 
   gpu = {
     nvidia = outerConfig.smind.hw.nvidia.enable or false;
@@ -111,20 +104,5 @@ in
       tags = [ "ollama" ];
       when = true;
     };
-
-    # Rootless-Podman socket: fail-fast if enabled but the socket path/uri
-    # were not provided by the host config.
-    smind.hm.dev.llm.podman.socketPath =
-      if rootlessPodmanEnabled then
-        (if rootlessPodmanSocketPathValue == null
-        then throw "smind.containers.docker.rootless.llmSocketPath must be set when rootless Podman is enabled"
-        else rootlessPodmanSocketPathValue)
-      else null;
-    smind.hm.dev.llm.podman.socketUri =
-      if rootlessPodmanEnabled then
-        (if rootlessPodmanSocketUriValue == null
-        then throw "smind.containers.docker.rootless.llmSocketUri must be set when rootless Podman is enabled"
-        else rootlessPodmanSocketUriValue)
-      else null;
   };
 }

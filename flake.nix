@@ -4,6 +4,12 @@
 
     flake-utils.url = "github:numtide/flake-utils";
 
+    ponygirls = {
+      url = "github:7mind/ponygirls";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
+    };
+
     lanzaboote.url = "github:nix-community/lanzaboote";
     lanzaboote.inputs.nixpkgs.follows = "nixpkgs";
 
@@ -147,6 +153,7 @@
       url = "github:7mind/cq";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
+      inputs.ponygirls.follows = "ponygirls";
     };
 
     # wanbond — resilient WAN-bonding tunnel with adaptive FEC (the "fecalia"
