@@ -25,12 +25,6 @@ in
     # verbose MCP server stays proxied.
     smind.hm.dev.llm.pi.mcpDirectTools = [ "codegraph" "ledger" ];
 
-    # Default Pi to maximum reasoning depth. Merges into the cq-managed
-    # programs.pi.settings (which sets defaultProvider/model but not this).
-    # Pi clamps the level per model's thinkingLevelMap, so it is safe across
-    # providers selected at runtime.
-    programs.pi.settings.defaultThinkingLevel = "xhigh";
-
     home.activation.removeObsoleteClaudePluginBackup = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
       backup=${lib.escapeShellArg "${config.programs.claude-code.configDir}/skills/claude-code-home-manager.hmbak"}
       manifest="$backup/.claude-plugin/plugin.json"
