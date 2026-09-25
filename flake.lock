@@ -172,11 +172,11 @@
         "ponygirls": "ponygirls"
       },
       "locked": {
-        "lastModified": 1790341509,
-        "narHash": "sha256-rWG2Dfa8HRBzBnOi7sNCXP14FtF6omYUNpeyFX6WNiQ=",
+        "lastModified": 1790351631,
+        "narHash": "sha256-IDN2aAHdINjQtwMk4b3wDJDYXUssS9XlOIQwZYCUv3M=",
         "owner": "7mind",
         "repo": "cq",
-        "rev": "f6c6d566da487ee1d8db4063576cfcf35927d256",
+        "rev": "a12fad499918165b1259428165aebabfb88acbab",
         "type": "github"
       },
       "original": {
