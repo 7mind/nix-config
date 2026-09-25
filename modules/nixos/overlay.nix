@@ -281,5 +281,6 @@
 
       }
     )
+    (import ../../pkg/searxng/overlay.nix)
   ];
 }
