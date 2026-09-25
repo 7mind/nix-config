@@ -4,6 +4,10 @@
   nixpkgs.overlays = [
     (import ../../pkg/openlinkhub/overlay.nix)
     (final: prev: {
+      # Used by shared hm modules (modules/hm/tmux.nix) on both Linux and Darwin,
+      # so it lives in the shared overlay, not modules/nixos/overlay.nix.
+      fastfetch-minimal = prev.callPackage ../../pkg/fastfetch-minimal { };
+
       # NetRocks (via Samba) and the xdg-utils wrapper pull X11 into a TTY build.
       far2l-noui = (prev.far2l.override {
         withGUI = false;

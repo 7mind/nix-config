@@ -28,6 +28,15 @@ fi
 
 [[ -f "$SCRIPT_DIR/private/setup-env" ]] && source "$SCRIPT_DIR/private/setup-env"
 
+# agenix-rekey reads the master identity at the path baked into the *target*
+# host's config, which follows the target platform (modules/nix-generic/age.nix):
+# darwin targets name /tmp/age-master-key. When rekeying from Linux, mirror the
+# decrypted key there — same mechanism as edit-secret.
+AGE_COMPATIBILITY_KEY=""
+if [[ "$(uname -s)" != "Darwin" && "$AGE_RUNTIME_KEY" != "/tmp/age-master-key" ]]; then
+    AGE_COMPATIBILITY_KEY="/tmp/age-master-key"
+fi
+
 HOSTS=()
 BUILD_ON_HOSTS=()
 BUILD_ON_ARGS=()
@@ -574,15 +583,17 @@ decrypt_tpm_key() {
 
 get_master_identity() {
     AGE_DECRYPTED_KEY="$AGE_RUNTIME_KEY"
-    trap 'rm -f "$AGE_DECRYPTED_KEY"' EXIT
+    trap 'cleanup_decrypted_key' EXIT
 
     if [[ "$(uname -s)" != "Darwin" ]]; then
         if decrypt_tpm_key; then
+            install_compatibility_key
             return 0
         fi
     fi
 
     if decrypt_password_key; then
+        install_compatibility_key
         return 0
     fi
 
@@ -592,7 +603,21 @@ get_master_identity() {
     return 1
 }
 
+install_compatibility_key() {
+    if [[ -z "$AGE_COMPATIBILITY_KEY" ]]; then
+        return 0
+    fi
+    if [[ -e "$AGE_COMPATIBILITY_KEY" ]]; then
+        echo "Error: refusing to replace existing compatibility path: $AGE_COMPATIBILITY_KEY" >&2
+        return 1
+    fi
+    ln -s -- "$AGE_DECRYPTED_KEY" "$AGE_COMPATIBILITY_KEY"
+}
+
 cleanup_decrypted_key() {
+    if [[ -n "$AGE_COMPATIBILITY_KEY" && -L "$AGE_COMPATIBILITY_KEY" ]]; then
+        rm -f -- "$AGE_COMPATIBILITY_KEY"
+    fi
     if [[ -n "$AGE_DECRYPTED_KEY" && -f "$AGE_DECRYPTED_KEY" ]]; then
         rm -f "$AGE_DECRYPTED_KEY"
         AGE_DECRYPTED_KEY=""

@@ -13,8 +13,6 @@
       # gstreamer, ...). Parses the terminfo from ghostty's Zig source, tic-compiles.
       ghostty-terminfo = prev.callPackage ../../pkg/ghostty-terminfo { };
 
-      fastfetch-minimal = prev.callPackage ../../pkg/fastfetch-minimal { };
-
       llama-swap = (prev.llama-swap.override {
         buildGoModule = prev.buildGo127Module;
       }).overrideAttrs (old: {
