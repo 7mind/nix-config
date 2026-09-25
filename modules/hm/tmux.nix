@@ -123,7 +123,7 @@ in
 
         # Darken inactive panes while preserving the active pane's terminal background.
         set -gF window-style "bg=#{@thm_mantle}"
-        set -g window-active-style "bg=default"
+        set -g window-active-style "bg=terminal"
 
         # Remove stale hooks and variables from previous config versions
         set-hook -gu client-resized
