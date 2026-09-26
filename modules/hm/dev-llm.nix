@@ -19,6 +19,10 @@ in
   imports = [ inputs.cq.homeManagerModules.dev-llm ];
 
   config = lib.mkIf cfg.enable {
+    smind.hm.dev.llm.extraSkills = lib.mkIf cfg.yolo.vm.enable {
+      local-test-vms = builtins.readFile ./skills/local-test-vms/SKILL.md;
+    };
+
     # Register the codegraph + ledger MCP tools directly in Pi instead of
     # behind pi-mcp-adapter's mcp() proxy, so all their tools load eagerly
     # into context. Scoped to these two servers (not `true`) so a future
