@@ -88,6 +88,35 @@ A typical disk and console configuration is:
 
 Specify the actual image format instead of relying on format probing.
 
+## Cloud-init and SSH access
+
+Use a fresh, task-specific SSH key and remove its private key with the
+disposable lab. Never put the host's normal private key in a seed image. For
+VM-to-VM SSH tests, either provision guest-specific keys or forward an
+isolated `ssh-agent` containing only the task-specific key.
+
+Do not assume a password-locked account can authenticate with a public key.
+In Alpine cloud images, `lock_passwd: true` causes sshd to reject the account
+before checking `authorized_keys`. For an Alpine key-only test account, use a
+fresh random password hash whose plaintext is not retained, set
+`lock_passwd: false`, and explicitly disable both `PasswordAuthentication` and
+`KbdInteractiveAuthentication`. Do not assume `ssh_pwauth: false` disables
+keyboard-interactive authentication. Treat this as Alpine-specific unless the
+same behaviour has been verified on the guest distribution in use.
+
+Cloud-init modules are commonly once-per-instance. When changing user-data on
+a reused overlay, use a new `instance-id` or deliberately run
+`cloud-init clean` inside the guest before rebooting; replacing the seed alone
+does not guarantee that account or SSH configuration will be reapplied.
+
+Avoid rapid SSH polling during first boot. Repeated pre-authentication or
+authentication failures from QEMU's user-network gateway can accumulate
+OpenSSH `PerSourcePenalties` and obscure the original failure. Prefer a serial
+or guest-agent boot-completion signal; otherwise use bounded exponential
+backoff. After the transport becomes reachable, stop retrying repeated
+authentication failures and inspect `ssh -vvv`, the guest authentication log,
+cloud-init logs, account lock state, and `authorized_keys` contents and modes.
+
 ## Networking
 
 ### Independent Internet access
@@ -159,3 +188,6 @@ Track the QEMU and VDE process IDs and stop only those processes. Remove stale
 Unix sockets, seed images, and disposable overlays created by the task; retain
 base images and explicitly requested persistent disks. Report separately what
 was boot-tested, what was only configuration-checked, and what remains unknown.
+For a persistent overlay, request an in-guest or QMP/ACPI shutdown and wait for
+QEMU to exit before sending a termination signal; forced termination can leave
+the guest filesystem journal dirty.
