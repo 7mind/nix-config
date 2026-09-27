@@ -23,6 +23,7 @@
   ./kitty.nix
   ./megasync.nix
   ./niri.nix
+  ./nix-access-tokens.nix
   ./nushell.nix
   ./prusa-3d-printing.nix
   ./ssh.nix
