@@ -249,10 +249,7 @@ rec {
         pylontech = inputs.pylontech.packages."${arch}";
         qendercore-adapter = inputs.qendercore-adapter;
         mqtt-spc = inputs.mqtt-spc;
-        nix-apple-fonts.default = pkgs.callPackage "${inputs.nix-apple-fonts}/packages/apple-fonts/default.nix" {
-          inputs = { };
-          xorg.mkfontscale = pkgs.mkfontscale;
-        };
+        nix-apple-fonts.default = pkgs.callPackage "${inputs.nix-apple-fonts}/packages/apple-fonts/default.nix" { };
         browservice.packages.${arch}.default =
           let
             original = inputs.browservice.packages.${arch}.default;

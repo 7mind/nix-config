@@ -230,21 +230,7 @@
           '';
         });
 
-        nix-apple-fonts = (
-          cfg-flakes.nix-apple-fonts.default.overrideAttrs (drv: {
-            # Install fonts into /share/fonts, not /usr/share/fonts where they
-            # don't work. FIXME: notify upstream / submit PR?
-            installPhase = ''
-              runHook preInstall
-              mkdir -p $out/share/fonts/opentype
-              for folder in $src/fonts/*; do
-                  install -Dm644 "$folder"/*.otf -t $out/share/fonts/opentype
-              done
-              mkfontdir "$out/share/fonts/opentype"
-              runHook postInstall
-            '';
-          })
-        );
+        nix-apple-fonts = cfg-flakes.nix-apple-fonts.default;
 
         smfc = super.python3Packages.buildPythonApplication rec {
           pname = "smfc";
