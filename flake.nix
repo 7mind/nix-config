@@ -65,7 +65,10 @@
     };
 
     nix-apple-fonts = {
-      url = "github:braindefender/nix-apple-fonts";
+      # Fork of braindefender/nix-apple-fonts fixing evaluation against nixpkgs
+      # >= 25.11 (removed lib.fold, reached via snowfall-lib). Upstream PR:
+      # https://github.com/braindefender/nix-apple-fonts/pull/1 — switch back once merged.
+      url = "github:autopeasant/nix-apple-fonts";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

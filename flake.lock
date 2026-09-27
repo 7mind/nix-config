@@ -776,12 +776,14 @@
       },
       "locked": {
         "lastModified": 1790511452,
-        "narHash": "sha256-wSfJs7+iGQg1QjPFSXC2xMxot+V7Zgm4nkY01sCvofo=",
-        "path": "/tmp/exchange/nix-apple-fonts-fork",
-        "type": "path"
+        "narHash": "sha256-GagRHUKSEnPUTsWilYOpq9ruP2RgNGc+d/QK8SZZEpQ=",
+        "owner": "autopeasant",
+        "repo": "nix-apple-fonts",
+        "rev": "acb0ae70a902077a3534f39f93dcf5063527c955",
+        "type": "github"
       },
       "original": {
-        "owner": "braindefender",
+        "owner": "autopeasant",
         "repo": "nix-apple-fonts",
         "type": "github"
       }

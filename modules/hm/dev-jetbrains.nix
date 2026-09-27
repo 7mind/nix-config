@@ -53,7 +53,7 @@ in
     home.packages = [
       (mkJetbrainsPackage {
         pkg = pkgs.jetbrains.idea;
-        path = "bin/idea";
+        path = "bin/intellij-idea";
       })
 
       (mkJetbrainsPackage {

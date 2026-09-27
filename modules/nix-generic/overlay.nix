@@ -108,10 +108,6 @@
 
       pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
         (python-final: python-prev: {
-          ifcopenshell = python-prev.ifcopenshell.overrideAttrs (old: {
-            patches = old.patches ++ [ ../../pkg/ifcopenshell/boost-optional.patch ];
-          });
-
           # CMake executes this ROCm code generator before the fixup-phase shebang hook.
           torch = python-prev.torch.overrideAttrs (old:
             prev.lib.optionalAttrs old.passthru.rocmSupport {
