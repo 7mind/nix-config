@@ -141,16 +141,16 @@ diff --git a/tests/test-grammar-integration.cpp b/tests/test-grammar-integration
 diff --git a/tests/test-json-schema-to-grammar.cpp b/tests/test-json-schema-to-grammar.cpp
 --- a/tests/test-json-schema-to-grammar.cpp
 +++ b/tests/test-json-schema-to-grammar.cpp
-@@ -1583,10 +1583,10 @@
-         // the rules of the partial conversion (here "root-0") must not leak into the grammar
-         run({
-             SUCCESS,
--            "regexp with unsupported shorthand",
-+            "regexp with unsupported boundary escape",
-             R"""({
-                 "type": "string",
--                "pattern": "^[0-9]{3}\\w$"
-+                "pattern": "^[0-9]{3}\\b$"
-             })""",
-             R"""(
-                 char ::= [^"\\\x7F\x00-\x1F] | [\\] (["\\bfnrt] | "u" [0-9a-fA-F]{4})
+@@ -1463,10 +1463,10 @@
+     // the rules of the partial conversion (here "root-0") must not leak into the grammar
+     test({
+         SUCCESS,
+-        "regexp with unsupported shorthand",
++        "regexp with unsupported boundary escape",
+         R"""({
+             "type": "string",
+-            "pattern": "^[0-9]{3}\\w$"
++            "pattern": "^[0-9]{3}\\b$"
+         })""",
+         R"""(
+             char ::= [^"\\\x7F\x00-\x1F] | [\\] (["\\bfnrt] | "u" [0-9a-fA-F]{4})
