@@ -78,6 +78,18 @@ and metadata. For NixOS, prefer the project's existing NixOS VM or test
 derivation; otherwise boot an installer ISO and install into a regular qcow2
 image. Do not silently replace a pinned guest release with a newer image.
 
+Some Alpine cloud-image `.sha512` sidecars contain only 128 hexadecimal digits,
+which `sha512sum -c` cannot read. For that format, validate the sidecar and
+compare it with the image hash before creating an overlay:
+
+```bash
+image="$lab/images/<alpine-image>.qcow2"
+expected=$(cat "$image.sha512")
+[[ $expected =~ ^[[:xdigit:]]{128}$ ]] || exit 1
+actual=$(sha512sum "$image") || exit 1
+[[ ${actual%% *} == "$expected" ]] || exit 1
+```
+
 A typical disk and console configuration is:
 
 ```bash
@@ -103,6 +115,21 @@ fresh random password hash whose plaintext is not retained, set
 `KbdInteractiveAuthentication`. Do not assume `ssh_pwauth: false` disables
 keyboard-interactive authentication. Treat this as Alpine-specific unless the
 same behaviour has been verified on the guest distribution in use.
+
+On this host `mkpasswd` is available even when `openssl` is not. Generate the
+hash without passing the password on the command line:
+
+```bash
+head -c 32 /dev/urandom | base64 | mkpasswd -m sha-512 -s
+```
+
+The Alpine cloud image may have no `sudo` executable. If a test needs guest
+privilege, install and verify the chosen privilege tool during provisioning;
+`sudo: NOPASSWD` in user-data alone does not install it. Verify SSH policy from
+the host with public-key and disallowed-method probes. Preserve stderr and
+check each probe's exit status and authentication trace to confirm it reached
+the intended method; empty output from a suppressed failure is not evidence
+that a policy holds.
 
 Cloud-init modules are commonly once-per-instance. When changing user-data on
 a reused overlay, use a new `instance-id` or deliberately run
@@ -130,7 +157,11 @@ LAN:
 -device virtio-net-pci,netdev=wan,mac=52:54:00:00:10:01
 ```
 
-Use a distinct MAC address for every NIC.
+Use a distinct MAC address for every NIC. For generated addresses, assign each
+NIC an integer ID from 1 through 255 and format all six octets explicitly, for
+example `mac=$(printf '52:54:00:00:20:%02x' "$nic_id")`. Before launch, check
+each address matches `^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$` and that no two
+NICs have the same address. Do not build addresses by slicing hex strings.
 
 ### Exactly two guests on one isolated Ethernet segment
 
@@ -188,6 +219,12 @@ Track the QEMU and VDE process IDs and stop only those processes. Remove stale
 Unix sockets, seed images, and disposable overlays created by the task; retain
 base images and explicitly requested persistent disks. Report separately what
 was boot-tested, what was only configuration-checked, and what remains unknown.
-For a persistent overlay, request an in-guest or QMP/ACPI shutdown and wait for
-QEMU to exit before sending a termination signal; forced termination can leave
-the guest filesystem journal dirty.
+For a persistent overlay, request an in-guest shutdown or start QEMU with a
+private QMP socket (`-qmp unix:"$lab/run/qmp.sock",server=on,wait=off`). A QMP
+client must read the greeting, send `{"execute":"qmp_capabilities"}`, check
+the response, then send `{"execute":"system_powerdown"}` and check its response.
+Wait for QEMU to exit and check its status;
+`system_powerdown` requests guest shutdown and does not guarantee completion.
+If it times out, report that the disk may be dirty before considering forced
+termination. SIGTERM is suitable for a disposable overlay whose state will be
+discarded, not as the normal persistent-disk shutdown path.

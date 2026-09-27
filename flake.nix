@@ -10,6 +10,12 @@
       inputs.flake-utils.follows = "flake-utils";
     };
 
+    f4 = {
+      url = "github:unxed/f4";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.home-manager.follows = "home-manager";
+    };
+
     lanzaboote.url = "github:nix-community/lanzaboote";
     lanzaboote.inputs.nixpkgs.follows = "nixpkgs";
 

@@ -1,15 +1,7 @@
-{ config, pkgs, lib, ... }:
+{ outerConfig, lib, ... }:
 
 {
-  options = {
-    smind.hm.mc.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = true;
-      description = "Enable Midnight Commander with dark theme";
-    };
-  };
-
-  config = lib.mkIf config.smind.hm.mc.enable {
+  config = lib.mkIf outerConfig.smind.environment.fileManagers.mc.enable {
     programs.mc = {
       enable = true;
       settings = {

@@ -56,7 +56,6 @@
         "ibkr"
         "trader-workstation"
         "wine-stable"
-        "far2l"
         "linearmouse"
         "tunnelblick"
         "ungoogled-chromium"
@@ -86,7 +85,10 @@
         "winbox"
 
         "mqttx"
-      ];
+      ] ++ lib.optional config.smind.environment.fileManagers.far2l.enable {
+        name = "far2l";
+        greedy = true;
+      };
       masApps = {
         "Audio Profile Manager" = 1484150558;
         "Bitwarden Password Manager" = 1352778147;

@@ -1,4 +1,4 @@
-{ config, lib, pkgs, cfg-meta, ... }:
+{ config, lib, pkgs, cfg-meta, inputs, ... }:
 
 {
   options = {
@@ -13,9 +13,29 @@
       default = true;
       description = "Enable full documentation generation";
     };
+
+    smind.environment.fileManagers = lib.genAttrs [ "mc" "far2l" "f4" ] (name: {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Install ${name}";
+      };
+    });
   };
 
-  config = lib.mkIf config.smind.environment.sane-defaults.enable {
+  config = lib.mkMerge [
+    {
+      environment.systemPackages = with pkgs;
+        lib.optional config.smind.environment.fileManagers.mc.enable mc
+        ++ lib.optional config.smind.environment.fileManagers.far2l.enable
+          (if config.smind.isDesktop then far2l else far2l-noui)
+        ++ lib.optional config.smind.environment.fileManagers.f4.enable
+          (if config.smind.isDesktop then
+            inputs.f4.packages.${pkgs.stdenv.hostPlatform.system}.f4-gui
+          else
+            inputs.f4.packages.${pkgs.stdenv.hostPlatform.system}.f4-tty);
+    }
+    (lib.mkIf config.smind.environment.sane-defaults.enable {
 
     documentation = lib.mkIf config.smind.environment.all-docs.enable
       {
@@ -34,8 +54,6 @@
       } else { };
 
     environment.systemPackages = with pkgs; [
-      mc
-      (if config.smind.isDesktop then far2l else far2l-noui)
       nnn
 
       nano
@@ -108,5 +126,6 @@
     ] ++ (if cfg-meta.isLinux then with pkgs; [
       radvd
     ] else [ ]);
-  };
+    })
+  ];
 }

@@ -293,6 +293,29 @@
         "type": "github"
       }
     },
+    "f4": {
+      "inputs": {
+        "home-manager": [
+          "home-manager"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1790544058,
+        "narHash": "sha256-RPrTQVHJr6F/4FfZt2T6kz8/Bd6jUufp4CeLbWvU8oM=",
+        "owner": "unxed",
+        "repo": "f4",
+        "rev": "4c61ee04c6ac17ded22a0ad19afd8917e7c3e6a9",
+        "type": "github"
+      },
+      "original": {
+        "owner": "unxed",
+        "repo": "f4",
+        "type": "github"
+      }
+    },
     "fecalia": {
       "inputs": {
         "flake-utils": [
@@ -1053,11 +1076,11 @@
         "openai-codex-plugin": "openai-codex-plugin"
       },
       "locked": {
-        "lastModified": 1790541998,
-        "narHash": "sha256-0D2ExDSd9mkzdIZntOCPUw5Nrjwkrxib/GQCJibw3MI=",
+        "lastModified": 1790543858,
+        "narHash": "sha256-m4p1uMjcrO+bWumdGUTrY8Qp1sgIUd05gzuawB/geI4=",
         "owner": "7mind",
         "repo": "ponygirls",
-        "rev": "55b2f396773a810bd9979a3a23239c71d009b411",
+        "rev": "431bb6e7cc38619382cf672e6ae6bac9522c4bce",
         "type": "github"
       },
       "original": {
@@ -1167,6 +1190,7 @@
         "crane": "crane",
         "darwin": "darwin",
         "ecoflow-mqtt": "ecoflow-mqtt",
+        "f4": "f4",
         "fecalia": "fecalia",
         "flake-utils": "flake-utils_2",
         "fractal": "fractal",

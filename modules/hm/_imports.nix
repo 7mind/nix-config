@@ -5,6 +5,7 @@
   ./cosmic-keybindings.nix
   ./kde.nix
   ./mc.nix
+  ./f4.nix
   ./dev-generic.nix
   ./dev-jetbrains.nix
   ./dev-git.nix
