@@ -146,6 +146,8 @@
     # pinned nixpkgs; drifting breaks the wheel build.
     zimt = {
       url = "github:pshirshov/zimt";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
     };
 
     # cq — markdown-ledger MCP server, the LLM prompt/skill assets, AND the
@@ -213,15 +215,17 @@
         nixosConfigurations = self.nixosConfigurations // self.darwinConfigurations;
       };
 
-      agenix-rekey-hosts = builtins.mapAttrs (
-        name: _:
-        inputs.agenix-rekey.configure {
-          userFlake = self;
-          nixosConfigurations = {
-            ${name} = (self.nixosConfigurations // self.darwinConfigurations).${name};
-          };
-        }
-      ) (self.nixosConfigurations // self.darwinConfigurations);
+      agenix-rekey-hosts = builtins.mapAttrs
+        (
+          name: _:
+            inputs.agenix-rekey.configure {
+              userFlake = self;
+              nixosConfigurations = {
+                ${name} = (self.nixosConfigurations // self.darwinConfigurations).${name};
+              };
+            }
+        )
+        (self.nixosConfigurations // self.darwinConfigurations);
 
       hostMeta =
         let
