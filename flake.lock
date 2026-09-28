@@ -1393,11 +1393,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790615860,
-        "narHash": "sha256-Rw/kbgM+Mxfl+Xgh4ERFsrykvTrj7q+GSLLGjoZNN94=",
+        "lastModified": 1790627931,
+        "narHash": "sha256-5viJCQi08wNyrpuNspVh9eHL15nbYrb08V/e4um1pYk=",
         "owner": "7mind",
         "repo": "touchpad-gesture-customization-app-expose",
-        "rev": "f3fc495f5fca4db2954753bfca00001a8524397a",
+        "rev": "2a49c18d0fddfb0c3886f498a1bdef1d95d5ed7b",
         "type": "github"
       },
       "original": {
