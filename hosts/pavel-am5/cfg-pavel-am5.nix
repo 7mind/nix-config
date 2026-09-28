@@ -214,6 +214,8 @@ in
   smind = {
     roles.desktop.generic-gnome = true;
     desktop.gnome.extensions.classic-app-switcher.enable = true;
+    desktop.gnome.extensions.touchpad-gesture-customization.enable = true;
+    desktop.gnome.extensions.touchpad-gesture-customization.remap-3-to-4 = true;
     desktop.gnome.gdm.monitors-xml = ./monitors.xml;
     desktop.gnome.switch-input-source-keybinding = [ "<Ctrl><Alt><Super>space" ];
 
