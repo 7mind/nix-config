@@ -168,12 +168,11 @@
     };
 
     # wanbond — resilient WAN-bonding tunnel with adaptive FEC (the "fecalia"
-    # repo). Exposes packages.<system>.default = the wanbond binary. Pinned to a
-    # rev >= 389cb0b (adaptive-FEC + reveal_addressing + multi-concentrator edge,
-    # T250). Used by the mobile-office edge (pi-mo) and its concentrators
+    # repo). Exposes packages.<system>.default = the wanbond binary. Tracks main.
+    # Used by the mobile-office edge (pi-mo) and its concentrators
     # (raspi5l primary, o2 backup) — see modules/nixos/wanbond.nix (private).
     fecalia = {
-      url = "github:7mind/fecalia?rev=040256256470eec5af976d5477c4deb24652d731";
+      url = "github:7mind/fecalia/main";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
     };

@@ -173,11 +173,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790583818,
+        "lastModified": 1790586621,
         "narHash": "sha256-sYyaUlZ84lf/iZF/TYFpfyu37ShJDX4q7LkK+U+ugVc=",
         "owner": "7mind",
         "repo": "cq",
-        "rev": "6469b68f6aff455ed93c5a479bb11a56e623add2",
+        "rev": "b070e9cc9ce30ee06c1c30292e285d380774d74f",
         "type": "github"
       },
       "original": {
@@ -326,17 +326,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1784891660,
-        "narHash": "sha256-1f1u3elDImvNPgCPUPRWPsjDrGYyCBqK864cobe1Kyk=",
+        "lastModified": 1790586520,
+        "narHash": "sha256-gFiisy1CUxokJBcPDJzUNWF/Zm99Q9kKmJoNnfwiun8=",
         "owner": "7mind",
         "repo": "fecalia",
-        "rev": "040256256470eec5af976d5477c4deb24652d731",
+        "rev": "544926a25e27be84a53c72781cf495bc97f7eca8",
         "type": "github"
       },
       "original": {
         "owner": "7mind",
+        "ref": "main",
         "repo": "fecalia",
-        "rev": "040256256470eec5af976d5477c4deb24652d731",
         "type": "github"
       }
     },
