@@ -117,7 +117,7 @@
     };
 
     touchpad-gesture-customization-app-expose = {
-      url = "github:7mind/touchpad-gesture-customization-app-expose?ref=feature/grouping-spiral-stacking";
+      url = "github:7mind/touchpad-gesture-customization-app-expose";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
     };
