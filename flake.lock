@@ -1393,15 +1393,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1790183411,
-        "narHash": "sha256-FcXSTqr2PlvMViNXT/OyoIo6fnZ8llRbRmxjRXtjePg=",
+        "lastModified": 1790615860,
+        "narHash": "sha256-Rw/kbgM+Mxfl+Xgh4ERFsrykvTrj7q+GSLLGjoZNN94=",
         "owner": "7mind",
         "repo": "touchpad-gesture-customization-app-expose",
-        "rev": "5ec92fcbf1e6f5000532dd2c864b0048865f0b48",
+        "rev": "f3fc495f5fca4db2954753bfca00001a8524397a",
         "type": "github"
       },
       "original": {
         "owner": "7mind",
+        "ref": "feature/grouping-spiral-stacking",
         "repo": "touchpad-gesture-customization-app-expose",
         "type": "github"
       }
