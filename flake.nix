@@ -203,6 +203,10 @@
           inherit inputs;
           inherit self;
         };
+        make-home-x86_64 = globals.make-home-x86_64 {
+          inherit inputs;
+          inherit self;
+        };
       };
     in
     {
@@ -214,6 +218,10 @@
 
       darwinConfigurations = builtins.listToAttrs (
         (hosts-public builders).darwin ++ (hosts-private builders).darwin
+      );
+
+      homeConfigurations = builtins.listToAttrs (
+        (hosts-public builders).home ++ ((hosts-private builders).home or [ ])
       );
 
       agenix-rekey = inputs.agenix-rekey.configure {
@@ -256,6 +264,7 @@
         localSystem = system;
         overlays = [ inputs.agenix-rekey.overlays.default (import ./pkg/openlinkhub/overlay.nix) ];
       };
+      packages.home-manager-cli = inputs.home-manager.packages.${system}.default;
       checks =
         inputs.nixpkgs.lib.optionalAttrs
           (builtins.elem system [

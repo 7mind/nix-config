@@ -1,9 +1,9 @@
-{ config, lib, outerConfig, ... }:
+{ config, lib, outerConfig, cfg-meta, ... }:
 
 let
   ageEnabled = outerConfig.smind.age.enable;
 in
-{
+if cfg-meta.isStandalone or false then { } else {
   config = lib.mkMerge [
     # Always propagate hostPubkey and masterIdentities from the outer (system)
     # config. hostPubkey suppresses agenix-rekey dummy-key warnings; real

@@ -13,10 +13,6 @@ in
     "python3.13-ecdsa-0.19.1"
   ];
 
-  # Onboard MediaTek MT7927 (Filogic 380) WiFi 7 + BT — out-of-tree driver +
-  # firmware until mainline support lands. See modules/nixos/mt7927-wifi.nix.
-  smind.hw.mt7927.enable = true;
-
   nix = {
     settings = {
       max-jobs = 2;

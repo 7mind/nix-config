@@ -1,9 +1,8 @@
 { lib, pkgs, cfg-meta, import_if_exists, ... }:
 
 {
-  imports = [
-    (import_if_exists "${cfg-meta.paths.private}/users/pavel/hm/home-pavel-generic-private.nix")
-  ];
+  imports = lib.optional (!(cfg-meta.isStandalone or false))
+    (import_if_exists "${cfg-meta.paths.private}/users/pavel/hm/home-pavel-generic-private.nix");
 
   home.shellAliases = { };
 

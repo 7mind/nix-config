@@ -8,4 +8,8 @@ builders: {
   darwin = [
     (builders.make-darwin-aarch64 "pavel-mba-m3")
   ];
+
+  home = [
+    (builders.make-home-x86_64 { hostname = "ubuntu"; username = "pavel"; })
+  ];
 }

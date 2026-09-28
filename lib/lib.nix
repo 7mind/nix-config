@@ -52,7 +52,8 @@ let
     });
 
   outerConfig =
-    if (cfg-meta.isLinux) then args.nixosConfig else args.darwinConfig;
+    if args ? standaloneOuterConfig then args.standaloneOuterConfig
+    else if (cfg-meta.isLinux) then args.nixosConfig else args.darwinConfig;
 
   extendFuncResultWith = func: attrset:
     let

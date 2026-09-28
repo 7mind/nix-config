@@ -367,6 +367,103 @@ rec {
         };
     };
 
+  make-home = { inputs, self, arch }: { hostname, username }:
+    let
+      pkgs = import inputs.nixpkgs {
+        localSystem = arch;
+        config.allowUnfree = true;
+        overlays = [
+          inputs.nix-vscode-extensions.overlays.default
+          inputs.rust-overlay.overlays.default
+          (final: _: {
+            resock = final.callPackage ./pkg/resock/default.nix { };
+            fastfetch-minimal = final.callPackage ./pkg/fastfetch-minimal { };
+          })
+        ];
+      };
+      cfg-const = (import ./config.nix).const;
+      cfg-meta = {
+        inherit arch hostname inputs;
+        isLinux = true;
+        isDarwin = false;
+        isStandalone = true;
+        paths = {
+          root = "${self}";
+          pkg = "${self}/pkg";
+          private = "${self}/private";
+          secrets = "${self}/private/secrets";
+          lib = "${self}/lib";
+          modules = "${self}/modules";
+          modules-hm = "${self}/modules/hm";
+          modules-nix = "${self}/modules/nix";
+          users = "${self}/users";
+        };
+      };
+      standaloneOuterConfig = {
+        smind = {
+          isDesktop = false;
+          fonts = {
+            terminal = "monospace";
+            defaults = {
+              sansSerif = [ "sans-serif" ];
+              monospace = [ "monospace" ];
+            };
+          };
+          desktop = {
+            niri.enable = false;
+            kde.enable = false;
+            cosmic.enable = false;
+            xkb = {
+              layouts = [ "us" ];
+              options = [ ];
+              hotkey-modifier = "super";
+            };
+            mouse = {
+              acceleration = 0.0;
+              accelProfile = "default";
+              naturalScroll = false;
+            };
+          };
+          environment.fileManagers = {
+            mc.enable = false;
+            f4.enable = false;
+          };
+          net.tailscale.enable = false;
+          security.keyring.enable = false;
+        };
+        lib.xkb = {
+          modifierType = pkgs.lib.types.str;
+          modifierTokens = spec: pkgs.lib.splitString "-" spec;
+        };
+      };
+      cfg-hm-modules = [
+        inputs.plasma-manager.homeModules.plasma-manager
+        inputs.niri.homeModules.config
+        inputs.noctalia.homeModules.default
+        { home.stateVersion = cfg-const.state-version-hm; }
+      ];
+      cfg-args = {
+        inherit inputs cfg-const cfg-meta cfg-hm-modules standaloneOuterConfig;
+        inherit smind-hm import_if_exists import_if_exists_or;
+        cfg-packages = (import ./config.nix).cfg-packages { inherit inputs pkgs arch; };
+      };
+    in
+    {
+      name = "${username}@${hostname}-${builtins.head (pkgs.lib.splitString "-" arch)}";
+      value = inputs.home-manager.lib.homeManagerConfiguration {
+        inherit pkgs;
+        extraSpecialArgs = cfg-args // { inherit cfg-args; };
+        modules = cfg-hm-modules ++ [
+          (import_if_exists ./hosts/${hostname}/home-${username}.nix)
+        ];
+      };
+    };
+
+  make-home-x86_64 = { inputs, self }: (make-home {
+    inherit inputs self;
+    arch = "x86_64-linux";
+  });
+
   make-nixos-x86_64 = { inputs, self }: (make {
     inherit inputs;
     inherit self;
