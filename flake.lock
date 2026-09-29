@@ -326,11 +326,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790644028,
-        "narHash": "sha256-TxBIgt+op1NOCWhPfK1+gadLBeCPe2Lx85TNsbcmxcM=",
+        "lastModified": 1790675611,
+        "narHash": "sha256-hV+TJdRUa6aUGyqX4n/g/aSsJ4Xz+JjMNLNWWopupos=",
         "owner": "7mind",
         "repo": "fecalia",
-        "rev": "147324c119799273429545df99ce76666d4f8879",
+        "rev": "6d2c65841d9599dc81f34e96c785c43e4db9d54b",
         "type": "github"
       },
       "original": {
@@ -682,11 +682,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790672729,
-        "narHash": "sha256-tWpuSe8qMTpx4npMWcy2CNm3RclDlv6w4XxVjWygTh8=",
+        "lastModified": 1790675988,
+        "narHash": "sha256-JzTvoAPpasMyzBnGR8km91MAnEyADPtf40ya4A5b1LM=",
         "owner": "pshirshov",
         "repo": "mqtt-controller",
-        "rev": "472ddc6633c228f3500707dec1079a14bf0ddbb6",
+        "rev": "737c90bbaa04802eaf54855e96e2834a0557b5ac",
         "type": "github"
       },
       "original": {
