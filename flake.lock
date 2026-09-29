@@ -326,11 +326,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790626759,
-        "narHash": "sha256-MNtCVYik2Dq0xeb05SGA+i2kA9TiP7W9sjhHIZcrvjM=",
+        "lastModified": 1790642789,
+        "narHash": "sha256-QGsMt6HlzvaEyASYY4QQP/ei6E6edPMbSUnaKTBrPmY=",
         "owner": "7mind",
         "repo": "fecalia",
-        "rev": "af2d54c4fcdcda89fb74842d951c687e02e43a27",
+        "rev": "d64e95650e2ff68910f035d3a1a0d93f70a3f607",
         "type": "github"
       },
       "original": {
