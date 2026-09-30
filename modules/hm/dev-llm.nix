@@ -29,6 +29,19 @@ in
     # verbose MCP server stays proxied.
     smind.hm.dev.llm.pi.mcpDirectTools = [ "codegraph" "ledger" ];
 
+    # Suppress Codex's "switch to a lower tier model" nudge on the rate-limit
+    # (low-token) basis — "Approaching rate limits / uses fewer credits for
+    # upcoming turns". Same preference the nudge's own "Keep current model
+    # (never show again)" writes. The slow-response variant ("Giving this
+    # request a little extra thought / retry with a faster model", prompt id
+    # `safety-buffering-prompt`) has no suppression switch in codex 0.159.2;
+    # its display is server-driven (x-codex-safety-buffering-* headers).
+    programs.codex.settings.notice.hide_rate_limit_model_nudge = true;
+
+    # Pin the Pi default model (matches the ponygirls module default; pinned
+    # here so an upstream default change cannot drift it silently).
+    smind.hm.dev.llm.models.pi.model = "mimo-v2.6-pro";
+
     home.activation.removeObsoleteClaudePluginBackup = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
       backup=${lib.escapeShellArg "${config.programs.claude-code.configDir}/skills/claude-code-home-manager.hmbak"}
       manifest="$backup/.claude-plugin/plugin.json"
