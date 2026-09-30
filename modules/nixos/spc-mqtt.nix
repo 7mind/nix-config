@@ -73,6 +73,16 @@ in
         default = 120;
         description = "Drop the panel connection after this many seconds without traffic.";
       };
+      partSetAName = lib.mkOption {
+        type = lib.types.str;
+        default = "Part Set A";
+        description = "Panel's name for part set A, shown in the area mode select.";
+      };
+      partSetBName = lib.mkOption {
+        type = lib.types.str;
+        default = "Part Set B";
+        description = "Panel's name for part set B, shown in the area mode select.";
+      };
       zoneClasses = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [ ];
@@ -124,6 +134,8 @@ in
           "--mqtt-creds \${RUNTIME_DIRECTORY}/mqtt-creds.json"
           "--topic-prefix ${cfg.topicPrefix}"
           "--discovery-prefix ${cfg.discoveryPrefix}"
+          "--part-set-a-name ${lib.escapeShellArg cfg.partSetAName}"
+          "--part-set-b-name ${lib.escapeShellArg cfg.partSetBName}"
         ] ++ lib.optional (cfg.edpKeyFile != null) "--edp-key-file \${CREDENTIALS_DIRECTORY}/edp-key"
           ++ map (zc: "--zone-class ${zc}") cfg.zoneClasses);
         DynamicUser = true;
