@@ -7,17 +7,33 @@ in
 {
   options = {
     smind.services.spc-mqtt = {
-      enable = lib.mkEnableOption "SPC alarm panel to MQTT bridge";
-      spcUrl = lib.mkOption {
+      enable = lib.mkEnableOption "SPC alarm panel to MQTT bridge (EDP receiver)";
+      listenAddress = lib.mkOption {
         type = lib.types.str;
-        description = "SPC panel base URL (e.g. http://panel-ip).";
+        default = "0.0.0.0";
+        description = "Address the EDP receiver listens on; the panel connects to it.";
       };
-      spcCredentialsFile = lib.mkOption {
-        type = lib.types.path;
+      listenPort = lib.mkOption {
+        type = lib.types.port;
+        default = 50000;
+        description = "TCP port the EDP receiver listens on (panel's Receiver IP Port).";
+      };
+      receiverId = lib.mkOption {
+        type = lib.types.ints.between 1 999997;
+        description = "EDP receiver ID, as configured for this receiver on the panel.";
+      };
+      edpKeyFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.path;
+        default = null;
         description = ''
-          Path to the JSON file with SPC panel login and password
-          (`{"login": "...", "password": "..."}`).
+          File with the receiver's 32-hex-digit EDP AES key, matching the
+          panel's receiver encryption key. Null for unencrypted EDP.
         '';
+      };
+      firewallInterface = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Interface on which to open listenPort for the panel's connection.";
       };
       mqttHost = lib.mkOption {
         type = lib.types.str;
@@ -47,10 +63,15 @@ in
         default = "homeassistant";
         description = "Home Assistant MQTT discovery prefix.";
       };
-      pollInterval = lib.mkOption {
-        type = lib.types.int;
-        default = 5;
-        description = "Polling interval in seconds.";
+      refreshInterval = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 30;
+        description = "Seconds between full area/zone/alert re-reads (covers missed events).";
+      };
+      idleTimeout = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 120;
+        description = "Drop the panel connection after this many seconds without traffic.";
       };
       zoneClasses = lib.mkOption {
         type = lib.types.listOf lib.types.str;
@@ -64,6 +85,10 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    networking.firewall.interfaces = lib.mkIf (cfg.firewallInterface != null) {
+      ${cfg.firewallInterface}.allowedTCPPorts = [ cfg.listenPort ];
+    };
+
     systemd.services.spc-mqtt = {
       description = "SPC alarm panel to MQTT bridge";
       after = [ "network-online.target" "mosquitto.service" ];
@@ -74,9 +99,8 @@ in
         Restart = "on-failure";
         RestartSec = 5;
         LoadCredential = [
-          "spc-credentials:${cfg.spcCredentialsFile}"
           "mqtt-password:${cfg.mqttPasswordFile}"
-        ];
+        ] ++ lib.optional (cfg.edpKeyFile != null) "edp-key:${cfg.edpKeyFile}";
         RuntimeDirectory = "spc-mqtt";
         RuntimeDirectoryMode = "0700";
         ExecStartPre = let
@@ -91,19 +115,21 @@ in
           ''}";
         ExecStart = lib.concatStringsSep " " ([
           "${spcMqtt}/bin/spc-mqtt"
-          "--spc-url ${cfg.spcUrl}"
-          "--spc-creds \${CREDENTIALS_DIRECTORY}/spc-credentials"
+          "--listen ${cfg.listenAddress}:${toString cfg.listenPort}"
+          "--receiver-id ${toString cfg.receiverId}"
+          "--refresh-interval ${toString cfg.refreshInterval}"
+          "--idle-timeout ${toString cfg.idleTimeout}"
           "--mqtt-host ${cfg.mqttHost}"
           "--mqtt-port ${toString cfg.mqttPort}"
           "--mqtt-creds \${RUNTIME_DIRECTORY}/mqtt-creds.json"
           "--topic-prefix ${cfg.topicPrefix}"
           "--discovery-prefix ${cfg.discoveryPrefix}"
-          "--poll-interval ${toString cfg.pollInterval}"
-        ] ++ map (zc: "--zone-class ${zc}") cfg.zoneClasses);
+        ] ++ lib.optional (cfg.edpKeyFile != null) "--edp-key-file \${CREDENTIALS_DIRECTORY}/edp-key"
+          ++ map (zc: "--zone-class ${zc}") cfg.zoneClasses);
         DynamicUser = true;
 
-        # Hardening. All this service needs is outbound TCP, its credentials,
-        # and its RuntimeDirectory (already declared above).
+        # Hardening. All this service needs is a listening TCP socket for the
+        # panel, outbound TCP to MQTT, its credentials, and its RuntimeDirectory.
         ProtectSystem = "strict";
         ProtectHome = true;
         PrivateTmp = true;
