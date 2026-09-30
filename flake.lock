@@ -682,11 +682,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790780252,
-        "narHash": "sha256-JW1yHhoUm1RA4hUQhsHxiQSwlxwtcMp/GZPTMQ0jpfM=",
+        "lastModified": 1790781895,
+        "narHash": "sha256-HwDAzadLw9pu3iKuiZKFWeMGPCXNtdydtTkA4dbYLZQ=",
         "owner": "pshirshov",
         "repo": "mqtt-controller",
-        "rev": "82d877d01be1ccd5c32117afcff48fbf4be1dd99",
+        "rev": "226a0141b916ab0db7e940d3091a817b16fa1302",
         "type": "github"
       },
       "original": {
@@ -702,11 +702,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790763943,
-        "narHash": "sha256-8vH2chIPaliXKl4h8wjE0WcpudDQrGomsQk80ClEufU=",
+        "lastModified": 1790783243,
+        "narHash": "sha256-RD2VE5czFN9SSEauMveqsXVbKx5RTEvFPsh8SVlmv7Q=",
         "owner": "pshirshov",
         "repo": "mqtt-spc",
-        "rev": "a1534718b92cc2d53652bf94bb08859d8d5d7143",
+        "rev": "511b8cae6f5e11d0a243ce676bbe39b45b471168",
         "type": "github"
       },
       "original": {
@@ -1076,11 +1076,11 @@
         "openai-codex-plugin": "openai-codex-plugin"
       },
       "locked": {
-        "lastModified": 1790759590,
-        "narHash": "sha256-VST+Oen9v4haLey/nu6PAxvPpmXeSI+Ezt4Fn6SM1jk=",
+        "lastModified": 1790783203,
+        "narHash": "sha256-UZ7Gpm01zW2msCVsV9Irp/FPfbKQXZJE+lVZi6s3j3g=",
         "owner": "7mind",
         "repo": "ponygirls",
-        "rev": "f9011b00c4dc1ddc3416d8a4ff15701cb12c65e7",
+        "rev": "d47373d4f33cc35a5a095bc1272cc8657a4c7269",
         "type": "github"
       },
       "original": {
