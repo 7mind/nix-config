@@ -6,6 +6,8 @@
 
   home.shellAliases = { };
 
+  smind.hm.dev.llm.coAuthored.enable = false;
+
   programs.zsh.shellAliases = {
     rmj = "find . -depth -type d \\( -name target -or -name .bloop -or -name .bsp -or -name .metals \\) -exec rm -rf {} \\;";
     rmgpucache = "${pkgs.findutils}/bin/find ~ -name GPUCache -type d -exec rm -rf {} \\;";
