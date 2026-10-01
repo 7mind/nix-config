@@ -1076,11 +1076,11 @@
         "openai-codex-plugin": "openai-codex-plugin"
       },
       "locked": {
-        "lastModified": 1790784138,
-        "narHash": "sha256-mrw+VU0t9QnZ7AR1e3nnwBtjB1BOBItmNPUoBA5EfRs=",
+        "lastModified": 1790854669,
+        "narHash": "sha256-sf8YPVZ2ckKUM7ysu/reCO/90dKHuDmbHrmBaXbZI6o=",
         "owner": "7mind",
         "repo": "ponygirls",
-        "rev": "9697a076f94576af6849f99b12c00dbeeaf8ad5b",
+        "rev": "07947e0d0383555678e5cfbabe43c372f4053803",
         "type": "github"
       },
       "original": {
@@ -1554,11 +1554,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790011946,
-        "narHash": "sha256-E0Ym7qDZ4GmapeG2EVkp/v4QtDEza0Vf65G4WkOLcZ0=",
+        "lastModified": 1790850224,
+        "narHash": "sha256-swMFq3/xd6ohBbb+iA9GTNWtrEH+kOkQ3xv5y8in3jI=",
         "owner": "pshirshov",
         "repo": "zimt",
-        "rev": "49cf8127433a53cc005c909708235593731cae42",
+        "rev": "2ca3db4ef0e9ab2802d729ae36dc2bb8704aba9c",
         "type": "github"
       },
       "original": {
