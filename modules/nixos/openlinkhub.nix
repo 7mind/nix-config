@@ -30,7 +30,9 @@ in
 {
   options.services.openlinkhub.enable = lib.mkOption {
     type = lib.types.bool;
-    default = lib.attrByPath [ "smind" "isDesktop" ] false config;
+    default =
+      lib.attrByPath [ "smind" "isDesktop" ] false config
+      && !lib.attrByPath [ "smind" "isLaptop" ] false config;
     description = "Enable OpenLinkHub device controller and WebUI";
   };
 
