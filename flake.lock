@@ -159,33 +159,6 @@
         "type": "github"
       }
     },
-    "cq": {
-      "inputs": {
-        "flake-utils": [
-          "flake-utils"
-        ],
-        "nixpkgs": [
-          "nixpkgs"
-        ],
-        "nixpkgs-bun": "nixpkgs-bun",
-        "ponygirls": [
-          "ponygirls"
-        ]
-      },
-      "locked": {
-        "lastModified": 1790634719,
-        "narHash": "sha256-+K7FHF+NGDzk3ImzbaLZTyNyVIx+arL9rtdn5a9bn3E=",
-        "owner": "7mind",
-        "repo": "cq",
-        "rev": "5719713c25710850282a87829e4c507c65e5df48",
-        "type": "github"
-      },
-      "original": {
-        "owner": "7mind",
-        "repo": "cq",
-        "type": "github"
-      }
-    },
     "crane": {
       "locked": {
         "lastModified": 1789760033,
@@ -877,22 +850,6 @@
         "type": "github"
       }
     },
-    "nixpkgs-bun": {
-      "locked": {
-        "lastModified": 1789149629,
-        "narHash": "sha256-H6GwaZzZf+4npqv0tph94w9tZddSjFjmQrVsW0z78uk=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "eaad089433ca2bb662274377d33df3d0e51ef28b",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "eaad089433ca2bb662274377d33df3d0e51ef28b",
-        "type": "github"
-      }
-    },
     "nixpkgs-lib": {
       "locked": {
         "lastModified": 1765674936,
@@ -1076,11 +1033,11 @@
         "openai-codex-plugin": "openai-codex-plugin"
       },
       "locked": {
-        "lastModified": 1791016761,
-        "narHash": "sha256-rP/BJy3MdEd34kJjahhKTDrWLOxXJLTwJ+Vcur3SJ+g=",
+        "lastModified": 1791028148,
+        "narHash": "sha256-0XKrvSy4hMs1JISqSYaw48dEp/6J0NNhLRhKN51e8MQ=",
         "owner": "7mind",
         "repo": "ponygirls",
-        "rev": "38df9ee9626da76d5df0aedece36c2948e248410",
+        "rev": "6b024e203d65cce8429aefc38b23460933d239f6",
         "type": "github"
       },
       "original": {
@@ -1186,7 +1143,6 @@
         "agenix-rekey": "agenix-rekey",
         "browservice": "browservice",
         "classic-app-switcher": "classic-app-switcher",
-        "cq": "cq",
         "crane": "crane",
         "darwin": "darwin",
         "ecoflow-mqtt": "ecoflow-mqtt",

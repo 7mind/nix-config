@@ -156,16 +156,7 @@
       inputs.flake-utils.follows = "flake-utils";
     };
 
-    # cq — markdown-ledger MCP server, the LLM prompt/skill assets, AND the
-    # extracted LLM coding-agent harness (Claude/Codex/Pi + yolo sandbox):
-    # cq.packages.<system>.{ledger-mcp,claude-code,codex,yolo,llm-prompts,...},
-    # cq.llmAssets, cq.homeManagerModules.dev-llm.
-    cq = {
-      url = "github:7mind/cq";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.flake-utils.follows = "flake-utils";
-      inputs.ponygirls.follows = "ponygirls";
-    };
+    # Legacy github:7mind/cq input removed. Replacement is ../cq4; not wired yet.
 
     # wanbond — resilient WAN-bonding tunnel with adaptive FEC (the "fecalia"
     # repo). Exposes packages.<system>.default = the wanbond binary. Tracks main.

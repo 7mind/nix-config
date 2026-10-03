@@ -1,2 +1,3 @@
-[ledger]
-  backend = "xdg"
+# Legacy cq ledger settings. Not used until cq4 is wired.
+# [ledger]
+#   backend = "xdg"

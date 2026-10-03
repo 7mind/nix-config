@@ -1,4 +1,6 @@
-# Supplies host-only facts that the portable cq module cannot access.
+# Supplies host-only facts that the portable harness module cannot access.
+# The legacy cq wrapper (inputs.cq.homeManagerModules.dev-llm) is removed;
+# cq4 is not wired yet. The harness itself comes from ponygirls.
 { config, lib, pkgs, outerConfig, inputs, ... }:
 let
   cfg = config.smind.hm.dev.llm;
@@ -16,18 +18,18 @@ let
     else null;
 in
 {
-  imports = [ inputs.cq.homeManagerModules.dev-llm ];
+  imports = [ inputs.ponygirls.homeManagerModules.dev-llm ];
 
   config = lib.mkIf cfg.enable {
     smind.hm.dev.llm.extraSkills = lib.mkIf cfg.yolo.vm.enable {
       local-test-vms = builtins.readFile ./skills/local-test-vms/SKILL.md;
     };
 
-    # Register the codegraph + ledger MCP tools directly in Pi instead of
-    # behind pi-mcp-adapter's mcp() proxy, so all their tools load eagerly
-    # into context. Scoped to these two servers (not `true`) so a future
-    # verbose MCP server stays proxied.
-    smind.hm.dev.llm.pi.mcpDirectTools = [ "codegraph" "ledger" ];
+    # Register the codegraph MCP tools directly in Pi instead of behind
+    # pi-mcp-adapter's mcp() proxy, so its tools load eagerly into context.
+    # Scoped to this server (not `true`) so a future verbose MCP server stays
+    # proxied. The legacy cq `ledger` server is not registered until cq4.
+    smind.hm.dev.llm.pi.mcpDirectTools = [ "codegraph" ]; # "ledger"
 
     # Suppress Codex's "switch to a lower tier model" nudge on the rate-limit
     # (low-token) basis — "Approaching rate limits / uses fewer credits for
