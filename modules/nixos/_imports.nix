@@ -5,6 +5,7 @@
   ./amnezia-vpn.nix
   ./asterisk.nix
   ./attic-cache-tmpfiles.nix
+  ./exchange-dir.nix
   ./audio.nix
   ./btrfs-snapshots.nix
   ./bluetooth.nix
