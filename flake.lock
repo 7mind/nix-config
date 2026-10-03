@@ -1076,11 +1076,11 @@
         "openai-codex-plugin": "openai-codex-plugin"
       },
       "locked": {
-        "lastModified": 1790980380,
-        "narHash": "sha256-+DQMZtsGWY/Ngsa3b9svCZyNNLnYXF2evnLMOJFXRqA=",
+        "lastModified": 1791016761,
+        "narHash": "sha256-rP/BJy3MdEd34kJjahhKTDrWLOxXJLTwJ+Vcur3SJ+g=",
         "owner": "7mind",
         "repo": "ponygirls",
-        "rev": "c36f01abf0ac12ed466c0d7afca8dfa6073203ef",
+        "rev": "38df9ee9626da76d5df0aedece36c2948e248410",
         "type": "github"
       },
       "original": {
