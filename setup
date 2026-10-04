@@ -89,7 +89,8 @@ Options:
                     remote switch/boot (nix copy + ssh), not the build.
   --build-on HOST   Restrict builds to this configured builder (repeatable).
                     Local builds are disabled unless HOST is this machine.
-  --offline         Pass --offline to nix build (no network fetches)
+  --offline         Pass --offline to nix build (no network fetches);
+                    also skips the upstream git sync
   -nrs, --no-resock Skip SSH_AUTH_SOCK probing (keep whatever the shell set)
   -ncs, --no-check-sigs
                     Pass --no-check-sigs to nix copy when deploying to a
@@ -101,6 +102,12 @@ Options:
 Host specifiers:
   HOST                 Individual host name (e.g., o1, pavel-fw)
   +GROUP               All hosts in a group (e.g., +infra, +pavel)
+
+Upstream sync:
+  Unless --offline is given, setup fetches upstream for the main repo
+  and the private submodule (when configured) and rebases the current
+  branches onto their upstreams before building anything. If the
+  rebase cannot proceed automatically, setup exits early.
 
 Examples:
   $(basename "$0")                  # Build current host
@@ -493,6 +500,97 @@ configure_build_on() {
     echo "==> Restricting builds to: ${BUILD_ON_HOSTS[*]}"
 }
 
+# Fetch upstream for one repo and rebase the current branch onto it.
+# Local uncommitted changes (if any) are stashed and re-applied, so the
+# build always runs on top of the latest upstream. Any failure aborts
+# the whole setup before any build starts; the working tree is left
+# clean (rebase aborted, stash restored) whenever possible.
+sync_repo() {
+    local repo="$1"
+    local label="$2"
+
+    if ! git -C "$repo" rev-parse --git-dir >/dev/null 2>&1; then
+        echo "    ${label}: not a git repository, skipping upstream sync"
+        return 0
+    fi
+
+    local branch
+    if ! branch=$(git -C "$repo" symbolic-ref --short HEAD 2>/dev/null); then
+        echo "    ${label}: detached HEAD, fetching only (no rebase target)"
+        git -C "$repo" fetch origin || {
+            echo "Error: failed to fetch ${label}" >&2
+            return 1
+        }
+        return 0
+    fi
+
+    local remote
+    remote=$(git -C "$repo" config "branch.${branch}.remote" 2>/dev/null || true)
+    [[ -z "$remote" ]] && remote="origin"
+
+    echo "==> Syncing ${label} (${branch}) with ${remote}..."
+    git -C "$repo" fetch "$remote" || {
+        echo "Error: failed to fetch ${label} from ${remote}" >&2
+        return 1
+    }
+
+    if ! git -C "$repo" rev-parse --verify '@{u}' >/dev/null 2>&1; then
+        echo "    ${label}: no upstream configured for '${branch}', skipping rebase"
+        return 0
+    fi
+
+    local behind
+    behind=$(git -C "$repo" rev-list --count 'HEAD..@{u}')
+    if [[ "$behind" == "0" ]]; then
+        echo "    ${label}: already up to date"
+        return 0
+    fi
+    echo "    ${label}: ${behind} commit(s) behind upstream, rebasing..."
+
+    local stashed=false
+    if [[ -n "$(git -C "$repo" status --porcelain)" ]]; then
+        echo "    ${label}: stashing local changes..."
+        git -C "$repo" stash push -u -m "setup: pre-sync WIP" || {
+            echo "Error: cannot stash local changes in ${label}; commit or stash them manually and re-run" >&2
+            return 1
+        }
+        stashed=true
+    fi
+
+    if ! git -C "$repo" rebase '@{u}'; then
+        git -C "$repo" rebase --abort || true
+        if [[ "$stashed" == "true" ]]; then
+            git -C "$repo" stash pop || true
+        fi
+        echo "Error: automatic rebase of ${label} onto upstream failed (conflicts); resolve manually and re-run. No builds were started." >&2
+        return 1
+    fi
+
+    if [[ "$stashed" == "true" ]]; then
+        git -C "$repo" stash pop || {
+            echo "Error: ${label} was rebased, but stashed changes could not be re-applied; the stash entry was kept (see 'git -C ${repo} stash list'). Resolve manually." >&2
+            return 1
+        }
+    fi
+
+    echo "    ${label}: rebased onto upstream"
+}
+
+do_git_sync() {
+    if [[ "$DO_OFFLINE" == "true" ]]; then
+        echo "==> Skipping upstream sync (--offline)"
+        return 0
+    fi
+
+    sync_repo "$SCRIPT_DIR" "main repo" || exit 1
+
+    if [[ -d "$SCRIPT_DIR/private" ]] && git -C "$SCRIPT_DIR/private" rev-parse --git-dir >/dev/null 2>&1; then
+        sync_repo "$SCRIPT_DIR/private" "private submodule" || exit 1
+    else
+        echo "    private submodule: not configured, skipping upstream sync"
+    fi
+}
+
 add_all() {
     git add .
     git submodule foreach git add .
@@ -844,6 +942,7 @@ main() {
 
     cd "$SCRIPT_DIR"
     do_resock
+    do_git_sync
     configure_build_on
     load_host_meta
     expand_host_specifiers
