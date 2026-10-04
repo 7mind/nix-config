@@ -1,4 +1,4 @@
-{ config, lib, outerConfig, cfg-meta, pkgs, ... }:
+{ config, lib, cfg-meta, pkgs, xkbLib, ... }:
 
 # KDE/Plasma user settings (theme, fonts, xkb, mouse, power, keybindings) driven
 # by system-level options. Linux-only, where plasma-manager is available.
@@ -17,13 +17,14 @@ let
   defaultSmallFontSize = 8;
   defaultFixedFontSize = 10;
 
-  defaultSansFamily = lib.head outerConfig.smind.fonts.defaults.sansSerif;
-  defaultMonoFamily = lib.head outerConfig.smind.fonts.defaults.monospace;
+  host = config.smind.hm.fromHost;
+  defaultSansFamily = lib.head host.fonts.defaults.sansSerif;
+  defaultMonoFamily = lib.head host.fonts.defaults.monospace;
 
-  kdeEnabled = outerConfig.smind.desktop.kde.enable or false;
-  isLaptop = outerConfig.smind.isLaptop or false;
-  sharedXkb = outerConfig.smind.desktop.xkb or false;
-  sharedMouse = outerConfig.smind.desktop.mouse or false;
+  kdeEnabled = host.desktop.kde.enable;
+  isLaptop = host.isLaptop;
+  sharedXkb = host.desktop.xkb;
+  sharedMouse = host.desktop.mouse;
 
   kdeFontType = lib.types.submodule ({ ... }: {
     options = {
@@ -49,8 +50,8 @@ lib.optionalAttrs cfg-meta.isLinux {
     smind.hm.desktop.kde.minimal-keybindings = lib.mkEnableOption "minimal KDE keybindings for window switching";
 
     smind.hm.desktop.kde.hotkey-modifier = lib.mkOption {
-      type = outerConfig.lib.xkb.modifierType;
-      default = outerConfig.smind.desktop.xkb.hotkey-modifier;
+      type = xkbLib.modifierType;
+      default = host.desktop.xkb.hotkey-modifier;
       example = "ctrl-super";
       description = ''
         Modifier(s) for window switching hotkeys (Tab, grave, Space), as a dash-separated
@@ -313,7 +314,6 @@ lib.optionalAttrs cfg-meta.isLinux {
     (lib.mkIf (config.smind.hm.desktop.kde.xkb.layouts != [ ]) {
       programs.plasma.input.keyboard =
         let
-          xkbLib = outerConfig.lib.xkb;
           xkb = config.smind.hm.desktop.kde.xkb;
           layouts = xkbLib.getLayouts xkb.layouts;
           variants = xkbLib.getVariants xkb.layouts;
@@ -349,7 +349,7 @@ lib.optionalAttrs cfg-meta.isLinux {
         };
       };
 
-      programs.plasma.configFile.kded5rc."Module-gtkconfig".autoload = outerConfig.smind.desktop.kde.kde-gtk-config.enable;
+      programs.plasma.configFile.kded5rc."Module-gtkconfig".autoload = host.desktop.kde.kde-gtk-config.enable;
 
       programs.plasma.fonts = {
         general = config.smind.hm.desktop.kde.fonts.general;
@@ -478,7 +478,7 @@ lib.optionalAttrs cfg-meta.isLinux {
           kdeModifierTokens = { ctrl = "Ctrl"; alt = "Alt"; super = "Meta"; shift = "Shift"; };
           hotkeyModifier = lib.concatMapStringsSep "+"
             (t: kdeModifierTokens.${t})
-            (outerConfig.lib.xkb.modifierTokens hotkeyMod);
+            (xkbLib.modifierTokens hotkeyMod);
 
           mkBinding = key: "${hotkeyModifier}+${key}";
         in

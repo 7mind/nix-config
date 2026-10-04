@@ -1,4 +1,4 @@
-{ config, lib, cfg-meta, outerConfig, ... }:
+{ config, lib, cfg-meta, ... }:
 
 let
   defaultFontSize = if cfg-meta.isDarwin then 14 else 10;
@@ -9,7 +9,7 @@ in
 
     smind.hm.wezterm.fontFamily = lib.mkOption {
       type = lib.types.str;
-      default = outerConfig.smind.fonts.terminal;
+      default = config.smind.hm.fromHost.fonts.terminal;
       description = "WezTerm font family";
     };
 

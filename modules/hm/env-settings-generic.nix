@@ -1,4 +1,4 @@
-{ cfg-const, config, lib, pkgs, xdg_associate, cfg-meta, outerConfig, ... }:
+{ cfg-const, config, lib, pkgs, xdg_associate, cfg-meta, ... }:
 
 {
   options = {
@@ -10,7 +10,7 @@
 
     smind.hm.environment.all-docs.enable = lib.mkOption {
       type = lib.types.bool;
-      default = outerConfig.smind.isDesktop;
+      default = config.smind.hm.fromHost.isDesktop;
       description = "Install documentation and man pages";
     };
 
@@ -25,9 +25,8 @@
     # When system uses gcr-ssh-agent (GNOME/COSMIC), don't start a competing agent
     services.ssh-agent.enable = lib.mkIf cfg-meta.isLinux (
       let
-        keyringCfg = outerConfig.smind.security.keyring or { };
-        keyringEnabled = keyringCfg.enable;
-        sshAgent = keyringCfg.sshAgent or "standalone";
+        keyringEnabled = config.smind.hm.fromHost.security.keyring.enable;
+        sshAgent = config.smind.hm.fromHost.security.keyring.sshAgent;
       in
       !keyringEnabled || sshAgent == "standalone"
     );

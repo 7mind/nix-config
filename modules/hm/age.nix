@@ -1,25 +1,28 @@
-{ config, lib, outerConfig, cfg-meta, ... }:
+{ config, lib, cfg-meta, ... }:
 
 let
-  ageEnabled = outerConfig.smind.age.enable;
+  host = config.smind.hm.fromHost;
+  ageEnabled = host.age.enable;
 in
 if cfg-meta.isStandalone or false then { } else {
   config = lib.mkMerge [
-    # Always propagate hostPubkey and masterIdentities from the outer (system)
-    # config. hostPubkey suppresses agenix-rekey dummy-key warnings; real
+    # Always propagate hostPubkey and masterIdentities from the host projection.
+    # hostPubkey suppresses agenix-rekey dummy-key warnings; real
     # masterIdentities satisfy agenix-rekey's non-empty assertion without
     # polluting the merged ageWrapper used by update-masterkeys.
     {
-      age.rekey = {
-        hostPubkey = outerConfig.age.rekey.hostPubkey;
-        masterIdentities = outerConfig.age.rekey.masterIdentities;
-      };
+      age.rekey = lib.mkMerge [
+        (lib.mkIf (host.age.hostPubkey != null) {
+          hostPubkey = host.age.hostPubkey;
+        })
+        { masterIdentities = host.age.masterIdentities; }
+      ];
     }
 
-    (lib.mkIf ageEnabled {
+    (lib.mkIf (ageEnabled && host.age.storageMode != null) {
       age.rekey = {
-        storageMode = outerConfig.age.rekey.storageMode;
-        localStorageDir = outerConfig.age.rekey.localStorageDir;
+        storageMode = host.age.storageMode;
+        localStorageDir = host.age.localStorageDir;
       };
     })
 

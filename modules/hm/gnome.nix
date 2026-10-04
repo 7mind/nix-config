@@ -1,7 +1,7 @@
-{ lib, outerConfig, ... }:
+{ config, lib, ... }:
 
 let
-  runOrRaiseEnabled = outerConfig.smind.desktop.gnome.extensions.run-or-raise.enable or false;
+  runOrRaiseEnabled = config.smind.hm.fromHost.desktop.gnome.extensions.run-or-raise.enable;
 in
 {
   config = lib.mkIf runOrRaiseEnabled {

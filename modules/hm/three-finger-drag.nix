@@ -1,4 +1,4 @@
-{ config, lib, cfg-meta, outerConfig, ... }:
+{ config, lib, cfg-meta, ... }:
 
 let
   cfg = config.smind.hm.three-finger-drag;
@@ -8,7 +8,7 @@ in
   options.smind.hm.three-finger-drag = {
     enable = lib.mkOption {
       type = lib.types.bool;
-      default = cfg-meta.isLinux && (outerConfig.smind.three-finger-drag.enable or false);
+      default = cfg-meta.isLinux && config.smind.hm.fromHost.three-finger-drag.enable;
       description = "Manage linux-3-finger-drag config file";
     };
 

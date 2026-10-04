@@ -1,7 +1,7 @@
-{ config, lib, pkgs, cfg-packages, cfg-meta, outerConfig, cfg-args, ... }:
+{ config, lib, pkgs, cfg-packages, cfg-meta, cfg-args, ... }:
 
 let
-  defaultTerminalFontFamily = "'${outerConfig.smind.fonts.terminal}'";
+  defaultTerminalFontFamily = "'${config.smind.hm.fromHost.fonts.terminal}'";
   vscodiumLdLibraries = [ pkgs.icu pkgs.openssl ];
   archiveFsImport = ''import{createWriteStream as'';
   ownerWritableArchiveFsImport = ''import{statSync as nixStatSync,createWriteStream as'';
