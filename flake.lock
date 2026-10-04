@@ -204,6 +204,23 @@
         "type": "github"
       }
     },
+    "crawl4ai": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790165349,
+        "narHash": "sha256-4mGYnNnEfdmV+IhkR1tKZf+b7mBMlcsrf5B/yK1ZqoA=",
+        "owner": "unclecode",
+        "repo": "crawl4ai",
+        "rev": "133e1d92e37885dfccc03ea2e3687d06c98b7ceb",
+        "type": "github"
+      },
+      "original": {
+        "owner": "unclecode",
+        "ref": "v0.9.4",
+        "repo": "crawl4ai",
+        "type": "github"
+      }
+    },
     "darwin": {
       "inputs": {
         "nixpkgs": [
@@ -299,11 +316,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1791067725,
-        "narHash": "sha256-8GNI82PvpdTz6hyebEUgtbsAU7QOfhgVwOmxSu2Bsg0=",
+        "lastModified": 1791117568,
+        "narHash": "sha256-4f6qHyewLmrh0zA/4uoyDM6oLDKjRAmaMgUlKGR0OVA=",
         "owner": "7mind",
         "repo": "fecalia",
-        "rev": "34b701ba945e454c2e4fc61a0b4616e6d9a73ddc",
+        "rev": "35aa0cc4ad6ba1e7df20560b3d30a285f29bacf8",
         "type": "github"
       },
       "original": {
@@ -1024,6 +1041,7 @@
       "inputs": {
         "claude-code-sandbox": "claude-code-sandbox",
         "codegraph": "codegraph",
+        "crawl4ai": "crawl4ai",
         "flake-utils": [
           "flake-utils"
         ],
@@ -1033,11 +1051,11 @@
         "openai-codex-plugin": "openai-codex-plugin"
       },
       "locked": {
-        "lastModified": 1791065813,
-        "narHash": "sha256-wftHOKjcucbZjZ0oE0px0ThPxBh/0dJYOZ9vXv7rdgo=",
+        "lastModified": 1791116905,
+        "narHash": "sha256-bmiV4th0JbVkvmia/bxNEI8/d41Pw7VmFA/jxB4Ino0=",
         "owner": "7mind",
         "repo": "ponygirls",
-        "rev": "86e75ba2c309fe8c6645a111e942c655b503b968",
+        "rev": "452ccbd4b1c8b4815f97a0c0fa110b366146438a",
         "type": "github"
       },
       "original": {
