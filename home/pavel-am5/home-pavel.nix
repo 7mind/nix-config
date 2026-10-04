@@ -6,14 +6,14 @@
   extended_pkg,
   cfg-meta,
   xdg_associate,
-  outerConfig,
   import_if_exists,
   import_if_exists_or,
   ...
 }:
 
 let
-  llamaSwapBaseUrl = "http://127.0.0.1:${toString outerConfig.services.llama-swap.port}/v1";
+  host = config.smind.hm.fromHost;
+  llamaSwapBaseUrl = "http://127.0.0.1:${toString host.llama-swap.port}/v1";
   llamaSwapModels = [
     { id = "qwen3.8-27b-q8"; name = "Qwen3.8 27B Q8 local"; }
     { id = "qwen3.8-27b-q8-abliterated"; name = "Qwen3.8 27B Q8 abliterated local"; }
@@ -32,11 +32,11 @@ in
 
   assertions = [
     {
-      assertion = outerConfig.services.llama-swap.enable;
+      assertion = host.llama-swap.enable;
       message = "The pavel-am5 Pi model provider requires services.llama-swap.enable";
     }
     {
-      assertion = builtins.all (m: builtins.hasAttr m.id outerConfig.services.llama-swap.settings.models) llamaSwapModels;
+      assertion = builtins.all (m: host.llama-swap.models ? ${m.id}) llamaSwapModels;
       message = "Pi models must exist in services.llama-swap.settings.models: ${lib.concatMapStringsSep ", " (m: m.id) llamaSwapModels}";
     }
   ];

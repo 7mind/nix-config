@@ -197,6 +197,14 @@
           inherit inputs;
           inherit self;
         };
+        make-home-aarch64 = globals.make-home-aarch64 {
+          inherit inputs;
+          inherit self;
+        };
+        make-home-darwin-aarch64 = globals.make-home-darwin-aarch64 {
+          inherit inputs;
+          inherit self;
+        };
       };
     in
     {

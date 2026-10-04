@@ -1,22 +1,23 @@
 # Supplies host-only facts that the portable harness module cannot access.
 # The legacy cq wrapper (inputs.cq.homeManagerModules.dev-llm) is removed;
 # cq4 is not wired yet. The harness itself comes from ponygirls.
-{ config, lib, pkgs, outerConfig, inputs, ... }:
+{ config, lib, pkgs, inputs, ... }:
 let
   cfg = config.smind.hm.dev.llm;
+  host = config.smind.hm.fromHost;
 
   gpu = {
-    nvidia = outerConfig.smind.hw.nvidia.enable or false;
-    amd = outerConfig.smind.hw.amd.gpu.enable or false;
-    intel = outerConfig.smind.hw.intel.gpu.enable or false;
+    nvidia = host.hw.nvidia.enable;
+    amd = host.hw.amd.gpu.enable;
+    intel = host.hw.intel.gpu.enable;
   };
   gpuEnabled = gpu.nvidia || gpu.amd || gpu.intel;
 
   ollamaModelsDir =
-    if (outerConfig.services.ollama.enable or false)
-    then outerConfig.services.ollama.modelsDir
+    if host.ollama.enable
+    then host.ollama.modelsDir
     else null;
-  crawl4aiToken = outerConfig.age.secrets.crawl4ai-api-token or null;
+  crawl4aiToken = host.age.secrets.crawl4ai-api-token or null;
   hasCrawl4aiToken = crawl4aiToken != null;
 in
 {

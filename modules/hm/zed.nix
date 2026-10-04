@@ -1,4 +1,4 @@
-{ config, lib, pkgs, cfg-flakes, cfg-packages, cfg-meta, outerConfig, override_pkg, ... }:
+{ config, lib, pkgs, cfg-flakes, cfg-packages, cfg-meta, override_pkg, ... }:
 
 let
   hasUserKeymaps = config.smind.hm.zed.userKeymaps != [ ];
@@ -21,7 +21,7 @@ in
 
     smind.hm.zed.terminalFontFamily = lib.mkOption {
       type = lib.types.str;
-      default = outerConfig.smind.fonts.terminal;
+      default = config.smind.hm.fromHost.fonts.terminal;
       description = "Zed terminal font family";
     };
 

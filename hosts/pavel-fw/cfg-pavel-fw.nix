@@ -249,7 +249,5 @@ in
     };
   };
 
-  home-manager.users.pavel = import ./home-pavel.nix;
-  home-manager.users.root = import ./home-root.nix;
 
 }

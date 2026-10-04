@@ -1,16 +1,16 @@
-{ cfg-const, config, lib, pkgs, xdg_associate, cfg-meta, outerConfig, ... }:
+{ cfg-const, config, lib, pkgs, xdg_associate, cfg-meta, ... }:
 
 {
   options = {
     smind.hm.environment.sane-defaults.desktop.enable = lib.mkOption {
       type = lib.types.bool;
-      default = outerConfig.smind.isDesktop;
+      default = config.smind.hm.fromHost.isDesktop;
       description = "Enable desktop-specific home-manager settings";
     };
 
   };
 
-  config = lib.mkIf (config.smind.hm.environment.sane-defaults.desktop.enable && outerConfig.smind.isDesktop) {
+  config = lib.mkIf (config.smind.hm.environment.sane-defaults.desktop.enable && config.smind.hm.fromHost.isDesktop) {
 
     programs.atuin = {
       daemon.enable = true;
@@ -38,7 +38,7 @@
         nix
         it-tools
         agenda
-      ] ++ lib.optional outerConfig.smind.desktop.kde.enable kde-system-settings;
+      ] ++ lib.optional config.smind.hm.fromHost.desktop.kde.enable kde-system-settings;
     };
 
     home.packages = lib.mkIf cfg-meta.isLinux (with pkgs; [

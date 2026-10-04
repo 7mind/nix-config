@@ -18,5 +18,4 @@
 
   system.defaults.screencapture = { location = "~/Desktop/Screenshots"; };
 
-  home-manager.users.pavel = import ./home-pavel.nix;
 }

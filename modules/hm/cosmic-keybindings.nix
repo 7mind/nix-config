@@ -1,9 +1,10 @@
-{ config, lib, pkgs, outerConfig, ... }:
+{ config, lib, pkgs, xkbLib, ... }:
 
 let
-  sharedXkb = outerConfig.smind.desktop.xkb;
-  sharedMouse = outerConfig.smind.desktop.mouse;
-  cosmicEnabled = outerConfig.smind.desktop.cosmic.enable or false;
+  host = config.smind.hm.fromHost;
+  sharedXkb = host.desktop.xkb;
+  sharedMouse = host.desktop.mouse;
+  cosmicEnabled = host.desktop.cosmic.enable;
 in
 {
   options = {
@@ -40,8 +41,8 @@ in
     };
 
     smind.hm.desktop.cosmic.hotkey-modifier = lib.mkOption {
-      type = outerConfig.lib.xkb.modifierType;
-      default = outerConfig.smind.desktop.xkb.hotkey-modifier;
+      type = xkbLib.modifierType;
+      default = host.desktop.xkb.hotkey-modifier;
       example = "ctrl-super";
       description = ''
         Modifier(s) for window switching hotkeys (Tab, grave, Space), as a dash-separated
@@ -139,7 +140,6 @@ in
 
       xdg.configFile."cosmic/com.system76.CosmicComp/v1/xkb_config".text =
         let
-          xkbLib = outerConfig.lib.xkb;
           xkb = config.smind.hm.desktop.cosmic.xkb;
           layouts = lib.concatStringsSep "," (xkbLib.getLayouts xkb.layouts);
           variants = lib.concatStringsSep "," (xkbLib.getVariants xkb.layouts);
@@ -198,7 +198,7 @@ in
           hotkeyMod = config.smind.hm.desktop.cosmic.hotkey-modifier;
 
           cosmicModifierTokens = { ctrl = "Ctrl"; alt = "Alt"; super = "Super"; shift = "Shift"; };
-          hotkeyMods = map (t: cosmicModifierTokens.${t}) (outerConfig.lib.xkb.modifierTokens hotkeyMod);
+          hotkeyMods = map (t: cosmicModifierTokens.${t}) (xkbLib.modifierTokens hotkeyMod);
 
           kbHotkey = key: action: kb hotkeyMods key action;
           disableHotkeyShift = key: disable ([ "Shift" ] ++ hotkeyMods) key;

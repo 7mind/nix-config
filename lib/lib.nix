@@ -51,9 +51,9 @@ let
       '';
     });
 
-  outerConfig =
-    if args ? standaloneOuterConfig then args.standaloneOuterConfig
-    else if (cfg-meta.isLinux) then args.nixosConfig else args.darwinConfig;
+  xkbLib = import ./xkb.nix { inherit lib; };
+
+  ageUserSecret = import ./age-user-secret.nix;
 
   extendFuncResultWith = func: attrset:
     let
@@ -141,7 +141,9 @@ in
 {
   _module.args.extend_pkg = extend_pkg;
 
-  _module.args.outerConfig = outerConfig;
+  _module.args.xkbLib = xkbLib;
+
+  _module.args.ageUserSecret = ageUserSecret;
 
   _module.args.extended_pkg = extended_pkg;
 

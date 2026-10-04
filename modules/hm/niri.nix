@@ -1,7 +1,7 @@
-args@{ lib, pkgs, cfg-meta, outerConfig, ... }:
+args@{ lib, pkgs, cfg-meta, config, ... }:
 
 let
-  niriEnabled = outerConfig.smind.desktop.niri.enable;
+  niriEnabled = config.smind.hm.fromHost.desktop.niri.enable;
   defaultNiriConfigModule = (import "${cfg-meta.inputs.niri}/default-config.kdl.nix") cfg-meta.inputs;
   inherit (cfg-meta.inputs.niri.lib.kdl) node plain leaf;
   scaledOutputNames = [

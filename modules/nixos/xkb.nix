@@ -1,4 +1,4 @@
-{ config, lib, ... }:
+{ config, lib, xkbLib, ... }:
 
 {
   options.smind.desktop.xkb = {
@@ -21,7 +21,7 @@
     };
 
     hotkey-modifier = lib.mkOption {
-      type = config.lib.xkb.modifierType;
+      type = xkbLib.modifierType;
       default = "super";
       example = "ctrl-super";
       description = ''
@@ -33,7 +33,7 @@
     };
 
     minimize-modifier = lib.mkOption {
-      type = config.lib.xkb.modifierType;
+      type = xkbLib.modifierType;
       default = "ctrl-alt";
       example = "ctrl-alt-super-shift";
       description = ''
@@ -45,34 +45,5 @@
     };
   };
 
-  config.lib.xkb = {
-    parseLayout = s:
-      let parts = lib.splitString "+" s;
-      in lib.head parts;
-
-    parseVariant = s:
-      let parts = lib.splitString "+" s;
-      in if lib.length parts > 1 then lib.elemAt parts 1 else "";
-
-    getLayouts = layouts: map config.lib.xkb.parseLayout layouts;
-
-    getVariants = layouts: map config.lib.xkb.parseVariant layouts;
-
-    modifierAccelTokens = {
-      ctrl = "<Primary>";
-      alt = "<Alt>";
-      super = "<Super>";
-      shift = "<Shift>";
-    };
-
-    # Option type for a modifier spec: a dash-separated combination of
-    # "ctrl", "alt", "super", "shift" (e.g. "ctrl", "super", "ctrl-alt", "ctrl-alt-super-shift")
-    modifierType = lib.types.addCheck lib.types.str
-      (s: lib.all (t: builtins.hasAttr t config.lib.xkb.modifierAccelTokens) (lib.splitString "-" s));
-
-    modifierTokens = spec: lib.splitString "-" spec;
-
-    modifierBinding = spec: key:
-      (lib.concatMapStrings (t: config.lib.xkb.modifierAccelTokens.${t}) (lib.splitString "-" spec)) + key;
-  };
+  config.lib.xkb = xkbLib;
 }

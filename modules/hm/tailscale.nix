@@ -1,8 +1,8 @@
-{ config, lib, pkgs, outerConfig, ... }:
+{ config, lib, pkgs, ... }:
 
 let
   cfg = config.smind.hm.tailscale;
-  tailscaleEnabled = outerConfig.smind.net.tailscale.enable;
+  tailscaleEnabled = config.smind.hm.fromHost.net.tailscale.enable;
 in
 {
   options.smind.hm.tailscale = {

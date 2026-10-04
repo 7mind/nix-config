@@ -2,6 +2,7 @@
   config,
   lib,
   cfg-meta,
+  ageUserSecret,
   ...
 }:
 
@@ -92,6 +93,8 @@ in
 
   config = lib.mkMerge [
     {
+      # Kept for callers that already hold the host secret set. Home Manager
+      # modules use the ageUserSecret module argument and smind.hm.fromHost.age.secrets.
       lib.smind.age.userSecret =
         {
           hmConfig,
@@ -99,14 +102,7 @@ in
           ageSecrets ? outerConfig.age.secrets,
           user ? hmConfig.home.username,
         }:
-        name:
-        let
-          userScopedName = "${user}/${name}";
-        in
-        if builtins.hasAttr userScopedName ageSecrets then
-          builtins.getAttr userScopedName ageSecrets
-        else
-          builtins.getAttr name ageSecrets;
+        ageUserSecret { inherit ageSecrets user; };
 
       assertions = [
         {
@@ -145,7 +141,7 @@ in
     # agenix-rekey asserts masterIdentities is non-empty, so provide a dummy at
     # mkDefault priority — real config overrides it whenever present,
     # which means update-masterkeys never sees the placeholder. The
-    # paired HM module (modules/hm/age.nix) propagates outerConfig's
+    # paired HM module (modules/hm/age.nix) propagates the host projection's
     # masterIdentities instead of setting its own dummy, so the merged
     # ageWrapper stays clean.
     #

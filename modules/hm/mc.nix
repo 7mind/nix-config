@@ -1,7 +1,7 @@
-{ outerConfig, lib, ... }:
+{ config, lib, ... }:
 
 {
-  config = lib.mkIf outerConfig.smind.environment.fileManagers.mc.enable {
+  config = lib.mkIf config.smind.hm.fromHost.environment.fileManagers.mc.enable {
     programs.mc = {
       enable = true;
       settings = {

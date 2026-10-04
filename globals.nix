@@ -45,7 +45,7 @@ rec {
     ];
   };
 
-  make = { self, inputs, arch }: hostname:
+  make = { self, inputs, arch }: { hostname, homes ? [ ] }:
     let
       pkgs = import inputs.nixpkgs {
         localSystem = arch;
@@ -363,29 +363,47 @@ rec {
             { system.stateVersion = cfg-meta.state-version-system; }
             (cfg-args.import_if_exists ./hosts/${hostname}/cfg-${hostname}.nix)
             (cfg-args.import_if_exists ./private/hosts/${hostname}/cfg-${hostname}.nix)
+            {
+              # Profiles declared for this host in hosts.nix. Only .modules is
+              # used; the standalone homeManagerConfiguration is not evaluated.
+              home-manager.users = builtins.listToAttrs (map (home:
+                if home.hostname != hostname then
+                  throw "Home profile ${home.name} belongs to ${home.hostname}, not ${hostname}"
+                else {
+                  name = home.username;
+                  value.imports = home.modules;
+                }
+              ) homes);
+            }
           ];
         };
     };
 
+  # Explicit profile declared in hosts.nix. The public file and the private
+  # overlay are both imported when present. Users are not discovered.
+  homeUserModules = { hostname, username }:
+    let
+      candidate = root:
+        let path = root + "/${hostname}/home-${username}.nix";
+        in if builtins.pathExists path then [ path ] else [ ];
+      modules = candidate ./home ++ candidate ./private/home;
+    in
+    if modules == [ ] then
+      throw "No Home Manager profile for ${username}@${hostname}. Expected home/${hostname}/home-${username}.nix or private/home/${hostname}/home-${username}.nix."
+    else modules;
+
   make-home = { inputs, self, arch }: { hostname, username }:
     let
-      pkgs = import inputs.nixpkgs {
-        localSystem = arch;
-        config.allowUnfree = true;
-        overlays = [
-          inputs.nix-vscode-extensions.overlays.default
-          inputs.rust-overlay.overlays.default
-          (final: _: {
-            resock = final.callPackage ./pkg/resock/default.nix { };
-            fastfetch-minimal = final.callPackage ./pkg/fastfetch-minimal { };
-          })
-        ];
-      };
+      isLinux = builtins.match ".*-linux" arch != null;
+      isDarwin = builtins.match ".*-darwin" arch != null;
+      archTag =
+        let short = builtins.head (builtins.match "([^-]+)-.+" arch);
+        in if isDarwin then "${short}-darwin" else short;
+      modules = homeUserModules { inherit hostname username; };
       cfg-const = (import ./config.nix).const;
       cfg-meta = {
         inherit arch hostname inputs;
-        isLinux = true;
-        isDarwin = false;
+        inherit isLinux isDarwin;
         isStandalone = true;
         paths = {
           root = "${self}";
@@ -399,69 +417,63 @@ rec {
           users = "${self}/users";
         };
       };
-      standaloneOuterConfig = {
-        smind = {
-          isDesktop = false;
-          fonts = {
-            terminal = "monospace";
-            defaults = {
-              sansSerif = [ "sans-serif" ];
-              monospace = [ "monospace" ];
-            };
-          };
-          desktop = {
-            niri.enable = false;
-            kde.enable = false;
-            cosmic.enable = false;
-            xkb = {
-              layouts = [ "us" ];
-              options = [ ];
-              hotkey-modifier = "super";
-            };
-            mouse = {
-              acceleration = 0.0;
-              accelProfile = "default";
-              naturalScroll = false;
-            };
-          };
-          environment.fileManagers = {
-            mc.enable = false;
-            f4.enable = false;
-          };
-          net.tailscale.enable = false;
-          security.keyring.enable = false;
-        };
-        lib.xkb = {
-          modifierType = pkgs.lib.types.str;
-          modifierTokens = spec: pkgs.lib.splitString "-" spec;
-        };
-      };
-      cfg-hm-modules = [
-        inputs.plasma-manager.homeModules.plasma-manager
-        inputs.niri.homeModules.config
-        inputs.noctalia.homeModules.default
-        { home.stateVersion = cfg-const.state-version-hm; }
-      ];
-      cfg-args = {
-        inherit inputs cfg-const cfg-meta cfg-hm-modules standaloneOuterConfig;
-        inherit smind-hm import_if_exists import_if_exists_or;
-        cfg-packages = (import ./config.nix).cfg-packages { inherit inputs pkgs arch; };
-      };
+      platformModules =
+        if isDarwin then [
+          inputs.mac-app-util.homeManagerModules.default
+          { targets.darwin.copyApps.enable = false; }
+        ] else [
+          inputs.plasma-manager.homeModules.plasma-manager
+          inputs.niri.homeModules.config
+          inputs.noctalia.homeModules.default
+        ];
     in
     {
-      name = "${username}@${hostname}-${builtins.head (pkgs.lib.splitString "-" arch)}";
-      value = inputs.home-manager.lib.homeManagerConfiguration {
-        inherit pkgs;
-        extraSpecialArgs = cfg-args // { inherit cfg-args; };
-        modules = cfg-hm-modules ++ [
-          (import_if_exists ./hosts/${hostname}/home-${username}.nix)
-        ];
-      };
+      name = "${username}@${hostname}-${archTag}";
+      inherit hostname username modules;
+      value =
+        let
+          pkgs = import inputs.nixpkgs {
+            localSystem = arch;
+            config.allowUnfree = true;
+            overlays = [
+              inputs.nix-vscode-extensions.overlays.default
+              inputs.rust-overlay.overlays.default
+            ] ++ (if isLinux then [
+              (final: _: {
+                resock = final.callPackage ./pkg/resock/default.nix { };
+                fastfetch-minimal = final.callPackage ./pkg/fastfetch-minimal { };
+              })
+            ] else [ ]);
+          };
+          cfg-hm-modules = platformModules ++ [
+            { home.stateVersion = cfg-const.state-version-hm; }
+          ];
+          cfg-args = {
+            inherit inputs cfg-const cfg-meta cfg-hm-modules;
+            inherit smind-hm import_if_exists import_if_exists_or;
+            cfg-packages = (import ./config.nix).cfg-packages { inherit inputs pkgs arch; };
+          };
+        in
+        inputs.home-manager.lib.homeManagerConfiguration {
+          inherit pkgs;
+          extraSpecialArgs = cfg-args // { inherit cfg-args; };
+          modules = cfg-hm-modules ++ modules;
+        };
     };
 
   make-home-x86_64 = { inputs, self }: (make-home {
     inherit inputs self;
     arch = "x86_64-linux";
+  });
+
+  make-home-aarch64 = { inputs, self }: (make-home {
+    inherit inputs self;
+    arch = "aarch64-linux";
+  });
+
+  make-home-darwin-aarch64 = { inputs, self }: (make-home {
+    inherit inputs self;
+    arch = "aarch64-darwin";
   });
 
   make-nixos-x86_64 = { inputs, self }: (make {
