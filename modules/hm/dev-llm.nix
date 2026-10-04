@@ -16,6 +16,8 @@ let
     if (outerConfig.services.ollama.enable or false)
     then outerConfig.services.ollama.modelsDir
     else null;
+  crawl4aiToken = outerConfig.age.secrets.crawl4ai-api-token or null;
+  hasCrawl4aiToken = crawl4aiToken != null;
 in
 {
   imports = [ inputs.ponygirls.homeManagerModules.dev-llm ];
@@ -29,7 +31,32 @@ in
     # pi-mcp-adapter's mcp() proxy, so its tools load eagerly into context.
     # Scoped to this server (not `true`) so a future verbose MCP server stays
     # proxied. The legacy cq `ledger` server is not registered until cq4.
-    smind.hm.dev.llm.pi.mcpDirectTools = [ "codegraph" ]; # "ledger"
+    smind.hm.dev.llm.pi.mcpDirectTools = [ "codegraph" ]
+      ++ lib.optional hasCrawl4aiToken "crawl4ai"; # "ledger"
+
+    # Same endpoint for Claude Code, Codex, and Pi. The token stays in the
+    # agenix file: yolo exports it as CRAWL4AI_API_TOKEN, and the proxy also
+    # accepts the file path when the harness is launched outside yolo.
+    smind.hm.dev.llm.crawl4ai = lib.mkIf hasCrawl4aiToken {
+      enable = true;
+      url = "http://crawl4ai.pgtr.7mind.io:11235/mcp/sse";
+      tokenFile = crawl4aiToken.path;
+    };
+    smind.hm.dev.llm.yolo.secretSessionVariables = lib.mkIf hasCrawl4aiToken {
+      CRAWL4AI_API_TOKEN = crawl4aiToken.path;
+    };
+    smind.hm.dev.llm.memorySections = lib.mkIf hasCrawl4aiToken [
+      ''
+        ## Web fetch and screenshots
+
+        The `crawl4ai` MCP server fetches public pages and takes screenshots
+        (tools: `md`, `html`, `screenshot`, `pdf`, `crawl`). It runs on
+        `crawl4ai.pgtr.7mind.io` and cannot open connections to this host or
+        to other machines on local networks; requests to private addresses
+        fail at the network boundary. Do not send it credentials or internal
+        URLs. `execute_js` and crawler hooks are disabled on the server.
+      ''
+    ];
 
     # Suppress Codex's "switch to a lower tier model" nudge on the rate-limit
     # (low-token) basis — "Approaching rate limits / uses fewer credits for
