@@ -316,11 +316,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1791153541,
-        "narHash": "sha256-RdIDLoqvL6ugDNMFVnd1J0pBLXdYEaQm4od61VBHaAI=",
+        "lastModified": 1791223667,
+        "narHash": "sha256-uyWSIi+s3TnSnXAsZHvXSMbDVGcqsY/0HVSUBy0DJco=",
         "owner": "7mind",
         "repo": "fecalia",
-        "rev": "c4d0485d5ca1d5caa8eef85d7ffbb72f9a60f910",
+        "rev": "92a3a949d7b6c09adc1dba6fe6cf4808399920c9",
         "type": "github"
       },
       "original": {
@@ -1051,11 +1051,11 @@
         "openai-codex-plugin": "openai-codex-plugin"
       },
       "locked": {
-        "lastModified": 1791154499,
-        "narHash": "sha256-Mb5MslGwu6H0AzlMmFx6Gq9Ujut9XrXRp+2Gjys5duE=",
+        "lastModified": 1791224859,
+        "narHash": "sha256-vkXOo/q+DNFmy/AMGptp1mh1ZvawJcyJYs39TmgqKzs=",
         "owner": "7mind",
         "repo": "ponygirls",
-        "rev": "b692a08c6f1d0ea7b41b35631583a314f299c1a4",
+        "rev": "f9768444d02af47b4847b855403aa6e7953255f2",
         "type": "github"
       },
       "original": {
