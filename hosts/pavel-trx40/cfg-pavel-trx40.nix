@@ -35,11 +35,20 @@
     # rekeyed file lands under `private/secrets/rekeyed/pavel-trx40/`.
     host.email.enable = false;
 
-    # Initrd unlock over SSH. The Realtek on-board NIC stays put
+    # No ZFS on the fresh 2TB layout (ext4 on LVM, no zroot pool) — keep
+    # the module off until/unless the box returns to ZFS. hostId below is
+    # retained so a future zroot import keeps working.
+    zfs.enable = false;
+
+    # Initrd unlock over SSH — disabled: the fresh ext4/LVM layout has no
+    # encrypted root to unlock, and no initrd host key is provisioned yet.
+    # To re-enable (LUKS/ZFS): generate the key on the target with
+    #   ssh-keygen -t ed25519 -N "" -f /etc/secrets/initrd/ssh_host_ed25519_key
+    # then flip this back to true. The Realtek on-board NIC stays put
     # under its permanent MAC and is enslaved to a synthetic bridge in
     # both the initrd and the booted system so the rest of the
     # networking pipeline (containers, VLANs, …) has a stable handle.
-    initrd-unlock.enable = true;
+    initrd-unlock.enable = false;
     initrd-unlock.macaddr = "00:e0:4c:75:00:9e";
     # bridge-slave auto-detected from net.main-interface
 
@@ -101,7 +110,12 @@
     users.root = {
       openssh.authorizedKeys.keys =
         cfg-const.ssh-keys-pavel ++
-        cfg-const.ssh-keys-nix-builder;
+        cfg-const.ssh-keys-nix-builder ++ [
+          # Deploy key generated on vm for the Oct 2026 re-bring-up
+          # (this host had no key access from vm; password auth goes away
+          # under ssh.mode = "safe"). Private half: ~/.ssh/id_trx40_deploy.
+          "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPHlqP9kXGy/zlvL/ayGsym3UcYWqG4H0J6uNyBNPaUC trx40-deploy-vm"
+        ];
     };
 
     users.pavel = {
@@ -126,7 +140,9 @@
         "podman"
         "ollama"
       ];
-      openssh.authorizedKeys.keys = cfg-const.ssh-keys-pavel;
+      openssh.authorizedKeys.keys = cfg-const.ssh-keys-pavel ++ [
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPHlqP9kXGy/zlvL/ayGsym3UcYWqG4H0J6uNyBNPaUC trx40-deploy-vm"
+      ];
     };
   };
 

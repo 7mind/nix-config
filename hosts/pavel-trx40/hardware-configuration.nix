@@ -6,10 +6,11 @@
   ];
 
   # TRX40 / Threadripper 3970x: AHCI for SATA, NVMe for storage, USB HID
-  # for the boot-time keyboard, and r8169 for the on-board Realtek NIC
-  # which we want available in initrd for SSH-based ZFS unlock.
+  # for the boot-time keyboard, and r8169 for the on-board Realtek NIC.
+  # dm-snapshot is required in initrd for the LVM root/swap on the fresh
+  # 2TB layout (vg-nixos on nvme0n1p1).
   boot.initrd.availableKernelModules = [ "ahci" "xhci_pci" "nvme" "usbhid" ];
-  boot.initrd.kernelModules = [ "r8169" ];
+  boot.initrd.kernelModules = [ "r8169" "dm-snapshot" ];
   boot.kernelModules = [ "kvm-amd" ];
   boot.extraModulePackages = [ ];
 
@@ -19,35 +20,28 @@
   # desktop-class box.
   boot.kernelParams = [ "pcie_aspm=off" ];
 
-  # ZFS root layout preserved from the previous install — pool name and
-  # dataset paths must match on-disk; only adjust UUIDs/devices if the
-  # partitions are re-created.
+  # Fresh 2TB CT2000T710SSD8 layout (basic NixOS install, 2026-10-06):
+  # single ext4 root on LVM (vg-nixos/lv-root); /nix and /home live on
+  # the same filesystem — no separate LVs. Revisit if we return to ZFS.
   fileSystems."/" = {
-    device = "zroot/root";
-    fsType = "zfs";
-  };
-
-  fileSystems."/nix" = {
-    device = "zroot/root/nix";
-    fsType = "zfs";
-  };
-
-  fileSystems."/home" = {
-    device = "zroot/root/home";
-    fsType = "zfs";
+    device = "/dev/mapper/vg--nixos-lv--root";
+    fsType = "ext4";
   };
 
   fileSystems."/boot" = {
-    device = "/dev/disk/by-uuid/837B-9A49";
+    device = "/dev/disk/by-uuid/C42E-2E55";
     fsType = "vfat";
     options = [ "fmask=0022" "dmask=0022" ];
   };
 
-  # Random-key encrypted swap on the Samsung 970 EVO Plus — ephemeral by
-  # design: dm-crypt opens it with a fresh /dev/urandom key each boot, so
-  # no persistent state. `nofail` keeps a missing/failed disk from blocking
-  # boot; the 32G zd0 zvol swap remains as a lower-priority fallback.
+  # Random-key encrypted swap on the Samsung 970 EVO Plus keeps its old
+  # role (ephemeral dm-crypt, fresh /dev/urandom key each boot, `nofail`
+  # so a missing disk never blocks boot). The LVM swap on the fresh 2TB
+  # disk stays as a lower-priority fallback.
   swapDevices = [
+    {
+      device = "/dev/mapper/vg--nixos-lv--swap";
+    }
     {
       device = "/dev/disk/by-id/nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0R971112P-part1";
       randomEncryption = {
