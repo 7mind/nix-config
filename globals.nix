@@ -447,19 +447,20 @@ rec {
             overlays = [
               inputs.nix-vscode-extensions.overlays.default
               inputs.rust-overlay.overlays.default
-            ] ++ (if isLinux then
-              (import ./modules/nixos/overlay.nix {
+            ] ++ builtins.concatMap (path:
+              ((import_if_exists_or path (_: { nixpkgs.overlays = [ ]; })) {
                 inherit pkgs cfg-meta inputs;
                 cfg-flakes = {
                   fractal = inputs.fractal.packages.${arch};
                   nix-apple-fonts.default = pkgs.callPackage "${inputs.nix-apple-fonts}/packages/apple-fonts/default.nix" { };
                 };
-              }).nixpkgs.overlays ++ [
-                (final: _: {
-                  fastfetch-minimal = final.callPackage ./pkg/fastfetch-minimal { };
-                })
-              ]
-            else [ ]);
+              }).nixpkgs.overlays
+            ) ([
+              ./modules/nix-generic/overlay.nix
+              ./private/modules/nix-generic/overlay.nix
+            ] ++ inputs.nixpkgs.lib.optionals isLinux [
+              ./modules/nixos/overlay.nix
+            ]);
           };
           cfg-hm-modules = platformModules ++ [
             { home.stateVersion = cfg-const.state-version-hm; }
@@ -469,11 +470,14 @@ rec {
             inherit smind-hm import_if_exists import_if_exists_or;
             cfg-packages = (import ./config.nix).cfg-packages { inherit inputs pkgs arch; };
           };
+          home = inputs.home-manager.lib.homeManagerConfiguration {
+            inherit pkgs;
+            extraSpecialArgs = cfg-args // { inherit cfg-args; };
+            modules = cfg-hm-modules ++ modules;
+          };
         in
-        inputs.home-manager.lib.homeManagerConfiguration {
-          inherit pkgs;
-          extraSpecialArgs = cfg-args // { inherit cfg-args; };
-          modules = cfg-hm-modules ++ modules;
+        home // {
+          activationPackage = import ./lib/standalone-home-activation.nix { inherit pkgs home; };
         };
     };
 

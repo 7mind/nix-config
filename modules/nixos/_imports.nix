@@ -70,6 +70,7 @@
   ./power-suspend-quirks.nix
   ./enocean-mqtt.nix
   ./hoymiles-mqtt.nix
+  ./home-manager.nix
   ./intel-gpu.nix
   ./qendercore.nix
   ./saic-mqtt.nix
