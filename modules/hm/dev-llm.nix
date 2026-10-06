@@ -72,6 +72,12 @@ in
     # here so an upstream default change cannot drift it silently).
     smind.hm.dev.llm.models.pi.model = "mimo-v2.6-pro";
 
+    # Let Pi subagents use any model (spawn_agent model overrides and gate
+    # reviewers). Writes "allowedModels": null to ~/.pi/agent/subagents-policy.json,
+    # which home-manager then owns as a read-only store symlink (hand-maintained
+    # repos/nesting/gate keys in that file are replaced, not merged).
+    smind.hm.dev.llm.pi.subagentsAllowAllModels = true;
+
     home.activation.removeObsoleteClaudePluginBackup = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
       backup=${lib.escapeShellArg "${config.programs.claude-code.configDir}/skills/claude-code-home-manager.hmbak"}
       manifest="$backup/.claude-plugin/plugin.json"
