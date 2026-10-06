@@ -79,10 +79,14 @@
     bootloader.systemd-boot.enable = true;
     bootloader.lanzaboote.enable = false;
 
-    # Build/work machine: keep nix-build infrastructure on, expose LLM
-    # tooling for Claude workflows.
+    # Build/work machine: keep nix-build infrastructure on.
     infra.nix-build.enable = true;
-    llm.enable = true;
+
+    # Ollama stack disabled on this host (Oct 2026) — the GPU box is not
+    # serving models; `llm.enable` is exactly that stack (ollama service +
+    # model pulls + custom-models unit), so one flag removes it all.
+    # Model blobs under /var/lib/ollama were purged out-of-band.
+    llm.enable = false;
     llm.ollama.package = pkgs.ollama-vulkan;
   };
 
