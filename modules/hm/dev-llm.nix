@@ -72,11 +72,19 @@ in
     # here so an upstream default change cannot drift it silently).
     smind.hm.dev.llm.models.pi.model = "mimo-v2.6-pro";
 
-    # Let Pi subagents use any model (spawn_agent model overrides and gate
-    # reviewers). Writes "allowedModels": null to ~/.pi/agent/subagents-policy.json,
-    # which home-manager then owns as a read-only store symlink (hand-maintained
-    # repos/nesting/gate keys in that file are replaced, not merged).
-    smind.hm.dev.llm.pi.subagentsAllowAllModels = true;
+    # Fully permissive subagents policy. Setting any subagents* option makes
+    # home-manager own ~/.pi/agent/subagents-policy.json as a complete file
+    # (read-only store symlink), so no hand-maintained keys are lost.
+    # subagentsRepos stays empty: only `sandbox` isolation needs registered
+    # repos; worktree/none need nothing.
+    smind.hm.dev.llm.pi.subagentsAllowAllModels = true; # any worker or gate-reviewer model
+    smind.hm.dev.llm.pi.subagentsMaxDepth = 2; # deepest tree the extension supports
+    smind.hm.dev.llm.pi.subagentsNesting = true; # children may delegate further
+    smind.hm.dev.llm.pi.subagentsGateBypassAllowed = true; # governor may bypass gates
+    smind.hm.dev.llm.pi.subagentsGateMaxRoundsCeiling = null; # unlimited agreement rounds
+    # smind.hm.dev.llm.pi.subagentsRepos = [
+    #   { repoId = "ponygirls"; checkoutPath = "/home/pavel/work/safe/flakes/ponygirls"; allowWriters = true; }
+    # ];
 
     home.activation.removeObsoleteClaudePluginBackup = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
       backup=${lib.escapeShellArg "${config.programs.claude-code.configDir}/skills/claude-code-home-manager.hmbak"}
