@@ -1,4 +1,4 @@
-{ config, lib, cfg-meta, cfg-const, ... }:
+{ config, lib, cfg-meta, cfg-const, make-home, ... }:
 
 let
   cfg = config.smind.roles.server.llm-worker;
@@ -81,7 +81,11 @@ in
         openssh.authorizedKeys.keys = cfg-const.ssh-keys-pavel;
       };
 
-      home-manager.users.llm = import "${cfg-meta.paths.users}/llm/hm/home-llm-generic.nix";
+      home-manager.users.llm.imports = (make-home {
+        source = "llm";
+        username = "llm";
+        host = import ../../lib/home-host-context.nix { inherit config lib; };
+      }).modules;
     }
 
     # Age-managed SSH key — only declared when the private submodule and

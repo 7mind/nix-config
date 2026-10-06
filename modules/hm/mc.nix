@@ -1,7 +1,7 @@
 { config, lib, ... }:
 
 {
-  config = lib.mkIf config.smind.hm.fromHost.environment.fileManagers.mc.enable {
+  config = lib.mkIf config.smind.hm.globals.environment.fileManagers.mc.enable {
     programs.mc = {
       enable = true;
       settings = {

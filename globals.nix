@@ -45,7 +45,7 @@ rec {
     ];
   };
 
-  make = { self, inputs, arch }: { hostname, homes ? [ ] }:
+  make = { self, inputs, arch }: { hostname, homes ? (_: [ ]) }:
     let
       pkgs = import inputs.nixpkgs {
         localSystem = arch;
@@ -338,6 +338,7 @@ rec {
       ];
 
       cfg-args = {
+        make-home = make-home { inherit inputs self; };
         inherit smind-hm;
         inherit cfg-meta;
         inherit cfg-flakes;
@@ -363,43 +364,51 @@ rec {
             { system.stateVersion = cfg-meta.state-version-system; }
             (cfg-args.import_if_exists ./hosts/${hostname}/cfg-${hostname}.nix)
             (cfg-args.import_if_exists ./private/hosts/${hostname}/cfg-${hostname}.nix)
-            {
-              # Profiles declared for this host in hosts.nix. Only .modules is
-              # used; the standalone homeManagerConfiguration is not evaluated.
-              home-manager.users = builtins.listToAttrs (map (home:
-                if home.hostname != hostname then
-                  throw "Home profile ${home.name} belongs to ${home.hostname}, not ${hostname}"
-                else {
+            ({ config, lib, ... }:
+              let
+                host = import ./lib/home-host-context.nix { inherit config lib; };
+              in
+              {
+                # Profiles declared for this host in hosts.nix. Only .modules is
+                # used; the standalone homeManagerConfiguration is not evaluated.
+                home-manager.users = builtins.listToAttrs (map (home: {
                   name = home.username;
                   value.imports = home.modules;
-                }
-              ) homes);
-            }
+                }) (homes host));
+              })
           ];
         };
     };
 
-  # Explicit profile declared in hosts.nix. The public file and the private
-  # overlay are both imported when present. Users are not discovered.
-  homeUserModules = { hostname, username }:
+  # Explicit source declared by a home instance. The public file and the
+  # private overlay are both imported when present. Users are not discovered.
+  homeUserModules = source:
     let
       candidate = root:
-        let path = root + "/${hostname}/home-${username}.nix";
+        let path = root + "/${source}.nix";
         in if builtins.pathExists path then [ path ] else [ ];
       modules = candidate ./home ++ candidate ./private/home;
     in
     if modules == [ ] then
-      throw "No Home Manager profile for ${username}@${hostname}. Expected home/${hostname}/home-${username}.nix or private/home/${hostname}/home-${username}.nix."
+      throw "No Home Manager source ${source}. Expected home/${source}.nix or private/home/${source}.nix."
     else modules;
 
-  make-home = { inputs, self, arch }: { hostname, username }:
+  make-home = { inputs, self }: { source, username, host }:
     let
+      hostname = host.hostname;
+      arch = host.system;
       isLinux = builtins.match ".*-linux" arch != null;
       isDarwin = builtins.match ".*-darwin" arch != null;
       archTag =
         let short = builtins.head (builtins.match "([^-]+)-.+" arch);
         in if isDarwin then "${short}-darwin" else short;
-      modules = homeUserModules { inherit hostname username; };
+      modules = homeUserModules source ++ [
+        {
+          home.username = username;
+          home.homeDirectory = host.homeDirectories.${username};
+          smind.hm.globals = host.globals;
+        }
+      ];
       cfg-const = (import ./config.nix).const;
       cfg-meta = {
         inherit arch hostname inputs;
@@ -438,12 +447,19 @@ rec {
             overlays = [
               inputs.nix-vscode-extensions.overlays.default
               inputs.rust-overlay.overlays.default
-            ] ++ (if isLinux then [
-              (final: _: {
-                resock = final.callPackage ./pkg/resock/default.nix { };
-                fastfetch-minimal = final.callPackage ./pkg/fastfetch-minimal { };
-              })
-            ] else [ ]);
+            ] ++ (if isLinux then
+              (import ./modules/nixos/overlay.nix {
+                inherit pkgs cfg-meta inputs;
+                cfg-flakes = {
+                  fractal = inputs.fractal.packages.${arch};
+                  nix-apple-fonts.default = pkgs.callPackage "${inputs.nix-apple-fonts}/packages/apple-fonts/default.nix" { };
+                };
+              }).nixpkgs.overlays ++ [
+                (final: _: {
+                  fastfetch-minimal = final.callPackage ./pkg/fastfetch-minimal { };
+                })
+              ]
+            else [ ]);
           };
           cfg-hm-modules = platformModules ++ [
             { home.stateVersion = cfg-const.state-version-hm; }
@@ -460,21 +476,6 @@ rec {
           modules = cfg-hm-modules ++ modules;
         };
     };
-
-  make-home-x86_64 = { inputs, self }: (make-home {
-    inherit inputs self;
-    arch = "x86_64-linux";
-  });
-
-  make-home-aarch64 = { inputs, self }: (make-home {
-    inherit inputs self;
-    arch = "aarch64-linux";
-  });
-
-  make-home-darwin-aarch64 = { inputs, self }: (make-home {
-    inherit inputs self;
-    arch = "aarch64-darwin";
-  });
 
   make-nixos-x86_64 = { inputs, self }: (make {
     inherit inputs;

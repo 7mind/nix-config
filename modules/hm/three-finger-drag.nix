@@ -8,7 +8,7 @@ in
   options.smind.hm.three-finger-drag = {
     enable = lib.mkOption {
       type = lib.types.bool;
-      default = cfg-meta.isLinux && config.smind.hm.fromHost.three-finger-drag.enable;
+      default = cfg-meta.isLinux && config.smind.hm.globals.three-finger-drag.enable;
       description = "Manage linux-3-finger-drag config file";
     };
 

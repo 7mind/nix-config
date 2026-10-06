@@ -5,7 +5,7 @@
     smind.hm.kitty.enable = lib.mkEnableOption "Kitty terminal with custom keybindings";
     smind.hm.kitty.fontFamily = lib.mkOption {
       type = lib.types.str;
-      default = config.smind.hm.fromHost.fonts.terminal;
+      default = config.smind.hm.globals.fonts.terminal;
       description = "Kitty font family";
     };
   };

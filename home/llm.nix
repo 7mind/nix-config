@@ -13,7 +13,7 @@
 
     # Pass the agenix-managed SSH key path through to yolo so the wrapper
     # can ro-bind it into the bubblewrap sandbox.
-    dev.llm.llmSshKeyPath = config.smind.hm.fromHost.llm-worker.sshKeyPath;
+    dev.llm.llmSshKeyPath = config.smind.hm.globals.llm-worker.sshKeyPath;
   };
 
   programs.direnv.config.whitelist.prefix = [ "~/work" ];

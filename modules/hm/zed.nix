@@ -21,7 +21,7 @@ in
 
     smind.hm.zed.terminalFontFamily = lib.mkOption {
       type = lib.types.str;
-      default = config.smind.hm.fromHost.fonts.terminal;
+      default = config.smind.hm.globals.fonts.terminal;
       description = "Zed terminal font family";
     };
 

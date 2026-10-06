@@ -1,7 +1,7 @@
 { config, lib, cfg-meta, ... }:
 
 let
-  host = config.smind.hm.fromHost;
+  host = config.smind.hm.globals;
   ageEnabled = host.age.enable;
 in
 if cfg-meta.isStandalone or false then { } else {

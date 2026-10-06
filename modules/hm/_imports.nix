@@ -18,8 +18,7 @@
   ./env-settings-desktop.nix
   ./firefox-notabbar.nix
   ./firefox.nix
-  ./from-host.nix
-  ./from-host-bridge.nix
+  ./globals.nix
   ./ghostty.nix
   ./gnome.nix
   ./htop.nix

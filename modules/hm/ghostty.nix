@@ -11,7 +11,7 @@ in
 
     smind.hm.ghostty.fontFamily = lib.mkOption {
       type = lib.types.str;
-      default = config.smind.hm.fromHost.fonts.terminal;
+      default = config.smind.hm.globals.fonts.terminal;
       description = "Ghostty font family";
     };
 
@@ -291,7 +291,7 @@ in
         );
       }
       // lib.optionalAttrs cfg-meta.isLinux {
-        window-decoration = lib.mkIf config.smind.hm.fromHost.desktop.kde.enable "client"; # workaround for https://github.com/ghostty-org/ghostty/discussions/7439 on KDE
+        window-decoration = lib.mkIf config.smind.hm.globals.desktop.kde.enable "client"; # workaround for https://github.com/ghostty-org/ghostty/discussions/7439 on KDE
       };
     };
 

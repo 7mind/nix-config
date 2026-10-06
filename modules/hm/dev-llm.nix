@@ -4,7 +4,7 @@
 { config, lib, pkgs, inputs, ... }:
 let
   cfg = config.smind.hm.dev.llm;
-  host = config.smind.hm.fromHost;
+  host = config.smind.hm.globals;
 
   gpu = {
     nvidia = host.hw.nvidia.enable;

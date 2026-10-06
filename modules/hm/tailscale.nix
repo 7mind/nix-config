@@ -2,7 +2,7 @@
 
 let
   cfg = config.smind.hm.tailscale;
-  tailscaleEnabled = config.smind.hm.fromHost.net.tailscale.enable;
+  tailscaleEnabled = config.smind.hm.globals.net.tailscale.enable;
 in
 {
   options.smind.hm.tailscale = {

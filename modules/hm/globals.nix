@@ -1,11 +1,11 @@
 # Facts a Home Manager module may read from the surrounding OS.
-# Embedded configurations fill these from the host via from-host-bridge.nix.
-# Standalone configurations keep the defaults. Modules must not read osConfig,
-# nixosConfig, or darwinConfig directly.
+# Embedded configurations receive the evaluated host projection.
+# Standalone configurations receive explicitly declared host facts.
+# Modules must not read osConfig, nixosConfig, or darwinConfig directly.
 { lib, ... }:
 
 {
-  options.smind.hm.fromHost = {
+  options.smind.hm.globals = {
     owner = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -118,6 +118,12 @@
       type = lib.types.bool;
       default = false;
       description = "Host installs f4.";
+    };
+
+    net.namespaces = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      description = "Network namespaces supplied by the host.";
     };
 
     net.tailscale.enable = lib.mkOption {

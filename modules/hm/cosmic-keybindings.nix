@@ -1,7 +1,7 @@
 { config, lib, pkgs, xkbLib, ... }:
 
 let
-  host = config.smind.hm.fromHost;
+  host = config.smind.hm.globals;
   sharedXkb = host.desktop.xkb;
   sharedMouse = host.desktop.mouse;
   cosmicEnabled = host.desktop.cosmic.enable;

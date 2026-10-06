@@ -193,17 +193,8 @@
           inherit inputs;
           inherit self;
         };
-        make-home-x86_64 = globals.make-home-x86_64 {
-          inherit inputs;
-          inherit self;
-        };
-        make-home-aarch64 = globals.make-home-aarch64 {
-          inherit inputs;
-          inherit self;
-        };
-        make-home-darwin-aarch64 = globals.make-home-darwin-aarch64 {
-          inherit inputs;
-          inherit self;
+        make-home = globals.make-home {
+          inherit inputs self;
         };
       };
     in
@@ -270,6 +261,13 @@
             "aarch64-linux"
           ])
           {
+            home-configurations =
+              let
+                capabilities = import ./tests/home-host-capabilities.nix { inherit pkgs; lib = pkgs.lib; };
+                contexts = import ./tests/home-context.nix { flake = self; };
+              in
+              assert builtins.deepSeq [ capabilities contexts ] true;
+              pkgs.runCommand "home-configurations" { } "touch $out";
             asterisk-linphone-fallback = import ./tests/asterisk-linphone-fallback.nix { inherit pkgs; };
             flexisip-file-transfer = import ./tests/flexisip.nix { inherit pkgs; };
             openlinkhub = import ./tests/openlinkhub.nix { inherit pkgs; };

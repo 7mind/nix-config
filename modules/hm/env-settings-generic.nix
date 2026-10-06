@@ -10,7 +10,7 @@
 
     smind.hm.environment.all-docs.enable = lib.mkOption {
       type = lib.types.bool;
-      default = config.smind.hm.fromHost.isDesktop;
+      default = config.smind.hm.globals.isDesktop;
       description = "Install documentation and man pages";
     };
 
@@ -25,8 +25,8 @@
     # When system uses gcr-ssh-agent (GNOME/COSMIC), don't start a competing agent
     services.ssh-agent.enable = lib.mkIf cfg-meta.isLinux (
       let
-        keyringEnabled = config.smind.hm.fromHost.security.keyring.enable;
-        sshAgent = config.smind.hm.fromHost.security.keyring.sshAgent;
+        keyringEnabled = config.smind.hm.globals.security.keyring.enable;
+        sshAgent = config.smind.hm.globals.security.keyring.sshAgent;
       in
       !keyringEnabled || sshAgent == "standalone"
     );

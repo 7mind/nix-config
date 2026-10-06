@@ -17,7 +17,7 @@ let
   defaultSmallFontSize = 8;
   defaultFixedFontSize = 10;
 
-  host = config.smind.hm.fromHost;
+  host = config.smind.hm.globals;
   defaultSansFamily = lib.head host.fonts.defaults.sansSerif;
   defaultMonoFamily = lib.head host.fonts.defaults.monospace;
 

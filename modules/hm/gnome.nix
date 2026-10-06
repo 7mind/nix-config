@@ -1,7 +1,7 @@
 { config, lib, ... }:
 
 let
-  runOrRaiseEnabled = config.smind.hm.fromHost.desktop.gnome.extensions.run-or-raise.enable;
+  runOrRaiseEnabled = config.smind.hm.globals.desktop.gnome.extensions.run-or-raise.enable;
 in
 {
   config = lib.mkIf runOrRaiseEnabled {

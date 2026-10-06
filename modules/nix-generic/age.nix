@@ -94,7 +94,7 @@ in
   config = lib.mkMerge [
     {
       # Kept for callers that already hold the host secret set. Home Manager
-      # modules use the ageUserSecret module argument and smind.hm.fromHost.age.secrets.
+      # modules use the ageUserSecret module argument and smind.hm.globals.age.secrets.
       lib.smind.age.userSecret =
         {
           hmConfig,

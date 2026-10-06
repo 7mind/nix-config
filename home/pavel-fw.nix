@@ -9,7 +9,7 @@
 }:
 
 let
-  host = config.smind.hm.fromHost;
+  host = config.smind.hm.globals;
   llamaSwapBaseUrl = "http://127.0.0.1:${toString host.llama-swap.port}/v1";
   llamaSwapModels = [
     { id = "qwen3.8-27b-q4"; name = "Qwen3.8 27B Q4 local"; }
@@ -23,10 +23,10 @@ in
     "${cfg-meta.paths.users}/pavel/hm/home-pavel-electronics.nix"
   ];
 
-  assertions = [
+  assertions = lib.optionals host.llama-swap.enable [
     {
-      assertion = host.llama-swap.enable;
-      message = "The pavel-fw Pi model provider requires services.llama-swap.enable";
+      assertion = host.llama-swap.port != null;
+      message = "The pavel-fw Pi model provider requires a llama-swap port";
     }
     {
       assertion = builtins.all (m: host.llama-swap.models ? ${m.id}) llamaSwapModels;
@@ -34,50 +34,52 @@ in
     }
   ];
 
-  home.file."${config.programs.pi.configDir}/models.json".source =
-    (pkgs.formats.json { }).generate "pi-models.json" {
-      providers.llama-swap = {
-        baseUrl = llamaSwapBaseUrl;
-        api = "openai-completions";
-        apiKey = "local";
+  home.file."${config.programs.pi.configDir}/models.json" = lib.mkIf host.llama-swap.enable {
+    source =
+      (pkgs.formats.json { }).generate "pi-models.json" {
+        providers.llama-swap = {
+          baseUrl = llamaSwapBaseUrl;
+          api = "openai-completions";
+          apiKey = "local";
 
-        compat = {
-          supportsStore = false;
-          supportsDeveloperRole = false;
-          supportsReasoningEffort = true;
-          supportsUsageInStreaming = true;
-          supportsStrictMode = false;
-          maxTokensField = "max_tokens";
+          compat = {
+            supportsStore = false;
+            supportsDeveloperRole = false;
+            supportsReasoningEffort = true;
+            supportsUsageInStreaming = true;
+            supportsStrictMode = false;
+            maxTokensField = "max_tokens";
+          };
+
+          models = map (m: {
+            inherit (m) id name;
+            reasoning = true;
+            input = [ "text" ];
+            contextWindow = 32768;
+            maxTokens = 8192;
+
+            thinkingLevelMap = {
+              off = "none";
+              minimal = null;
+              low = null;
+              medium = null;
+              high = null;
+              xhigh = "xhigh";
+              max = null;
+            };
+
+            samplingParams = {
+              temperature = 1.0;
+              top_p = 0.95;
+              top_k = 20;
+              min_p = 0.0;
+              presence_penalty = 0.0;
+              repeat_penalty = 1.0;
+            };
+          }) llamaSwapModels;
         };
-
-        models = map (m: {
-          inherit (m) id name;
-          reasoning = true;
-          input = [ "text" ];
-          contextWindow = 32768;
-          maxTokens = 8192;
-
-          thinkingLevelMap = {
-            off = "none";
-            minimal = null;
-            low = null;
-            medium = null;
-            high = null;
-            xhigh = "xhigh";
-            max = null;
-          };
-
-          samplingParams = {
-            temperature = 1.0;
-            top_p = 0.95;
-            top_k = 20;
-            min_p = 0.0;
-            presence_penalty = 0.0;
-            repeat_penalty = 1.0;
-          };
-        }) llamaSwapModels;
       };
-    };
+  };
 
   services.wluma = {
     enable = false;
@@ -126,7 +128,7 @@ in
     electron-wrappers = {
       enable = true;
       slack.enable = true;
-      slack.netns = "vpn";
+      slack.netns = lib.mkIf (builtins.elem "vpn" host.net.namespaces) "vpn";
       element.enable = true;
     };
 
