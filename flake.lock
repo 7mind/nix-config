@@ -770,11 +770,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790511452,
-        "narHash": "sha256-GagRHUKSEnPUTsWilYOpq9ruP2RgNGc+d/QK8SZZEpQ=",
+        "lastModified": 1791307101,
+        "narHash": "sha256-4Ogeh/Z02IL84/5rxItAVIur8aByjQXLJRtGaAKKJzc=",
         "owner": "autopeasant",
         "repo": "nix-apple-fonts",
-        "rev": "acb0ae70a902077a3534f39f93dcf5063527c955",
+        "rev": "3e40c8ecfb33e12a18e523d60181a4fae5b4128c",
         "type": "github"
       },
       "original": {
