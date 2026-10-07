@@ -306,30 +306,6 @@
         "type": "github"
       }
     },
-    "fecalia": {
-      "inputs": {
-        "flake-utils": [
-          "flake-utils"
-        ],
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1791323370,
-        "narHash": "sha256-0xrvd51KzwLv7kc2pdV2sMC4Bj+CwGEBEeNUjbDVG2o=",
-        "owner": "7mind",
-        "repo": "fecalia",
-        "rev": "09612b1f5e1293fa6ff86cd785a217c9e1ee4021",
-        "type": "github"
-      },
-      "original": {
-        "owner": "7mind",
-        "ref": "main",
-        "repo": "fecalia",
-        "type": "github"
-      }
-    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -1165,7 +1141,6 @@
         "darwin": "darwin",
         "ecoflow-mqtt": "ecoflow-mqtt",
         "f4": "f4",
-        "fecalia": "fecalia",
         "flake-utils": "flake-utils_2",
         "fractal": "fractal",
         "home-manager": "home-manager",
@@ -1187,6 +1162,7 @@
         "rust-overlay": "rust-overlay_3",
         "touchpad-gesture-customization-app-expose": "touchpad-gesture-customization-app-expose",
         "vicinae-extensions": "vicinae-extensions",
+        "wanbond": "wanbond",
         "zimt": "zimt"
       }
     },
@@ -1482,6 +1458,30 @@
       "original": {
         "owner": "vicinaehq",
         "repo": "extensions",
+        "type": "github"
+      }
+    },
+    "wanbond": {
+      "inputs": {
+        "flake-utils": [
+          "flake-utils"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1791359804,
+        "narHash": "sha256-/AXWJHCph2wddofffmzJ6n6o9fmdelzuQ4GNNzZSp54=",
+        "owner": "7mind",
+        "repo": "wanbond",
+        "rev": "b8eb2d8b70f60caecda2393830a2b336dd4dea34",
+        "type": "github"
+      },
+      "original": {
+        "owner": "7mind",
+        "ref": "main",
+        "repo": "wanbond",
         "type": "github"
       }
     },
