@@ -71,10 +71,14 @@ os.replace(temporary, profile)
             self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         return result
 
-    def system_request(self, generation, system, action):
+    def select_system(self, environment, profile, generation, system, action):
         with tempfile.NamedTemporaryFile(mode="w", dir=self.root, delete=False) as request:
-            request.write(f"{system}\n{action}\n{generation}\n")
-            return Path(request.name)
+            request.write(f"{system}\n{action}\n{generation / 'nixos-generation'}\n")
+        self.run_profile(environment, "system", profile, request.name)
+        return Path(request.name)
+
+    def setting(self):
+        return (self.home / ".hm-test-setting").read_text()
 
     def test_switch_boot_system_switch_and_rollback(self):
         for adapter in ["dummy", "production"]:
@@ -88,65 +92,58 @@ os.replace(temporary, profile)
                 if adapter == "dummy":
                     environment["PATH"] = f"{self.bin}:{os.environ['PATH']}"
 
-                request = self.system_request(self.old / "nixos-generation", system_a, "boot")
-                self.run_profile(environment, "system", profile, request)
+                self.select_system(environment, profile, self.old, system_a, "boot")
                 self.assertEqual(profile.resolve(), (self.old / "nixos-generation").resolve())
                 self.run_profile(environment, "activate", profile)
-                self.assertEqual((self.home / ".hm-test-setting").read_text(), "old")
+                self.assertEqual(self.setting(), "old")
 
                 self.run_profile(environment, "switch", profile, self.new / "nixos-generation")
                 self.assertEqual(profile.resolve(), (self.new / "nixos-generation").resolve())
-                self.assertEqual((self.home / ".hm-test-setting").read_text(), "new")
+                self.assertEqual(self.setting(), "new")
                 selected = profile.resolve()
 
-                request = self.system_request(self.old / "nixos-generation", system_a, "boot")
-                self.run_profile(environment, "system", profile, request)
+                self.select_system(environment, profile, self.old, system_a, "boot")
                 self.run_profile(environment, "activate", profile)
                 self.assertEqual(profile.resolve(), selected)
-                self.assertEqual((self.home / ".hm-test-setting").read_text(), "new")
+                self.assertEqual(self.setting(), "new")
                 package = subprocess.check_output([str(profile / "home-path/bin/hm-fixture-tool")], text=True)
                 self.assertEqual(package.strip(), "new")
 
-                request = self.system_request(self.old / "nixos-generation", system_a, "switch")
-                self.run_profile(environment, "system", profile, request)
+                request = self.select_system(environment, profile, self.old, system_a, "switch")
                 self.run_profile(environment, "activate", profile)
-                self.assertEqual((self.home / ".hm-test-setting").read_text(), "old")
+                self.assertEqual(self.setting(), "old")
 
                 self.run_profile(environment, "switch", profile, self.new / "nixos-generation")
                 self.run_profile(environment, "system", profile, request)
                 self.run_profile(environment, "activate", profile)
                 self.assertEqual(profile.resolve(), (self.new / "nixos-generation").resolve())
-                self.assertEqual((self.home / ".hm-test-setting").read_text(), "new")
+                self.assertEqual(self.setting(), "new")
 
-                request = self.system_request(self.old / "nixos-generation", system_a, "switch")
-                self.run_profile(environment, "system", profile, request)
+                self.select_system(environment, profile, self.old, system_a, "switch")
                 self.run_profile(environment, "activate", profile)
-                self.assertEqual((self.home / ".hm-test-setting").read_text(), "old")
+                self.assertEqual(self.setting(), "old")
 
-                request = self.system_request(self.new / "nixos-generation", system_b, "boot")
-                self.run_profile(environment, "system", profile, request)
+                self.select_system(environment, profile, self.new, system_b, "boot")
                 self.run_profile(environment, "activate", profile)
-                self.assertEqual((self.home / ".hm-test-setting").read_text(), "new")
+                self.assertEqual(self.setting(), "new")
 
-                request = self.system_request(self.old / "nixos-generation", system_a, "boot")
-                self.run_profile(environment, "system", profile, request)
+                self.select_system(environment, profile, self.old, system_a, "boot")
                 self.run_profile(environment, "activate", profile)
-                self.assertEqual((self.home / ".hm-test-setting").read_text(), "old")
+                self.assertEqual(self.setting(), "old")
 
                 selected = (self.failing / "nixos-generation").resolve()
                 result = self.run_profile(environment, "switch", profile, selected, success=False)
                 self.assertEqual(result.returncode, 17)
                 self.assertEqual((self.home / ".hm-test-new-only").read_text(), "failing")
                 self.assertEqual(profile.resolve(), selected)
-                self.assertEqual((self.home / ".hm-test-setting").read_text(), "failing")
+                self.assertEqual(self.setting(), "failing")
 
-                request = self.system_request(self.old / "nixos-generation", system_a, "boot")
-                self.run_profile(environment, "system", profile, request)
+                self.select_system(environment, profile, self.old, system_a, "boot")
                 self.assertEqual(profile.resolve(), selected)
                 result = self.run_profile(environment, "activate", profile, success=False)
                 self.assertEqual(result.returncode, 17)
                 self.assertEqual(profile.resolve(), selected)
-                self.assertEqual((self.home / ".hm-test-setting").read_text(), "failing")
+                self.assertEqual(self.setting(), "failing")
 
     def test_nixos_switch_requires_installed_integration(self):
         marker = self.root / "NIXOS"
@@ -165,14 +162,13 @@ os.replace(temporary, profile)
         marker = directory / "NIXOS"
         marker.touch()
         environment = dict(self.environment)
-        request = self.system_request(self.old / "nixos-generation", directory / "system", "boot")
-        self.run_profile(environment, "system", profile, request)
+        self.select_system(environment, profile, self.old, directory / "system", "boot")
         result = subprocess.run([
             str(self.new / "switch-home"), str(self.new), str(directory), str(marker),
         ], env=environment, text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(profile.resolve(), (self.new / "nixos-generation").resolve())
-        self.assertEqual((self.home / ".hm-test-setting").read_text(), "new")
+        self.assertEqual(self.setting(), "new")
 
 
 if __name__ == "__main__":

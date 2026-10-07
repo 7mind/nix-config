@@ -1,6 +1,7 @@
-{ writeShellScriptBin, lib, coreutils, nix, util-linux, stdenv }:
+{ writeShellApplication, lib, coreutils, nix, util-linux, stdenv }:
 
-writeShellScriptBin "home-manager-profile" ''
-  export PATH=${lib.makeBinPath ([ coreutils nix ] ++ lib.optionals stdenv.hostPlatform.isLinux [ util-linux ])}:$PATH
-  ${builtins.readFile ./profile.sh}
-''
+writeShellApplication {
+  name = "home-manager-profile";
+  runtimeInputs = [ coreutils nix ] ++ lib.optionals stdenv.hostPlatform.isLinux [ util-linux ];
+  text = builtins.readFile ./profile.sh;
+}

@@ -27,8 +27,7 @@ case "$action" in
     switch)
         generation="$(readlink -e "$3")"
         nix-env --profile "$profile" --set "$generation"
-        "$profile/activate" --driver-version 1 9>&-
-        ;;
+        ;&
     activate)
         "$profile/activate" --driver-version 1 9>&-
         ;;
