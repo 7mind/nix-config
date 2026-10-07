@@ -439,6 +439,7 @@ rec {
     {
       name = "${username}@${hostname}-${archTag}";
       inherit hostname username modules;
+      platform = if isDarwin then "darwin" else "linux";
       value =
         let
           pkgs = import inputs.nixpkgs {
@@ -448,19 +449,14 @@ rec {
               inputs.nix-vscode-extensions.overlays.default
               inputs.rust-overlay.overlays.default
             ] ++ builtins.concatMap (path:
-              ((import_if_exists_or path (_: { nixpkgs.overlays = [ ]; })) {
+              (import path {
                 inherit pkgs cfg-meta inputs;
                 cfg-flakes = {
                   fractal = inputs.fractal.packages.${arch};
                   nix-apple-fonts.default = pkgs.callPackage "${inputs.nix-apple-fonts}/packages/apple-fonts/default.nix" { };
                 };
               }).nixpkgs.overlays
-            ) ([
-              ./modules/nix-generic/overlay.nix
-              ./private/modules/nix-generic/overlay.nix
-            ] ++ inputs.nixpkgs.lib.optionals isLinux [
-              ./modules/nixos/overlay.nix
-            ]);
+            ) ([ ./modules/nix-generic/overlay.nix ] ++ inputs.nixpkgs.lib.optionals isLinux [ ./modules/nixos/overlay.nix ]);
           };
           cfg-hm-modules = platformModules ++ [
             { home.stateVersion = cfg-const.state-version-hm; }

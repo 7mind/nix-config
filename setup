@@ -150,12 +150,12 @@ load_host_meta() {
     add_all
     local json
     local errfile
-    local -a eval_args=(".?submodules=1#hostMeta")
+    local meta_attr="hostMeta"
     if [[ "$DO_HM_ONLY" == "true" ]]; then
-        eval_args=(".?submodules=1#homeConfigurations" --apply builtins.attrNames)
+        meta_attr="homeMeta"
     fi
     errfile="$(mktemp)"
-    if ! json=$(nix eval "${eval_args[@]}" --json 2>"$errfile"); then
+    if ! json=$(nix eval ".?submodules=1#${meta_attr}" --json 2>"$errfile"); then
         echo "Error: nix eval failed for host metadata:" >&2
         cat "$errfile" >&2
         rm -f "$errfile"
@@ -165,15 +165,9 @@ load_host_meta() {
 
     if [[ "$DO_HM_ONLY" == "true" ]]; then
         json=$(echo "$json" | jq --arg user "$(id -un)" '
-            map(select(startswith($user + "@")) | . as $name | {
-                key: (ltrimstr($user + "@") | if endswith("-darwin") then
-                    sub("-[^-]+-darwin$"; "") else sub("-[^-]+$"; "") end),
-                value: {
-                    platform: (if endswith("-darwin") then "darwin" else "linux" end),
-                    group: $user,
-                    fqn: null,
-                    homeConfiguration: $name
-                }
+            to_entries | map(select(.value.username == $user) | {
+                key: .value.hostname,
+                value: { platform: .value.platform, group: $user, homeConfiguration: .key }
             }) | if length == (map(.key) | unique | length) then from_entries
                 else error("Ambiguous standalone Home Manager exports for the same host") end
         ')
@@ -193,15 +187,6 @@ get_host_attr() {
         return
     fi
     echo "$meta" | jq -r ".$attr // empty"
-}
-
-get_build_root() {
-    local host="$1"
-    if [[ "$DO_HM_ONLY" == "true" ]]; then
-        printf '%s/%s\n' "$ROOTS" "$(get_host_attr "$host" homeConfiguration)"
-    else
-        printf '%s/%s\n' "$ROOTS" "$host"
-    fi
 }
 
 get_hosts_by_group() {
@@ -808,7 +793,7 @@ do_rekey() {
 
 attic_inhibit_start() {
     ATTIC_INHIBIT="/run/attic-push/inhibit"
-    if [[ "$DO_HM_ONLY" == "true" && ! -d /run/attic-push ]]; then
+    if [[ ! -d /run/attic-push ]]; then
         ATTIC_INHIBIT=""
         return 0
     fi
@@ -825,9 +810,7 @@ attic_push_closures() {
     if command -v attic-push-closure &>/dev/null; then
         local -a closures=()
         for host in "${HOSTS[@]}"; do
-            local root
-            root=$(get_build_root "$host")
-            [[ -L "$root" ]] && closures+=("$(readlink -f "$root")")
+            [[ -L "${ROOTS}/${host}" ]] && closures+=("$(readlink -f "${ROOTS}/${host}")")
         done
         if [[ ${#closures[@]} -gt 0 ]]; then
             echo "==> Pushing ${#closures[@]} closure(s) to attic..."
@@ -853,35 +836,25 @@ do_build() {
     fi
 
     for host in "${HOSTS[@]}"; do
-        local platform root
+        local platform installable
         platform=$(get_host_attr "$host" "platform")
-        root=$(get_build_root "$host")
 
         echo "    Building $host ($platform)..."
         if [[ "$DO_HM_ONLY" == "true" ]]; then
-            local home_configuration
-            home_configuration=$(get_host_attr "$host" homeConfiguration)
-            nix build ".?submodules=1#homeConfigurations.\"${home_configuration}\".activationPackage" \
-                --out-link "$root" \
-                "${build_args[@]}"
-            continue
+            installable="homeConfigurations.\"$(get_host_attr "$host" homeConfiguration)\".activationPackage"
+        else
+            case "$platform" in
+                darwin) installable="darwinConfigurations.${host}.system" ;;
+                linux)  installable="nixosConfigurations.${host}.config.system.build.toplevel" ;;
+                *)
+                    echo "Error: Unknown platform '$platform' for host '$host'" >&2
+                    exit 1
+                    ;;
+            esac
         fi
-        case "$platform" in
-            darwin)
-                nix build ".?submodules=1#darwinConfigurations.${host}.system" \
-                    --out-link "$root" \
-                    "${build_args[@]}"
-                ;;
-            linux)
-                nix build ".?submodules=1#nixosConfigurations.${host}.config.system.build.toplevel" \
-                    --out-link "$root" \
-                    "${build_args[@]}"
-                ;;
-            *)
-                echo "Error: Unknown platform '$platform' for host '$host'" >&2
-                exit 1
-                ;;
-        esac
+        nix build ".?submodules=1#${installable}" \
+            --out-link "${ROOTS}/${host}" \
+            "${build_args[@]}"
     done
 
     commit_and_push
@@ -913,11 +886,10 @@ do_switch() {
     fi
 
     for host in "${HOSTS[@]}"; do
-        local platform fqn closure remote_target root
+        local platform fqn closure remote_target
         platform=$(get_host_attr "$host" "platform")
         fqn=$(get_host_attr "$host" "fqn")
-        root=$(get_build_root "$host")
-        closure=$(readlink -f "$root")
+        closure=$(readlink -f "${ROOTS}/${host}")
 
         [[ "$fqn" == "null" || -z "$fqn" ]] && fqn=""
 
@@ -971,13 +943,14 @@ do_switch() {
         fi
 
         if [[ "$DO_HM_ONLY" == "true" ]]; then
+            local -a switch_home=("${closure}/switch-home" "$closure" /etc/smind/home-manager /etc/NIXOS)
             if [[ "$THISHOST" == "$host" ]]; then
-                "${closure}/switch-home" "$closure" /etc/smind/home-manager /etc/NIXOS
+                "${switch_home[@]}"
             else
                 local username
                 username=$(id -un)
-                nix copy "${copy_args[@]}" --to "ssh-ng://${username}@${remote_target}?compress=true" "$root"
-                ssh "${username}@${remote_target}" "${closure}/switch-home" "$closure" /etc/smind/home-manager /etc/NIXOS
+                nix copy "${copy_args[@]}" --to "ssh-ng://${username}@${remote_target}?compress=true" "${ROOTS}/${host}"
+                ssh "${username}@${remote_target}" "${switch_home[@]}"
             fi
             continue
         fi

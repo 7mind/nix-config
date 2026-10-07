@@ -31,16 +31,16 @@ in
         message = "Persistent Home Manager integration requires NixOS activation scripts"; }
     ];
 
-    environment.etc = lib.mkMerge (lib.mapAttrsToList (username: home: {
+    environment.etc = lib.concatMapAttrs (username: home: {
       "smind/home-manager/${username}".text = "${profilePath username}\n";
       "profiles/per-user/${username}".source = lib.mkForce "${profilePath username}/home-path";
       "profiles/per-user-system/${username}".source = pkgs.buildEnv {
         name = "system-user-environment";
-        paths = builtins.filter (package: toString package != toString home.homePath) home.packages;
+        paths = lib.remove home.homePath home.packages;
         inherit (config.environment) pathsToLink extraOutputsToInstall;
         inherit (config.system.path) ignoreCollisions postBuild;
       };
-    }) homes);
+    }) homes;
     environment.profiles = [ "/etc/profiles/per-user-system/$USER" ];
 
     systemd.services = lib.mapAttrs' (username: home:
@@ -54,11 +54,13 @@ in
       deps = [ "users" "etc" ];
       text = ''
         ${pkgs.coreutils}/bin/install -d -m 0755 -o root -g root ${profileRoot} ${requestRoot}
+        hm_system_generation="$(readlink -e "$systemConfig")"
+        read -r hm_boot_id < /proc/sys/kernel/random/boot_id
       '' + lib.concatStrings (lib.mapAttrsToList (username: home: ''
         ${pkgs.coreutils}/bin/install -d -m 0755 -o ${lib.escapeShellArg username} \
           -g ${lib.escapeShellArg home.group} ${lib.escapeShellArg "${profileRoot}/${username}"}
-        request="$(mktemp '${requestRoot}/request.'"$(cat /proc/sys/kernel/random/boot_id)"'.XXXXXX')"
-        printf '%s\n' "$(readlink -e "$systemConfig")" "''${NIXOS_ACTION:-boot}" ${home.activationPackage} > "$request"
+        request="$(mktemp "${requestRoot}/request.$hm_boot_id.XXXXXX")"
+        printf '%s\n' "$hm_system_generation" "''${NIXOS_ACTION:-boot}" ${home.activationPackage} > "$request"
         chmod 0644 "$request"
         ln -sfn "$request" ${lib.escapeShellArg "${requestRoot}/${username}"}
         if [[ "''${NIXOS_ACTION:-boot}" != boot ]]; then
