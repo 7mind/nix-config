@@ -19,23 +19,21 @@ let
   activation = label: import ../lib/standalone-home-activation.nix { inherit pkgs; home = home label; };
   alias = flake.inputs.nixpkgs.lib.nixosSystem {
     system = builtins.currentSystem;
+    specialArgs.specialArgsSelfRef = { cfg-hm-modules = [ ]; };
     modules = [
       flake.inputs.home-manager.nixosModules.home-manager
+      ../modules/nix-generic/home-manager.nix
       ../modules/nixos/home-manager.nix
-      ({ lib, ... }: {
-        options.smind.home-manager.enable = lib.mkEnableOption "Home Manager";
-        config = {
-          smind.home-manager.enable = true;
-          system.stateVersion = "25.05";
-          users.users.homealias = {
-            name = "runtimeuser";
-            isNormalUser = true;
-            home = "/home/runtimeuser";
-          };
-          home-manager.useUserPackages = true;
-          home-manager.users.homealias.home.stateVersion = "25.05";
+      {
+        smind.home-manager.enable = true;
+        system.stateVersion = "25.05";
+        users.users.homealias = {
+          name = "runtimeuser";
+          isNormalUser = true;
+          home = "/home/runtimeuser";
         };
-      })
+        home-manager.users.homealias.home.stateVersion = "25.05";
+      }
     ];
   };
 in

@@ -21,10 +21,10 @@ class SetupHomeManagerTest(unittest.TestCase):
         self.generation = self.root / "home-generation"
         self.generation.mkdir()
         activate = self.generation / "activate"
-        activate.write_text('#!/usr/bin/env bash\nprintf "activate:%s\\n" "$HOME_MANAGER_BACKUP_EXT" >> "$TEST_LOG"\n')
+        activate.write_text('#!/usr/bin/env bash\nprintf "activate-run\\n" >> "$TEST_LOG"\n')
         activate.chmod(0o755)
         switch = self.generation / "switch-home"
-        switch.write_text('#!/usr/bin/env bash\nexport HOME_MANAGER_BACKUP_EXT=hmbak\nexec "$1/activate"\n')
+        switch.write_text('#!/usr/bin/env bash\nexec "$1/activate"\n')
         switch.chmod(0o755)
         command = self.bin / "command"
         command.write_text('''#!/usr/bin/env bash
@@ -43,7 +43,7 @@ case "$name" in
         case "$1" in
             eval)
                 case "$2" in
-                    *'#homeConfigurations') printf '%s\\n' "$TEST_HOMES" ;;
+                    *'#homeMeta') printf '%s\\n' "$TEST_HOMES" ;;
                     *'#hostMeta') printf '%s\\n' "$TEST_HOST_META" ;;
                     *) exit 90 ;;
                 esac
@@ -85,10 +85,13 @@ esac
             TEST_USER="pavel",
             TEST_PLATFORM="Linux",
             TEST_ARCH="x86_64",
-            TEST_HOMES=json.dumps([
-                "pavel@pavel-fw-x86_64", "pavel@pavel-am5-x86_64", "pavel@pavel-trx40-x86_64",
-                "pavel@pavel-mba-m3-aarch64-darwin", "alex@ubuntu-x86_64",
-            ]),
+            TEST_HOMES=json.dumps({
+                "pavel@pavel-fw-x86_64": {"hostname": "pavel-fw", "username": "pavel", "platform": "linux"},
+                "pavel@pavel-am5-x86_64": {"hostname": "pavel-am5", "username": "pavel", "platform": "linux"},
+                "pavel@pavel-trx40-x86_64": {"hostname": "pavel-trx40", "username": "pavel", "platform": "linux"},
+                "pavel@pavel-mba-m3-aarch64-darwin": {"hostname": "pavel-mba-m3", "username": "pavel", "platform": "darwin"},
+                "alex@ubuntu-x86_64": {"hostname": "ubuntu", "username": "alex", "platform": "linux"},
+            }),
             TEST_HOST_META=json.dumps({"pavel-fw": {"platform": "linux", "group": "pavel", "fqn": None}}),
         )
 
@@ -114,13 +117,13 @@ esac
         _, commands = self.run_setup("--hm-only")
         self.assert_home_only(commands)
         self.assertIn('#homeConfigurations."pavel@pavel-fw-x86_64".activationPackage', commands)
-        self.assertIn(str(self.root / "state/nix-config/home-builds/pavel@pavel-fw-x86_64"), commands)
-        self.assertNotIn("activate:", commands)
+        self.assertIn(str(self.root / "state/nix-config/home-builds/pavel-fw"), commands)
+        self.assertNotIn("activate-run", commands)
 
     def test_switch_current_home(self):
         _, commands = self.run_setup("--hm-only", "-s")
         self.assert_home_only(commands)
-        self.assertIn("activate:hmbak", commands)
+        self.assertIn("activate-run", commands)
         self.assertNotIn("sudo", commands)
 
     def test_remote_switch_uses_user(self):
@@ -137,7 +140,7 @@ esac
         _, commands = self.run_setup("--hm-only", "-s")
         self.assert_home_only(commands)
         self.assertIn('#homeConfigurations."pavel@pavel-mba-m3-aarch64-darwin".activationPackage', commands)
-        self.assertIn("activate:hmbak", commands)
+        self.assertIn("activate-run", commands)
 
     def test_home_without_os_export(self):
         self.env.update(TEST_HOST="ubuntu", TEST_USER="alex")
@@ -160,7 +163,10 @@ esac
         ))
 
     def test_ambiguous_host_exports_rejected(self):
-        self.env["TEST_HOMES"] = json.dumps(["pavel@pavel-fw-x86_64", "pavel@pavel-fw-aarch64"])
+        self.env["TEST_HOMES"] = json.dumps({
+            "pavel@pavel-fw-x86_64": {"hostname": "pavel-fw", "username": "pavel", "platform": "linux"},
+            "pavel@pavel-fw-aarch64": {"hostname": "pavel-fw", "username": "pavel", "platform": "linux"},
+        })
         result, commands = self.run_setup("--hm-only", success=False)
         self.assertIn("Ambiguous standalone Home Manager exports", result.stderr)
         self.assert_home_only(commands)
