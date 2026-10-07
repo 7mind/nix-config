@@ -47,7 +47,10 @@ in
     hw.amd.gpu.enable = (at [ "smind" "hw" "amd" "gpu" "enable" ] false);
     hw.intel.gpu.enable = (at [ "smind" "hw" "intel" "gpu" "enable" ] false);
     nas-autofs.enable = (at [ "smind" "nas-autofs" "enable" ] false);
-    llm-worker.sshKeyPath = (at [ "smind" "roles" "server" "llm-worker" "sshKey" "path" ] null);
+    llm-worker.sshKeyPath =
+      if at [ "smind" "roles" "server" "llm-worker" "enable" ] false then
+        at [ "smind" "roles" "server" "llm-worker" "sshKey" "path" ] null
+      else null;
     age.enable = (at [ "smind" "age" "enable" ] false);
     age.load-owner-secrets = (at [ "smind" "age" "load-owner-secrets" ] false);
     age.hostPubkey = (at [ "age" "rekey" "hostPubkey" ] null);

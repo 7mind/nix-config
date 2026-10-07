@@ -42,6 +42,7 @@ BUILD_ON_HOSTS=()
 BUILD_ON_ARGS=()
 DO_REFRESH=false
 DO_SWITCH=false
+DO_HM_ONLY=false
 DO_BOOT=false
 DO_REKEY=false
 DO_GIT=true
@@ -66,12 +67,14 @@ usage() {
     cat <<EOF
 Usage: $(basename "$0") [OPTIONS] [HOST...]
 
-Build and deploy NixOS/nix-darwin configurations.
+Build and deploy NixOS/nix-darwin or standalone Home Manager configurations.
 
 If no HOST is specified, builds the current host (${THISHOST}).
 
 Options:
   -s, --switch      Switch to the new configuration after building
+  --hm-only         Build the current user's standalone Home Manager export;
+                    -s activates it as that user. Incompatible with --boot/--rekey.
   -b, --boot        Stage the new configuration for next boot (Linux only;
                     skips activation on Darwin). Mutually exclusive with -s.
   -k, --rekey       Rekey age secrets for the specified hosts before building
@@ -102,6 +105,18 @@ Options:
 Host specifiers:
   HOST                 Individual host name (e.g., o1, pavel-fw)
   +GROUP               All hosts in a group (e.g., +infra, +pavel)
+
+With --hm-only, hosts come from homeConfigurations for the current user.
+The group is the username; remote switches need --host-override or --allow-short-host.
+Home build roots are stored in \$XDG_STATE_HOME/nix-config/home-builds
+(default: \$HOME/.local/state/nix-config/home-builds).
+On NixOS, install the persistent HM integration with a full system switch first.
+Afterwards, --hm-only -s survives reboot. A full system switch or rollback
+selects the Home Manager generation bundled with that system.
+
+Home Manager examples:
+  $(basename "$0") --hm-only pavel-fw
+  $(basename "$0") --hm-only -s pavel-fw
 
 Upstream sync:
   Unless --offline is given, setup fetches upstream for the main repo
@@ -135,14 +150,28 @@ load_host_meta() {
     add_all
     local json
     local errfile
+    local meta_attr="hostMeta"
+    if [[ "$DO_HM_ONLY" == "true" ]]; then
+        meta_attr="homeMeta"
+    fi
     errfile="$(mktemp)"
-    if ! json=$(nix eval ".?submodules=1#hostMeta" --json 2>"$errfile"); then
+    if ! json=$(nix eval ".?submodules=1#${meta_attr}" --json 2>"$errfile"); then
         echo "Error: nix eval failed for host metadata:" >&2
         cat "$errfile" >&2
         rm -f "$errfile"
         exit 1
     fi
     rm -f "$errfile"
+
+    if [[ "$DO_HM_ONLY" == "true" ]]; then
+        json=$(echo "$json" | jq --arg user "$(id -un)" '
+            to_entries | map(select(.value.username == $user) | {
+                key: .value.hostname,
+                value: { platform: .value.platform, group: $user, homeConfiguration: .key }
+            }) | if length == (map(.key) | unique | length) then from_entries
+                else error("Ambiguous standalone Home Manager exports for the same host") end
+        ')
+    fi
 
     while IFS="=" read -r key value; do
         HOST_META["$key"]="$value"
@@ -273,6 +302,10 @@ parse_args() {
                 DO_SWITCH=true
                 shift
                 ;;
+            --hm-only)
+                DO_HM_ONLY=true
+                shift
+                ;;
             -b|--boot)
                 DO_BOOT=true
                 shift
@@ -363,6 +396,14 @@ parse_args() {
                 ;;
         esac
     done
+
+    if [[ "$DO_HM_ONLY" == "true" ]]; then
+        if [[ "$DO_BOOT" == "true" || "$DO_REKEY" == "true" ]]; then
+            echo "Error: --hm-only is incompatible with --boot/--rekey" >&2
+            exit 1
+        fi
+        ROOTS="${XDG_STATE_HOME:-${HOME}/.local/state}/nix-config/home-builds"
+    fi
 
     if [[ ${#HOSTS[@]} -eq 0 ]]; then
         HOSTS=("$THISHOST")
@@ -752,6 +793,10 @@ do_rekey() {
 
 attic_inhibit_start() {
     ATTIC_INHIBIT="/run/attic-push/inhibit"
+    if [[ ! -d /run/attic-push ]]; then
+        ATTIC_INHIBIT=""
+        return 0
+    fi
     touch "$ATTIC_INHIBIT"
     trap 'rm -f "$ATTIC_INHIBIT"' EXIT
 }
@@ -775,6 +820,7 @@ attic_push_closures() {
 }
 
 attic_inhibit_stop() {
+    [[ -n "$ATTIC_INHIBIT" ]] || return 0
     rm -f "$ATTIC_INHIBIT"
     trap - EXIT
 }
@@ -790,26 +836,25 @@ do_build() {
     fi
 
     for host in "${HOSTS[@]}"; do
-        local platform
+        local platform installable
         platform=$(get_host_attr "$host" "platform")
 
         echo "    Building $host ($platform)..."
-        case "$platform" in
-            darwin)
-                nix build ".?submodules=1#darwinConfigurations.${host}.system" \
-                    --out-link "${ROOTS}/${host}" \
-                    "${build_args[@]}"
-                ;;
-            linux)
-                nix build ".?submodules=1#nixosConfigurations.${host}.config.system.build.toplevel" \
-                    --out-link "${ROOTS}/${host}" \
-                    "${build_args[@]}"
-                ;;
-            *)
-                echo "Error: Unknown platform '$platform' for host '$host'" >&2
-                exit 1
-                ;;
-        esac
+        if [[ "$DO_HM_ONLY" == "true" ]]; then
+            installable="homeConfigurations.\"$(get_host_attr "$host" homeConfiguration)\".activationPackage"
+        else
+            case "$platform" in
+                darwin) installable="darwinConfigurations.${host}.system" ;;
+                linux)  installable="nixosConfigurations.${host}.config.system.build.toplevel" ;;
+                *)
+                    echo "Error: Unknown platform '$platform' for host '$host'" >&2
+                    exit 1
+                    ;;
+            esac
+        fi
+        nix build ".?submodules=1#${installable}" \
+            --out-link "${ROOTS}/${host}" \
+            "${build_args[@]}"
     done
 
     commit_and_push
@@ -895,6 +940,19 @@ do_switch() {
             else
                 echo "    Warning: signing key $sign_key not found; remote copy may fail require-sigs (retry with -ncs)."
             fi
+        fi
+
+        if [[ "$DO_HM_ONLY" == "true" ]]; then
+            local -a switch_home=("${closure}/switch-home" "$closure" /etc/smind/home-manager /etc/NIXOS)
+            if [[ "$THISHOST" == "$host" ]]; then
+                "${switch_home[@]}"
+            else
+                local username
+                username=$(id -un)
+                nix copy "${copy_args[@]}" --to "ssh-ng://${username}@${remote_target}?compress=true" "${ROOTS}/${host}"
+                ssh "${username}@${remote_target}" "${switch_home[@]}"
+            fi
+            continue
         fi
 
         case "$platform" in

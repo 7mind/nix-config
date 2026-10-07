@@ -32,6 +32,9 @@ let
   worker = flake.nixosConfigurations.pavel-trx40.config.home-manager.users.llm;
   config = standalone.value.config;
   otherConfig = relocated.value.config;
+  nixos = flake.nixosConfigurations.pavel-trx40;
+  profile = "/nix/var/nix/profiles/smind-home/pavel/generation";
+  privateContexts = flake.globals.import_if_exists_or ../private/tests/home-context.nix (_: { exports = [ ]; }) { inherit flake; };
 in
 assert lib.assertMsg (standalone.name == "pavel@ubuntu-x86_64") "Standalone export must use the supplied hostname and architecture";
 assert lib.assertMsg (config.home.username == "pavel" && config.home.homeDirectory == "/home/pavel") "Standalone identity must come from its context";
@@ -45,7 +48,13 @@ assert lib.assertMsg (!otherConfig.smind.hm.globals.isDesktop && failedAssertion
 assert lib.assertMsg (relocated.name == "alex@other-workstation-x86_64") "Source names must not determine instance names";
 assert lib.assertMsg ((root "x86_64-linux").value.pkgs.stdenv.hostPlatform.system == "x86_64-linux") "Root must support x86_64 context";
 assert lib.assertMsg ((root "aarch64-linux").value.pkgs.stdenv.hostPlatform.system == "aarch64-linux") "Root must support aarch64 context";
-assert lib.assertMsg (builtins.attrNames flake.homeConfigurations == [ standalone.name ]) "Only explicitly declared standalone instances may be exported";
+assert lib.assertMsg (builtins.attrNames flake.homeConfigurations == builtins.sort builtins.lessThan ([ standalone.name ] ++ privateContexts.exports)) "Only explicitly declared standalone instances may be exported";
+assert lib.assertMsg nixos.config.home-manager.useUserPackages "NixOS must keep Home Manager packages visible through the system profile";
+assert lib.assertMsg (nixos.config.environment.etc."profiles/per-user/pavel".source == "${profile}/home-path") "NixOS packages must follow the selected Home Manager generation";
+assert lib.assertMsg (nixos.config.environment.etc."smind/home-manager/pavel".text == "${profile}\n") "HM-only switches must discover the persistent profile from the installed system";
+assert lib.assertMsg (lib.hasSuffix " ${profile} /run/smind-home-manager/pavel" nixos.config.systemd.services.home-manager-pavel.serviceConfig.ExecStart) "Boot activation must follow the selected profile";
+assert lib.assertMsg (builtins.elem "multi-user.target" nixos.config.systemd.services.home-manager-pavel.wantedBy) "The selected Home Manager generation must activate at boot";
+assert lib.assertMsg (standalone.value.pkgs.far2l-noui.drvPath == nixos.pkgs.far2l-noui.drvPath) "Standalone Home Manager must apply the shared package overlays";
 {
   standalone = true;
   relocated = true;
