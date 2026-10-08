@@ -78,7 +78,9 @@ in
           "plugdev"
           "uucp"
         ] ++ lib.optional (config.smind.ssh.mode == "safe") "ssh-users";
-        openssh.authorizedKeys.keys = cfg-const.ssh-keys-pavel;
+        # Operator keys plus the fleet `llm` key (public half of the
+        # `${llmSshKeySecretName}` secret above) agents log in with.
+        openssh.authorizedKeys.keys = cfg-const.ssh-keys-pavel ++ cfg-const.ssh-keys-llm;
       };
 
       home-manager.users.llm.imports = (make-home {
