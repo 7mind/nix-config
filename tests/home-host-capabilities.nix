@@ -1,5 +1,6 @@
 { lib, pkgs }:
 let
+  ageSecretHelpers = import ../lib/age-user-secret.nix;
   profiles = [
     { name = "pavel-am5"; path = ../home/pavel-am5.nix; model = "qwen3.8-27b-q8"; }
     { name = "pavel-fw"; path = ../home/pavel-fw.nix; model = "qwen3.8-27b-q4"; }
@@ -18,7 +19,8 @@ let
         xdg_associate = null;
         import_if_exists = null;
         import_if_exists_or = null;
-        ageUserSecret = import ../lib/age-user-secret.nix;
+        ageUserSecret = ageSecretHelpers.ageUserSecret;
+        ageUserSecretExists = ageSecretHelpers.ageUserSecretExists;
       };
       modules = [
         ../modules/hm/globals.nix

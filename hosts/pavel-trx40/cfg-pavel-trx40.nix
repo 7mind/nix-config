@@ -64,6 +64,11 @@
     isDesktop = false;
     roles.server.generic = true;   # pulls in shell.zsh.enable + sane-defaults
     roles.server.llm-worker.enable = true; # creates the `llm` user + agenix-managed ssh key
+
+    # nix-ld for running unpatched binaries (AppImages, downloaded toolchains).
+    # Desktops get this from roles/nixos/desktop.nix; enable it explicitly on
+    # this headless box for the same effective config as pavel-am5.
+    environment.nix-ld.enable = true;
     hw.cpu.isAmd = true;
 
     # AMD Radeon 6900XT — amdgpu kernel driver, ROCm compute stack,

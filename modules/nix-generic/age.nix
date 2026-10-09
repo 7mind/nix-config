@@ -52,8 +52,40 @@ let
         value = rekeyedSecretFor name;
       }) (builtins.attrNames secrets)
     );
+  standardOwnerSecrets = loadSecretsFile owner ownerSecretsFile;
+  standardOwnerSecretNames = builtins.attrNames standardOwnerSecrets;
+  # fnmatch-style glob over secret names: `*` matches any run of characters,
+  # `?` any single character; a pattern must match the whole name.
+  globRegex =
+    glob:
+    "^"
+    + lib.concatMapStrings
+      (
+        c:
+        if c == "*" then ".*"
+        else if c == "?" then "."
+        else if builtins.match "[a-zA-Z0-9_-]" c != null then c
+        else "\\" + c
+      )
+      (lib.stringToCharacters glob)
+    + "$";
+  matchesGlob = glob: name: builtins.match (globRegex glob) name != null;
+  matchesAny = patterns: name: builtins.any (glob: matchesGlob glob name) patterns;
+  unmatchedOwnerSecretPatterns = builtins.filter
+    (glob: !(builtins.any (name: matchesGlob glob name) standardOwnerSecretNames))
+    (cfg.owner-secrets.include ++ cfg.owner-secrets.exclude);
+  keepOwnerSecret =
+    name:
+    let
+      included = matchesAny cfg.owner-secrets.include name;
+      excluded = matchesAny cfg.owner-secrets.exclude name;
+    in
+    if included && excluded then cfg.owner-secrets.precedence == "include"
+    else if included then true
+    else if excluded then false
+    else cfg.owner-secrets.include == [ ];
   loadOwnerSecrets = owner != null && cfg.enable && cfg.load-owner-secrets;
-  ownerSecrets = if loadOwnerSecrets then loadSecretsFile owner ownerSecretsFile else { };
+  ownerSecrets = if loadOwnerSecrets then lib.filterAttrs (name: _: keepOwnerSecret name) standardOwnerSecrets else { };
   loadAdditionalUserOnlySecrets = cfg.enable && cfg.additionalUserOnlySecrets != [ ];
   additionalUserOnlySecrets = builtins.foldl' (acc: user: acc // rekeyedUserSecrets user) { } (
     lib.unique cfg.additionalUserOnlySecrets
@@ -70,6 +102,38 @@ in
     type = lib.types.nullOr (lib.types.either lib.types.path lib.types.str);
     default = null;
     description = "Override the owner secret definition file loaded when smind.age.load-owner-secrets is enabled.";
+  };
+
+  options.smind.age.owner-secrets = {
+    include = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      description = ''
+        Glob patterns (`*` and `?`, matched against the whole secret name)
+        selecting which members of the standard owner secrets set
+        (smind.age.secretsFile) are loaded. Empty means "no include rule":
+        every name passes the include gate. A name matching neither list is
+        loaded only when `include` is empty. A name matching both lists is
+        resolved by `precedence`.
+      '';
+    };
+    exclude = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      description = ''
+        Glob patterns (`*` and `?`) naming members of the standard owner
+        secrets set that must NOT be loaded. Consulted on every name that
+        passes the include gate.
+      '';
+    };
+    precedence = lib.mkOption {
+      type = lib.types.enum [ "exclude" "include" ];
+      default = "exclude";
+      description = ''
+        Which list wins when a name matches both `include` and `exclude`:
+        "exclude" (default) drops the secret, "include" keeps it.
+      '';
+    };
   };
   options.smind.age.additionalUserOnlySecrets = lib.mkOption {
     type = lib.types.listOf lib.types.str;
@@ -108,6 +172,10 @@ in
         {
           assertion = !hostPubkeySet || builtins.match hostPubkeyPattern hostPubkey != null;
           message = "age.rekey.hostPubkey must be exactly 'ssh-ed25519 <ed25519 base64 key blob>' with no prefix or suffix";
+        }
+        {
+          assertion = standardOwnerSecretNames == [ ] || unmatchedOwnerSecretPatterns == [ ];
+          message = "smind.age.owner-secrets patterns matching no standard secret: ${lib.concatStringsSep ", " unmatchedOwnerSecretPatterns}";
         }
       ];
     }

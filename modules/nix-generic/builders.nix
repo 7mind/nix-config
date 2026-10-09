@@ -2,6 +2,9 @@
 
 let
   ownerSecretsEnabled = config.smind.age.enable && config.smind.age.load-owner-secrets;
+  # The remote-builder ssh key is part of the standard owner secrets set; a
+  # host that filters it out (smind.age.owner-secrets) gets keyless builders.
+  builderKeyEnabled = ownerSecretsEnabled && config.age.secrets ? builder-key;
 
   # Prevent a host from using itself as a remote builder (causes deadlock).
   # Compare short hostnames: extract first component of builder FQDN (e.g. "vm" from "vm.home.7mind.io").
@@ -21,7 +24,7 @@ let
         protocol = "ssh-ng";
         sshUser = "root";
         maxJobs = 3;
-        sshKey = lib.mkIf ownerSecretsEnabled "${config.age.secrets.builder-key.path}";
+        sshKey = lib.mkIf builderKeyEnabled "${config.age.secrets.builder-key.path}";
         publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSUxqclA0bHIrV1NnTDNrNWVBNis0Q0dZbXR6NlVpdEltWSszUkFSYU0wcnkgcm9vdEBmcmVzaG5peAo=";
         # vm's x86 speedFactor is 2; the Threadripper benchmarks well
         # over 4x faster (per the user), and Nix prefers higher
@@ -51,7 +54,7 @@ let
         protocol = "ssh-ng";
         sshUser = "root";
         maxJobs = 3;
-        sshKey = lib.mkIf ownerSecretsEnabled "${config.age.secrets.builder-key.path}";
+        sshKey = lib.mkIf builderKeyEnabled "${config.age.secrets.builder-key.path}";
         publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSUxqclA0bHIrV1NnTDNrNWVBNis0Q0dZbXR6NlVpdEltWSszUkFSYU0wcnkgcm9vdEBmcmVzaG5peAo=";
         speedFactor = 10;
         supportedFeatures = [ "benchmark" "big-parallel" ];
@@ -64,7 +67,7 @@ let
         protocol = "ssh-ng";
         sshUser = "root";
         maxJobs = 2;
-        sshKey = lib.mkIf ownerSecretsEnabled "${config.age.secrets.builder-key.path}";
+        sshKey = lib.mkIf builderKeyEnabled "${config.age.secrets.builder-key.path}";
         publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSURRWkVOWnVzZUl6aFhrYnZNYnFhVS91ZlM0WExXOTV5WS9EUHJvZG5ZVmIgcm9vdEBuaXhvcwo=";
         speedFactor = 2;
         supportedFeatures = [ "benchmark" "big-parallel" "kvm" ];
@@ -77,7 +80,7 @@ let
         protocol = "ssh-ng";
         sshUser = "root";
         maxJobs = 1;
-        sshKey = lib.mkIf ownerSecretsEnabled "${config.age.secrets.builder-key.path}";
+        sshKey = lib.mkIf builderKeyEnabled "${config.age.secrets.builder-key.path}";
         publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSURRWkVOWnVzZUl6aFhrYnZNYnFhVS91ZlM0WExXOTV5WS9EUHJvZG5ZVmIgcm9vdEBuaXhvcwo=";
         speedFactor = 1;
         supportedFeatures = [ ];
@@ -89,7 +92,7 @@ let
         system = "aarch64-linux";
         protocol = "ssh-ng";
         sshUser = "root";
-        sshKey = lib.mkIf ownerSecretsEnabled "${config.age.secrets.builder-key.path}";
+        sshKey = lib.mkIf builderKeyEnabled "${config.age.secrets.builder-key.path}";
         publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSUtaU3FyUjVSb0FUV2Z2ZFdPUkdHU1FGRTJFTzJpSlA5S3Z2WWtRbVE2aG8gcm9vdEBuaXhvcwo=";
         maxJobs = 4;
         speedFactor = 8;
@@ -102,7 +105,7 @@ let
         system = "aarch64-linux";
         protocol = "ssh-ng";
         sshUser = "root";
-        sshKey = lib.mkIf ownerSecretsEnabled "${config.age.secrets.builder-key.path}";
+        sshKey = lib.mkIf builderKeyEnabled "${config.age.secrets.builder-key.path}";
         publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSU1ybldtV3hBa25nMXp4NktjUXVHYUpnQ1JWYUxjaDl4TXZrVnpTZSs2ekkgcm9vdEBuaXhvcwo=";
         maxJobs = 4;
         speedFactor = 8;
@@ -115,7 +118,7 @@ let
         system = "aarch64-linux";
         protocol = "ssh-ng";
         sshUser = "root";
-        sshKey = lib.mkIf ownerSecretsEnabled "${config.age.secrets.builder-key.path}";
+        sshKey = lib.mkIf builderKeyEnabled "${config.age.secrets.builder-key.path}";
         publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSUZPRFREbUZsUHVKM1hIVzI0TFlMY0pyVFpGNStmZzZITlVpSEtLdUpYZkQgcm9vdEBuaXhvcwo=";
         maxJobs = 4;
         speedFactor = 4;

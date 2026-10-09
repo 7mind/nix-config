@@ -53,7 +53,7 @@ let
 
   xkbLib = import ./xkb.nix { inherit lib; };
 
-  ageUserSecret = import ./age-user-secret.nix;
+  ageSecretHelpers = import ./age-user-secret.nix;
 
   extendFuncResultWith = func: attrset:
     let
@@ -143,7 +143,9 @@ in
 
   _module.args.xkbLib = xkbLib;
 
-  _module.args.ageUserSecret = ageUserSecret;
+  _module.args.ageUserSecret = ageSecretHelpers.ageUserSecret;
+
+  _module.args.ageUserSecretExists = ageSecretHelpers.ageUserSecretExists;
 
   _module.args.extended_pkg = extended_pkg;
 

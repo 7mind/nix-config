@@ -18,6 +18,13 @@ let
       globals = ubuntu.host.globals // { net.namespaces = [ "vpn" ]; };
     };
   });
+  # Owner-secret consumers must degrade per-secret when a host filters the
+  # standard set with smind.age.owner-secrets: pavel-trx40 loads only
+  # "github-*", pavel-am5 loads the full set. The consumers live in private HM
+  # modules, so these checks only run when the private submodule is present.
+  hasPrivate = builtins.pathExists ../private/home/pavel-trx40.nix;
+  trx40Pavel = flake.nixosConfigurations.pavel-trx40.config.home-manager.users.pavel;
+  am5Pavel = flake.nixosConfigurations.pavel-am5.config.home-manager.users.pavel;
   root = system: make {
     source = "root";
     username = "root";
@@ -33,6 +40,11 @@ let
   config = standalone.value.config;
   otherConfig = relocated.value.config;
 in
+assert lib.assertMsg (!hasPrivate || trx40Pavel.smind.hm.nix.githubAccessTokenFile == "/run/agenix/github-token-autopeasant") "pavel-trx40: the agent GitHub token must survive owner secret filtering";
+assert lib.assertMsg (!hasPrivate || trx40Pavel.smind.hm.dev.llm.yolo.secretSessionVariables.GH_TOKEN == "/run/agenix/github-token-autopeasant") "pavel-trx40: the agent GH_TOKEN must survive owner secret filtering";
+assert lib.assertMsg (!hasPrivate || trx40Pavel.programs.git.signing.key == null) "pavel-trx40: git SSH signing must deactivate when id_ed25519.pub is filtered out";
+assert lib.assertMsg (!hasPrivate || am5Pavel.smind.hm.nix.githubAccessTokenFile == "/run/agenix/github-token-autopeasant") "pavel-am5: GitHub wiring must be unchanged for the unfiltered set";
+assert lib.assertMsg (!hasPrivate || am5Pavel.programs.git.signing.key == "/run/agenix/id_ed25519.pub") "pavel-am5: git SSH signing must stay wired for the unfiltered set";
 assert lib.assertMsg (standalone.name == "pavel@ubuntu-x86_64") "Standalone export must use the supplied hostname and architecture";
 assert lib.assertMsg (config.home.username == "pavel" && config.home.homeDirectory == "/home/pavel") "Standalone identity must come from its context";
 assert lib.assertMsg (config.smind.hm.globals.isDesktop && !config.smind.hm.globals.llama-swap.enable) "Standalone capabilities must come from its declaration";
@@ -52,4 +64,6 @@ assert lib.assertMsg (builtins.attrNames flake.homeConfigurations == [ standalon
   architectures = true;
   explicitExports = true;
   roleContext = true;
+  ownerSecrets = true;
+  ownerSecretsFiltered = true;
 }
