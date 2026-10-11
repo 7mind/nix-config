@@ -281,6 +281,7 @@
             };
           } ++ [{
             "org/gnome/settings-daemon/plugins/power" = {
+              idle-brightness = lib.gvariant.mkInt32 100;
               sleep-inactive-ac-type = config.smind.desktop.gnome.auto-suspend.onAC;
               sleep-inactive-battery-type = config.smind.desktop.gnome.auto-suspend.onBattery;
               sleep-inactive-ac-timeout = lib.gvariant.mkInt32 config.smind.desktop.gnome.auto-suspend.timeoutAC;
