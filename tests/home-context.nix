@@ -39,6 +39,8 @@ let
   worker = flake.nixosConfigurations.pavel-trx40.config.home-manager.users.llm;
   config = standalone.value.config;
   otherConfig = relocated.value.config;
+  nixos = flake.nixosConfigurations.pavel-trx40;
+  privateContexts = flake.globals.import_if_exists_or ../private/tests/home-context.nix (_: { exports = [ ]; }) { inherit flake; };
 in
 assert lib.assertMsg (!hasPrivate || trx40Pavel.smind.hm.nix.githubAccessTokenFile == "/run/agenix/github-token-autopeasant") "pavel-trx40: the agent GitHub token must survive owner secret filtering";
 assert lib.assertMsg (!hasPrivate || trx40Pavel.smind.hm.dev.llm.yolo.secretSessionVariables.GH_TOKEN == "/run/agenix/github-token-autopeasant") "pavel-trx40: the agent GH_TOKEN must survive owner secret filtering";
@@ -57,7 +59,9 @@ assert lib.assertMsg (!otherConfig.smind.hm.globals.isDesktop && failedAssertion
 assert lib.assertMsg (relocated.name == "alex@other-workstation-x86_64") "Source names must not determine instance names";
 assert lib.assertMsg ((root "x86_64-linux").value.pkgs.stdenv.hostPlatform.system == "x86_64-linux") "Root must support x86_64 context";
 assert lib.assertMsg ((root "aarch64-linux").value.pkgs.stdenv.hostPlatform.system == "aarch64-linux") "Root must support aarch64 context";
-assert lib.assertMsg (builtins.attrNames flake.homeConfigurations == [ standalone.name ]) "Only explicitly declared standalone instances may be exported";
+assert lib.assertMsg (builtins.attrNames flake.homeConfigurations == builtins.sort builtins.lessThan ([ standalone.name ] ++ privateContexts.exports)) "Only explicitly declared standalone instances may be exported";
+assert lib.assertMsg (nixos.config.smind.home-manager.enable && nixos.config.home-manager.useUserPackages) "The host must enable persistent Home Manager with external package installation";
+assert lib.assertMsg (standalone.value.pkgs.far2l-noui.drvPath == nixos.pkgs.far2l-noui.drvPath) "Standalone Home Manager must apply the shared package overlays";
 {
   standalone = true;
   relocated = true;
