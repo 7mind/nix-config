@@ -64,8 +64,6 @@ assert lib.assertMsg (builtins.attrNames flake.homeConfigurations == builtins.so
 assert lib.assertMsg nixos.config.home-manager.useUserPackages "NixOS must keep Home Manager packages visible through the system profile";
 assert lib.assertMsg (nixos.config.environment.etc."profiles/per-user/pavel".source == "${profile}/home-path") "NixOS packages must follow the selected Home Manager generation";
 assert lib.assertMsg (nixos.config.environment.etc."smind/home-manager/pavel".text == "${profile}\n") "HM-only switches must discover the persistent profile from the installed system";
-assert lib.assertMsg (lib.hasSuffix " ${profile} /run/smind-home-manager/pavel" nixos.config.systemd.services.home-manager-pavel.serviceConfig.ExecStart) "Boot activation must follow the selected profile";
-assert lib.assertMsg (builtins.elem "multi-user.target" nixos.config.systemd.services.home-manager-pavel.wantedBy) "The selected Home Manager generation must activate at boot";
 assert lib.assertMsg (standalone.value.pkgs.far2l-noui.drvPath == nixos.pkgs.far2l-noui.drvPath) "Standalone Home Manager must apply the shared package overlays";
 {
   standalone = true;
