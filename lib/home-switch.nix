@@ -7,11 +7,10 @@ let
 in
 pkgs.writeShellApplication {
   name = "switch-home";
-  runtimeInputs = [ pkgs.coreutils ];
   text = ''
     export HOME_MANAGER_BACKUP_EXT=hmbak
     ${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''if [[ -e "$2" ]]; then
-      if ! read -r profile < "$1/$(id -un)"; then
+      if ! read -r profile < "$1/$(${pkgs.coreutils}/bin/id -un)"; then
         echo "Error: install persistent Home Manager integration with a full NixOS switch first" >&2
         exit 1
       fi

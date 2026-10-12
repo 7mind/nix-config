@@ -24,6 +24,8 @@ with open(os.environ["TEST_LOG"], "a") as log:
 if name in ("uname", "hostname", "id"):
     print(os.environ[{"uname": "TEST_ARCH" if args == ["-m"] else "TEST_PLATFORM", "hostname": "TEST_HOST", "id": "TEST_USER"}[name]])
 elif name == "nix" and args[0] == "eval":
+    if os.environ.get("TEST_EVAL_FAIL"):
+        raise SystemExit("fixture nix eval failure")
     print(os.environ["TEST_HOMES"])
 elif name == "nix" and args[0] == "build":
     target = pathlib.Path(args[args.index("--out-link") + 1])
@@ -57,6 +59,7 @@ elif name == "nix" and args[0] == "build":
         ("boot", ["--boot"], {}, [], "--hm-only is incompatible", 0),
         ("rekey", ["--rekey"], {}, [], "--hm-only is incompatible", 0),
         ("list", ["--list"], {}, ["pavel-fw", "pavel-mba-m3"], "", 0),
+        ("eval-failure", [], dict(TEST_EVAL_FAIL="1"), [], "fixture nix eval failure", 0),
     ]:
         log.write_text("")
         shutil.rmtree(root / "state", ignore_errors=True)
@@ -72,4 +75,4 @@ elif name == "nix" and args[0] == "build":
         assert commands.count(".switchPackage") == builds, (label, commands)
         if label in ("boot", "rekey"):
             assert '["nix", "eval"' not in commands
-    print("11 setup build, switch, selection, and rejection cases passed")
+    print("12 setup build, switch, selection, and rejection cases passed")

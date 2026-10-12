@@ -141,18 +141,9 @@ EOF
 load_host_meta() {
     echo "Loading host metadata from flake..."
     add_all
-    local json
-    local errfile
-    local meta_attr="hostMeta"
+    local json meta_attr="hostMeta"
     [[ "$DO_HM_ONLY" == "true" ]] && meta_attr="homeMeta"
-    errfile="$(mktemp)"
-    if ! json=$(nix eval ".?submodules=1#${meta_attr}" --json 2>"$errfile"); then
-        echo "Error: nix eval failed for host metadata:" >&2
-        cat "$errfile" >&2
-        rm -f "$errfile"
-        exit 1
-    fi
-    rm -f "$errfile"
+    json=$(nix eval ".?submodules=1#${meta_attr}" --json) || exit 1
 
     if [[ "$DO_HM_ONLY" == "true" ]]; then
         json=$(echo "$json" | jq --arg user "$(id -un)" '
@@ -387,9 +378,7 @@ parse_args() {
         esac
     done
 
-    if [[ "$DO_HM_ONLY" == "true" ]]; then
-        ROOTS="${XDG_STATE_HOME:-${HOME}/.local/state}/nix-config/home-builds"
-    fi
+    [[ "$DO_HM_ONLY" != "true" ]] || ROOTS="${XDG_STATE_HOME:-${HOME}/.local/state}/nix-config/home-builds"
     if [[ "$DO_HM_ONLY" == "true" && ( "$DO_BOOT" == "true" || "$DO_REKEY" == "true" ) ]]; then
         echo "Error: --hm-only is incompatible with --boot/--rekey" >&2
         exit 1
@@ -935,15 +924,12 @@ do_switch() {
         fi
 
         if [[ "$DO_HM_ONLY" == "true" ]]; then
-            local -a switch_home=("${closure}/bin/switch-home" /etc/smind/home-manager /etc/NIXOS)
-            if [[ "$THISHOST" == "$host" ]]; then
-                "${switch_home[@]}"
-            else
-                local username
-                username=$(id -un)
-                nix copy "${copy_args[@]}" --to "ssh-ng://${username}@${remote_target}?compress=true" "${ROOTS}/${host}"
-                ssh "${username}@${remote_target}" "${switch_home[@]}"
+            local -a activate=()
+            if [[ "$THISHOST" != "$host" ]]; then
+                nix copy "${copy_args[@]}" --to "ssh-ng://$(get_host_attr "$host" username)@${remote_target}?compress=true" "${ROOTS}/${host}"
+                activate=(ssh "$(get_host_attr "$host" username)@${remote_target}")
             fi
+            "${activate[@]}" "${closure}/bin/switch-home" /etc/smind/home-manager /etc/NIXOS
             continue
         fi
 
