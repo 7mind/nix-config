@@ -1,11 +1,8 @@
-set -euo pipefail
-
-action="$1"
 profile="$2"
 exec 9>>"${profile}.switch-lock"
 flock 9
 
-case "$action" in
+case "$1" in
     system)
         request="$(readlink -e "$3")"
         read -r system_generation system_action generation < "$request"
@@ -22,7 +19,7 @@ case "$action" in
         nix-env --profile "$profile" --set "$(readlink -e "$3")"
         ;;
     *)
-        echo "Error: unknown Home Manager profile action '$action'" >&2
+        echo "Error: unknown Home Manager profile action '$1'" >&2
         exit 1
         ;;
 esac

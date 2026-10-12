@@ -45,6 +45,33 @@ rec {
     ];
   };
 
+  pathsFor = self: {
+    root = "${self}";
+    pkg = "${self}/pkg";
+    private = "${self}/private";
+    secrets = "${self}/private/secrets";
+    lib = "${self}/lib";
+    modules = "${self}/modules";
+    modules-hm = "${self}/modules/hm";
+    modules-nix = "${self}/modules/nix";
+    users = "${self}/users";
+  };
+
+  homePlatformModules = inputs: isDarwin:
+    if isDarwin then [
+      inputs.mac-app-util.homeManagerModules.default
+      # nix-darwin runs HM activation through sudo→launchctl asuser→sudo -u user.
+      # TCC doesn't associate that process chain with the terminal emulator, so both the
+      # App Management permission check and the rsync copyApps itself fail.
+      # mac-app-util already handles Spotlight/Launchpad visibility via trampolines,
+      # so copyApps is redundant.
+      { targets.darwin.copyApps.enable = false; }
+    ] else [
+      inputs.plasma-manager.homeModules.plasma-manager
+      inputs.niri.homeModules.config
+      inputs.noctalia.homeModules.default
+    ];
+
   make = { self, inputs, arch }: { hostname, homes ? (_: [ ]) }:
     let
       pkgs = import inputs.nixpkgs {
@@ -59,19 +86,6 @@ rec {
         (import_if_exists ./private/config.nix);
 
 
-      paths = {
-        root = "${self}";
-        pkg = "${self}/pkg";
-        private = "${self}/private";
-        secrets = "${self}/private/secrets";
-        lib = "${self}/lib";
-        modules = "${self}/modules";
-        modules-hm = "${self}/modules/hm";
-        modules-nix = "${self}/modules/nix";
-        users = "${self}/users";
-      };
-
-
       cfg-packages = const.cfg-packages {
         inherit inputs;
         inherit pkgs;
@@ -80,7 +94,7 @@ rec {
 
       cfg-meta = rec {
         inherit arch;
-        inherit paths;
+        paths = pathsFor self;
         inherit inputs;
         inherit hostname;
         isLinux = builtins.trace (arch) (pkgs.lib.hasSuffix "-linux" arch);
@@ -214,11 +228,7 @@ rec {
             }
           ];
 
-          hm-modules = [
-            inputs.plasma-manager.homeModules.plasma-manager
-            inputs.niri.homeModules.config
-            inputs.noctalia.homeModules.default
-          ];
+          hm-modules = homePlatformModules inputs false;
         } else {
           generator = inputs.darwin.lib.darwinSystem;
 
@@ -235,15 +245,7 @@ rec {
             }
           ];
 
-          hm-modules = [
-            inputs.mac-app-util.homeManagerModules.default
-            # nix-darwin runs HM activation through sudo→launchctl asuser→sudo -u user.
-            # TCC doesn't associate that process chain with the terminal emulator, so both the
-            # App Management permission check and the rsync copyApps itself fail.
-            # mac-app-util already handles Spotlight/Launchpad visibility via trampolines,
-            # so copyApps is redundant.
-            { targets.darwin.copyApps.enable = false; }
-          ];
+          hm-modules = homePlatformModules inputs true;
         };
 
       cfg-flakes = {
@@ -423,27 +425,8 @@ rec {
         inherit arch hostname inputs;
         inherit isLinux isDarwin;
         isStandalone = true;
-        paths = {
-          root = "${self}";
-          pkg = "${self}/pkg";
-          private = "${self}/private";
-          secrets = "${self}/private/secrets";
-          lib = "${self}/lib";
-          modules = "${self}/modules";
-          modules-hm = "${self}/modules/hm";
-          modules-nix = "${self}/modules/nix";
-          users = "${self}/users";
-        };
+        paths = pathsFor self;
       };
-      platformModules =
-        if isDarwin then [
-          inputs.mac-app-util.homeManagerModules.default
-          { targets.darwin.copyApps.enable = false; }
-        ] else [
-          inputs.plasma-manager.homeModules.plasma-manager
-          inputs.niri.homeModules.config
-          inputs.noctalia.homeModules.default
-        ];
     in
     {
       name = "${username}@${hostname}-${archTag}";
@@ -471,7 +454,7 @@ rec {
               }).nixpkgs.overlays
             ) ([ ./modules/nix-generic/overlay.nix ] ++ inputs.nixpkgs.lib.optionals isLinux [ ./modules/nixos/overlay.nix ]);
           };
-          cfg-hm-modules = platformModules ++ [
+          cfg-hm-modules = homePlatformModules inputs isDarwin ++ [
             { home.stateVersion = cfg-const.state-version-hm; }
             inputs.agenix.homeManagerModules.default
             inputs.agenix-rekey.homeManagerModules.default
