@@ -488,7 +488,7 @@ rec {
           };
         in
         home // {
-          activationPackage = import ./lib/standalone-home-activation.nix { inherit pkgs home; };
+          switchPackage = import ./lib/home-switch.nix { inherit pkgs home; };
         };
     };
 

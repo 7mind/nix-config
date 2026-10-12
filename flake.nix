@@ -337,6 +337,7 @@
                 asterisk-linphone-fallback = import ./tests/asterisk-linphone-fallback.nix { inherit pkgs; };
                 flexisip-file-transfer = import ./tests/flexisip.nix { inherit pkgs; };
                 openlinkhub = import ./tests/openlinkhub.nix { inherit pkgs; };
+                home-manager-persistence = import ./tests/home-manager-persistence.nix { inherit pkgs; flake = self; };
                 searxng = import ./tests/searxng.nix { inherit pkgs; };
               }
               // pkgs.lib.optionalAttrs (system == "x86_64-linux") {
