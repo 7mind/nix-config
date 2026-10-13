@@ -79,7 +79,11 @@ if [[ -n "$netns" ]]; then
   else
     # Default (jailed): firejail drops caps and hardens /proc — which also
     # blocks nesting bwrap inside it (use --jailless for that).
-    run_cmd=(/run/wrappers/bin/firejail --noprofile "--netns=$netns" -- "${cmd[@]}")
+    firejail_flags=(--noprofile "--netns=$netns")
+    if [[ -f "/etc/netns/$netns/nsswitch.conf" ]]; then
+      firejail_flags+=(--blacklist=/run/systemd/resolve/io.systemd.Resolve)
+    fi
+    run_cmd=(/run/wrappers/bin/firejail "${firejail_flags[@]}" -- "${cmd[@]}")
   fi
 else
   run_cmd=("${cmd[@]}")

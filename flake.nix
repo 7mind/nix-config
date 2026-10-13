@@ -248,50 +248,76 @@
         in
         builtins.mapAttrs extractMeta allConfigs;
     }
-    // inputs.flake-utils.lib.eachDefaultSystem (system: rec {
-      pkgs = import inputs.nixpkgs {
-        localSystem = system;
-        overlays = [ inputs.agenix-rekey.overlays.default (import ./pkg/openlinkhub/overlay.nix) ];
-      };
-      packages.home-manager-cli = inputs.home-manager.packages.${system}.default;
-      checks =
-        inputs.nixpkgs.lib.optionalAttrs
-          (builtins.elem system [
-            "x86_64-linux"
-            "aarch64-linux"
-          ])
-          {
-            home-configurations =
-              let
-                capabilities = import ./tests/home-host-capabilities.nix { inherit pkgs; lib = pkgs.lib; };
-                contexts = import ./tests/home-context.nix { flake = self; };
-              in
-              assert builtins.deepSeq [ capabilities contexts ] true;
-              pkgs.runCommand "home-configurations" { } "touch $out";
-            asterisk-linphone-fallback = import ./tests/asterisk-linphone-fallback.nix { inherit pkgs; };
-            flexisip-file-transfer = import ./tests/flexisip.nix { inherit pkgs; };
-            openlinkhub = import ./tests/openlinkhub.nix { inherit pkgs; };
-          };
-      devShells.default = pkgs.mkShell {
-        shellHook = ''
-          export NIX_CONFIG_DEV_SHELL=1
-        '';
-        packages = with pkgs; [
-          # Plain `agenix` can't see host pubkeys from our `private/` git
-          # submodule without `--extra-flake-params '?submodules=1'`; without
-          # it, recipients resolve to junk and rage fails with
-          # "Invalid recipient 'age'". Wrap it so the flag is implicit.
-          (writeShellScriptBin "agenix" ''
-            exec ${agenix-rekey}/bin/agenix --extra-flake-params '?submodules=1' "$@"
-          '')
-          (callPackage ./pkg/resock/default.nix { })
-          age-plugin-tpm
-          nixfmt
-          qrencode
-          wireguard-tools
-          # inputs.json2nix.packages."${system}".json2nix
-        ];
-      };
-    });
+    // inputs.flake-utils.lib.eachDefaultSystem (
+      system:
+      let
+        privateOutputs =
+          (globals.import_if_exists_or ./private/flake-outputs.nix (_: {
+            overlays = [ ];
+            packages = { };
+            checks = { };
+          }))
+            { inherit pkgs; };
+        pkgs = import inputs.nixpkgs {
+          localSystem = system;
+          overlays = [
+            inputs.agenix-rekey.overlays.default
+            (import ./pkg/openlinkhub/overlay.nix)
+          ]
+          ++ privateOutputs.overlays;
+        };
+      in
+      {
+        inherit pkgs;
+        packages = {
+          home-manager-cli = inputs.home-manager.packages.${system}.default;
+        }
+        // privateOutputs.packages;
+        checks =
+          inputs.nixpkgs.lib.optionalAttrs
+            (builtins.elem system [
+              "x86_64-linux"
+              "aarch64-linux"
+            ])
+            (
+              {
+                home-configurations =
+                  let
+                    capabilities = import ./tests/home-host-capabilities.nix {
+                      inherit pkgs;
+                      lib = pkgs.lib;
+                    };
+                    contexts = import ./tests/home-context.nix { flake = self; };
+                  in
+                  assert builtins.deepSeq [ capabilities contexts ] true;
+                  pkgs.runCommand "home-configurations" { } "touch $out";
+                asterisk-linphone-fallback = import ./tests/asterisk-linphone-fallback.nix { inherit pkgs; };
+                flexisip-file-transfer = import ./tests/flexisip.nix { inherit pkgs; };
+                openlinkhub = import ./tests/openlinkhub.nix { inherit pkgs; };
+              }
+              // privateOutputs.checks
+            );
+        devShells.default = pkgs.mkShell {
+          shellHook = ''
+            export NIX_CONFIG_DEV_SHELL=1
+          '';
+          packages = with pkgs; [
+            # Plain `agenix` can't see host pubkeys from our `private/` git
+            # submodule without `--extra-flake-params '?submodules=1'`; without
+            # it, recipients resolve to junk and rage fails with
+            # "Invalid recipient 'age'". Wrap it so the flag is implicit.
+            (writeShellScriptBin "agenix" ''
+              exec ${agenix-rekey}/bin/agenix --extra-flake-params '?submodules=1' "$@"
+            '')
+            (callPackage ./pkg/resock/default.nix { })
+            age-plugin-tpm
+            nixfmt
+            qrencode
+            wireguard-tools
+            # inputs.json2nix.packages."${system}".json2nix
+          ];
+        };
+      }
+    );
 
 }
