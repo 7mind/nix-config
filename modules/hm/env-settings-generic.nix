@@ -38,6 +38,8 @@
       enableBashIntegration = true;
     };
 
+    programs.dircolors.enable = lib.mkDefault cfg-meta.isLinux;
+
     programs.starship = {
       enable = true;
       settings = {
@@ -159,14 +161,22 @@
     };
 
     home.shellAliases = cfg-const.universal-aliases
+      // lib.optionalAttrs cfg-meta.isLinux {
+        ls = lib.mkDefault "ls --color=tty";
+      }
       // lib.optionalAttrs config.smind.hm.environment.television.enable {
         fzf = "tv";
         tve = "tv edit";
       };
 
-    home.packages = lib.mkIf cfg-meta.isLinux (with pkgs; [
+    home.packages = with pkgs; [
+      lsd
+      viddy
+      curl
+    ] ++ lib.optionals cfg-meta.isLinux [
       imagemagick
-    ]);
+      util-linux
+    ];
 
   };
 

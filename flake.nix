@@ -216,7 +216,19 @@
       agenix-rekey = inputs.agenix-rekey.configure {
         userFlake = self;
         nixosConfigurations = self.nixosConfigurations // self.darwinConfigurations;
+        homeConfigurations = inputs.nixpkgs.lib.filterAttrs
+          (_: home: home.config.age.enable) self.homeConfigurations;
       };
+
+      agenix-rekey-homes = builtins.mapAttrs
+        (
+          name: home:
+            inputs.agenix-rekey.configure {
+              userFlake = self;
+              homeConfigurations = { ${name} = home; };
+            }
+        )
+        self.homeConfigurations;
 
       agenix-rekey-hosts = builtins.mapAttrs
         (
@@ -280,7 +292,8 @@
               "aarch64-linux"
             ])
             (
-              {
+              
+          {
                 home-configurations =
                   let
                     capabilities = import ./tests/home-host-capabilities.nix {
@@ -291,6 +304,21 @@
                   in
                   assert builtins.deepSeq [ capabilities contexts ] true;
                   pkgs.runCommand "home-configurations" { } "touch $out";
+                switch-hm = pkgs.runCommand "switch-hm-test" {
+                  nativeBuildInputs = [ pkgs.bash pkgs.git pkgs.python3 ]
+                    ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.util-linux ];
+                } ''
+                  mkdir -p checkout/tests
+                  cp ${./switch-hm} checkout/switch-hm
+                  chmod +x checkout/switch-hm
+                  patchShebangs checkout/switch-hm
+                  cp ${./tests/switch-hm-test.py} checkout/tests/switch-hm-test.py
+                  python3 checkout/tests/switch-hm-test.py -v
+                  touch $out
+                '';
+                home-shell = import ./tests/home-shell.nix { inherit pkgs; home-manager = inputs.home-manager; };
+                nix-access-tokens = import ./tests/nix-access-tokens.nix { inherit pkgs; home-manager = inputs.home-manager; };
+                gnome-extensions = import ./tests/gnome-extensions.nix { inherit pkgs inputs; home-manager = inputs.home-manager; };
                 asterisk-linphone-fallback = import ./tests/asterisk-linphone-fallback.nix { inherit pkgs; };
                 flexisip-file-transfer = import ./tests/flexisip.nix { inherit pkgs; };
                 openlinkhub = import ./tests/openlinkhub.nix { inherit pkgs; };
@@ -300,6 +328,12 @@
         devShells.default = pkgs.mkShell {
           shellHook = ''
             export NIX_CONFIG_DEV_SHELL=1
+            # agenix edit runs under `set -u` and requires EDITOR. Keep a
+            # user-chosen editor; otherwise use a store-pinned vim, for which
+            # agenix disables swap/undo/viminfo files holding the plaintext.
+            if [ -z "''${EDITOR:-}" ]; then
+              export EDITOR=${pkgs.vim}/bin/vim
+            fi
           '';
           packages = with pkgs; [
             # Plain `agenix` can't see host pubkeys from our `private/` git
@@ -310,12 +344,13 @@
               exec ${agenix-rekey}/bin/agenix --extra-flake-params '?submodules=1' "$@"
             '')
             (callPackage ./pkg/resock/default.nix { })
+            age
             age-plugin-tpm
             nixfmt
             qrencode
             wireguard-tools
             # inputs.json2nix.packages."${system}".json2nix
-          ];
+          ] ++ lib.optionals stdenv.hostPlatform.isLinux [ util-linux ];
         };
       }
     );

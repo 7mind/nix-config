@@ -8,18 +8,7 @@
       # so it lives in the shared overlay, not modules/nixos/overlay.nix.
       fastfetch-minimal = prev.callPackage ../../pkg/fastfetch-minimal { };
 
-      # NetRocks (via Samba) and the xdg-utils wrapper pull X11 into a TTY build.
-      far2l-noui = (prev.far2l.override {
-        withGUI = false;
-        withTTYX = false;
-        withNetRocks = false;
-      }).overrideAttrs (old: let
-        xdgSuffix = "\\\n  --suffix PATH : ${prev.lib.makeBinPath [ prev.xdg-utils ]}";
-        cleanedPostInstall = builtins.replaceStrings [ xdgSuffix ] [ "" ] old.postInstall;
-      in {
-        postInstall = assert builtins.stringLength cleanedPostInstall < builtins.stringLength old.postInstall;
-          cleanedPostInstall;
-      });
+      far2l-noui = prev.callPackage ../../pkg/far2l-noui { };
 
       # ripgrep's `misc::compressed_{brotli,lz4,zstd}` integration tests fail
       # with exit 2 / empty stderr when an aarch64 build runs under qemu-user

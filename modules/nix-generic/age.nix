@@ -157,6 +157,13 @@ in
 
   config = lib.mkMerge [
     {
+      # agenix-rekey merges every node's agePlugins into the flake-wide
+      # edit/rekey apps. Its default (age-plugin-yubikey from each host's own
+      # pkgs) makes those apps depend on aarch64/darwin builds, so they fail on
+      # a machine without cross-arch builders. No master identity here uses a
+      # plugin (TPM unwrapping happens in edit-secret before agenix runs).
+      age.rekey.agePlugins = lib.mkDefault [ ];
+
       # Kept for callers that already hold the host secret set. Home Manager
       # modules use the ageUserSecret module argument and smind.hm.globals.age.secrets.
       lib.smind.age.userSecret =

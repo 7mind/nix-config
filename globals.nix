@@ -464,6 +464,8 @@ rec {
           };
           cfg-hm-modules = platformModules ++ [
             { home.stateVersion = cfg-const.state-version-hm; }
+            inputs.agenix.homeManagerModules.default
+            inputs.agenix-rekey.homeManagerModules.default
           ];
           cfg-args = {
             inherit inputs cfg-const cfg-meta cfg-hm-modules;

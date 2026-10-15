@@ -36,6 +36,16 @@ let
     };
   };
   failedAssertions = home: builtins.filter (a: !a.assertion) home.value.config.assertions;
+  disabledAge = home:
+    let
+      config = home.value.config;
+    in
+    assert lib.assertMsg (config ? age && config.age ? rekey) "Standalone Home Manager must expose agenix and agenix-rekey options";
+    assert lib.assertMsg (!config.age.enable && config.age.secrets == { }) "Standalone agenix must remain disabled with no secrets";
+    assert lib.assertMsg (failedAssertions home == [ ]) "Disabled standalone agenix-rekey must pass assertions without keys";
+    assert lib.assertMsg (!home.value.pkgs.stdenv.hostPlatform.isLinux || !(config.systemd.user.services ? agenix)) "Disabled standalone agenix must not install a user service";
+    assert lib.assertMsg (!home.value.pkgs.stdenv.hostPlatform.isDarwin || !(config.launchd.agents ? activate-agenix)) "Disabled standalone agenix must not install a launch agent";
+    true;
   worker = flake.nixosConfigurations.pavel-trx40.config.home-manager.users.llm;
   config = standalone.value.config;
   otherConfig = relocated.value.config;
@@ -57,12 +67,14 @@ assert lib.assertMsg (!otherConfig.smind.hm.globals.isDesktop && failedAssertion
 assert lib.assertMsg (relocated.name == "alex@other-workstation-x86_64") "Source names must not determine instance names";
 assert lib.assertMsg ((root "x86_64-linux").value.pkgs.stdenv.hostPlatform.system == "x86_64-linux") "Root must support x86_64 context";
 assert lib.assertMsg ((root "aarch64-linux").value.pkgs.stdenv.hostPlatform.system == "aarch64-linux") "Root must support aarch64 context";
+assert builtins.deepSeq (map disabledAge [ standalone relocated (root "aarch64-darwin") ]) true;
 assert lib.assertMsg (builtins.attrNames flake.homeConfigurations == [ standalone.name ]) "Only explicitly declared standalone instances may be exported";
 {
   standalone = true;
   relocated = true;
   architectures = true;
   explicitExports = true;
+  standaloneAgeDisabled = true;
   roleContext = true;
   ownerSecrets = true;
   ownerSecretsFiltered = true;
