@@ -106,6 +106,16 @@
   networking.domain = "home.7mind.io";
   networking.useDHCP = false;
 
+  # Dev port range, same rule as vm (private/hosts/vm/network.nix) and
+  # pavel-am5: ephemeral dev services in 8000-9000 (e.g. :8877) are
+  # reachable without a per-service firewall edit.
+  networking.firewall.allowedTCPPortRanges = [
+    {
+      from = 8000;
+      to = 9000;
+    }
+  ];
+
   # initrd SSH host key: provisioned out-of-band on the running host with
   #   ssh-keygen -t ed25519 -N "" -f /etc/secrets/initrd/ssh_host_ed25519_key
   # mirrors how pavel-am5 handles it (no agenix dependency, so this

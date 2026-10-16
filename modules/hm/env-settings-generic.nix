@@ -161,8 +161,8 @@
     };
 
     home.shellAliases = cfg-const.universal-aliases
-      // lib.optionalAttrs cfg-meta.isLinux {
-        ls = lib.mkDefault "ls --color=tty";
+      // {
+        ls = lib.mkDefault "lsd -lh --group-directories-first";
       }
       // lib.optionalAttrs config.smind.hm.environment.television.enable {
         fzf = "tv";

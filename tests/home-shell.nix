@@ -57,7 +57,7 @@ pkgs.runCommand "home-shell"
     source ${rc}
     setopt errexit
     ${lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
-      [[ "''${aliases[ls]-}" = 'ls --color=tty' ]] || { print -u2 -- 'Missing GNU ls color alias'; exit 1; }
+      [[ "''${aliases[ls]-}" = 'lsd -lh --group-directories-first' ]] || { print -u2 -- 'Missing lsd ls alias'; exit 1; }
       [[ -n "''${LS_COLORS-}" ]] || { print -u2 -- 'Missing LS_COLORS initialization'; exit 1; }
       ls -la --color=always > "$HOME/colored-listing"
       grep -q $'\e\\[' "$HOME/colored-listing"
