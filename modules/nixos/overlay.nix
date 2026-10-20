@@ -9,6 +9,8 @@
 {
   nixpkgs.overlays = [
     (final: prev: {
+      hyprwhspr = prev.callPackage ../../pkg/hyprwhspr { src = inputs.hyprwhspr; };
+
       # Standalone ghostty terminfo, avoiding the full GUI app (gtk4, libadwaita,
       # gstreamer, ...). Parses the terminfo from ghostty's Zig source, tic-compiles.
       ghostty-terminfo = prev.callPackage ../../pkg/ghostty-terminfo { };

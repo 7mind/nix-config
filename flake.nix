@@ -2,6 +2,11 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
+    hyprwhspr = {
+      url = "github:goodroot/hyprwhspr/v1.49.2";
+      flake = false;
+    };
+
     flake-utils.url = "github:numtide/flake-utils";
 
     ponygirls = {
@@ -284,6 +289,9 @@
         packages = {
           home-manager-cli = inputs.home-manager.packages.${system}.default;
         }
+        // pkgs.lib.optionalAttrs (system == "x86_64-linux") {
+          hyprwhspr = pkgs.callPackage ./pkg/hyprwhspr { src = inputs.hyprwhspr; };
+        }
         // privateOutputs.packages;
         checks =
           inputs.nixpkgs.lib.optionalAttrs
@@ -322,6 +330,12 @@
                 asterisk-linphone-fallback = import ./tests/asterisk-linphone-fallback.nix { inherit pkgs; };
                 flexisip-file-transfer = import ./tests/flexisip.nix { inherit pkgs; };
                 openlinkhub = import ./tests/openlinkhub.nix { inherit pkgs; };
+              }
+              // pkgs.lib.optionalAttrs (system == "x86_64-linux") {
+                hyprwhspr = import ./tests/hyprwhspr.nix {
+                  inherit pkgs;
+                  package = self.packages.${system}.hyprwhspr;
+                };
               }
               // privateOutputs.checks
             );

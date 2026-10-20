@@ -33,6 +33,7 @@
   ./gnome-minimal-hotkeys.nix
   ./gnome-extensions.nix
   ./hyprland.nix
+  ./dictation.nix
   ./i2c.nix
   ./initrd-ssh-unlock.nix
   ./kanata-super-remap.nix

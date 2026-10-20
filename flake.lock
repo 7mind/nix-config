@@ -561,6 +561,23 @@
         "type": "github"
       }
     },
+    "hyprwhspr": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792431288,
+        "narHash": "sha256-rSWO9gANWp0rflzJamdPVqB2zYouh2mp0qzezIAfEw4=",
+        "owner": "goodroot",
+        "repo": "hyprwhspr",
+        "rev": "9c9050ed83efeadaae4181c4dcc789109ccac7a1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "goodroot",
+        "ref": "v1.49.2",
+        "repo": "hyprwhspr",
+        "type": "github"
+      }
+    },
     "kanata-switcher": {
       "inputs": {
         "crane": "crane_2",
@@ -1144,6 +1161,7 @@
         "flake-utils": "flake-utils_2",
         "fractal": "fractal",
         "home-manager": "home-manager",
+        "hyprwhspr": "hyprwhspr",
         "kanata-switcher": "kanata-switcher",
         "lanzaboote": "lanzaboote",
         "mac-app-util": "mac-app-util",
