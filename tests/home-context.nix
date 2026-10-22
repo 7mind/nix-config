@@ -55,6 +55,10 @@ assert lib.assertMsg (!hasPrivate || trx40Pavel.smind.hm.dev.llm.yolo.secretSess
 assert lib.assertMsg (!hasPrivate || trx40Pavel.programs.git.signing.key == null) "pavel-trx40: git SSH signing must deactivate when id_ed25519.pub is filtered out";
 assert lib.assertMsg (!hasPrivate || am5Pavel.smind.hm.nix.githubAccessTokenFile == "/run/agenix/github-token-autopeasant") "pavel-am5: GitHub wiring must be unchanged for the unfiltered set";
 assert lib.assertMsg (!hasPrivate || am5Pavel.programs.git.signing.key == "/run/agenix/id_ed25519.pub") "pavel-am5: git SSH signing must stay wired for the unfiltered set";
+assert lib.assertMsg (trx40Pavel.smind.hm.dev.git.enable && trx40Pavel.programs.git.enable) "pavel-trx40: dev.git must be enabled directly (headless homes do not get it via roles.desktop)";
+assert lib.assertMsg (builtins.any (p: lib.getName p == "tig") trx40Pavel.home.packages) "pavel-trx40: tig must be in home.packages";
+assert lib.assertMsg (!trx40Pavel.smind.hm.dev.git.rewriteGithubToSsh) "pavel-trx40: GitHub must stay on HTTPS (the host SSH key is not registered on GitHub)";
+assert lib.assertMsg (lib.hasInfix "gh auth git-credential" (trx40Pavel.programs.git.settings.credential."https://github.com".helper or "")) "pavel-trx40: GitHub HTTPS credentials must come from gh (a manual ~/.gitconfig would shadow the HM git config)";
 assert lib.assertMsg (standalone.name == "pavel@ubuntu-x86_64") "Standalone export must use the supplied hostname and architecture";
 assert lib.assertMsg (config.home.username == "pavel" && config.home.homeDirectory == "/home/pavel") "Standalone identity must come from its context";
 assert lib.assertMsg (config.smind.hm.globals.isDesktop && !config.smind.hm.globals.llama-swap.enable) "Standalone capabilities must come from its declaration";
