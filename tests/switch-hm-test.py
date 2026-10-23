@@ -106,7 +106,7 @@ if command == 'run' and any('#agenix-rekey-homes.' in arg for arg in args):
     if status:
         sys.exit(status)
     from pathlib import Path
-    output = Path('private/secrets/rekeyed/fixture/token.age')
+    output = Path(os.environ.get('TEST_REKEY_OUTPUT', 'private/secrets/rekeyed/fixture/token.age'))
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text('synthetic ciphertext\\n')
 if command == 'eval':
@@ -124,7 +124,7 @@ if os.environ.get('TEST_EXPECT_KEY_ABSENT_DURING_ACTIVATION') == '1' and (comman
     assert not Path(os.environ['TEST_REKEY_IDENTITY']).exists()
 if os.environ.get('TEST_REQUIRE_REKEY_STAGED') == '1' and (command == 'build' or (command == 'run' and any('#home-manager-cli' in arg for arg in args))):
     import subprocess
-    subprocess.run(['git', 'ls-files', '--error-unmatch', 'private/secrets/rekeyed/fixture/token.age'], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(['git', 'ls-files', '--error-unmatch', os.environ.get('TEST_REKEY_OUTPUT', 'private/secrets/rekeyed/fixture/token.age')], check=True, stdout=subprocess.DEVNULL)
 if command == 'build' and '--dry-run' not in args:
     print('/nix/store/00000000000000000000000000000000-home-manager-generation')
 """,
@@ -133,7 +133,7 @@ args = sys.argv[1:]
 probe = args[-2:] == ['sh', '-s']
 script = sys.stdin.read() if probe else ''
 with open(os.environ['TEST_SSH_LOG'], 'a') as log:
-    log.write(json.dumps({'args': args, 'stdin': script}) + '\\n')
+    log.write(json.dumps({'cwd': os.getcwd(), 'args': args, 'stdin': script}) + '\\n')
 status = int(os.environ.get('TEST_SSH_PROBE_STATUS' if probe else 'TEST_SSH_ACTIVATE_STATUS', '0'))
 if status:
     sys.exit(status)
@@ -212,6 +212,108 @@ sys.exit(int(os.environ.get('TEST_AGE_STATUS', '0')))
 
     def assert_success(self, result):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def external_checkout(self):
+        # Real independent Git checkout, deliberately without a switch-hm script.
+        external = self.directory / "external checkout ' $(touch should-not-exist)"
+        external.mkdir()
+        self.git('init', '--initial-branch=main', cwd=external)
+        (external / 'flake.nix').write_text('{}\n')
+        self.git('add', '.', cwd=external)
+        self.git('commit', '-m', 'initial', cwd=external)
+        (external / 'profile.nix').write_text('{}\n')
+        return external
+
+    # Effectual-GoodCommunication @specified: real independent Git sources with
+    # recording Nix/SSH boundaries; no live activation or remote connection.
+    def test_external_local_switch_selects_and_commits_only_external_checkout(self):
+        external = self.external_checkout()
+        source_state = self.git('status', '--porcelain')
+        self.assert_success(self.invoke(f'--flake-dir={external}', '--no-push', '-m', 'external update'))
+        self.assertFalse((external / 'switch-hm').exists())
+        self.assertEqual(self.calls()[0]['cwd'], str(external))
+        self.assertEqual(self.calls()[0]['args'][-1], '.?submodules=1#alice@workstation-x86_64')
+        self.assertEqual(self.git('log', '-1', '--format=%B', cwd=external), 'external update')
+        self.assertEqual(self.git('status', '--porcelain', cwd=external), '')
+        self.assertEqual(self.git('status', '--porcelain'), source_state)
+        self.assertEqual(self.git('rev-parse', 'HEAD'), self.initial)
+        self.assertEqual(self.git('rev-parse', 'HEAD', cwd=self.module), self.module_initial)
+
+    def test_external_remote_switch_evaluates_builds_and_stages_external_checkout(self):
+        external = self.external_checkout()
+        self.assert_success(self.invoke('--flake-dir', str(external), '--target-host', 'server', '-n'))
+        self.assertEqual(len(self.calls()), 3)
+        self.assertTrue(all(call['cwd'] == str(external) for call in self.calls()))
+        self.assertTrue(all(call['cwd'] == str(external) for call in self.ssh_calls()))
+        self.assertTrue(any('homeConfigurations."alice@server-aarch64".activationPackage' in arg
+                            for arg in self.calls()[1]['args']))
+        self.assertIn('profile.nix', self.git('diff', '--cached', '--name-only', cwd=external))
+        self.assertEqual(self.git('diff', '--cached', '--name-only'), '')
+        self.assertEqual(self.git('log', '-1', '--format=%B', cwd=external), 'initial')
+
+    def test_external_relative_directory_survives_devshell_reexec_without_script_copy(self):
+        external = self.external_checkout()
+        relative = os.path.relpath(external, self.caller)
+        self.assert_success(self.invoke('--flake-dir', relative, '-n',
+                                        overrides={'NIX_CONFIG_DEV_SHELL': ''}))
+        self.assertEqual(len(self.calls()), 2)
+        self.assertIn('develop', self.calls()[0]['args'])
+        self.assertEqual(self.calls()[0]['cwd'], str(external))
+        self.assertEqual(self.calls()[1]['cwd'], str(external))
+        self.assertIn('profile.nix', self.git('diff', '--cached', '--name-only', cwd=external))
+        self.assertFalse((self.caller / 'should-not-exist').exists())
+        self.assertFalse((external / 'should-not-exist').exists())
+        self.assertFalse((external / 'switch-hm').exists())
+
+    def test_external_list_evaluates_without_staging_or_devshell(self):
+        external = self.external_checkout()
+        self.assert_success(self.invoke('--flake-dir', str(external), '--list',
+                                        overrides={'NIX_CONFIG_DEV_SHELL': ''}))
+        self.assertEqual(len(self.calls()), 1)
+        self.assertEqual(self.calls()[0]['cwd'], str(external))
+        self.assertIn('eval', self.calls()[0]['args'])
+        self.assertEqual(self.git('diff', '--cached', '--name-only', cwd=external), '')
+        self.assertEqual(self.git('diff', '--cached', '--name-only'), '')
+
+    def test_external_root_rekey_stages_ciphertext_before_remote_build(self):
+        external = self.external_checkout()
+        Path(self.env['TEST_REKEY_IDENTITY']).write_text('synthetic identity\n')
+        self.assert_success(self.invoke('--flake-dir', str(external), '--rekey',
+                                        '--target-host', 'server', '-n', overrides={
+            'TEST_REKEY_DIRECTORY': '/nix/store/source/secrets/rekeyed/fixture',
+            'TEST_REKEY_OUTPUT': 'secrets/rekeyed/fixture/token.age',
+            'TEST_REQUIRE_REKEY_STAGED': '1',
+        }))
+        self.assertEqual(len(self.calls()), 5)
+        self.assertTrue(all(call['cwd'] == str(external) for call in self.calls()))
+        self.assertIn('secrets/rekeyed/fixture/token.age',
+                      self.git('diff', '--cached', '--name-only', cwd=external))
+        self.assertEqual(self.git('diff', '--cached', '--name-only'), '')
+        self.assertEqual(self.git('log', '-1', '--format=%B', cwd=external), 'initial')
+
+    def test_external_private_submodule_rekey_stages_in_own_git_repo(self):
+        external = self.external_checkout()
+        self.git('submodule', 'add', str(self.module_remote), 'private', cwd=external)
+        self.git('commit', '-am', 'add private fixture', cwd=external)
+        Path(self.env['TEST_REKEY_IDENTITY']).write_text('synthetic identity\n')
+        self.assert_success(self.invoke('--flake-dir', str(external), '--rekey', '-n'))
+        self.assertIn('secrets/rekeyed/fixture/token.age',
+                      self.git('diff', '--cached', '--name-only', cwd=external / 'private'))
+        self.assertEqual(self.git('diff', '--cached', '--name-only'), '')
+
+    def test_external_rekey_rejects_runtime_identity_inside_selected_checkout(self):
+        external = self.external_checkout()
+        self.enroll_tpm_fixture()
+        identity = external / 'runtime key'
+        result = self.invoke('--flake-dir', str(external), '--rekey', '-n', overrides={
+            'TEST_REKEY_IDENTITY': str(identity), 'AGE_RUNTIME_KEY': str(identity),
+            'TEST_REKEY_DIRECTORY': '/nix/store/source/secrets/rekeyed/fixture',
+        })
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('outside the checkout', result.stderr)
+        self.assertFalse(identity.exists())
+        self.assertEqual(self.age_calls(), [])
+        self.assertEqual(len(self.calls()), 1)
 
     def test_defaults_from_different_cwd_commit_and_push_without_identifiers(self):
         self.assert_success(self.invoke())
@@ -321,7 +423,9 @@ sys.exit(int(os.environ.get('TEST_AGE_STATUS', '0')))
         self.assert_success(result)
         self.assertIn("-l, --list", result.stdout)
         for args in [("--unknown",), ("--user",), ("--message",), ("--message=",),
-                     ("first", "second"), ("bad#host",), ("--user=",)]:
+                     ("first", "second"), ("bad#host",), ("--user=",),
+                     ("--flake-dir",), ("--flake-dir=",), ("--flake-dir", "--list"),
+                     ("--flake-dir", str(self.directory / "missing checkout"))]:
             with self.subTest(args=args):
                 self.assertNotEqual(self.invoke(*args).returncode, 0)
         self.assertEqual(self.calls(), [])
@@ -775,7 +879,11 @@ sys.exit(int(os.environ.get('TEST_AGE_STATUS', '0')))
         for directory in ['/elsewhere/secrets',
                           '/nix/store/source/private/secrets/rekeyed',
                           '/nix/store/source/private/secrets/rekeyed/..',
-                          '/nix/store/source/private/secrets/rekeyed/.']:
+                          '/nix/store/source/private/secrets/rekeyed/.',
+                          '/nix/store/source/secrets/rekeyed',
+                          '/nix/store/source/secrets/rekeyed/..',
+                          '/nix/store/source/secrets/rekeyed/.',
+                          '/nix/store/source/secrets/rekeyed/fixture/../../outside']:
             with self.subTest(directory=directory):
                 self.log.unlink(missing_ok=True)
                 result = self.invoke('--rekey', '-n', overrides={'TEST_REKEY_DIRECTORY': directory})

@@ -11,6 +11,8 @@ The configuration is USER@HOST-ARCH (USER@HOST-ARCH-darwin on macOS).
 HOST selects the profile; --target-host selects the remote SSH destination.
 
 Options:
+      --flake-dir DIR
+                    Use another flake checkout (default: this script's checkout)
   -u, --user USER    Override the configuration's username
   -t, --target-host [USER@]HOST
                     Build locally, copy the closure and activate over SSH
@@ -25,9 +27,9 @@ Options:
   -m, --message MSG  Custom commit message (default: "autosave", no host/user names)
   -h, --help         Show this help
 
-Enters this checkout's pinned development shell automatically, like setup.
-Uses this checkout's pinned Home Manager CLI and hmbak backup extension.
-Git operations cover this checkout and its initialized submodules.
+Enters the selected checkout's pinned development shell automatically, like setup.
+Uses its pinned Home Manager CLI and hmbak backup extension.
+Git operations cover the selected checkout and its initialized submodules.
 Commits and pushes happen only after a successful switch. No upstream sync
 is performed; custom commit messages are used verbatim.
 
@@ -143,8 +145,8 @@ rekey_home() {
             )' "$@")"
     while IFS= read -r value; do info+=("$value"); done <<< "$metadata"
     [[ ${#info[@]} -ge 2 ]] || fail 'unexpected rekey metadata output'
-    [[ "${info[0]}" =~ ^/nix/store/[^/]+/private/(secrets/rekeyed/[a-zA-Z0-9._-]+)$ ]] \
-        || fail 'rekey storage must be a profile directory under private/secrets/rekeyed'
+    [[ "${info[0]}" =~ ^/nix/store/[^/]+/((private/)?secrets/rekeyed/[a-zA-Z0-9._-]+)$ ]] \
+        || fail 'rekey storage must be a profile directory under private/secrets/rekeyed or secrets/rekeyed'
     directory="${BASH_REMATCH[1]}"
     [[ "${directory##*/}" != . && "${directory##*/}" != .. ]] \
         || fail 'rekey storage must not escape its profile directory'
@@ -186,7 +188,11 @@ rekey_home() {
     done
     AGENIX_REKEY_ADD_TO_GIT=false run_key_command nix --extra-experimental-features 'nix-command flakes' run \
         --no-write-lock-file ".?submodules=1#agenix-rekey-homes.\"${profile}\".${system}.rekey" "$@" </dev/null
-    git -C private add -A -- "$directory"
+    if [[ "$directory" == private/* ]]; then
+        git -C private add -A -- "${directory#private/}"
+    else
+        git add -A -- "$directory"
+    fi
     exit 0
 }
 
@@ -297,13 +303,25 @@ rekey_tools_available() {
 }
 
 main() {
-    local repo host="" username="" message="autosave" target=""
+    local repo script caller_cwd host="" username="" message="autosave" target=""
     local do_git=true do_push=true do_list=false use_remote_sudo=false dry_run=false do_rekey=false
     local -a hm_args=() original_args=("$@") develop_args=()
     repo="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+    script="$repo/${BASH_SOURCE[0]##*/}"
+    caller_cwd="$(pwd -P)"
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
+            --flake-dir)
+                [[ $# -ge 2 && -n "$2" && "$2" != -* ]] || fail '--flake-dir requires a directory'
+                repo="$2"
+                shift 2
+                ;;
+            --flake-dir=*)
+                repo="${1#*=}"
+                [[ -n "$repo" ]] || fail '--flake-dir requires a directory'
+                shift
+                ;;
             -u|--user)
                 [[ $# -ge 2 && -n "$2" && "$2" != -* ]] || fail '--user requires a username'
                 username="$2"
@@ -358,6 +376,7 @@ main() {
         [[ "$use_remote_sudo" == false && "$dry_run" == false ]] || fail '--use-remote-sudo and --dry-run require --target-host'
     fi
 
+    repo="$(cd -- "$repo" && pwd -P)"
     if [[ "$do_list" == true ]]; then
         [[ "$do_rekey" == false ]] || fail '--rekey cannot be combined with --list'
         cd -- "$repo"
@@ -380,7 +399,8 @@ main() {
         exec nix --extra-experimental-features 'nix-command flakes' develop \
             --no-write-lock-file '.?submodules=1' "${develop_args[@]}" \
             --command env NIX_CONFIG_DEV_SHELL=1 SWITCH_HM_DEV_SHELL_REEXEC=1 \
-            "$repo/switch-hm" "${original_args[@]}"
+            bash -c 'cd -- "$1" || exit; shift; exec "$@"' switch-hm \
+            "$caller_cwd" "$script" "${original_args[@]}"
     fi
     if [[ -n "$target" ]]; then
         switch_remote "$target" "$host" "$username" "$use_remote_sudo" "$dry_run" "${NIX_SSHOPTS-}" "$do_rekey" "${hm_args[@]}"
