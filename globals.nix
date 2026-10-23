@@ -395,6 +395,14 @@ rec {
     else modules;
 
   make-home = { inputs, self }: { source, username, host }:
+    make-home-from-modules { inherit inputs self; } {
+      modules = homeUserModules source;
+      inherit username host;
+    };
+
+  # Keep module selection separate from evaluation so downstream flakes can
+  # supply their own profiles. The returned modules also serve integrated HM.
+  make-home-from-modules = { inputs, self }: { modules, username, host }:
     let
       hostname = host.hostname;
       arch = host.system;
@@ -403,7 +411,7 @@ rec {
       archTag =
         let short = builtins.head (builtins.match "([^-]+)-.+" arch);
         in if isDarwin then "${short}-darwin" else short;
-      modules = homeUserModules source ++ [
+      homeModules = modules ++ [
         {
           home.username = username;
           home.homeDirectory = host.homeDirectories.${username};
@@ -439,7 +447,8 @@ rec {
     in
     {
       name = "${username}@${hostname}-${archTag}";
-      inherit hostname username modules;
+      inherit hostname username;
+      modules = homeModules;
       value =
         let
           pkgs = import inputs.nixpkgs {
@@ -448,6 +457,9 @@ rec {
             overlays = [
               inputs.nix-vscode-extensions.overlays.default
               inputs.rust-overlay.overlays.default
+              (final: _: {
+                fastfetch-minimal = final.callPackage ./pkg/fastfetch-minimal { };
+              })
             ] ++ (if isLinux then
               (import ./modules/nixos/overlay.nix {
                 inherit pkgs cfg-meta inputs;
@@ -455,11 +467,7 @@ rec {
                   fractal = inputs.fractal.packages.${arch};
                   nix-apple-fonts.default = pkgs.callPackage "${inputs.nix-apple-fonts}/packages/apple-fonts/default.nix" { };
                 };
-              }).nixpkgs.overlays ++ [
-                (final: _: {
-                  fastfetch-minimal = final.callPackage ./pkg/fastfetch-minimal { };
-                })
-              ]
+              }).nixpkgs.overlays
             else [ ]);
           };
           cfg-hm-modules = platformModules ++ [
@@ -476,7 +484,7 @@ rec {
         inputs.home-manager.lib.homeManagerConfiguration {
           inherit pkgs;
           extraSpecialArgs = cfg-args // { inherit cfg-args; };
-          modules = cfg-hm-modules ++ modules;
+          modules = cfg-hm-modules ++ homeModules;
         };
     };
 

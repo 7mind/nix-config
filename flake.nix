@@ -309,8 +309,11 @@
                       lib = pkgs.lib;
                     };
                     contexts = import ./tests/home-context.nix { flake = self; };
+                    explicitModules = import ./tests/home-from-modules.nix { flake = self; };
+                    darwinModules = import ./tests/home-from-modules-darwin.nix { flake = self; };
+                    credentials = import ./tests/dev-llm-credentials.nix { flake = self; };
                   in
-                  assert builtins.deepSeq [ capabilities contexts ] true;
+                  assert builtins.deepSeq [ capabilities contexts explicitModules darwinModules credentials ] true;
                   pkgs.runCommand "home-configurations" { } "touch $out";
                 switch-hm = pkgs.runCommand "switch-hm-test" {
                   nativeBuildInputs = [ pkgs.bash pkgs.git pkgs.python3 ]

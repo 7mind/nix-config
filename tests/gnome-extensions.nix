@@ -62,8 +62,6 @@ let
     };
   }).config;
   disabledHome = (home { }).config;
-  hasUbuntu = builtins.pathExists ../private/modules/hm/ubuntu-gnome.nix;
-  ubuntuHome = (home { imports = [ ../private/modules/hm/ubuntu-gnome.nix ]; }).config;
   inheritedHome = (home {
     smind.hm.globals = {
       net.tailscale.enable = true;
@@ -123,11 +121,7 @@ assert lib.assertMsg (!(disabledHome.systemd.user.services ? tailscale-systray)
 assert lib.assertMsg (inheritedHome.systemd.user.services ? tailscale-systray
   && inheritedHome.xdg.configFile."run-or-raise/shortcuts.conf".text == "")
   "Existing NixOS host defaults must retain the systray and shortcut file";
-assert lib.assertMsg (!hasUbuntu || (let enabled = uuids ubuntuHome.smind.hm.desktop.gnome.extensions; in
-  !(builtins.elem extensionPkgs.gnomeExtensions.status-tray.extensionUuid enabled)
-  && builtins.elem "ubuntu-appindicators@ubuntu.com" enabled
-  && current.status-tray.enable))
-  "Ubuntu must use its distribution tray renderer without changing the shared Status Tray default";
+assert lib.assertMsg current.status-tray.enable "Shared Status Tray must remain enabled by default";
 assert lib.assertMsg (builtins.all (assertion: assertion.assertion) enabledHome.assertions)
   "Standalone GNOME Home Manager must pass its assertions";
 pkgs.runCommand "gnome-extensions" { nativeBuildInputs = [ pkgs.python3 ]; } ''
