@@ -18,7 +18,7 @@ Options:
                     Build locally, copy the closure and activate over SSH
       --use-remote-sudo
                     Use sudo -n for remote store imports, never activation
-      --dry-run     Remote build preview only; no rekey, copy, activation, commit or push
+      --dry-run     Local or remote build plan; no rekey, copy, activation, commit or push
       --rekey       Rekey only the selected profile locally before activation
                     Reuse runtime keys or unlock existing local TPM enrollment
   -l, --list         List available Home Manager configurations and exit
@@ -37,11 +37,12 @@ Remote mode requires installed Nix (SSH PATH or standard profile) and an existin
 Only the selected activation closure is copied; the checkout is not synchronized. Remote
 username/home directory must match the selected profile. The target needs no
 checkout. Cross-platform builds need a configured builder or cached outputs.
-Extra args go to Home Manager locally, or both nix eval and nix build remotely
-(use options accepted by both commands). NIX_SSHOPTS (single-line, space/tab-separated
+Extra args go to Home Manager locally, nix build for local --dry-run, or both
+nix eval and nix build remotely (use options accepted by both commands).
+NIX_SSHOPTS (single-line, space/tab-separated
 SSH arguments, without shell quoting) applies to remote connections; SSH config
 supports aliases, ports and identity files. Dry runs still stage source files.
-With --rekey, extra args must also be accepted by nix eval and nix run (for
+With --rekey (except --dry-run), extra args must also be accepted by nix eval and nix run (for
 example --override-input); they must also be accepted by nix develop for shell
 bootstrap. The same inputs are used for rekey and activation.
 Rekey failures abort activation; closed stdin prevents retries or dummy choices.
@@ -373,7 +374,7 @@ main() {
         [[ "$target" =~ ^([[:alnum:]_][[:alnum:]_.-]*@)?[[:alnum:]_][[:alnum:]_.-]*$ ]] || fail 'invalid SSH destination; use [USER@]HOST or an SSH alias'
         [[ "$do_list" == false ]] || fail '--target-host cannot be combined with --list'
     else
-        [[ "$use_remote_sudo" == false && "$dry_run" == false ]] || fail '--use-remote-sudo and --dry-run require --target-host'
+        [[ "$use_remote_sudo" == false ]] || fail '--use-remote-sudo requires --target-host'
     fi
 
     repo="$(cd -- "$repo" && pwd -P)"
@@ -389,13 +390,15 @@ main() {
     cd -- "$repo"
     local needs_dev_shell=false
     [[ "${NIX_CONFIG_DEV_SHELL:-}" == 1 ]] || needs_dev_shell=true
-    if [[ "$do_rekey" == true ]] && ! rekey_tools_available; then
+    if [[ "$do_rekey" == true && "$dry_run" == false ]] && ! rekey_tools_available; then
         needs_dev_shell=true
     fi
     if [[ "$needs_dev_shell" == true ]]; then
         [[ "${SWITCH_HM_DEV_SHELL_REEXEC:-}" != 1 ]] \
             || fail 'development shell still lacks required rekey tools; check the flake development-shell packages'
-        [[ "$do_rekey" == false ]] || develop_args=("${hm_args[@]}")
+        if [[ "$do_rekey" == true && "$dry_run" == false ]]; then
+            develop_args=("${hm_args[@]}")
+        fi
         exec nix --extra-experimental-features 'nix-command flakes' develop \
             --no-write-lock-file '.?submodules=1' "${develop_args[@]}" \
             --command env NIX_CONFIG_DEV_SHELL=1 SWITCH_HM_DEV_SHELL_REEXEC=1 \
@@ -413,12 +416,18 @@ main() {
         local arch
         arch="$(configuration_arch "$(uname -m)" "$(uname -s)")"
         stage_changes
+        if [[ "$dry_run" == true ]]; then
+            [[ "$do_rekey" == false ]] || printf 'switch-hm: dry run; not rekeying\n' >&2
+            nix --extra-experimental-features 'nix-command flakes' build --dry-run --no-link \
+                ".?submodules=1#homeConfigurations.\"${username}@${host}-${arch}\".activationPackage" "${hm_args[@]}"
+            return 0
+        fi
         if [[ "$do_rekey" == true ]]; then
             run_rekey_home "${username}@${host}-${arch}" "${hm_args[@]}"
         fi
         nix --extra-experimental-features 'nix-command flakes' run \
             '.?submodules=1#home-manager-cli' -- \
-            switch -b hmbak --flake ".?submodules=1#${username}@${host}-${arch}" "${hm_args[@]}"
+            switch -b hmbak "${hm_args[@]}" --flake ".?submodules=1#${username}@${host}-${arch}"
     fi
 
     if [[ "$do_git" == true ]]; then

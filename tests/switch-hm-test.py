@@ -334,7 +334,7 @@ sys.exit(int(os.environ.get('TEST_AGE_STATUS', '0')))
 
     def test_no_git_skips_commits_and_push_but_stages_for_flake_visibility(self):
         self.assert_success(self.invoke("-n", "another-host", "--user", "bob", "--", "--show-trace"))
-        self.assertEqual(self.calls()[0]["args"][-2:], [".?submodules=1#bob@another-host-x86_64", "--show-trace"])
+        self.assertEqual(self.calls()[0]["args"][-3:], ["--show-trace", "--flake", ".?submodules=1#bob@another-host-x86_64"])
         self.assertEqual(self.git("rev-parse", "HEAD"), self.initial)
         self.assertEqual(self.git("rev-parse", "HEAD", cwd=self.module), self.module_initial)
         self.assertIn("settings.txt", self.git("diff", "--cached", "--name-only"))
@@ -533,6 +533,102 @@ sys.exit(int(os.environ.get('TEST_AGE_STATUS', '0')))
                 self.assertEqual(self.git("rev-parse", "main", cwd=self.remote), self.initial)
                 self.assertEqual(self.git("rev-parse", "main", cwd=self.module_remote), self.module_initial)
 
+    # Effectual-GoodCommunication @specified: local previews stage real Git
+    # sources, but Nix/SSH/age remain recording boundaries with no activation.
+    def test_local_switch_keeps_selected_flake_after_passthrough_and_preserves_option_values(self):
+        external = self.external_checkout()
+        selected = '.?submodules=1#alice@workstation-x86_64'
+        for extra in [('--flake', 'path:/unrelated#other'), ('--argstr', 'name', '--flake')]:
+            with self.subTest(extra=extra):
+                self.log.unlink(missing_ok=True)
+                self.assert_success(self.invoke('--flake-dir', str(external), '-n', '--', *extra))
+                self.assertEqual(len(self.calls()), 1)
+                self.assertEqual(self.calls()[0]['cwd'], str(external))
+                args = self.calls()[0]['args']
+                hm_args = args[args.index('--') + 1:]
+                last_flake = max(index for index, value in enumerate(hm_args) if value == '--flake')
+                self.assertEqual(hm_args[last_flake + 1:], [selected])
+                self.assertEqual(hm_args, ['switch', '-b', 'hmbak', *extra, '--flake', selected])
+                self.assertEqual(self.ssh_calls(), [])
+                self.assertEqual(self.git('log', '-1', '--format=%s', cwd=external), 'initial')
+
+    def test_local_dry_run_uses_login_identity_stages_and_never_commits_or_pushes(self):
+        self.assert_success(self.invoke('--dry-run', '--', '--show-trace'))
+        self.assertEqual(self.calls(), [{'cwd': str(self.repo), 'args': [
+            '--extra-experimental-features', 'nix-command flakes', 'build',
+            '--dry-run', '--no-link',
+            '.?submodules=1#homeConfigurations."alice@workstation-x86_64".activationPackage',
+            '--show-trace',
+        ]}])
+        self.assertEqual(self.ssh_calls(), [])
+        self.assertEqual(self.age_calls(), [])
+        for repo, origin, initial in [(self.repo, self.remote, self.initial),
+                                      (self.module, self.module_remote, self.module_initial)]:
+            self.assertIn('settings.txt', self.git('diff', '--cached', '--name-only', cwd=repo))
+            self.assertEqual(self.git('rev-parse', 'HEAD', cwd=repo), initial)
+            self.assertEqual(self.git('rev-parse', 'main', cwd=origin), initial)
+
+    def test_local_dry_run_selects_darwin_arm_configuration(self):
+        self.assert_success(self.invoke('--dry-run', overrides={'TEST_OS': 'Darwin', 'TEST_ARCH': 'arm64'}))
+        self.assertEqual(self.calls()[0]['args'][-1],
+                         '.?submodules=1#homeConfigurations."alice@workstation-aarch64-darwin".activationPackage')
+        self.assertEqual(self.ssh_calls(), [])
+        self.assertEqual(self.git('rev-parse', 'HEAD'), self.initial)
+
+    def test_local_dry_run_uses_external_flake_and_explicit_identity_without_ssh(self):
+        external = self.external_checkout()
+        self.assert_success(self.invoke('--flake-dir', str(external), '--dry-run',
+                                        '--user', 'bob', 'declared-host'))
+        self.assertEqual(len(self.calls()), 1)
+        self.assertEqual(self.calls()[0]['cwd'], str(external))
+        self.assertEqual(self.calls()[0]['args'][-1],
+                         '.?submodules=1#homeConfigurations."bob@declared-host-x86_64".activationPackage')
+        self.assertIn('profile.nix', self.git('diff', '--cached', '--name-only', cwd=external))
+        self.assertEqual(self.git('diff', '--cached', '--name-only'), '')
+        self.assertEqual(self.git('log', '-1', '--format=%s', cwd=external), 'initial')
+        self.assertEqual(self.ssh_calls(), [])
+
+    def test_local_dry_run_ignores_rekey_even_when_tools_and_identity_are_missing(self):
+        external = self.external_checkout()
+        (self.bin / 'age').unlink()
+        (self.bin / 'age-plugin-tpm').unlink()
+        for command in ['bash', 'dirname', 'env', 'git', 'basename', 'sed', 'cat', 'sh']:
+            (self.bin / command).symlink_to(shutil.which(command))
+        self.assert_success(self.invoke('--flake-dir', str(external), '--dry-run', '--rekey', overrides={
+            'PATH': str(self.bin), 'SWITCH_HM_DEV_SHELL_REEXEC': '1',
+        }))
+        self.assertEqual(len(self.calls()), 1)
+        self.assertIn('build', self.calls()[0]['args'])
+        self.assertEqual(self.age_calls(), [])
+        self.assertEqual(self.ssh_calls(), [])
+        self.assertFalse(Path(self.env['AGE_RUNTIME_KEY']).exists())
+        self.assertFalse(Path(self.env['AGE_RUNTIME_KEY'] + '.lock').exists())
+        self.assertEqual(self.git('log', '-1', '--format=%s', cwd=external), 'initial')
+
+    def test_local_dry_run_bootstraps_only_ordinary_shell_not_rekey_arguments(self):
+        self.assert_success(self.invoke('--dry-run', '--rekey', '--', '--show-trace',
+                                        overrides={'NIX_CONFIG_DEV_SHELL': ''}))
+        calls = self.calls()
+        self.assertEqual(len(calls), 2)
+        self.assertIn('develop', calls[0]['args'])
+        self.assertNotIn('--show-trace', calls[0]['args'][:calls[0]['args'].index('--command')])
+        self.assertIn('build', calls[1]['args'])
+        self.assertIn('--show-trace', calls[1]['args'])
+        self.assertEqual(self.age_calls(), [])
+        self.assertEqual(self.ssh_calls(), [])
+        self.assertEqual(self.git('rev-parse', 'HEAD'), self.initial)
+
+    def test_local_dry_run_build_failure_propagates_without_activation_or_commit(self):
+        result = self.invoke('--dry-run', overrides={'TEST_NIX_BUILD_STATUS': '31'})
+        self.assertEqual(result.returncode, 31, result.stdout + result.stderr)
+        self.assertEqual(len(self.calls()), 1)
+        self.assertIn('build', self.calls()[0]['args'])
+        self.assertEqual(self.ssh_calls(), [])
+        self.assertEqual(self.age_calls(), [])
+        self.assertEqual(self.git('rev-parse', 'HEAD'), self.initial)
+        self.assertEqual(self.git('rev-parse', 'HEAD', cwd=self.module), self.module_initial)
+        self.assertEqual(self.git('rev-parse', 'main', cwd=self.remote), self.initial)
+
     def test_remote_dry_run_does_not_copy_activate_commit_or_push(self):
         self.assert_success(self.invoke("--target-host", "server", "--dry-run", "--", "--show-trace"))
         self.assertEqual(len(self.calls()), 2)
@@ -561,7 +657,7 @@ sys.exit(int(os.environ.get('TEST_AGE_STATUS', '0')))
 
     def test_invalid_remote_options_and_metadata_do_not_stage(self):
         for args in [("--target-host",), ("--target-host=",), ("--target-host", "bad#host"),
-                     ("--use-remote-sudo",), ("--dry-run",), ("--target-host", "server", "--list")]:
+                     ("--use-remote-sudo",), ("--dry-run", "--use-remote-sudo"), ("--target-host", "server", "--list")]:
             with self.subTest(args=args):
                 self.assertNotEqual(self.invoke(*args).returncode, 0)
         for info in [["unexpected output"], ["alice", "server", "aarch64", "Unsupported", "/home/alice", "/bin/nix-store"]]:
