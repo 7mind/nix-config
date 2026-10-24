@@ -32,5 +32,6 @@ assert plugins["searx.plugins.oa_doi_rewrite.SXNGPlugin"]["active"] is True
 assert len(plugins) > 1
 print("SearXNG DOI plugin enabled; other plugin defaults preserved")
 PY
+  python3 ${./searxng-config.py} -v
   touch "$out"
 ''
