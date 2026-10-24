@@ -333,6 +333,7 @@
                 asterisk-linphone-fallback = import ./tests/asterisk-linphone-fallback.nix { inherit pkgs; };
                 flexisip-file-transfer = import ./tests/flexisip.nix { inherit pkgs; };
                 openlinkhub = import ./tests/openlinkhub.nix { inherit pkgs; };
+                searxng = import ./tests/searxng.nix { inherit pkgs; };
               }
               // pkgs.lib.optionalAttrs (system == "x86_64-linux") {
                 hyprwhspr = import ./tests/hyprwhspr.nix {
