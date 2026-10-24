@@ -95,6 +95,10 @@ in
         bind '"' split-window -v -c "#{pane_current_path}"
         bind % split-window -h -c "#{pane_current_path}"
 
+        # Move the current window left/right; keep focus and allow repeated swaps.
+        bind -r S-Left swap-window -d -t -1
+        bind -r S-Right swap-window -d -t +1
+
         # Prefer tmux's own terminfo (more accurate capabilities than screen-256color)
         set -g default-terminal "tmux-256color"
 
