@@ -1,0 +1,11 @@
+diff --git a/searx/webapp.py b/searx/webapp.py
+--- a/searx/webapp.py
++++ b/searx/webapp.py
+@@ -1251,6 +1251,7 @@ def config():
+         _engines.append(
+             {
+                 'name': name,
++                'engine_type': engine.engine_type,
+                 'categories': engine.categories,
+                 'shortcut': engine.shortcut,
+                 'enabled': not engine.disabled,
