@@ -67,16 +67,9 @@ in
       inherit (cfg) users;
     };
 
-    home-manager.users = lib.genAttrs cfg.users (_: {
-      xdg.configFile."hyprwhspr/config.json".text = builtins.toJSON {
-        transcription_backend = "qwen3-asr";
-        qwen3_asr_model = cfg.model;
-        qwen3_asr_device = cfg.device;
-        language = "en";
-        external_bindings = cfg.gnome.enable;
-        recording_mode = "toggle";
-        mic_osd_enabled = false;
-      };
+    home-manager.users = lib.genAttrs cfg.users (_: import ../../lib/dictation-home.nix {
+      inherit (cfg) model device;
+      externalBindings = cfg.gnome.enable;
     });
 
     systemd.user.services.hyprwhspr.serviceConfig = {

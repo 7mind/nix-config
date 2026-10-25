@@ -42,6 +42,7 @@ BUILD_ON_HOSTS=()
 BUILD_ON_ARGS=()
 DO_REFRESH=false
 DO_SWITCH=false
+DO_HM_ONLY=false
 DO_BOOT=false
 DO_REKEY=false
 DO_GIT=true
@@ -66,12 +67,14 @@ usage() {
     cat <<EOF
 Usage: $(basename "$0") [OPTIONS] [HOST...]
 
-Build and deploy NixOS/nix-darwin configurations.
+Build and deploy NixOS/nix-darwin or standalone Home Manager configurations.
 
 If no HOST is specified, builds the current host (${THISHOST}).
 
 Options:
   -s, --switch      Switch to the new configuration after building
+  --hm-only         Build the current user's standalone Home Manager export;
+                    -s activates it as that user. Incompatible with --boot/--rekey.
   -b, --boot        Stage the new configuration for next boot (Linux only;
                     skips activation on Darwin). Mutually exclusive with -s.
   -k, --rekey       Rekey age secrets for the specified hosts before building
@@ -103,6 +106,11 @@ Host specifiers:
   HOST                 Individual host name (e.g., o1, pavel-fw)
   +GROUP               All hosts in a group (e.g., +infra, +pavel)
 
+With --hm-only, hosts come from homeConfigurations for the current user;
++USER selects that user's homes. Remote switches need an address override.
+On NixOS, install the integration with ./setup -s first; ./setup --hm-only -s
+then persists across reboot. A system switch or rollback selects its bundled HM.
+
 Upstream sync:
   Unless --offline is given, setup fetches upstream for the main repo
   and the private submodule (when configured) and rebases the current
@@ -133,16 +141,18 @@ EOF
 load_host_meta() {
     echo "Loading host metadata from flake..."
     add_all
-    local json
-    local errfile
-    errfile="$(mktemp)"
-    if ! json=$(nix eval ".?submodules=1#hostMeta" --json 2>"$errfile"); then
-        echo "Error: nix eval failed for host metadata:" >&2
-        cat "$errfile" >&2
-        rm -f "$errfile"
-        exit 1
+    local json meta_attr="hostMeta"
+    [[ "$DO_HM_ONLY" == "true" ]] && meta_attr="homeMeta"
+    json=$(nix eval ".?submodules=1#${meta_attr}" --json) || exit 1
+
+    if [[ "$DO_HM_ONLY" == "true" ]]; then
+        json=$(echo "$json" | jq --arg user "$(id -un)" '
+            to_entries | map(select(.value.username == $user) |
+                {key: .value.hostname, value: (.value + {group: $user, homeConfiguration: .key})}) |
+                if length == (map(.key) | unique | length) then from_entries
+                else error("Ambiguous standalone Home Manager exports for the same host") end
+        ')
     fi
-    rm -f "$errfile"
 
     while IFS="=" read -r key value; do
         HOST_META["$key"]="$value"
@@ -273,6 +283,10 @@ parse_args() {
                 DO_SWITCH=true
                 shift
                 ;;
+            --hm-only)
+                DO_HM_ONLY=true
+                shift
+                ;;
             -b|--boot)
                 DO_BOOT=true
                 shift
@@ -363,6 +377,12 @@ parse_args() {
                 ;;
         esac
     done
+
+    [[ "$DO_HM_ONLY" != "true" ]] || ROOTS="${XDG_STATE_HOME:-${HOME}/.local/state}/nix-config/home-builds"
+    if [[ "$DO_HM_ONLY" == "true" && ( "$DO_BOOT" == "true" || "$DO_REKEY" == "true" ) ]]; then
+        echo "Error: --hm-only is incompatible with --boot/--rekey" >&2
+        exit 1
+    fi
 
     if [[ ${#HOSTS[@]} -eq 0 ]]; then
         HOSTS=("$THISHOST")
@@ -752,6 +772,7 @@ do_rekey() {
 
 attic_inhibit_start() {
     ATTIC_INHIBIT="/run/attic-push/inhibit"
+    [[ -d /run/attic-push ]] || return 0
     touch "$ATTIC_INHIBIT"
     trap 'rm -f "$ATTIC_INHIBIT"' EXIT
 }
@@ -794,6 +815,11 @@ do_build() {
         platform=$(get_host_attr "$host" "platform")
 
         echo "    Building $host ($platform)..."
+        if [[ "$DO_HM_ONLY" == "true" ]]; then
+            nix build ".?submodules=1#homeConfigurations.\"$(get_host_attr "$host" homeConfiguration)\".switchPackage" \
+                --out-link "${ROOTS}/${host}" "${build_args[@]}"
+            continue
+        fi
         case "$platform" in
             darwin)
                 nix build ".?submodules=1#darwinConfigurations.${host}.system" \
@@ -895,6 +921,16 @@ do_switch() {
             else
                 echo "    Warning: signing key $sign_key not found; remote copy may fail require-sigs (retry with -ncs)."
             fi
+        fi
+
+        if [[ "$DO_HM_ONLY" == "true" ]]; then
+            local -a activate=()
+            if [[ "$THISHOST" != "$host" ]]; then
+                nix copy "${copy_args[@]}" --to "ssh-ng://$(get_host_attr "$host" username)@${remote_target}?compress=true" "${ROOTS}/${host}"
+                activate=(ssh "$(get_host_attr "$host" username)@${remote_target}")
+            fi
+            "${activate[@]}" "${closure}/bin/switch-home" /etc/smind/home-manager /etc/NIXOS
+            continue
         fi
 
         case "$platform" in

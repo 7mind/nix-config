@@ -202,6 +202,7 @@
           inherit inputs self;
         };
       };
+      homes = (hosts-public builders).home ++ ((hosts-private builders).home or [ ]);
     in
     {
       inherit globals; # this makes this flake reusable by other flakes
@@ -214,9 +215,12 @@
         (hosts-public builders).darwin ++ (hosts-private builders).darwin
       );
 
-      homeConfigurations = builtins.listToAttrs (
-        (hosts-public builders).home ++ ((hosts-private builders).home or [ ])
-      );
+      homeConfigurations = builtins.listToAttrs homes;
+
+      homeMeta = builtins.listToAttrs (map (home: {
+        inherit (home) name;
+        value = { inherit (home) hostname username platform; };
+      }) homes);
 
       agenix-rekey = inputs.agenix-rekey.configure {
         userFlake = self;
@@ -333,6 +337,7 @@
                 asterisk-linphone-fallback = import ./tests/asterisk-linphone-fallback.nix { inherit pkgs; };
                 flexisip-file-transfer = import ./tests/flexisip.nix { inherit pkgs; };
                 openlinkhub = import ./tests/openlinkhub.nix { inherit pkgs; };
+                home-manager-persistence = import ./tests/home-manager-persistence.nix { inherit pkgs; flake = self; };
                 searxng = import ./tests/searxng.nix { inherit pkgs; };
               }
               // pkgs.lib.optionalAttrs (system == "x86_64-linux") {
