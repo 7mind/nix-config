@@ -146,11 +146,11 @@
     "codegraph": {
       "flake": false,
       "locked": {
-        "lastModified": 1791852373,
-        "narHash": "sha256-N/8u7t7Cr4v3EzAL3hz2gLQvh1/NmySXM4MOY9sJ/cE=",
+        "lastModified": 1792808177,
+        "narHash": "sha256-ENkj5c4F4ADgE9fYBsMFptolx6L2s93C1Op6PXe9FbE=",
         "owner": "colbymchenry",
         "repo": "codegraph",
-        "rev": "df3ce972f7d5bbb82d75bcc0e24f2047616fba36",
+        "rev": "69af19ace270f2e940444d514de6dde971df12df",
         "type": "github"
       },
       "original": {
@@ -207,16 +207,16 @@
     "crawl4ai": {
       "flake": false,
       "locked": {
-        "lastModified": 1790165349,
-        "narHash": "sha256-4mGYnNnEfdmV+IhkR1tKZf+b7mBMlcsrf5B/yK1ZqoA=",
+        "lastModified": 1791973438,
+        "narHash": "sha256-vdEL89vCCDuFuQ2DeUqiqJ5FP1Yov0WApyu401Ksxrg=",
         "owner": "unclecode",
         "repo": "crawl4ai",
-        "rev": "133e1d92e37885dfccc03ea2e3687d06c98b7ceb",
+        "rev": "838869bdda93f25e6d50b3f50ae9577d9b19a586",
         "type": "github"
       },
       "original": {
         "owner": "unclecode",
-        "ref": "v0.9.4",
+        "ref": "v0.9.5",
         "repo": "crawl4ai",
         "type": "github"
       }
@@ -1044,11 +1044,11 @@
         "openai-codex-plugin": "openai-codex-plugin"
       },
       "locked": {
-        "lastModified": 1792833238,
-        "narHash": "sha256-UirY489ppAwwDySTxgZZ2r3lleRAaxrEfv1rzna5/JA=",
+        "lastModified": 1793020445,
+        "narHash": "sha256-Ba86VHNLwPlH120ifZHfmJX5vULPEmTEVNCXVFRlYC0=",
         "owner": "7mind",
         "repo": "ponygirls",
-        "rev": "f91df73acfa0d783f06298449ee68e70a0769a85",
+        "rev": "7fdcd6e942a384bdebc8150a9a43ed72a0675c42",
         "type": "github"
       },
       "original": {
