@@ -1,0 +1,22 @@
+error (ignored): SQLite database '/home/pavel/.cache/nix/eval-cache-v6/8f69cc268f4d0fc0b36f7aca25b3a6e995efe931b63d799bf3b59f351535f4ec.sqlite' is busy
+trace: x86_64-linux
+error:
+       … while evaluating attribute 'crawl4ai-api-token'
+
+       … while evaluating attribute 'generator'
+
+       … while evaluating attribute '_script'
+
+       … while evaluating attribute '__functor'
+         at «github:NixOS/nixpkgs/e158d9ed9b51c98974c5e66e1ba1c9e0255fecaa?narHash=sha256-hKlVl12B1dF0Q5vd9dY3lIJM5mFGWYSlXwSLAqHZ1%2Bs%3D»/lib/types.nix:1307:9:
+         1306|         __functionArgs = zipAttrsWith (_: all (x: x)) (map (fn: functionArgs fn.value) defs);
+         1307|         __functor =
+             |         ^
+         1308|           _: callerArgs:
+
+       error: cannot convert a function to JSON
+       at «github:NixOS/nixpkgs/e158d9ed9b51c98974c5e66e1ba1c9e0255fecaa?narHash=sha256-hKlVl12B1dF0Q5vd9dY3lIJM5mFGWYSlXwSLAqHZ1%2Bs%3D»/lib/types.nix:1308:11:
+         1307|         __functor =
+         1308|           _: callerArgs:
+             |           ^
+         1309|           (mergeDefinitions (loc ++ [ "<function body>" ]) elemType (
