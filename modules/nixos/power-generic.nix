@@ -79,8 +79,7 @@ in
 
       environment.systemPackages = [
         config.boot.kernelPackages.cpupower
-        pkgs.cpufrequtils
-      ];
+      ] ++ lib.optional pkgs.stdenv.hostPlatform.isx86 pkgs.cpufrequtils; # cpufrequtils is x86-only
     })
 
     (lib.mkIf cfg.amd.enable {

@@ -45,19 +45,36 @@ in
       text = "${profilePath username}\n";
     }) homes;
     environment.profiles = [ "/etc/profiles/per-user-system/$USER" ];
+    # Restart each HM service when its generation changes via the declarative
+    # unit-diff mechanism (X-Restart-Triggers), not /run/nixos/activation-
+    # restart-list (deprecated, removed in NixOS 26.11). ExecStart already
+    # embeds activationPackage, so this is belt-and-braces against the unit
+    # text ceasing to embed it. Deliberately NOT preserved: a switch to an
+    # identical toplevel no longer re-asserts the system-pinned generation
+    # over a standalone switch-home change, and a failed HM service is no
+    # longer retried by an unrelated system switch. To keep that total
+    # rather than deferred, the request file below lives at a stable path:
+    # an identical-toplevel activation rewrites identical content, so the
+    # request marker in profile.sh still matches and a later manual service
+    # restart does not consume a stale re-assertion either. A changed
+    # toplevel is still detected via the system-generation marker (the HM
+    # generation is an input to the toplevel, so it cannot change alone).
+    systemd.services = lib.mapAttrs' (username: home: lib.nameValuePair "home-manager-${utils.escapeSystemdPath username}" {
+      restartTriggers = [ home.activationPackage.generation ];
+    }) homes;
     system.activationScripts.smind-home-manager = {
       deps = [ "users" "etc" ];
       text = ''
         ${pkgs.coreutils}/bin/install -d -m 0755 -o root -g root ${profileRoot} ${requestRoot}
         hm_system_generation="$(readlink -e "$systemConfig")"
-        read -r hm_boot_id < /proc/sys/kernel/random/boot_id
       '' + lib.concatStrings (lib.mapAttrsToList (username: home: ''
         ${pkgs.coreutils}/bin/install -d -m 0755 -o ${lib.escapeShellArg username} -g ${lib.escapeShellArg home.group} ${lib.escapeShellArg "${profileRoot}/${username}"}
-        request="$(mktemp "${requestRoot}/request.$hm_boot_id.XXXXXX")"
-        printf '%s %s %s\n' "$hm_system_generation" "''${NIXOS_ACTION:-boot}" ${home.activationPackage.generation} > "$request"
-        chmod 0644 "$request"
+        request=${lib.escapeShellArg "${requestRoot}/${username}.request"}
+        request_tmp="$(mktemp "${requestRoot}/.request.XXXXXX")"
+        printf '%s %s %s\n' "$hm_system_generation" "''${NIXOS_ACTION:-boot}" ${home.activationPackage.generation} > "$request_tmp"
+        chmod 0644 "$request_tmp"
+        mv -f "$request_tmp" "$request"
         ln -sfn "$request" ${lib.escapeShellArg "${requestRoot}/${username}"}
-        [[ "''${NIXOS_ACTION:-boot}" == boot ]] || echo ${lib.escapeShellArg "home-manager-${utils.escapeSystemdPath username}.service"} >> /run/nixos/activation-restart-list
       '') homes);
     };
   };

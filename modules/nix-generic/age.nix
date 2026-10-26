@@ -39,10 +39,22 @@ let
           identHash = builtins.substring 0 32 (
             builtins.hashString "sha256" (pubkeyHash + builtins.hashFile "sha256" secret.rekeyFile)
           );
+          file = "${outputDir}/${identHash}-${secretName}.age";
         in
+        # These secrets bypass agenix-rekey (rekeyFile is stripped below), so
+        # its eval-time existence checks do not apply. Mirror them here: a
+        # missing rekeyed file must fail evaluation, not system activation
+        # (agenix only warns, then chown fails on the never-decrypted file).
+        assert lib.assertMsg (builtins.pathExists secret.rekeyFile) ''
+          smind.age.additionalUserOnlySecrets: source secret for age.secrets."${user}/${secretName}" does not exist: ${toString secret.rekeyFile}
+        '';
+        assert lib.assertMsg (builtins.pathExists file) ''
+          smind.age.additionalUserOnlySecrets: rekeyed secret for age.secrets."${user}/${secretName}" not found, please run `./private/rekey-user-secrets ${cfg-meta.hostname} ${user}` as ${user} and commit the results to git.
+            rekeyed secret path: ${file}
+        '';
         builtins.removeAttrs secret [ "rekeyFile" ]
         // {
-          file = "${outputDir}/${identHash}-${secretName}.age";
+          inherit file;
           name = "${user}/${secretName}";
         };
     in

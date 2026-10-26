@@ -41,7 +41,10 @@ pkgs.testers.runNixOSTest {
     machine.fail("runuser -u tester -- ${switch "new"}/bin/switch-home /missing /etc/NIXOS")
     for command, label in [
         (apply, "new"), ("systemctl restart " + unit, "new"), ("reboot", "new"),
-        (system + "/bin/switch-to-configuration switch", "old"),
+        # Identical-toplevel switch: no unit change, so no HM restart and the
+        # standalone generation is NOT re-asserted (activation-restart-list
+        # removal; see modules/nixos/home-manager.nix).
+        (system + "/bin/switch-to-configuration switch", "new"),
         (apply, "new"), ("systemctl restart " + unit, "new"),
         (system + "/specialisation/new/bin/switch-to-configuration switch", "new"),
         ("reboot", "old"),
