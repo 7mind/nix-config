@@ -44,7 +44,7 @@ in
     environment.etc = lib.mapAttrs' (username: _: lib.nameValuePair "smind/home-manager/${username}" {
       text = "${profilePath username}\n";
     }) homes;
-    environment.profiles = [ "/etc/profiles/per-user-system/$USER" ];
+    environment.profiles = lib.mkAfter [ "/etc/profiles/per-user-system/$USER" ];
     # Restart each HM service when its generation changes via the declarative
     # unit-diff mechanism (X-Restart-Triggers), not /run/nixos/activation-
     # restart-list (deprecated, removed in NixOS 26.11). ExecStart already

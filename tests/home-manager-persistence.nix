@@ -23,7 +23,11 @@ pkgs.testers.runNixOSTest {
     smind.home-manager.enable = true;
     boot.loader.grub.enable = false;
     virtualisation.additionalPaths = [ (switch "new") (switch "failing") ];
-    users.users.homealias = { name = "tester"; isNormalUser = true; packages = [ pkgs.hello ]; };
+    users.users.homealias = {
+      name = "tester";
+      isNormalUser = true;
+      packages = [ pkgs.hello (pkgs.writeShellScriptBin "hm-fixture-tool" "echo system") ];
+    };
     home-manager.users.homealias = home "old";
     specialisation.new.configuration.home-manager.users.homealias = lib.mkForce (home "new");
   };
@@ -32,6 +36,7 @@ pkgs.testers.runNixOSTest {
     def check(label):
         machine.succeed(f"grep -Fx {label} /home/tester/.hm-test-setting",
                         f"test $(/etc/profiles/per-user/tester/bin/hm-fixture-tool) = {label}",
+                        f"""runuser -l tester -c 'test "$(hm-fixture-tool)" = {label}'""",
                         "/etc/profiles/per-user-system/tester/bin/hello")
     machine.start(allow_reboot=True)
     machine.wait_for_unit(unit)
