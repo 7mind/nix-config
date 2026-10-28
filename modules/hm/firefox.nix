@@ -274,6 +274,7 @@ in
             "general.smoothScroll.stopDecelerationWeighting" = 1.0;
             "mousewheel.default.delta_multiplier_y" = config.smind.hm.firefox.scrollMultiplier;
             "browser.compactmode.show" = true;
+            "sidebar.revamp" = false;
 
             # betterfox / securefox
             "accessibility.force_disabled" = 1;
