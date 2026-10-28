@@ -144,11 +144,11 @@
     "codegraph": {
       "flake": false,
       "locked": {
-        "lastModified": 1792808177,
-        "narHash": "sha256-ENkj5c4F4ADgE9fYBsMFptolx6L2s93C1Op6PXe9FbE=",
+        "lastModified": 1793153692,
+        "narHash": "sha256-kjMMKt6o76CCbIKnWYqHWz7fwSZvmB/DpINRBD+6ZBY=",
         "owner": "colbymchenry",
         "repo": "codegraph",
-        "rev": "69af19ace270f2e940444d514de6dde971df12df",
+        "rev": "01e0ac3aa7419a7ab75583963e8a95359f3af1d3",
         "type": "github"
       },
       "original": {
@@ -1043,11 +1043,11 @@
         "squish": "squish"
       },
       "locked": {
-        "lastModified": 1793226880,
-        "narHash": "sha256-Fub6aKiyCddBN13qdh7oGxyqPr/nVoBsxiTEQJ6Wphk=",
+        "lastModified": 1793230538,
+        "narHash": "sha256-c4bSa/p8uDr+63EAcufTczgIweSM1bCVwanyCe4s9AY=",
         "owner": "7mind",
         "repo": "ponygirls",
-        "rev": "590d6867929c0a89138baa0a3b3fa6abf8747728",
+        "rev": "e20bbbfa6aa22800c7bfdcf79aac17c575cfd61b",
         "type": "github"
       },
       "original": {
@@ -1266,8 +1266,8 @@
       },
       "original": {
         "owner": "7mind",
+        "ref": "main",
         "repo": "squish-find-the-brains",
-        "rev": "b731a16d0de7198303d890273249e0136dede902",
         "type": "github"
       }
     },
