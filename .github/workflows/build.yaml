@@ -34,9 +34,6 @@ jobs:
       - uses: 7mind/github-env@minimal
         with:
           setup-nix: ${{ matrix.preconfigured != true }}
-      - name: Verify configurations
-        run: |
-          ./verify-configs
       - name: Check flake
         run: |
           nix flake check --no-build '.'
@@ -56,9 +53,6 @@ jobs:
       - uses: 7mind/github-env@minimal
         with:
           setup-nix: ${{ matrix.preconfigured != true }}
-      - name: Verify configurations
-        run: |
-          ./verify-configs
       - name: Check flake
         run: |
           nix flake check --no-build '.'

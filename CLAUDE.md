@@ -5,26 +5,16 @@
 After a trivial change concerning exactly one host, verifying just that host is enough (substitute the hostname reported by the SessionStart hook — `$HOSTNAME` is bash-only and is empty under zsh, the user's login shell):
 
 ```bash
-# Build the current host (replace HOSTNAME with the actual short hostname, e.g. pavel-am5, pavel-fw)
-./verify-configs --verbose HOSTNAME
+# Build the current host (replace HOSTNAME with the actual short hostname, e.g. testbench)
+nix build --dry-run ".#nixosConfigurations.HOSTNAME.config.system.build.toplevel"
 ```
 
-After significant changes that may affect many hosts (for example shared modules, roles, overlays, package definitions, or refactorings), it's a good idea to use `./verify-configs` to check all hosts:
-
-```bash
-# Build all hosts
-./verify-configs --verbose
-```
+After significant changes that may affect many hosts (for example shared modules, roles, overlays, package definitions, or refactorings), check every configuration this flake exports with `nix flake check --no-build '.'`.
 
 When verifying new features, run the same steps as CI:
-  1. Check the public configurations:
-    ```bash
-    # Build all public hosts
-    ./verify-configs --verbose
-    ```
-  2. Run `nix flake check --no-build '.'`
+  1. Run `nix flake check --no-build '.'`
 
-Prefer using `./verify-configs`/`nix build --dry-run` over `nix build` for verification to avoid slow building of packages.
+Prefer using `nix build --dry-run` over `nix build` for verification to avoid slow building of packages.
 When changing Home Manager activations a full nix build may still be required as those require executing activations themselves to verify their correctness.
 
 This flake works independently. Downstream configuration repositories consume `lib.mkFlake` and use their own checkout as the flake root:
@@ -33,19 +23,12 @@ This flake works independently. Downstream configuration repositories consume `l
 # Build a specific host configuration
 nix build ".#nixosConfigurations.HOSTNAME.config.system.build.toplevel"
 
-# Examples:
-nix build ".#nixosConfigurations.pavel-fw.config.system.build.toplevel"
-nix build ".#nixosConfigurations.pavel-am5.config.system.build.toplevel"
+# Example:
+nix build ".#nixosConfigurations.testbench.config.system.build.toplevel"
 
 # For Darwin (macOS):
 nix build ".#darwinConfigurations.HOSTNAME.system"
 ```
-
-Use `./setup` script for full build + switch workflow:
-- `./setup` - build current host
-- `./setup -s` - build and switch
-- `./setup -r` - update flake inputs before building
-- `./setup -n` - skip git commit/push
 
 ## Structure
 

@@ -145,30 +145,6 @@ in
               in
               assert builtins.deepSeq [ capabilities contexts explicitModules darwinModules credentials ] true;
               pkgs.runCommand "home-configurations" { } "touch $out";
-            switch-hm = pkgs.runCommand "switch-hm-test" {
-              nativeBuildInputs = [ pkgs.bash pkgs.git pkgs.python3 pkgs.jq ]
-                ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.util-linux ];
-            } ''
-              mkdir -p checkout/tests
-              cp ${../switch-hm} checkout/switch-hm
-              chmod +x checkout/switch-hm
-              patchShebangs checkout/switch-hm
-              cp ${../tests/switch-hm-test.py} checkout/tests/switch-hm-test.py
-              cp ${../setup} checkout/setup
-              cp ${../verify-configs} checkout/verify-configs
-              cp ${../verify-kanata-configs} checkout/verify-kanata-configs
-              cp ${../edit-secret} checkout/edit-secret
-              cp ${../update-masterkeys} checkout/update-masterkeys
-              cp ${../takeover-host} checkout/takeover-host
-              cp ${../switch} checkout/switch
-              cp ${../switch-darwin} checkout/switch-darwin
-              chmod +x checkout/{setup,verify-configs,verify-kanata-configs,edit-secret,update-masterkeys,takeover-host,switch,switch-darwin}
-              patchShebangs checkout
-              cp ${../tests/flake-root-test.py} checkout/tests/flake-root-test.py
-              python3 checkout/tests/switch-hm-test.py -v
-              python3 checkout/tests/flake-root-test.py -v
-              touch $out
-            '';
             home-shell = import ../tests/home-shell.nix { inherit pkgs; home-manager = inputs.home-manager; };
             nix-access-tokens = import ../tests/nix-access-tokens.nix { inherit pkgs; home-manager = inputs.home-manager; };
             gnome-extensions = import ../tests/gnome-extensions.nix { inherit pkgs inputs; home-manager = inputs.home-manager; };
@@ -183,6 +159,32 @@ in
               inherit pkgs;
               package = self.packages.${system}.hyprwhspr;
             };
+          }
+          // pkgs.lib.optionalAttrs (privateRoot != null) {
+            switch-hm = pkgs.runCommand "switch-hm-test" {
+              nativeBuildInputs = [ pkgs.bash pkgs.git pkgs.python3 pkgs.jq ]
+                ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.util-linux ];
+            } ''
+              mkdir -p checkout/tests
+              cp ${privateRoot}/switch-hm checkout/switch-hm
+              chmod +x checkout/switch-hm
+              patchShebangs checkout/switch-hm
+              cp ${privateRoot}/tests/switch-hm-test.py checkout/tests/switch-hm-test.py
+              cp ${privateRoot}/setup checkout/setup
+              cp ${privateRoot}/verify-configs checkout/verify-configs
+              cp ${privateRoot}/verify-kanata-configs checkout/verify-kanata-configs
+              cp ${privateRoot}/edit-secret checkout/edit-secret
+              cp ${privateRoot}/update-masterkeys checkout/update-masterkeys
+              cp ${privateRoot}/takeover-host checkout/takeover-host
+              cp ${privateRoot}/switch checkout/switch
+              cp ${privateRoot}/switch-darwin checkout/switch-darwin
+              chmod +x checkout/{setup,verify-configs,verify-kanata-configs,edit-secret,update-masterkeys,takeover-host,switch,switch-darwin}
+              patchShebangs checkout
+              cp ${privateRoot}/tests/flake-root-test.py checkout/tests/flake-root-test.py
+              python3 checkout/tests/switch-hm-test.py -v
+              python3 checkout/tests/flake-root-test.py -v
+              touch $out
+            '';
           }
           // privateOutputs.checks
         );
