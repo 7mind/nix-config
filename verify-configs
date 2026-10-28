@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")"
+export NIX_CONFIG_FLAKE_DIR="$(cd -- "${NIX_CONFIG_FLAKE_DIR:-$(dirname -- "${BASH_SOURCE[0]}")}" && pwd -P)"
+cd -- "$NIX_CONFIG_FLAKE_DIR"
 
 export show_trace=""
 export parallel="1"
 export verbose=""
-export flake_ref=".?submodules=1"
+export flake_ref="."
 selected_hosts=()
 
 while [[ $# -gt 0 ]]; do
@@ -15,14 +16,12 @@ while [[ $# -gt 0 ]]; do
         -p|--parallel) parallel=1; shift ;;
         -np|--no-parallel) parallel=""; shift ;;
         -v|--verbose) verbose=1; shift ;;
-        --no-submodules) flake_ref="."; shift ;;
         -h|--help)
-            echo "Usage: $0 [-t|--trace] [-np|--no-parallel] [-v|--verbose] [--no-submodules] [host...]"
+            echo "Usage: $0 [-t|--trace] [-np|--no-parallel] [-v|--verbose] [host...]"
             echo "  -t, --trace        Show full stack trace on errors"
             echo "  -p, --parallel     Evaluate all hosts in parallel (default)"
             echo "  -np, --no-parallel Evaluate hosts sequentially"
             echo "  -v, --verbose      Print nix commands being executed"
-            echo "  --no-submodules    Do not include submodules in flake evaluation"
             echo ""
             echo "If no hosts are specified, all hosts are verified."
             exit 0

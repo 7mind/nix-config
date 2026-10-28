@@ -14,3 +14,4 @@ nix/
 debug/
 .codegraph/
 tmp/
+/private/

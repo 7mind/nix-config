@@ -19,8 +19,8 @@ outside="$(env -u NIX_CONFIG_DEV_SHELL PATH="$test_dir:$PATH" "$setup" --help)"
   echo 'FAIL: setup did not enter the flake dev shell' >&2
   exit 1
 }
-[[ "$outside" == *'FAKE_NIX_ARG=.?submodules=1'* ]] || {
-  echo 'FAIL: setup did not use its own submodule-aware flake' >&2
+[[ "$outside" == *'FAKE_NIX_ARG=.'* ]] || {
+  echo 'FAIL: setup did not use its own flake' >&2
   exit 1
 }
 [[ "$outside" == *"FAKE_NIX_CWD=$flake_dir"* ]] || {

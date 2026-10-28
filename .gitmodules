@@ -1,4 +1,0 @@
-[submodule "private"]
-	path = private
-	url = git@github.com:7mind/nix-private.git
-	update = rebase

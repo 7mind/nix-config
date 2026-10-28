@@ -135,7 +135,7 @@ rekey_home() {
         return "$status"
     }
     metadata="$(nix --extra-experimental-features 'nix-command flakes' eval \
-        --no-write-lock-file --raw ".?submodules=1#homeConfigurations.\"${profile}\".config.age" \
+        --no-write-lock-file --raw ".#homeConfigurations.\"${profile}\".config.age" \
         --apply 'age:
             assert age.enable;
             assert age.rekey.storageMode == "local";
@@ -188,7 +188,7 @@ rekey_home() {
         ln -T -- "$unlock_dir/key" "$runtime_key"
     done
     AGENIX_REKEY_ADD_TO_GIT=false run_key_command nix --extra-experimental-features 'nix-command flakes' run \
-        --no-write-lock-file ".?submodules=1#agenix-rekey-homes.\"${profile}\".${system}.rekey" "$@" </dev/null
+        --no-write-lock-file ".#agenix-rekey-homes.\"${profile}\".${system}.rekey" "$@" </dev/null
     if [[ "$directory" == private/* ]]; then
         git -C private add -A -- "${directory#private/}"
     else
@@ -270,21 +270,21 @@ REMOTE
     selector="homeConfigurations.\"${username}@${host}-${arch}\""
     stage_changes
     home_info="$(nix --extra-experimental-features 'nix-command flakes' eval \
-        --no-write-lock-file --raw ".?submodules=1#${selector}.config.home" \
+        --no-write-lock-file --raw ".#${selector}.config.home" \
         --apply 'home: home.username + "\n" + home.homeDirectory' "$@")"
     [[ "$home_info" == "${remote_info[0]}"$'\n'"${remote_info[4]}" ]] \
         || fail 'selected profile username/home directory does not match the remote login'
     if [[ "$dry_run" == true ]]; then
         [[ "$do_rekey" == false ]] || printf 'switch-hm: dry run; not rekeying\n' >&2
         nix --extra-experimental-features 'nix-command flakes' build --dry-run --no-link \
-            ".?submodules=1#${selector}.activationPackage" "$@"
+            ".#${selector}.activationPackage" "$@"
         return 0
     fi
     if [[ "$do_rekey" == true ]]; then
         run_rekey_home "${username}@${host}-${arch}" "$@"
     fi
     activation="$(nix --extra-experimental-features 'nix-command flakes' build --no-link --print-out-paths \
-        "$@" ".?submodules=1#${selector}.activationPackage")"
+        "$@" ".#${selector}.activationPackage")"
     [[ "$activation" =~ ^/nix/store/[0-9a-z]{32}-[a-zA-Z0-9+._?=-]+$ ]] || fail 'expected exactly one activation store path'
     importer="'${remote_info[5]//\'/\'\\\'\'}'"
     [[ "$use_sudo" == false ]] || importer="sudo -n $importer"
@@ -309,6 +309,7 @@ main() {
     local -a hm_args=() original_args=("$@") develop_args=()
     repo="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
     script="$repo/${BASH_SOURCE[0]##*/}"
+    repo="${NIX_CONFIG_FLAKE_DIR:-$repo}"
     caller_cwd="$(pwd -P)"
 
     while [[ $# -gt 0 ]]; do
@@ -378,11 +379,18 @@ main() {
     fi
 
     repo="$(cd -- "$repo" && pwd -P)"
+    export NIX_CONFIG_FLAKE_DIR="$repo"
+    if [[ -f "$repo/setup-env" ]]; then
+        declare -A group_pubkeys=()
+        set +u
+        source "$repo/setup-env"
+        set -u
+    fi
     if [[ "$do_list" == true ]]; then
         [[ "$do_rekey" == false ]] || fail '--rekey cannot be combined with --list'
         cd -- "$repo"
         nix --extra-experimental-features 'nix-command flakes' eval \
-            --no-write-lock-file --raw '.?submodules=1#homeConfigurations' \
+            --no-write-lock-file --raw '.#homeConfigurations' \
             --apply 'configs: builtins.concatStringsSep "" (map (name: name + "\n") (builtins.attrNames configs))'
         return 0
     fi
@@ -400,7 +408,7 @@ main() {
             develop_args=("${hm_args[@]}")
         fi
         exec nix --extra-experimental-features 'nix-command flakes' develop \
-            --no-write-lock-file '.?submodules=1' "${develop_args[@]}" \
+            --no-write-lock-file '.' "${develop_args[@]}" \
             --command env NIX_CONFIG_DEV_SHELL=1 SWITCH_HM_DEV_SHELL_REEXEC=1 \
             bash -c 'cd -- "$1" || exit; shift; exec "$@"' switch-hm \
             "$caller_cwd" "$script" "${original_args[@]}"
@@ -419,15 +427,15 @@ main() {
         if [[ "$dry_run" == true ]]; then
             [[ "$do_rekey" == false ]] || printf 'switch-hm: dry run; not rekeying\n' >&2
             nix --extra-experimental-features 'nix-command flakes' build --dry-run --no-link \
-                ".?submodules=1#homeConfigurations.\"${username}@${host}-${arch}\".activationPackage" "${hm_args[@]}"
+                ".#homeConfigurations.\"${username}@${host}-${arch}\".activationPackage" "${hm_args[@]}"
             return 0
         fi
         if [[ "$do_rekey" == true ]]; then
             run_rekey_home "${username}@${host}-${arch}" "${hm_args[@]}"
         fi
         nix --extra-experimental-features 'nix-command flakes' run \
-            '.?submodules=1#home-manager-cli' -- \
-            switch -b hmbak "${hm_args[@]}" --flake ".?submodules=1#${username}@${host}-${arch}"
+            '.#home-manager-cli' -- \
+            switch -b hmbak "${hm_args[@]}" --flake ".#${username}@${host}-${arch}"
     fi
 
     if [[ "$do_git" == true ]]; then

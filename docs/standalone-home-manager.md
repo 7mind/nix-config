@@ -9,7 +9,7 @@ Install Nix with flakes enabled, then clone this repository as `pavel`. From
 the repository root, run:
 
 ```sh
-nix run '.?submodules=0#home-manager-cli' -- switch -b hmbak --flake '.?submodules=0#pavel@ubuntu-x86_64'
+nix run '.#home-manager-cli' -- switch -b hmbak --flake '.#pavel@ubuntu-x86_64'
 ```
 
 The CLI comes from this flake's pinned Home Manager input. `-b hmbak` backs up
@@ -64,9 +64,8 @@ leaves staged changes but does not commit or push. It does not fetch or rebase.
   they must also be accepted by `nix eval`, `nix run`, and `nix develop`.
   Rekey shell bootstrap receives the same input overrides.
 
-The helper uses the pinned CLI and `hmbak` backups from the command above, with
-submodules enabled when present. Use the explicit `?submodules=0` command above
-when you need to exclude submodules.
+The helper uses the pinned CLI and `hmbak` backups from the command above.
+`NIX_CONFIG_FLAKE_DIR` sets its default configuration root; `--flake-dir` takes precedence.
 
 ## Optional profile-scoped rekey
 
@@ -105,7 +104,8 @@ identity and remain outside the checkout. `AGE_TPM_IDENTITY` and
 variables do not modify the Nix profile. Normal switches do not unlock keys.
 
 Rekey uses the selected profile's pinned agenix-rekey input and accepts only
-local storage under `private/secrets/rekeyed/<profile-directory>`. It stages source
+local storage under `secrets/rekeyed/<profile-directory>` (or
+`private/secrets/rekeyed/<profile-directory>` in an older combined checkout). It stages source
 before evaluation and the selected directory's generated ciphertext before
 building/activating. Input overrides are applied to metadata evaluation, rekey,
 and activation. Stage new files in any sibling Git-flake input separately.

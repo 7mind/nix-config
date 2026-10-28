@@ -1,6 +1,14 @@
+{ privateRoot ? null }:
+
+let
+  publicRoot = builtins.path { path = ./.; name = "source"; };
+in
 rec {
   import_if_exists_or = path: default: if builtins.pathExists path then import path else default;
   import_if_exists = path: import_if_exists_or path { };
+  importPrivate = relative: default:
+    if privateRoot == null then default
+    else import_if_exists_or (privateRoot + "/${relative}") default;
 
   smind-nixos-imports = builtins.concatLists [
     (import ./lib/_imports.nix)
@@ -9,11 +17,11 @@ rec {
     (import ./modules/nixos/_imports.nix)
     (import ./roles/nixos/_imports.nix)
 
-    (import_if_exists_or ./private/lib/_imports.nix [ ])
-    (import_if_exists_or ./private/modules/generic/_imports.nix [ ])
-    (import_if_exists_or ./private/modules/nix-generic/_imports.nix [ ])
-    (import_if_exists_or ./private/modules/nixos/_imports.nix [ ])
-    (import_if_exists_or ./private/roles/nixos/_imports.nix [ ])
+    (importPrivate "lib/_imports.nix" [ ])
+    (importPrivate "modules/generic/_imports.nix" [ ])
+    (importPrivate "modules/nix-generic/_imports.nix" [ ])
+    (importPrivate "modules/nixos/_imports.nix" [ ])
+    (importPrivate "roles/nixos/_imports.nix" [ ])
   ];
 
   smind-darwin-imports = builtins.concatLists [
@@ -24,11 +32,11 @@ rec {
     (import ./roles/darwin/_imports.nix)
 
 
-    (import_if_exists_or ./private/lib/_imports.nix [ ])
-    (import_if_exists_or ./private/modules/generic/_imports.nix [ ])
-    (import_if_exists_or ./private/modules/nix-generic/_imports.nix [ ])
-    (import_if_exists_or ./private/modules/darwin/_imports.nix [ ])
-    (import_if_exists_or ./private/roles/darwin/_imports.nix [ ])
+    (importPrivate "lib/_imports.nix" [ ])
+    (importPrivate "modules/generic/_imports.nix" [ ])
+    (importPrivate "modules/nix-generic/_imports.nix" [ ])
+    (importPrivate "modules/darwin/_imports.nix" [ ])
+    (importPrivate "roles/darwin/_imports.nix" [ ])
   ];
 
   smind-hm = {
@@ -38,23 +46,23 @@ rec {
       (import ./modules/hm/_imports.nix)
       (import ./roles/hm/_imports.nix)
 
-      (import_if_exists_or ./private/lib/_imports.nix [ ])
-      (import_if_exists_or ./private/modules/generic/_imports.nix [ ])
-      (import_if_exists_or ./private/modules/hm/_imports.nix [ ])
-      (import_if_exists_or ./private/roles/hm/_imports.nix [ ])
+      (importPrivate "lib/_imports.nix" [ ])
+      (importPrivate "modules/generic/_imports.nix" [ ])
+      (importPrivate "modules/hm/_imports.nix" [ ])
+      (importPrivate "roles/hm/_imports.nix" [ ])
     ];
   };
 
-  pathsFor = self: {
-    root = "${self}";
-    pkg = "${self}/pkg";
-    private = "${self}/private";
-    secrets = "${self}/private/secrets";
-    lib = "${self}/lib";
-    modules = "${self}/modules";
-    modules-hm = "${self}/modules/hm";
-    modules-nix = "${self}/modules/nix";
-    users = "${self}/users";
+  pathsFor = _: {
+    root = "${publicRoot}";
+    pkg = "${publicRoot}/pkg";
+    private = if privateRoot == null then "${publicRoot}/private" else "${privateRoot}";
+    secrets = if privateRoot == null then "${publicRoot}/private/secrets" else "${privateRoot}/secrets";
+    lib = "${publicRoot}/lib";
+    modules = "${publicRoot}/modules";
+    modules-hm = "${publicRoot}/modules/hm";
+    modules-nix = "${publicRoot}/modules/nix";
+    users = "${publicRoot}/users";
   };
 
   homePlatformModules = inputs: isDarwin:
@@ -83,7 +91,7 @@ rec {
 
       cfg-const = pkgs.lib.recursiveUpdate
         const.const
-        (import_if_exists ./private/config.nix);
+        (importPrivate "config.nix" { });
 
 
       cfg-packages = const.cfg-packages {
@@ -366,7 +374,7 @@ rec {
             { nixpkgs.hostPlatform = arch; }
             { system.stateVersion = cfg-meta.state-version-system; }
             (cfg-args.import_if_exists ./hosts/${hostname}/cfg-${hostname}.nix)
-            (cfg-args.import_if_exists ./private/hosts/${hostname}/cfg-${hostname}.nix)
+            (importPrivate "hosts/${hostname}/cfg-${hostname}.nix" { })
             ({ config, lib, ... }:
               let
                 host = import ./lib/home-host-context.nix { inherit config lib; };
@@ -390,10 +398,10 @@ rec {
       candidate = root:
         let path = root + "/${source}.nix";
         in if builtins.pathExists path then [ path ] else [ ];
-      modules = candidate ./home ++ candidate ./private/home;
+      modules = candidate ./home ++ (if privateRoot == null then [ ] else candidate (privateRoot + "/home"));
     in
     if modules == [ ] then
-      throw "No Home Manager source ${source}. Expected home/${source}.nix or private/home/${source}.nix."
+      throw "No Home Manager source ${source}. Expected home/${source}.nix in the public or downstream root."
     else modules;
 
   make-home = { inputs, self }: { source, username, host }:

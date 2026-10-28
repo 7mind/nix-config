@@ -7,7 +7,12 @@ set -euo pipefail
 # but needs the decrypted key present at every path it references
 # (Linux: /dev/shm/age-master-key, Darwin: /tmp/age-master-key).
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+export NIX_CONFIG_FLAKE_DIR="$(cd -- "${NIX_CONFIG_FLAKE_DIR:-$SCRIPT_DIR}" && pwd -P)"
+cd -- "$NIX_CONFIG_FLAKE_DIR"
+if [[ "${NIX_CONFIG_DEV_SHELL:-}" != 1 ]]; then
+    exec nix develop . --command env NIX_CONFIG_DEV_SHELL=1 "$SCRIPT_DIR/update-masterkeys" "$@"
+fi
 
 AGE_TPM_IDENTITY="${AGE_TPM_IDENTITY:-${HOME}/.age/tpm-identity.txt}"
 AGE_MASTER_KEY_TPM="${AGE_MASTER_KEY_TPM:-${HOME}/.age/master-key.age}"
@@ -15,7 +20,7 @@ AGE_MASTER_KEY_TPM="${AGE_MASTER_KEY_TPM:-${HOME}/.age/master-key.age}"
 KEY_LINUX="/dev/shm/age-master-key"
 KEY_DARWIN="/tmp/age-master-key"
 
-[[ -f "$SCRIPT_DIR/private/setup-env" ]] && source "$SCRIPT_DIR/private/setup-env"
+[[ -f "$NIX_CONFIG_FLAKE_DIR/setup-env" ]] && source "$NIX_CONFIG_FLAKE_DIR/setup-env"
 
 CREATED_KEYS=()
 
@@ -29,6 +34,9 @@ trap cleanup EXIT
 decrypt_master_key() {
     local target="$1"
 
+    if [[ ! -e "$target" ]]; then
+        CREATED_KEYS+=("$target")
+    fi
     if [[ "$(uname -s)" == "Darwin" ]]; then
         local password_key="${HOME}/age-key.age"
         if [[ ! -f "$password_key" ]]; then
@@ -36,7 +44,7 @@ decrypt_master_key() {
             return 1
         fi
         echo "    Decrypting master key (enter password)..." >&2
-        age -d -o "$target" "$password_key"
+        age -d -o "$target" "$password_key" || return 1
     else
         if [[ ! -f "$AGE_MASTER_KEY_TPM" ]]; then
             echo "Error: TPM-encrypted master key not found: $AGE_MASTER_KEY_TPM" >&2
@@ -54,7 +62,7 @@ decrypt_master_key() {
             return 1
         fi
         echo "    Decrypting master key via TPM..." >&2
-        age -d -i "$AGE_TPM_IDENTITY" -o "$target" "$AGE_MASTER_KEY_TPM" 2>/dev/null
+        age -d -i "$AGE_TPM_IDENTITY" -o "$target" "$AGE_MASTER_KEY_TPM" 2>/dev/null || return 1
     fi
     chmod 600 "$target"
 }
@@ -69,8 +77,8 @@ place_key() {
         else
             cp "${CREATED_KEYS[0]}" "$path"
             chmod 600 "$path"
+            CREATED_KEYS+=("$path")
         fi
-        CREATED_KEYS+=("$path")
     fi
 }
 
@@ -80,6 +88,6 @@ place_key "$KEY_DARWIN"
 
 echo "==> Running agenix update-masterkeys..."
 local_system="$(uname -m)-$(uname -s | tr '[:upper:]' '[:lower:]')"
-nix run ".?submodules=1#agenix-rekey.${local_system}.update-masterkeys"
+nix run ".#agenix-rekey.${local_system}.update-masterkeys"
 
 echo "==> Done. Don't forget to commit the updated secrets and re-run ./setup -k for affected hosts."

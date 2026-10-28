@@ -232,7 +232,7 @@ sys.exit(int(os.environ.get('TEST_AGE_STATUS', '0')))
         self.assert_success(self.invoke(f'--flake-dir={external}', '--no-push', '-m', 'external update'))
         self.assertFalse((external / 'switch-hm').exists())
         self.assertEqual(self.calls()[0]['cwd'], str(external))
-        self.assertEqual(self.calls()[0]['args'][-1], '.?submodules=1#alice@workstation-x86_64')
+        self.assertEqual(self.calls()[0]['args'][-1], '.#alice@workstation-x86_64')
         self.assertEqual(self.git('log', '-1', '--format=%B', cwd=external), 'external update')
         self.assertEqual(self.git('status', '--porcelain', cwd=external), '')
         self.assertEqual(self.git('status', '--porcelain'), source_state)
@@ -319,8 +319,8 @@ sys.exit(int(os.environ.get('TEST_AGE_STATUS', '0')))
         self.assert_success(self.invoke())
         self.assertEqual(self.calls(), [{"cwd": str(self.repo), "args": [
             "--extra-experimental-features", "nix-command flakes", "run",
-            ".?submodules=1#home-manager-cli", "--", "switch", "-b", "hmbak",
-            "--flake", ".?submodules=1#alice@workstation-x86_64",
+            ".#home-manager-cli", "--", "switch", "-b", "hmbak",
+            "--flake", ".#alice@workstation-x86_64",
         ]}])
         for repo in [self.repo, self.module]:
             self.assertEqual(self.git("log", "-1", "--format=%B", cwd=repo), "autosave")
@@ -334,7 +334,7 @@ sys.exit(int(os.environ.get('TEST_AGE_STATUS', '0')))
 
     def test_no_git_skips_commits_and_push_but_stages_for_flake_visibility(self):
         self.assert_success(self.invoke("-n", "another-host", "--user", "bob", "--", "--show-trace"))
-        self.assertEqual(self.calls()[0]["args"][-3:], ["--show-trace", "--flake", ".?submodules=1#bob@another-host-x86_64"])
+        self.assertEqual(self.calls()[0]["args"][-3:], ["--show-trace", "--flake", ".#bob@another-host-x86_64"])
         self.assertEqual(self.git("rev-parse", "HEAD"), self.initial)
         self.assertEqual(self.git("rev-parse", "HEAD", cwd=self.module), self.module_initial)
         self.assertIn("settings.txt", self.git("diff", "--cached", "--name-only"))
@@ -357,7 +357,7 @@ sys.exit(int(os.environ.get('TEST_AGE_STATUS', '0')))
         ]:
             with self.subTest(platform=platform, architecture=architecture):
                 self.assert_success(self.invoke("--no-git", overrides={"TEST_OS": platform, "TEST_ARCH": architecture}))
-                self.assertEqual(self.calls()[-1]["args"][-1], f".?submodules=1#alice@workstation-{suffix}")
+                self.assertEqual(self.calls()[-1]["args"][-1], f".#alice@workstation-{suffix}")
 
     def test_switch_failure_does_not_commit_or_push(self):
         result = self.invoke(overrides={"TEST_NIX_STATUS": "17"})
@@ -391,7 +391,7 @@ sys.exit(int(os.environ.get('TEST_AGE_STATUS', '0')))
                 self.assertEqual(call["args"][:3], [
                     "--extra-experimental-features", "nix-command flakes", "eval",
                 ])
-                self.assertIn(".?submodules=1#homeConfigurations", call["args"])
+                self.assertIn(".#homeConfigurations", call["args"])
                 self.assertIn("--raw", call["args"])
                 self.assertIn("--apply", call["args"])
                 self.assertIn("--no-write-lock-file", call["args"])
@@ -537,7 +537,7 @@ sys.exit(int(os.environ.get('TEST_AGE_STATUS', '0')))
     # sources, but Nix/SSH/age remain recording boundaries with no activation.
     def test_local_switch_keeps_selected_flake_after_passthrough_and_preserves_option_values(self):
         external = self.external_checkout()
-        selected = '.?submodules=1#alice@workstation-x86_64'
+        selected = '.#alice@workstation-x86_64'
         for extra in [('--flake', 'path:/unrelated#other'), ('--argstr', 'name', '--flake')]:
             with self.subTest(extra=extra):
                 self.log.unlink(missing_ok=True)
@@ -557,7 +557,7 @@ sys.exit(int(os.environ.get('TEST_AGE_STATUS', '0')))
         self.assertEqual(self.calls(), [{'cwd': str(self.repo), 'args': [
             '--extra-experimental-features', 'nix-command flakes', 'build',
             '--dry-run', '--no-link',
-            '.?submodules=1#homeConfigurations."alice@workstation-x86_64".activationPackage',
+            '.#homeConfigurations."alice@workstation-x86_64".activationPackage',
             '--show-trace',
         ]}])
         self.assertEqual(self.ssh_calls(), [])
@@ -571,7 +571,7 @@ sys.exit(int(os.environ.get('TEST_AGE_STATUS', '0')))
     def test_local_dry_run_selects_darwin_arm_configuration(self):
         self.assert_success(self.invoke('--dry-run', overrides={'TEST_OS': 'Darwin', 'TEST_ARCH': 'arm64'}))
         self.assertEqual(self.calls()[0]['args'][-1],
-                         '.?submodules=1#homeConfigurations."alice@workstation-aarch64-darwin".activationPackage')
+                         '.#homeConfigurations."alice@workstation-aarch64-darwin".activationPackage')
         self.assertEqual(self.ssh_calls(), [])
         self.assertEqual(self.git('rev-parse', 'HEAD'), self.initial)
 
@@ -582,7 +582,7 @@ sys.exit(int(os.environ.get('TEST_AGE_STATUS', '0')))
         self.assertEqual(len(self.calls()), 1)
         self.assertEqual(self.calls()[0]['cwd'], str(external))
         self.assertEqual(self.calls()[0]['args'][-1],
-                         '.?submodules=1#homeConfigurations."bob@declared-host-x86_64".activationPackage')
+                         '.#homeConfigurations."bob@declared-host-x86_64".activationPackage')
         self.assertIn('profile.nix', self.git('diff', '--cached', '--name-only', cwd=external))
         self.assertEqual(self.git('diff', '--cached', '--name-only'), '')
         self.assertEqual(self.git('log', '-1', '--format=%s', cwd=external), 'initial')
@@ -675,7 +675,7 @@ sys.exit(int(os.environ.get('TEST_AGE_STATUS', '0')))
         calls = self.calls()
         self.assertEqual(len(calls), 4)
         self.assertIn('develop', calls[0]['args'])
-        self.assertIn('.?submodules=1', calls[0]['args'])
+        self.assertIn('.', calls[0]['args'])
         self.assertIn('--no-write-lock-file', calls[0]['args'])
         self.assertIn('NIX_CONFIG_DEV_SHELL=1', calls[0]['args'])
         self.assertEqual(calls[0]['cwd'], str(self.repo))
@@ -926,7 +926,7 @@ sys.exit(int(os.environ.get('TEST_AGE_STATUS', '0')))
         calls = self.calls()
         self.assertEqual(len(calls), 3)
         self.assertTrue(any(arg.endswith('.config.age') for arg in calls[0]['args']))
-        self.assertIn('.?submodules=1#agenix-rekey-homes."alice@workstation-x86_64".x86_64-linux.rekey', calls[1]['args'])
+        self.assertIn('.#agenix-rekey-homes."alice@workstation-x86_64".x86_64-linux.rekey', calls[1]['args'])
         self.assertIn('home-manager-cli', ' '.join(calls[2]['args']))
         for call in calls:
             self.assertIn('--override-input', call['args'])
@@ -958,7 +958,7 @@ sys.exit(int(os.environ.get('TEST_AGE_STATUS', '0')))
         self.assertEqual(len(calls), 5)
         self.assertTrue(any(arg.endswith('.config.home') for arg in calls[0]['args']))
         self.assertTrue(any(arg.endswith('.config.age') for arg in calls[1]['args']))
-        self.assertIn('.?submodules=1#agenix-rekey-homes."alice@server-aarch64".x86_64-linux.rekey', calls[2]['args'])
+        self.assertIn('.#agenix-rekey-homes."alice@server-aarch64".x86_64-linux.rekey', calls[2]['args'])
         self.assertIn('build', calls[3]['args'])
         self.assertIn('copy', calls[4]['args'])
         self.assertTrue(all(call['cwd'] == str(self.repo) for call in calls))
@@ -997,7 +997,7 @@ sys.exit(int(os.environ.get('TEST_AGE_STATUS', '0')))
         Path(self.env['TEST_REKEY_IDENTITY']).write_text('synthetic identity\n')
         result = self.invoke('--rekey', '-n', overrides={'TEST_OS': 'Darwin', 'TEST_ARCH': 'arm64'})
         self.assert_success(result)
-        self.assertIn('.?submodules=1#agenix-rekey-homes."alice@workstation-aarch64-darwin".aarch64-darwin.rekey',
+        self.assertIn('.#agenix-rekey-homes."alice@workstation-aarch64-darwin".aarch64-darwin.rekey',
                       self.calls()[1]['args'])
 
     def test_remote_identity_mismatch_prevents_rekey(self):

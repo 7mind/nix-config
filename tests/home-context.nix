@@ -1,4 +1,4 @@
-{ flake }:
+{ flake, privateRoot ? null }:
 let
   lib = flake.inputs.nixpkgs.lib;
   make = flake.globals.make-home { inputs = flake.inputs; self = flake; };
@@ -21,8 +21,8 @@ let
   # Owner-secret consumers must degrade per-secret when a host filters the
   # standard set with smind.age.owner-secrets: pavel-trx40 loads only
   # "github-*", pavel-am5 loads the full set. The consumers live in private HM
-  # modules, so these checks only run when the private submodule is present.
-  hasPrivate = builtins.pathExists ../private/home/pavel-trx40.nix;
+  # modules, so these checks only run when the downstream root is present.
+  hasPrivate = privateRoot != null && builtins.pathExists (privateRoot + "/home/pavel-trx40.nix");
   trx40Pavel = flake.nixosConfigurations.pavel-trx40.config.home-manager.users.pavel;
   am5Pavel = flake.nixosConfigurations.pavel-am5.config.home-manager.users.pavel;
   root = system: make {
@@ -50,7 +50,7 @@ let
   config = standalone.value.config;
   otherConfig = relocated.value.config;
   nixos = flake.nixosConfigurations.pavel-trx40;
-  privateContexts = flake.globals.import_if_exists_or ../private/tests/home-context.nix (_: { exports = [ ]; }) { inherit flake; };
+  privateContexts = flake.globals.importPrivate "tests/home-context.nix" (_: { exports = [ ]; }) { inherit flake; };
 in
 assert lib.assertMsg (!hasPrivate || trx40Pavel.smind.hm.nix.githubAccessTokenFile == "/run/agenix/github-token-autopeasant") "pavel-trx40: the agent GitHub token must survive owner secret filtering";
 assert lib.assertMsg (!hasPrivate || trx40Pavel.smind.hm.dev.llm.yolo.secretSessionVariables.GH_TOKEN == "/run/agenix/github-token-autopeasant") "pavel-trx40: the agent GH_TOKEN must survive owner secret filtering";

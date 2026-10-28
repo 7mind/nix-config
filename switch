@@ -3,7 +3,7 @@
 set -xe
 
 function workdir() {
-    ORIGIN="$(cd "$(dirname "$0")" && pwd)"
+    ORIGIN="$(cd -- "${NIX_CONFIG_FLAKE_DIR:-$(dirname -- "${BASH_SOURCE[0]}")}" && pwd -P)"
     pushd .
     cd "$ORIGIN"
 }
@@ -19,6 +19,6 @@ add_all
 git submodule foreach git commit -am "autosave" || true
 git commit -am "autosave" || true
 
-sudo nixos-rebuild switch --flake "${PWD}?submodules=1" "$@"
+sudo nixos-rebuild switch --flake "${PWD}" "$@"
 
 popd

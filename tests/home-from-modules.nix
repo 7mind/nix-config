@@ -2,6 +2,8 @@
 let
   lib = flake.inputs.nixpkgs.lib;
   globals = flake.globals;
+  publicSource = flake.inputs.nix-config or flake;
+  paths = globals.pathsFor flake;
   build = globals.make-home-from-modules { inputs = flake.inputs; self = flake; };
   host = {
     hostname = "external-workstation";
@@ -33,6 +35,8 @@ let
   };
 in
 # WA @specified: inspect the required API arguments and returned metadata/modules.
+assert lib.assertMsg (paths.root == publicSource.outPath) "Public paths must retain the public flake source identity";
+assert lib.assertMsg (builtins.getContext paths.root == builtins.getContext publicSource.outPath) "Public paths must retain the public flake source context";
 assert lib.assertMsg (builtins.functionArgs build == { modules = false; username = false; host = false; }) "Explicit modules, username, and host must remain required";
 assert lib.assertMsg (home.name == "alex@external-workstation-x86_64" && home.hostname == host.hostname && home.username == "alex") "Explicit-module instances must preserve naming and metadata";
 assert lib.assertMsg (builtins.length home.modules == 2 && builtins.length legacy.modules == 2) "Both builders must append exactly one host-context module";
@@ -43,6 +47,8 @@ assert lib.assertMsg (config.home.sessionVariables.EXTERNAL_PROFILE == "explicit
 assert lib.assertMsg (builtins.filter (a: !a.assertion) config.assertions == [ ]) "Explicit-module configuration must pass assertions";
 assert lib.assertMsg ((builtins.head lazy.modules).home.sessionVariables.EXTERNAL_PROFILE == "lazy" && (builtins.elemAt lazy.modules 1).home.homeDirectory == "/srv/homes/alex") "Integrated modules must not force standalone evaluation";
 {
+  publicSourceIdentity = true;
+  publicSourceContext = true;
   explicitModules = true;
   legacySource = true;
   metadata = true;

@@ -16,17 +16,18 @@ fi
 AGE_DECRYPTED_KEY=""  # Set during rekey
 
 THISHOST="$(hostname -s)"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+export NIX_CONFIG_FLAKE_DIR="$(cd -- "${NIX_CONFIG_FLAKE_DIR:-$SCRIPT_DIR}" && pwd -P)"
+cd -- "$NIX_CONFIG_FLAKE_DIR"
 ROOTS=/nix/var/nix/gcroots/my-builds
 
 # The entry point may be invoked from a parent directory where .envrc is not
 # active. Re-enter in this flake's dev shell before any setup work begins.
 if [[ "${NIX_CONFIG_DEV_SHELL:-}" != 1 ]]; then
-    cd "$SCRIPT_DIR"
-    exec nix develop ".?submodules=1" --command env NIX_CONFIG_DEV_SHELL=1 "$SCRIPT_DIR/setup" "$@"
+    exec nix develop "." --command env NIX_CONFIG_DEV_SHELL=1 "$SCRIPT_DIR/setup" "$@"
 fi
 
-[[ -f "$SCRIPT_DIR/private/setup-env" ]] && source "$SCRIPT_DIR/private/setup-env"
+[[ -f "$NIX_CONFIG_FLAKE_DIR/setup-env" ]] && source "$NIX_CONFIG_FLAKE_DIR/setup-env"
 
 # agenix-rekey reads the master identity at the path baked into the *target*
 # host's config, which follows the target platform (modules/nix-generic/age.nix):
@@ -103,8 +104,8 @@ Options:
   -h, --help        Show this help message
 
 Host specifiers:
-  HOST                 Individual host name (e.g., o1, pavel-fw)
-  +GROUP               All hosts in a group (e.g., +infra, +pavel)
+  HOST                 Individual host name (e.g., pavel-fw, pavel-am5)
+  +GROUP               All hosts in a group (e.g., +default)
 
 With --hm-only, hosts come from homeConfigurations for the current user;
 +USER selects that user's homes. Remote switches need an address override.
@@ -112,24 +113,23 @@ On NixOS, install the integration with ./setup -s first; ./setup --hm-only -s
 then persists across reboot. A system switch or rollback selects its bundled HM.
 
 Upstream sync:
-  Unless --offline is given, setup fetches upstream for the main repo
-  and the private submodule (when configured) and rebases the current
-  branches onto their upstreams before building anything. If the
-  rebase cannot proceed automatically, setup exits early.
+  Unless --offline is given, setup fetches upstream for the selected
+  configuration repository and its initialized submodules, and rebases
+  their current branches before building. A failed rebase stops setup.
 
 Examples:
   $(basename "$0")                  # Build current host
   $(basename "$0") -s               # Build and switch current host
   $(basename "$0") -k -s            # Rekey, build, and switch current host
-  $(basename "$0") o1 o2            # Build o1 and o2
-  $(basename "$0") +infra           # Build all hosts in 'infra' group
-  $(basename "$0") -k +infra        # Rekey and build all infra hosts
+  $(basename "$0") pavel-fw pavel-am5  # Build pavel-fw and pavel-am5
+  $(basename "$0") +default         # Build all hosts in 'default' group
+  $(basename "$0") -k +default      # Rekey and build all hosts in 'default' group
   $(basename "$0") -r -s            # Update flake, build, and switch
   $(basename "$0") pavel-fw -s --allow-short-host
                               # Remote switch via short host name when no FQDN is defined
   $(basename "$0") pavel-fw -n -s --host-override pavel-fw=192.100.100.25
                               # Build + switch pavel-fw, deploying to a specific address
-  $(basename "$0") +infra -s --host-override o1=10.0.0.1 --host-override o2=10.0.0.2
+  $(basename "$0") +default -s --host-override pavel-fw=10.0.0.1 --host-override pavel-am5=10.0.0.2
                               # Deploy a group with per-host address overrides
   $(basename "$0") --build-on pavel-trx40
                               # Build the current host only on pavel-trx40
@@ -143,7 +143,7 @@ load_host_meta() {
     add_all
     local json meta_attr="hostMeta"
     [[ "$DO_HM_ONLY" == "true" ]] && meta_attr="homeMeta"
-    json=$(nix eval ".?submodules=1#${meta_attr}" --json) || exit 1
+    json=$(nix eval ".#${meta_attr}" --json) || exit 1
 
     if [[ "$DO_HM_ONLY" == "true" ]]; then
         json=$(echo "$json" | jq --arg user "$(id -un)" '
@@ -602,13 +602,11 @@ do_git_sync() {
         return 0
     fi
 
-    sync_repo "$SCRIPT_DIR" "main repo" || exit 1
-
-    if [[ -d "$SCRIPT_DIR/private" ]] && git -C "$SCRIPT_DIR/private" rev-parse --git-dir >/dev/null 2>&1; then
-        sync_repo "$SCRIPT_DIR/private" "private submodule" || exit 1
-    else
-        echo "    private submodule: not configured, skipping upstream sync"
-    fi
+    sync_repo "$NIX_CONFIG_FLAKE_DIR" "configuration repository" || exit 1
+    local submodule
+    while IFS= read -r submodule; do
+        sync_repo "$NIX_CONFIG_FLAKE_DIR/$submodule" "$submodule" || exit 1
+    done < <(git submodule foreach --quiet 'printf "%s\n" "$sm_path"')
 }
 
 add_all() {
@@ -763,7 +761,7 @@ do_rekey() {
             fi
 
             echo "    Rekeying $host (group: $group)..."
-            nix run ".?submodules=1#agenix-rekey-hosts.${host}.${system}.rekey"
+            nix run ".#agenix-rekey-hosts.${host}.${system}.rekey"
         done
 
         cleanup_decrypted_key
@@ -816,18 +814,18 @@ do_build() {
 
         echo "    Building $host ($platform)..."
         if [[ "$DO_HM_ONLY" == "true" ]]; then
-            nix build ".?submodules=1#homeConfigurations.\"$(get_host_attr "$host" homeConfiguration)\".switchPackage" \
+            nix build ".#homeConfigurations.\"$(get_host_attr "$host" homeConfiguration)\".switchPackage" \
                 --out-link "${ROOTS}/${host}" "${build_args[@]}"
             continue
         fi
         case "$platform" in
             darwin)
-                nix build ".?submodules=1#darwinConfigurations.${host}.system" \
+                nix build ".#darwinConfigurations.${host}.system" \
                     --out-link "${ROOTS}/${host}" \
                     "${build_args[@]}"
                 ;;
             linux)
-                nix build ".?submodules=1#nixosConfigurations.${host}.config.system.build.toplevel" \
+                nix build ".#nixosConfigurations.${host}.config.system.build.toplevel" \
                     --out-link "${ROOTS}/${host}" \
                     "${build_args[@]}"
                 ;;
@@ -976,7 +974,7 @@ main() {
         set -x
     fi
 
-    cd "$SCRIPT_DIR"
+    cd -- "$NIX_CONFIG_FLAKE_DIR"
     do_resock
     do_git_sync
     configure_build_on

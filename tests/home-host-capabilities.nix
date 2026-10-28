@@ -1,14 +1,10 @@
-{ lib, pkgs }:
+{ lib, pkgs, profiles ? [ ] }:
 let
   ageSecretHelpers = import ../lib/age-user-secret.nix;
-  profiles = [
+  allProfiles = [
     { name = "pavel-am5"; path = ../home/pavel-am5.nix; model = "qwen3.8-27b-q8"; }
     { name = "pavel-fw"; path = ../home/pavel-fw.nix; model = "qwen3.8-27b-q4"; }
-  ] ++ lib.optional (builtins.pathExists ../private/modules/hm/dev-llm-private.nix) {
-    name = "vm";
-    path = ../private/modules/hm/dev-llm-private.nix;
-    model = "qwen3.8-27b-q4";
-  };
+  ] ++ profiles;
   evaluate = profile: capability:
     (lib.evalModules {
       specialArgs = {
@@ -39,9 +35,7 @@ let
             smind.hm.dev.llm.enable = true;
           };
         }
-      ] ++ lib.optional (profile.name == "vm") {
-        smind.hm.dev.llm.pi.llamaSwap.enable = true;
-      };
+      ] ++ (profile.modules or [ ]);
     }).config;
   failures = config: builtins.filter (a: !a.assertion) config.assertions;
   check = profile:
@@ -68,4 +62,4 @@ let
     assert lib.assertMsg (builtins.length (failures missingPort) == 1) "${profile.name}: enabled service must validate its port";
     { name = profile.name; value = true; };
 in
-builtins.listToAttrs (map check profiles)
+builtins.listToAttrs (map check allProfiles)

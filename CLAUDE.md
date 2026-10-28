@@ -5,7 +5,7 @@
 After a trivial change concerning exactly one host, verifying just that host is enough (substitute the hostname reported by the SessionStart hook — `$HOSTNAME` is bash-only and is empty under zsh, the user's login shell):
 
 ```bash
-# Build the current host (replace HOSTNAME with the actual short hostname, e.g. vm, pavel-am5, pavel-fw)
+# Build the current host (replace HOSTNAME with the actual short hostname, e.g. pavel-am5, pavel-fw)
 ./verify-configs --verbose HOSTNAME
 ```
 
@@ -17,35 +17,35 @@ After significant changes that may affect many hosts (for example shared modules
 ```
 
 When verifying new features, run the same steps as CI:
-  1. Check whether hosts build without private modules:
+  1. Check the public configurations:
     ```bash
-    # Build all public hosts without private modules
-    ./verify-configs --verbose --no-submodules
+    # Build all public hosts
+    ./verify-configs --verbose
     ```
-  2. Run `nix flake check --no-build '.?submodules=0'`
+  2. Run `nix flake check --no-build '.'`
 
 Prefer using `./verify-configs`/`nix build --dry-run` over `nix build` for verification to avoid slow building of packages.
 When changing Home Manager activations a full nix build may still be required as those require executing activations themselves to verify their correctness.
 
-This repository uses git submodules. Always use `?submodules=1` when building or using `nix eval` (unless verifying CI steps):
+This flake works independently. Downstream configuration repositories consume `lib.mkFlake` and use their own checkout as the flake root:
 
 ```bash
 # Build a specific host configuration
-nix build ".?submodules=1#nixosConfigurations.HOSTNAME.config.system.build.toplevel"
+nix build ".#nixosConfigurations.HOSTNAME.config.system.build.toplevel"
 
 # Examples:
-nix build ".?submodules=1#nixosConfigurations.pavel-fw.config.system.build.toplevel"
-nix build ".?submodules=1#nixosConfigurations.pavel-am5.config.system.build.toplevel"
+nix build ".#nixosConfigurations.pavel-fw.config.system.build.toplevel"
+nix build ".#nixosConfigurations.pavel-am5.config.system.build.toplevel"
 
 # For Darwin (macOS):
-nix build ".?submodules=1#darwinConfigurations.HOSTNAME.system"
+nix build ".#darwinConfigurations.HOSTNAME.system"
 ```
 
 Use `./setup` script for full build + switch workflow:
 - `./setup` - build current host
 - `./setup -s` - build and switch
 - `./setup -r` - update flake inputs before building
-- `./setup -ng` - skip git commit/push
+- `./setup -n` - skip git commit/push
 
 ## Structure
 
@@ -54,4 +54,4 @@ Use `./setup` script for full build + switch workflow:
 - `/modules/darwin/` - macOS modules
 - `/modules/hm/` - Home-manager modules
 - `/roles/` - High-level role definitions
-- `/private/` - Secrets and private configs (submodule)
+- `/lib/mk-flake.nix` - Shared output composition for downstream flakes

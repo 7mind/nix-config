@@ -17,15 +17,15 @@ if [ "${3:-}" == "--no-switch" ]; then
     DO_SWITCH=false
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR"
+export NIX_CONFIG_FLAKE_DIR="$(cd -- "${NIX_CONFIG_FLAKE_DIR:-$(dirname -- "${BASH_SOURCE[0]}")}" && pwd -P)"
+cd -- "$NIX_CONFIG_FLAKE_DIR"
 
 echo "==> Building configuration for $FLAKE_HOSTNAME..."
 # Keep a temporary GC root so the copied closure cannot be collected.
 mkdir -p .tmp/builds
 OUT_LINK=".tmp/builds/$FLAKE_HOSTNAME"
 
-nix build ".?submodules=1#nixosConfigurations.${FLAKE_HOSTNAME}.config.system.build.toplevel" \
+nix build ".#nixosConfigurations.${FLAKE_HOSTNAME}.config.system.build.toplevel" \
     --out-link "$OUT_LINK"
 
 CLOSURE=$(readlink -f "$OUT_LINK")
