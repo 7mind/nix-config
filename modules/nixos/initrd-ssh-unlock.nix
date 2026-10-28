@@ -58,7 +58,6 @@
 
       systemd =
         {
-          enable = true;
           emergencyAccess = true;
 
           initrdBin = with pkgs; [

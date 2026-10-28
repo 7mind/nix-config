@@ -37,7 +37,6 @@
       initrd = {
         kernelModules = [ "r8169" ];
         systemd = {
-          enable = true;
           emergencyAccess = true;
           initrdBin = with pkgs; [
             busybox

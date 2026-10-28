@@ -24,7 +24,6 @@ in
       boot.plymouth.enable = true;
       boot.plymouth.theme = cfg.theme;
       boot.consoleLogLevel = 3;
-      boot.initrd.verbose = false;
       boot.kernelParams = [ "quiet" "splash" ];
     }
 

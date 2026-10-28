@@ -69,34 +69,23 @@
       # man pages. fwupd depends on the tools, not their documentation.
       tpm2-tools = prev.tpm2-tools.override { enableManpages = false; };
 
-      # Match the AOTriton API pinned by PyTorch 2.13's own build configuration.
-      rocmPackages = prev.rocmPackages.overrideScope (_: rocm-prev: {
-        aotriton = rocm-prev.aotriton.overrideAttrs (old: {
-          version = "0.12b";
-          src = prev.fetchFromGitHub {
-            owner = "ROCm";
-            repo = "aotriton";
-            tag = "0.12b";
-            hash = "sha256-KOc+xAoWABjokIEq5n9olpln3JUqVFYGADLwqV/H2Zc=";
-          };
-          patches = (old.patches or [ ]) ++ [ ../../pkg/aotriton/aiter-source.patch ];
-          cmakeFlags = old.cmakeFlags ++ [
-            (prev.lib.cmakeFeature "AOTRITON_AITER_SOURCE" (toString (prev.fetchFromGitHub {
-              owner = "ROCm";
-              repo = "aiter";
-              tag = "v0.1.11";
-              hash = "sha256-e1C/baFYkm1/iuLUCcCLyiHfivRgBb96lnVGH9mOmM0=";
-            })))
-          ];
-          env = old.env // {
-            AOTRITON_CI_SUPPLIED_SHA1 = "269036897bcee4292f4e928767df1e3dd0e3c8bd";
-            AOTRITON_GIT_TREESHA1 = "35bfbd0ebe2fd774e97cdc12421592c23f59abfe";
-          };
+      # mcp-proxy 0.13.0 requires `mcp<2`; the pinned nixpkgs bumped
+      # python3Packages.mcp to 2.2.0 before upstream scoped mcp-proxy to the
+      # 1.x line (master: `mcp_1` alias + a python3Packages scope override in
+      # pkgs/by-name/mc/mcp-proxy). Mirror that fix until the pin catches up;
+      # remove together with pkg/mcp-1.
+      mcp-proxy = prev.mcp-proxy.override {
+        python3Packages = prev.python3Packages.overrideScope (mcp-final: _: {
+          mcp = mcp-final.mcp_1;
         });
-      });
+      };
 
       pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
         (python-final: python-prev: {
+          # mcp 1.x for mcp-proxy (see the mcp-proxy entry above); port of
+          # nixpkgs master's `mcp_1` alias. Remove when the pin provides it.
+          mcp_1 = python-final.callPackage ../../pkg/mcp-1 { };
+
           # CMake executes this ROCm code generator before the fixup-phase shebang hook.
           torch = python-prev.torch.overrideAttrs (old:
             prev.lib.optionalAttrs old.passthru.rocmSupport {

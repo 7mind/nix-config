@@ -26,13 +26,9 @@ in
     hostPubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILVhIJvhBhZBZwwW+XNYWLRn5wL+ecMkWRYcuqmJVq1r";
   };
 
-  # Use systemd in initrd for proper LUKS + LVM + hibernate resume sequencing
-  boot.initrd.systemd.enable = true;
-
   # Re-enroll after UEFI/TPM changes: tpm-enroll-luks
   boot.initrd.luks.devices."enc" = {
     device = luksDevice;
-    preLVM = true;
     crypttabExtraOpts = [ "tpm2-device=auto" ];
   };
 

@@ -15,9 +15,7 @@
       # gstreamer, ...). Parses the terminfo from ghostty's Zig source, tic-compiles.
       ghostty-terminfo = prev.callPackage ../../pkg/ghostty-terminfo { };
 
-      llama-swap = (prev.llama-swap.override {
-        buildGoModule = prev.buildGo127Module;
-      }).overrideAttrs (old: {
+      llama-swap = prev.llama-swap.overrideAttrs (old: {
         version = "256";
         src = old.src.override {
           tag = "v256";
@@ -33,6 +31,17 @@
         ] ++ prev.lib.optionals (!prev.stdenv.buildPlatform.canExecute prev.stdenv.hostPlatform) [
           "cmd/simple-responder"
         ];
+        # v256 predates the upstream binary/output split (kubeswap, wol,
+        # vllm_wrapper, utils in v262): the inherited installPhase moves
+        # binaries this version does not build into outputs it declares.
+        outputs = [ "out" ];
+        installPhase = ''
+          runHook preInstall
+          install -Dm444 -t "$out/share/llama-swap" config.example.yaml
+          mkdir -p "$out/bin"
+          mv "$GOPATH/bin/llama-swap" "$out/bin/"
+          runHook postInstall
+        '';
         passthru = old.passthru // {
           ui = old.passthru.ui.overrideAttrs (ui:
             let
@@ -49,6 +58,34 @@
       });
 
       # nixpkgs' 0.3.38 accesses struct nilfs internals removed in nilfs-utils 2.3.
+      # intel-llvm's Sphinx docs targets run with warnings-as-errors and
+      # Sphinx >= 8.2 trips over the SYCL attribute examples (pygments
+      # misc.highlighting_failure warnings become fatal) — upstream:
+      # intel/llvm#23649. The toolchain is consumed for its compiler and
+      # libraries, so drop docs/manpages via the package's own switch
+      # (upstream-verified alternative that keeps docs:
+      # -DSPHINX_WARNINGS_AS_ERRORS=OFF).
+      intel-llvm = prev.intel-llvm.overrideScope (llvm-final: llvm-prev: {
+        unwrapped = llvm-prev.unwrapped.override { enableManpages = false; };
+      });
+
+      # unified-memory-framework 1.2.0's IPC ctest scripts (test/ipc_*.sh)
+      # carry their shebang below the leading copyright comment, so execve()
+      # treats them as shebang-less and ctest (executing them directly) fails
+      # them with ENOEXEC ("exec format error"). Fixed upstream by
+      # oneapi-src/unified-memory-framework#1618 (merged 2026-10-26); v1.2.0
+      # predates it. Disable exactly those tests until the pin moves past
+      # 1.2.0, then drop this override.
+      unified-memory-framework = prev.unified-memory-framework.overrideAttrs (old: {
+        disabledTests = (old.disabledTests or [ ]) ++ [
+          "test_ipc_os_prov_anon_fd"
+          "test_ipc_os_prov_shm"
+          "test_ipc_devdax_prov"
+          "test_ipc_file_prov"
+          "test_ipc_file_prov_fsdax"
+        ];
+      });
+
       partclone = prev.partclone.overrideAttrs (old: {
         version = "0.3.50";
         src = prev.fetchFromGitHub {

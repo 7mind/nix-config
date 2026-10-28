@@ -80,13 +80,6 @@ in
     })
 
     (lib.mkIf cfg.mac-like-modifiers-remap {
-      assertions = [
-        {
-          assertion = config.boot.initrd.systemd.enable;
-          message = "smind.hw.framework-laptop.mac-like-modifiers-remap requires boot.initrd.systemd.enable";
-        }
-      ];
-
       boot.initrd.systemd = {
         initrdBin = [ pkgs.framework-tool ];
 

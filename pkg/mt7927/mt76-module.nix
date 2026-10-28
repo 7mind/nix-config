@@ -19,6 +19,7 @@
   stdenv,
   fetchurl,
   kernel,
+  kmodigest,
 }:
 
 let
@@ -44,7 +45,7 @@ stdenv.mkDerivation {
 
   src = ./.;
 
-  nativeBuildInputs = kernel.moduleBuildDependencies;
+  nativeBuildInputs = kernel.moduleBuildDependencies ++ [ kmodigest ];
 
   # The patches are context diffs against linux-7.2; -p1 from the respective
   # subtree root, applied in the same order as jetm's Makefile `sources` target.
@@ -97,6 +98,13 @@ stdenv.mkDerivation {
     mkdir -p "$instdir"
     find build \( -name 'btusb.ko' -o -name 'btmtk.ko' -o -path '*mt76*.ko' \) \
       -exec cp -v {} "$instdir/" \;
+    # nixpkgs' kernel signs modules at `modules_install` (cmd_sign overridden
+    # to kmodigest) and the kmod aggregator concatenates the per-module
+    # `*.ko.cer` certificates into modules.cer. This package installs the
+    # modules manually, bypassing modinst, so sign them here explicitly.
+    for ko in "$instdir"/*.ko; do
+      kmodigest "$ko"
+    done
     runHook postInstall
   '';
 

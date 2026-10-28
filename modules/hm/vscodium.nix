@@ -5,10 +5,13 @@ let
   vscodiumLdLibraries = [ pkgs.icu pkgs.openssl ];
   archiveFsImport = ''import{createWriteStream as'';
   ownerWritableArchiveFsImport = ''import{statSync as nixStatSync,createWriteStream as'';
-  archiveAddFile = ''n.addFile(a.localPath,a.path)'';
+  # Minified identifiers churn between VSCodium releases (1.140 renamed the
+  # locals and the receiver differs per bundle), so match the addFile call
+  # without its receiver.
+  archiveAddFile = ''addFile(s.localPath,s.path)'';
   ownerWriteBit = 128; # S_IWUSR (octal 0200)
   ownerWritableArchiveAddFile =
-    ''n.addFile(a.localPath,a.path,{mode:nixStatSync(a.localPath).mode|${toString ownerWriteBit}})'';
+    ''addFile(s.localPath,s.path,{mode:nixStatSync(s.localPath).mode|${toString ownerWriteBit}})'';
   extensionId = extension: "${extension.vscodeExtPublisher}.${extension.vscodeExtName}";
   remoteSshExtension = pkgs.open-vsx.jeanp413.open-remote-ssh;
   managedExtensions = with pkgs.vscode-marketplace; with pkgs.vscode-extensions; [
