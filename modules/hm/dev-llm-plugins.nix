@@ -82,9 +82,70 @@ in
           })
         ]
       ))
-      (lib.mkIf cfg.iHaveAdhdPlugin.codex.enable {
+      (lib.mkIf cfg.iHaveAdhdPlugin.codex.enable (let
+        pluginManifest = builtins.fromJSON (builtins.readFile "${iHaveAdhdPlugin}/.codex-plugin/plugin.json");
+        pluginKey = "${pluginManifest.name}@home-manager";
+        pluginHooks = builtins.fromJSON (builtins.readFile "${iHaveAdhdPlugin}/hooks/hooks.json");
+        eventLabels = {
+          PreModelRequest = "pre_model_request";
+          PostModelRequest = "post_model_request";
+          PreToolUse = "pre_tool_use";
+          PermissionRequest = "permission_request";
+          PostToolUse = "post_tool_use";
+          PreCompact = "pre_compact";
+          PostCompact = "post_compact";
+          SessionStart = "session_start";
+          SessionEnd = "session_end";
+          UserPromptSubmit = "user_prompt_submit";
+          SubagentStart = "subagent_start";
+          SubagentStop = "subagent_stop";
+          Stop = "stop";
+          Interrupt = "interrupt";
+        };
+        matcherKept = label: !(lib.elem label [ "pre_model_request" "post_model_request" "user_prompt_submit" "stop" "interrupt" ]);
+        contextLimitKept = label: lib.elem label [ "pre_tool_use" "post_tool_use" "session_start" "user_prompt_submit" "subagent_start" ];
+        normalizeTimeout = label: timeout:
+          if label == "session_end" || label == "interrupt" then
+            let t = if timeout == null then 1 else timeout; in if t < 1 then 1 else if t > 3 then 3 else t
+          else
+            let t = if timeout == null then 600 else timeout; in if t < 1 then 1 else t;
+        commandIdentity = label: handler:
+          ({
+            type = "command";
+            command = handler.command;
+            timeout = normalizeTimeout label (handler.timeout or null);
+            async = handler.async or false;
+          }
+          // lib.optionalAttrs (handler ? statusMessage && handler.statusMessage != null) {
+            inherit (handler) statusMessage;
+          }
+          // lib.optionalAttrs
+            (handler ? additionalContextLimit && handler.additionalContextLimit != null && handler.additionalContextLimit != 2500 && contextLimitKept label) {
+            inherit (handler) additionalContextLimit;
+          });
+        hookTrustEntries = lib.concatLists (lib.mapAttrsToList
+          (event: groups:
+            let label = eventLabels.${event}; in lib.concatLists (lib.imap0
+              (gi: group:
+                lib.map (pair: {
+                  name = "${pluginKey}:hooks/hooks.json:${label}:${toString gi}:${toString pair.hi}";
+                  value.trusted_hash =
+                    "sha256:${builtins.hashString "sha256" (builtins.toJSON ({
+                      event_name = label;
+                      hooks = [ (commandIdentity label pair.handler) ];
+                    }
+                    // lib.optionalAttrs
+                      (matcherKept label && group ? matcher && group.matcher != null)
+                      { inherit (group) matcher; }))}";
+                })
+                (lib.filter (pair: (pair.handler.type or "command") == "command")
+                  (lib.imap0 (hi: handler: { inherit hi handler; }) group.hooks)))
+            groups))
+          (lib.filterAttrs (event: groups: eventLabels ? ${event} && groups != [ ]) pluginHooks.hooks));
+      in {
         programs.codex.plugins = [ iHaveAdhdPlugin ];
-      })
+        programs.codex.settings.hooks.state = lib.listToAttrs hookTrustEntries;
+      }))
       (lib.mkIf cfg.iHaveAdhdPlugin.pi.enable (
         lib.mkMerge [
           {
