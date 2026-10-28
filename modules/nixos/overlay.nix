@@ -86,6 +86,25 @@
         ];
       });
 
+      # vmnet-natd is the package's only ET_EXEC (non-PIE) daemon binary.
+      # patchelf's rpath relocation (autoPatchelfHook) moves its .dynamic
+      # into a read-only LOAD segment, so glibc's loader segfaults in
+      # dl_main before main() and vmware-networks can never start NAT on
+      # vmnet8 (upstream: NixOS/patchelf#146, NixOS/patchelf#152). Run
+      # autoPatchelf manually on everything except vmnet-natd, then patch
+      # natd's interpreter only and supply its libraries via a wrapper.
+      vmware-workstation = prev.vmware-workstation.overrideAttrs (old: {
+        dontAutoPatchelf = true;
+        postFixup = ''
+          mapfile -t vmwareBinFiles < <(find "$out/bin" -type f ! -name vmnet-natd -print)
+          autoPatchelf -- "$out/lib" "''${vmwareBinFiles[@]}"
+
+          patchelf --set-interpreter "$(cat "$NIX_CC/nix-support/dynamic-linker")" "$out/bin/vmnet-natd"
+          wrapProgram "$out/bin/vmnet-natd" \
+            --prefix LD_LIBRARY_PATH : "${prev.lib.makeLibraryPath [ prev.openssl prev.stdenv.cc.libc ]}"
+        '';
+      });
+
       partclone = prev.partclone.overrideAttrs (old: {
         version = "0.3.50";
         src = prev.fetchFromGitHub {
