@@ -38,9 +38,9 @@ let
 
       # Same Threadripper as the x86_64 entry above, exposed as an
       # aarch64-linux builder via the binfmt/QEMU emulation enabled in
-      # hosts/pavel-trx40/cfg-pavel-trx40.nix. Per-job throughput is
-      # below a native ARM64 box (o0/o1/o2), but 32C/64T + the userspace
-      # QEMU translator running on Zen2 still beats local emulation on
+      # the downstream hosts/pavel-trx40/cfg-pavel-trx40-base.nix. Per-job
+      # throughput is below a native ARM64 box (o0/o1/o2), but 32C/64T +
+      # the userspace QEMU translator running on Zen2 still beats local emulation on
       # vm by a wide margin, and frequently the small o0/o1/o2 boxes too
       # — so this entry is given a higher speedFactor than the native
       # ones to make the scheduler prefer it whenever pavel-trx40 is
