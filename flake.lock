@@ -122,7 +122,10 @@
     "claude-code-sandbox": {
       "inputs": {
         "flake-utils": "flake-utils_4",
-        "nixpkgs": "nixpkgs_6"
+        "nixpkgs": [
+          "ponygirls",
+          "nixpkgs"
+        ]
       },
       "locked": {
         "lastModified": 1790187976,
@@ -966,22 +969,6 @@
         "type": "github"
       }
     },
-    "nixpkgs_6": {
-      "locked": {
-        "lastModified": 1764521362,
-        "narHash": "sha256-M101xMtWdF1eSD0xhiR8nG8CXRlHmv6V+VoY65Smwf4=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "871b9fd269ff6246794583ce4ee1031e1da71895",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "25.11",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
     "noctalia": {
       "inputs": {
         "nixpkgs": [
@@ -1056,11 +1043,11 @@
         "squish": "squish"
       },
       "locked": {
-        "lastModified": 1793216590,
-        "narHash": "sha256-XkbU6OZ76e2Jr8ZuqpIhUbt5ZkMs0gi0iMCA3VhqFT4=",
+        "lastModified": 1793221322,
+        "narHash": "sha256-RzJrlR0AhD0cJMH67FO1SBfwRh0Rj9CqgBwgoimsYr4=",
         "owner": "7mind",
         "repo": "ponygirls",
-        "rev": "09455ed18c7f39e444c6156044988938e857c007",
+        "rev": "b99c1dd711722999eb3a28f4b03ae46c473b289f",
         "type": "github"
       },
       "original": {
