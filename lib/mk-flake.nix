@@ -51,7 +51,9 @@ in
     userFlake = self;
     nixosConfigurations = self.nixosConfigurations // self.darwinConfigurations;
     homeConfigurations = inputs.nixpkgs.lib.filterAttrs
-      (_: home: home.config.age.enable) self.homeConfigurations;
+      (_: home: home.config.age.enable && builtins.any
+        (secret: secret.rekeyFile != null) (builtins.attrValues home.config.age.secrets))
+      self.homeConfigurations;
   };
 
   agenix-rekey-homes = builtins.mapAttrs
@@ -188,6 +190,8 @@ in
               packages = self.packages;
             };
             home-manager-persistence = import ../tests/home-manager-persistence.nix { inherit pkgs; flake = self; };
+            home-age = import ../tests/home-age.nix { inherit pkgs; flake = self; };
+            home-age-runtime = import ../tests/home-age-runtime.nix { inherit pkgs; flake = self; };
             searxng = import ../tests/searxng.nix { inherit pkgs; };
             dev-llm-plugins = import ../tests/dev-llm-plugins.nix { flake = self; inherit pkgs; };
           }

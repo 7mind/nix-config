@@ -14,6 +14,9 @@ pkgs.writeShellApplication {
         echo "Error: install persistent Home Manager integration with a full NixOS switch first" >&2
         exit 1
       fi
+      if [[ -x ${external.activationPackage}/refresh-user-secrets ]]; then
+        /run/wrappers/bin/sudo -- ${external.activationPackage}/refresh-user-secrets
+      fi
       exec ${pkgs.lib.getExe profile} switch "$profile" ${external.activationPackage}
     fi''}
     exec ${home.activationPackage}/activate

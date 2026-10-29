@@ -67,6 +67,39 @@ leaves staged changes but does not commit or push. It does not fetch or rebase.
 The helper uses the pinned CLI and `hmbak` backups from the command above.
 `NIX_CONFIG_FLAKE_DIR` sets its default configuration root; `--flake-dir` takes precedence.
 
+## HM-only secrets on integrated NixOS
+
+In a downstream configuration root, `./setup --hm-only -s` refreshes the invoking
+user's host-encrypted secrets before changing the persistent Home Manager
+profile. It explicitly invokes the selected generation's immutable helper with
+`sudo`, which may prompt for a password. A failed refresh aborts the HM switch.
+It does not switch the system or install a privileged service or sudo policy.
+
+A successful full NixOS switch must already have installed persistent HM
+integration and the stock `/run/agenix -> /run/agenix.d/<generation>` storage.
+The host SSH ed25519 identity must exist at `/etc/ssh/ssh_host_ed25519_key`.
+Source definitions and current host-rekeyed ciphertext must be present and staged
+before building. Additional users first run the existing user-specific rekey,
+for example `./rekey-user-secrets vm kai`; HM-only refresh does not unlock a
+master identity or rekey source files. Runtime-only profiles are excluded from
+aggregate master-key operations; explicitly rekeyable profiles still contribute.
+
+Only enabled, source-defined secrets projected as owned by the invoking user
+are refreshed. Existing paths are retained: `/run/agenix/kai/<secret>` on the
+shared `vm`, and legacy `/run/agenix/<secret>` paths on owner hosts. Other users,
+root and unrelated service secrets are untouched. Ubuntu, Darwin and disabled
+or empty age configurations do not acquire a refresh helper or require sudo.
+The ordinary Home Manager CLI does not perform this privileged refresh.
+
+Refresh takes the existing NixOS switch lock nonblockingly; retry after a
+concurrent switch or refresh finishes. All files decrypt before publication,
+and each file is replaced atomically. Publication is not a multi-file
+transaction; an interruption during renames may leave a partially updated set.
+Removed secrets are not pruned. **The refresh is runtime-only:** reboot and a
+full system switch or rollback can restore system-pinned older secrets while
+the persistent HM profile remains selected. Full system activation owns secret
+lifecycle and persistence.
+
 ## Optional profile-scoped rekey
 
 On a trusted Linux machine with existing TPM enrollment, one command unlocks,
