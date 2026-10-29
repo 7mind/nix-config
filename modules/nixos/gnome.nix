@@ -144,7 +144,7 @@
       default = config.smind.desktop.mouse.acceleration;
       example = 0.2;
       description = ''
-        Mouse pointer acceleration/speed for GNOME.
+        Initial mouse pointer acceleration/speed for GNOME, overridable by users.
         Defaults to smind.desktop.mouse.acceleration.
       '';
     };
@@ -154,7 +154,7 @@
       default = config.smind.desktop.mouse.accelProfile;
       example = "adaptive";
       description = ''
-        Mouse acceleration profile for GNOME.
+        Initial mouse acceleration profile for GNOME, overridable by users.
         Defaults to smind.desktop.mouse.accelProfile.
       '';
     };
@@ -200,6 +200,12 @@
             inherit lib;
             gnome = config.smind.desktop.gnome;
             powerButton = config.smind.power-management.powerButton;
+          };
+        }
+        {
+          settings."org/gnome/desktop/peripherals/mouse" = {
+            speed = lib.gvariant.mkDouble config.smind.desktop.gnome.mouse.acceleration;
+            accel-profile = config.smind.desktop.gnome.mouse.accelProfile;
           };
         }
       ];

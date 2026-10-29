@@ -1,4 +1,9 @@
 [
+  ./steam-wrappers.nix
+  ./wanbond.nix
+  ./mt7927-wifi.nix
+  ./nas-autofs.nix
+  ./geoip.nix
   ./adguard.nix
   ./alien-filesystems.nix
   ./networkd-routes-to-dns.nix
@@ -44,6 +49,7 @@
   ./keyring.nix
   ./ledger.nix
   ./llama-server.nix
+  ./llama-swap.nix
   ./llm.nix
   ./locale-ie.nix
   ./metrics.nix

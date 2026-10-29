@@ -155,6 +155,10 @@ in
             home-shell = import ../tests/home-shell.nix { inherit pkgs; home-manager = inputs.home-manager; };
             nix-access-tokens = import ../tests/nix-access-tokens.nix { inherit pkgs; home-manager = inputs.home-manager; };
             gnome-extensions = import ../tests/gnome-extensions.nix { inherit pkgs inputs; home-manager = inputs.home-manager; };
+            gnome-mouse = import ../tests/gnome-mouse.nix { inherit pkgs; };
+            promoted-core = import ../tests/promoted-core.nix { inherit pkgs; };
+            promoted-mosquitto = import ../tests/promoted-mosquitto.nix { inherit pkgs; };
+            llama-swap = import ../tests/llama-swap.nix { inherit pkgs inputs; };
             asterisk-linphone-fallback = import ../tests/asterisk-linphone-fallback.nix { inherit pkgs; };
             flexisip-file-transfer = import ../tests/flexisip.nix { inherit pkgs; };
             openlinkhub = import ../tests/openlinkhub.nix { inherit pkgs; };

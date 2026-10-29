@@ -43,8 +43,6 @@ lib.mkMerge ([
       show-in-lock-screen = false;
     };
     "org/gnome/desktop/peripherals/mouse" = {
-      speed = lib.gvariant.mkDouble gnome.mouse.acceleration;
-      accel-profile = gnome.mouse.accelProfile;
       natural-scroll = gnome.mouse.naturalScroll;
     };
     "org/gnome/desktop/peripherals/touchpad" = {

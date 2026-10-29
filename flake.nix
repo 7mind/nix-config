@@ -161,10 +161,7 @@
 
     # Legacy github:7mind/cq input removed. Replacement is ../cq4; not wired yet.
 
-    # wanbond — resilient WAN-bonding tunnel with adaptive FEC (repo renamed
-    # from "fecalia"). Exposes packages.<system>.default = the wanbond binary.
-    # Tracks main. Used by the mobile-office edge (pi-mo) and its concentrators
-    # (raspi5l primary, o2 backup) — see modules/nixos/wanbond.nix (private).
+    # Resilient WAN-bonding tunnel with adaptive FEC, used by modules/nixos/wanbond.nix.
     wanbond = {
       url = "github:7mind/wanbond/main";
       inputs.nixpkgs.follows = "nixpkgs";
