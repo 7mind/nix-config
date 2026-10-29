@@ -14,7 +14,7 @@ from .process import FlurryError, Runner, redact
 from .pull import Pull
 from .state import workspace_lock
 from .sync import Sync, SyncOptions, plan_sync
-from .workspace import build_graph, discover, load_config
+from .workspace import build_graph, discover, init_config, load_config
 
 
 COMMAND_TIMEOUT = 900.0
@@ -42,6 +42,7 @@ def parser() -> argparse.ArgumentParser:
     result.set_defaults(exclude=[])
     commands = result.add_subparsers(dest="command", required=True)
     for name, description in (
+        ("init", "Create a default local workspace configuration without overwriting"),
         ("status", "Inspect sibling checkouts without fetching"),
         ("graph", "Show provider-to-consumer dependencies"),
         ("plan", "Preview synchronization; no fetch, commit or push"),
@@ -77,7 +78,15 @@ def _print(data: object) -> None:
 def execute(args: argparse.Namespace) -> int:
     if args.timeout <= 0:
         raise FlurryError("--timeout must be positive")
-    config = load_config(args.root, tuple(args.global_excludes + args.exclude))
+    excludes = tuple(args.global_excludes + args.exclude)
+    if args.command == "init":
+        path = init_config(args.root, excludes)
+        if args.json:
+            _print({"path": str(path)})
+        else:
+            print(f"Created {path}")
+        return 0
+    config = load_config(args.root, excludes)
     runner = Runner(os.environ, args.timeout)
     nix = Nix(runner)
     report = lambda message: print(message, file=sys.stderr)

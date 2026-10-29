@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import fnmatch
+import json
 import os
 import tomllib
 from dataclasses import dataclass
@@ -98,6 +99,36 @@ def _table(path: Path) -> dict[str, object]:
             else:
                 _value(value, f"{name}.{key}")
     return data
+
+
+def init_config(root: Path, excludes: tuple[str, ...]) -> Path:
+    root = root.resolve()
+    if not root.is_dir():
+        raise FlurryError(f"Workspace root is not a directory: {root}")
+    patterns = list(dict.fromkeys(_exclude(value) for value in excludes))
+    document = (
+        "version = 1\n"
+        f"exclude = {json.dumps(patterns, ensure_ascii=False)}\n"
+        "gitlab_hosts = []\n"
+        "\n"
+        "# Put machine-local repository overrides in flurry.local.toml.\n"
+        "# Exclusions from both files and --exclude flags are additive.\n"
+    )
+    content = document.encode("utf-8")
+    tomllib.loads(document)
+    path = root / "flurry.toml"
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    except FileExistsError as error:
+        raise FlurryError(f"Refusing to overwrite existing configuration: {path}") from error
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except OSError as error:
+        raise FlurryError(f"Cannot finish writing configuration {path}: {error}; an incomplete file may remain, inspect it before retrying") from error
+    return path
 
 
 def load_config(root: Path, extra_excludes: tuple[str, ...]) -> Config:
