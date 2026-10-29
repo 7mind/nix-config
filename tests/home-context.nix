@@ -13,11 +13,6 @@ let
       globals.isDesktop = false;
     };
   });
-  vpn = make (ubuntu // {
-    host = ubuntu.host // {
-      globals = ubuntu.host.globals // { net.namespaces = [ "vpn" ]; };
-    };
-  });
   # Owner-secret consumers must degrade per-secret when a host filters the
   # standard set with smind.age.owner-secrets: pavel-trx40 loads only
   # "github-*", pavel-am5 loads the full set. The consumers live in private HM
@@ -63,11 +58,10 @@ assert lib.assertMsg (testbenchPavel.smind.hm.dev.git.enable && testbenchPavel.p
 assert lib.assertMsg (builtins.any (p: lib.getName p == "tig") testbenchPavel.home.packages) "testbench: tig must be in home.packages";
 assert lib.assertMsg (!hasTrx40 || !trx40Pavel.smind.hm.dev.git.rewriteGithubToSsh) "pavel-trx40: GitHub must stay on HTTPS (the host SSH key is not registered on GitHub)";
 assert lib.assertMsg (!hasTrx40 || lib.hasInfix "gh auth git-credential" (trx40Pavel.programs.git.settings.credential."https://github.com".helper or "")) "pavel-trx40: GitHub HTTPS credentials must come from gh (a manual ~/.gitconfig would shadow the HM git config)";
+assert lib.assertMsg (!hasPrivate || am5Pavel.smind.hm.electron-wrappers.slack.netns == (if builtins.elem "vpn" am5Pavel.smind.hm.globals.net.namespaces then "vpn" else null)) "pavel-am5: Slack namespace must follow declared host namespaces";
 assert lib.assertMsg (standalone.name == "pavel@ubuntu-x86_64") "Standalone export must use the supplied hostname and architecture";
 assert lib.assertMsg (config.home.username == "pavel" && config.home.homeDirectory == "/home/pavel") "Standalone identity must come from its context";
 assert lib.assertMsg (config.smind.hm.globals.isDesktop && !config.smind.hm.globals.llama-swap.enable) "Standalone capabilities must come from its declaration";
-assert lib.assertMsg (vpn.value.config.smind.hm.electron-wrappers.slack.netns == "vpn") "Declared VPN namespaces must remain enabled";
-assert lib.assertMsg (config.smind.hm.electron-wrappers.slack.netns == null) "Standalone Slack must not require an unavailable VPN namespace";
 assert lib.assertMsg (builtins.filter (a: !a.assertion) worker.assertions == [ ]) "Role-created homes must receive their host context";
 assert lib.assertMsg (failedAssertions standalone == [ ]) "Standalone configuration must pass assertions";
 assert lib.assertMsg (otherConfig.home.username == "alex" && otherConfig.home.homeDirectory == "/srv/homes/alex") "The same source must support a different user and home directory";

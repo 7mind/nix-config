@@ -1,5 +1,5 @@
 {
-  source = "pavel-am5";
+  source = "pavel-testbench";
   username = "pavel";
   host = {
     hostname = "ubuntu";
