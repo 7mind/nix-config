@@ -54,9 +54,12 @@ provider commits. Fixed-revision inputs are boundaries, not requests to rewrite
 `flake.nix`. Unrelated external dependencies are not deliberately upgraded;
 transitive lock nodes can change when a provider changes its own dependencies.
 
-`plan` and `sync --dry-run` are local, provisional plans: no fetch, commit or push.
-`status`/`graph` also do not fetch. Remote races, authentication and later Nix
-validation can still fail. Use `--json` for structured output and `--root DIR`
+`plan` and `sync --dry-run` enforce the same local dirty-state policy as `sync`:
+known blockers fail with a nonzero exit before a run journal is created. This
+includes retained staged, unstaged or visible untracked root flake-file edits.
+Plans remain local and provisional: no fetch, commit or push. `status`/`graph`
+also do not fetch. Remote races, authentication, rebase/restore rehearsals and
+later Nix validation can still fail. Use `--json` for structured output and `--root DIR`
 to select a workspace explicitly. Global flags may appear before or after the
 command. Every subprocess has a configurable `--timeout` (seconds).
 
@@ -188,6 +191,8 @@ Initial explicit restrictions:
   safely. Unused registered drivers, including global Git LFS, are allowed.
 - Preserve mode refuses pre-existing `flake.nix`/`flake.lock` edits that overlap
   generated lock work. Commit/reconcile those files explicitly first.
+  `--commit staged` also refuses unstaged or untracked flake edits left outside
+  that scope; `--commit all` includes them only when explicitly requested.
 - Same-repository and subdirectory-flake publication arrangements are reported
   unsupported instead of assuming a valid ordering. Registry-only input identifiers
   need explicit Git references.

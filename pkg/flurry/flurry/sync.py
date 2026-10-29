@@ -145,6 +145,26 @@ def target_for(repo: Repository, runner: Runner) -> Target:
     return Target(repo, remote, f"refs/heads/{branch}", push_remote, push_ref, urls[0])
 
 
+def validate_dirty_policy(repository: Repository, runner: Runner, options: SyncOptions) -> None:
+    path = repository.path
+    if options.dirty_mode == "reject":
+        if runner.git(path, "--no-optional-locks", "status", "--porcelain=v1", "--untracked-files=all", "-z"):
+            raise FlurryError(f"{repository.name}: Dirty source rejected; choose --preserve or an explicit --commit scope")
+        return
+    if options.dirty_mode == "commit" and options.commit_scope == "all":
+        return
+    flake_paths = (":(top,literal)flake.nix", ":(top,literal)flake.lock")
+    diff_options = ("diff", "--name-only", "--no-renames", "--no-ext-diff", "--no-textconv", "-z")
+    retained = runner.git(path, "--no-optional-locks", *diff_options, "--", *flake_paths)
+    retained = retained or runner.git(path, "--no-optional-locks", "ls-files", "--others", "--exclude-standard", "-z", "--", *flake_paths)
+    if options.dirty_mode == "preserve":
+        retained = retained or runner.git(path, "--no-optional-locks", *diff_options, "--cached", "HEAD", "--", *flake_paths)
+    if retained:
+        if options.dirty_mode == "preserve":
+            raise FlurryError(f"{repository.name}: preserve mode cannot publish locks over pre-existing flake.nix/flake.lock edits; commit or reconcile those files first")
+        raise FlurryError(f"{repository.name}: --commit staged leaves pre-existing flake.nix/flake.lock edits outside the commit; stage or reconcile those files first")
+
+
 def plan_sync(config: Config, runner: Runner, nix: Nix, options: SyncOptions) -> SyncPlan:
     repositories = discover(config, runner)
     graph = build_graph(repositories, nix)
@@ -157,6 +177,8 @@ def plan_sync(config: Config, runner: Runner, nix: Nix, options: SyncOptions) ->
         raise FlurryError("Committing existing edits requires an explicit staged/all scope and message")
     if options.check_mode not in ("none", "eval", "full"):
         raise FlurryError("Invalid check mode")
+    for target in targets:
+        validate_dirty_policy(target.repository, runner, options)
     return SyncPlan(graph, targets, options, repositories)
 
 
@@ -251,10 +273,6 @@ class Sync:
                         "checkpoint": fingerprint(repo.path, self.runner),
                         "push_ref": target.push_ref, "push_remote": target.push_remote,
                     })
-                    if options.dirty_mode == "preserve":
-                        touched = self.runner.git(repo.path, "diff", "--name-only", "HEAD", "--", "flake.nix", "flake.lock")
-                        if touched:
-                            raise FlurryError(f"{repo.name}: preserve mode cannot publish locks over pre-existing flake.nix/flake.lock edits; commit or reconcile those files first")
                 validate_edges(plan.graph, targets, self.runner)
                 prepared: dict[str, Prepared] = {}
                 for index, target in enumerate(plan.targets):
