@@ -62,6 +62,199 @@ class GitTests(unittest.TestCase):
         self.git(self.seed, 'commit', '-m', 'upstream')
         self.git(self.seed, 'push', 'origin', 'main')
 
+    def configure_filter(self, name):
+        marker = self.root / 'filter-executed'
+        program = self.root / 'filter-command'
+        program.write_text(f'#!/bin/sh\nprintf invoked > "{marker}"\nexit 19\n')
+        program.chmod(0o755)
+        configuration = self.root / 'global.gitconfig'
+        for setting in ('clean', 'smudge', 'process'):
+            self.git(self.root, 'config', '--file', str(configuration), f'filter.{name}.{setting}', str(program))
+        self.git(self.root, 'config', '--file', str(configuration), f'filter.{name}.required', 'true')
+        self.runner.environment['GIT_CONFIG_GLOBAL'] = str(configuration)
+        return marker
+
+    def test_unused_global_filter_registration_preserves_dirty_state(self):
+        marker = self.configure_filter('lfs')
+        self.dirty()
+        before = self.snapshot()
+        self.advance()
+        prepared = self.prepare()
+        record = self.adapter.promote(prepared, 'unused-filter')
+        self.assertEqual(self.snapshot()[1:], before[1:])
+        self.adapter.recover(record)
+        self.assertEqual(self.snapshot(), before)
+        self.assertFalse(marker.exists(), 'An unused filter command was executed')
+
+    def assert_filter_refused_without_source_changes(self, marker, reason):
+        before = (self.git(self.repo, 'rev-parse', 'HEAD'), self.git(self.repo, 'write-tree'),
+                  (self.repo / 'mixed').read_bytes(), self.git(self.repo, 'stash', 'list', '--format=%H'))
+        self.assertFalse(marker.exists(), 'Fixture setup executed a filter')
+        with tempfile.TemporaryDirectory(dir=self.root, prefix='refusal-') as temporary:
+            with self.assertRaisesRegex(FlurryError, reason):
+                self.adapter.prepare(self.repo, Path(temporary) / 'trial', 'main', 'preserve', None, None)
+        after = (self.git(self.repo, 'rev-parse', 'HEAD'), self.git(self.repo, 'write-tree'),
+                 (self.repo / 'mixed').read_bytes(), self.git(self.repo, 'stash', 'list', '--format=%H'))
+        self.assertEqual(before, after)
+        self.assertFalse(marker.exists(), 'The unsupported filter was executed before refusal')
+
+    def test_effective_filter_is_rejected_in_worktree_index_and_head_views(self):
+        marker = self.configure_filter('lfs')
+        attributes = self.repo / '.gitattributes'
+        attributes.write_text('mixed filter=lfs\n')
+        self.assert_filter_refused_without_source_changes(marker, 'mixed.*working tree')
+        self.adapter._git(self.repo, 'add', '.gitattributes', env={'GIT_CONFIG_GLOBAL': '/dev/null'})
+        attributes.write_text('')
+        self.assert_filter_refused_without_source_changes(marker, 'mixed.*index')
+        self.adapter._git(self.repo, 'commit', '-m', 'attributes', env={'GIT_CONFIG_GLOBAL': '/dev/null'})
+        self.adapter._git(self.repo, 'add', '.gitattributes', env={'GIT_CONFIG_GLOBAL': '/dev/null'})
+        self.assert_filter_refused_without_source_changes(marker, 'mixed.*HEAD')
+
+    def test_visible_untracked_filter_is_rejected_before_snapshot_add(self):
+        marker = self.configure_filter('lfs')
+        (self.repo / '.gitattributes').write_text('*.bin filter=lfs\n')
+        (self.repo / 'new.bin').write_bytes(b'valuable\x00\xff')
+        self.assert_filter_refused_without_source_changes(marker, 'new.bin')
+        self.assertEqual((self.repo / 'new.bin').read_bytes(), b'valuable\x00\xff')
+
+    def test_filter_on_generated_lock_or_sentinel_is_rejected(self):
+        marker = self.configure_filter('lfs')
+        self.git(self.repo, 'rm', 'flake.lock')
+        self.git(self.repo, 'commit', '-m', 'remove lock')
+        attributes = self.repo / '.gitattributes'
+        attributes.write_text('flake.lock filter=lfs\n')
+        self.assert_filter_refused_without_source_changes(marker, 'flake.lock')
+        attributes.write_text('.flurry-* filter=lfs\n')
+        self.assert_filter_refused_without_source_changes(marker, r'\.flurry-')
+        self.assertEqual(list(self.repo.glob('.flurry-*')), [])
+
+    def filtered_upstream(self, attributes):
+        (self.seed / 'future.dat').write_bytes(b'new upstream data\n')
+        if attributes:
+            (self.seed / '.gitattributes').write_text(attributes)
+        for args in (('add', '.'), ('commit', '-m', 'incoming files')):
+            self.adapter._git(self.seed, *args, env={'GIT_CONFIG_GLOBAL': '/dev/null'})
+        self.git(self.seed, 'push', 'origin', 'main')
+
+    def test_incoming_filter_is_rejected_before_checkout(self):
+        marker = self.configure_filter('lfs')
+        self.filtered_upstream('future.dat filter=lfs\n')
+        self.assert_filter_refused_without_source_changes(marker, 'future.dat')
+        self.assertFalse((self.repo / 'future.dat').exists())
+
+    def test_global_and_dirty_attributes_are_checked_for_incoming_paths(self):
+        marker = self.configure_filter('lfs')
+        attributes = self.root / 'global.attributes'
+        attributes.write_text('future.dat filter=lfs\n')
+        self.git(self.root, 'config', '--file', self.runner.environment['GIT_CONFIG_GLOBAL'], 'core.attributesFile', str(attributes))
+        self.filtered_upstream('')
+        self.assert_filter_refused_without_source_changes(marker, 'future.dat')
+        attributes.write_text('')
+        (self.repo / '.gitattributes').write_text('future.dat filter=lfs\n')
+        self.assert_filter_refused_without_source_changes(marker, 'future.dat')
+
+    def test_preserved_and_incoming_attribute_merges_are_refused(self):
+        marker = self.configure_filter('lfs')
+        nested = self.repo / 'nested'
+        nested.mkdir()
+        (nested / '.gitattributes').write_text('future.dat media\n')
+        self.filtered_upstream('[attr]media filter=lfs\n')
+        self.assert_filter_refused_without_source_changes(marker, 'Cannot safely merge preserved .gitattributes')
+        self.assertEqual((nested / '.gitattributes').read_text(), 'future.dat media\n')
+
+    def test_attribute_merge_guard_includes_canceled_staged_edits(self):
+        marker = self.configure_filter('lfs')
+        nested = self.repo / 'nested'
+        nested.mkdir()
+        attributes = nested / '.gitattributes'
+        attributes.write_text('')
+        self.git(self.repo, 'add', 'nested/.gitattributes')
+        self.git(self.repo, 'commit', '-m', 'nested attributes')
+        attributes.write_text('future.dat media\n')
+        self.git(self.repo, 'add', 'nested/.gitattributes')
+        attributes.write_text('')
+        incoming = self.seed / 'nested'
+        incoming.mkdir()
+        (incoming / 'future.dat').write_text('incoming data\n')
+        self.filtered_upstream('[attr]media filter=lfs\n')
+        self.assert_filter_refused_without_source_changes(marker, 'Cannot safely merge preserved .gitattributes')
+
+    def test_attribute_context_of_untracked_snapshot_is_checked(self):
+        marker = self.configure_filter('lfs')
+        attributes = self.repo / '.gitattributes'
+        attributes.write_text('*.bin -filter\n')
+        self.git(self.repo, 'add', '.gitattributes')
+        self.git(self.repo, 'commit', '-m', 'disable binary filtering')
+        global_attributes = self.root / 'global.attributes'
+        global_attributes.write_text('*.bin filter=lfs\n')
+        self.git(self.root, 'config', '--file', self.runner.environment['GIT_CONFIG_GLOBAL'], 'core.attributesFile', str(global_attributes))
+        attributes.unlink()
+        (self.repo / 'new.bin').write_bytes(b'valuable\x00\xff')
+        self.assert_filter_refused_without_source_changes(marker, 'new.bin.*untracked snapshot')
+
+    def test_attribute_context_of_untracked_checkout_is_checked(self):
+        marker = self.configure_filter('lfs')
+        attributes = self.repo / '.gitattributes'
+        attributes.write_text('*.bin -filter\n')
+        (self.repo / '.gitignore').write_text('ignored\nnested/.gitattributes\n')
+        self.git(self.repo, 'add', '.gitattributes', '.gitignore')
+        self.git(self.repo, 'commit', '-m', 'disable binary filtering')
+        global_attributes = self.root / 'global.attributes'
+        global_attributes.write_text('*.bin filter=lfs\n')
+        self.git(self.root, 'config', '--file', self.runner.environment['GIT_CONFIG_GLOBAL'], 'core.attributesFile', str(global_attributes))
+        attributes.unlink()
+        nested = self.repo / 'nested'
+        nested.mkdir()
+        (nested / '.gitattributes').write_text('*.bin -filter\n')
+        (nested / 'new.bin').write_bytes(b'valuable\x00\xff')
+        self.assert_filter_refused_without_source_changes(marker, 'Uncaptured Git attribute file.*nested/.gitattributes')
+
+    def source_only_attribute_fixture(self, existing):
+        marker = self.configure_filter('lfs')
+        (self.seed / '.gitattributes').write_text('')
+        (self.seed / '.gitignore').write_text('ignored\nnested/.gitattributes\n')
+        if existing:
+            (self.seed / 'nested').mkdir()
+            (self.seed / 'nested' / 'file.dat').write_text('original data\n')
+        self.git(self.seed, 'add', '.')
+        self.git(self.seed, 'commit', '-m', 'attribute fixture')
+        self.git(self.seed, 'push', 'origin', 'main')
+        self.git(self.repo, 'fetch', 'origin')
+        self.git(self.repo, 'merge', '--ff-only', 'origin/main')
+        global_attributes = self.root / 'global.attributes'
+        global_attributes.write_text('nested/*.dat media\n')
+        self.git(self.root, 'config', '--file', self.runner.environment['GIT_CONFIG_GLOBAL'], 'core.attributesFile', str(global_attributes))
+        (self.repo / '.gitattributes').write_text('[attr]media filter=lfs\n')
+        nested = self.repo / 'nested'
+        nested.mkdir(exist_ok=True)
+        (nested / '.gitattributes').write_text('*.dat -filter\n')
+        return marker
+
+    def test_ignored_source_attributes_cannot_hide_trial_filter_on_existing_file(self):
+        marker = self.source_only_attribute_fixture(True)
+        self.assert_filter_refused_without_source_changes(marker, 'Uncaptured Git attribute file.*nested/.gitattributes')
+
+    def test_ignored_source_attributes_cannot_hide_trial_filter_on_incoming_file(self):
+        marker = self.source_only_attribute_fixture(False)
+        (self.seed / 'nested').mkdir()
+        (self.seed / 'nested' / 'future.dat').write_text('incoming data\n')
+        self.filtered_upstream('')
+        self.assert_filter_refused_without_source_changes(marker, 'Uncaptured Git attribute file.*nested/.gitattributes')
+
+    def test_disabled_filter_attributes_remain_allowed_with_unused_driver(self):
+        marker = self.configure_filter('lfs')
+        (self.repo / '.gitattributes').write_text('* -filter\n')
+        prepared = self.prepare()
+        self.adapter.promote(prepared, 'disabled-filter')
+        self.assertFalse(marker.exists())
+
+    def test_reserved_filter_driver_names_fail_closed(self):
+        for name in ('unset', 'unspecified'):
+            with self.subTest(name=name):
+                marker = self.configure_filter(name)
+                (self.repo / '.gitattributes').write_text(f'mixed filter={name}\n')
+                self.assert_filter_refused_without_source_changes(marker, 'Ambiguous reserved Git filter name')
+
     def test_prepare_promote_preserves_split_untracked_stash_and_lock_commit(self):
         (self.repo / 'other').write_text('old stash\n')
         self.git(self.repo, 'stash', 'push', '-m', 'old')

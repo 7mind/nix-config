@@ -161,6 +161,7 @@ class Git:
             env = {'GIT_INDEX_FILE': str(Path(temporary) / 'index'), 'GIT_LITERAL_PATHSPECS': '1'}
             self._git(repo, 'read-tree', '--empty', env=env)
             if untracked:
+                self._reject_filters(repo, untracked, (), env, 'untracked snapshot')
                 data = b''.join(os.fsencode(path) + b'\0' for path in untracked)
                 self._git(repo, 'add', '--pathspec-from-file=-', '--pathspec-file-nul',
                           input_data=data, env=env)
@@ -179,7 +180,65 @@ class Git:
         if any(item.startswith(b'160000 ') for item in self._git(repo, 'ls-tree', '-r', '-z', tree).split(b'\0')):
             raise FlurryError(f'Gitlink-bearing parent repositories are unsupported: {repo}')
 
-    def _preflight(self, repo: Path) -> None:
+    def _reject_filters(self, repo: Path, paths: tuple[str, ...], view: tuple[str, ...],
+                        env: dict[str, str], context: str) -> None:
+        if not paths:
+            return
+        reserved = self._text(repo, 'config', '--name-only', '--get-regexp',
+                              r'^filter\.(unset|unspecified)\.', check=False)
+        data = b''.join(os.fsencode(path) + b'\0' for path in paths)
+        records = self._git(repo, 'check-attr', '--stdin', '-z', *view, 'filter',
+                            input_data=data, env=env).split(b'\0')
+        if records.pop() != b'' or len(records) != len(paths) * 3:
+            raise FlurryError(f'Malformed filter attribute response: {repo}')
+        for offset, path in enumerate(paths):
+            reported, attribute, value = records[offset * 3:offset * 3 + 3]
+            if reported != os.fsencode(path) or attribute != b'filter':
+                raise FlurryError(f'Malformed filter attribute response: {repo}')
+            if value in (b'unspecified', b'unset'):
+                if any(key.startswith(f'filter.{os.fsdecode(value)}.') for key in reserved.splitlines()):
+                    raise FlurryError(f'Ambiguous reserved Git filter name {os.fsdecode(value)!r}: {repo}')
+                continue
+            raise FlurryError(f'Git filter {os.fsdecode(value)!r} applies to {path!r} ({context}) in {repo}; clean/smudge transformations are unsupported')
+
+    def _filter_views(self, repo: Path, paths: tuple[str, ...]) -> None:
+        for view, context in (((), 'working tree'), (('--cached',), 'index'),
+                              (('--source=HEAD',), 'HEAD')):
+            self._reject_filters(repo, paths, view, {}, context)
+
+    def _uncaptured_attributes(self, repo: Path, paths: tuple[str, ...], captured: set[str]) -> None:
+        attributes = {str(parent / '.gitattributes') for path in paths for parent in Path(path).parents}
+        for name in sorted(attributes - captured):
+            path = repo / name
+            if path.exists() or path.is_symlink():
+                raise FlurryError(f'Uncaptured Git attribute file cannot be reproduced safely in the rehearsal: {path}')
+
+    def _attributes_file(self, repo: Path) -> Path:
+        configured = self._text(repo, 'config', '--path', '--get', 'core.attributesFile', check=False)
+        if configured:
+            path = Path(configured)
+            return (path if path.is_absolute() else repo / path).resolve()
+        directory = self.runner.environment.get('XDG_CONFIG_HOME')
+        if not directory:
+            home = self.runner.environment.get('HOME')
+            if not home:
+                raise FlurryError('Cannot resolve global Git attributes without HOME or XDG_CONFIG_HOME')
+            directory = str(Path(home) / '.config')
+        return (Path(directory) / 'git' / 'attributes').resolve()
+
+    def _tree_filters(self, prepared: Prepared, tree: str) -> None:
+        paths = tuple(sorted({item.path for item in prepared.original.files}
+                             | set(self._tree_paths(prepared.trial, tree))
+                             | {prepared.marker, 'flake.lock'}))
+        self._uncaptured_attributes(prepared.repo, paths, {item.path for item in prepared.original.files})
+        self._filter_views(prepared.repo, paths)
+        objects = self._text(prepared.trial, 'rev-parse', '--path-format=absolute', '--git-path', 'objects')
+        # Inspect fetched objects under the source's attribute configuration without importing them.
+        self._reject_filters(prepared.repo, paths, (f'--source={tree}',),
+                             {'GIT_OBJECT_DIRECTORY': objects}, 'prepared tree')
+        self._reject_filters(prepared.trial, paths, (f'--source={tree}',), {}, 'rehearsal tree')
+
+    def _preflight(self, repo: Path, extra_paths: tuple[str, ...]) -> None:
         if not self._succeeds(repo, 'symbolic-ref', '--quiet', 'HEAD'):
             raise FlurryError(f'Detached HEAD in {repo}')
         gitdir = Path(self._text(repo, 'rev-parse', '--absolute-git-dir'))
@@ -211,9 +270,11 @@ class Git:
             path = repo / name
             if (path.exists() or path.is_symlink()) and self._succeeds(repo, 'check-ignore', '--quiet', '--no-index', '--', name):
                 raise FlurryError(f'Ignored replacement of staged-deleted path: {path}')
-        # Source-only filter semantics cannot safely be reproduced under another gitdir.
-        if self._git(repo, 'config', '--get-regexp', r'^filter\.', check=False):
-            raise FlurryError(f'Git clean/smudge filters are unsupported: {repo}')
+        paths = tuple(sorted(set(self._tree_paths(repo, 'HEAD')) | set(self._tree_paths(repo, index))
+                             | set(self._paths(self._git(repo, 'ls-files', '--others', '--exclude-standard', '-z')))
+                             | set(extra_paths) | {'flake.lock'}))
+        self._uncaptured_attributes(repo, paths, set(paths))
+        self._filter_views(repo, paths)
         if self._text(repo, 'config', 'core.autocrlf', check=False) not in ('', 'false'):
             raise FlurryError(f'Git EOL conversion may be lossy; core.autocrlf is unsupported: {repo}')
         attributes = Path(self._text(repo, 'rev-parse', '--git-path', 'info/attributes'))
@@ -315,7 +376,8 @@ class Git:
             raise FlurryError('Dirty commit requires a message and explicit staged/all scope')
         if dirty_mode != 'commit' and (message is not None or commit_scope is not None):
             raise FlurryError('Commit message/scope only apply to dirty commit mode')
-        self._preflight(repo)
+        marker = f'.flurry-{uuid.uuid4().hex}'
+        self._preflight(repo, (marker,))
         url = self._text(repo, 'remote', 'get-url', remote)
         if not url or url.startswith('-') or url.startswith('ext::'):
             raise FlurryError(f'Unsupported or empty remote URL in {repo}')
@@ -333,16 +395,21 @@ class Git:
             self._git(destination, 'config', '--local', '--replace-all', key, value)
         self._git(destination, 'remote', 'set-url', 'origin', url)
         self._git(destination, 'read-tree', original.index_tree)
+        if self._attributes_file(repo) != self._attributes_file(destination):
+            raise FlurryError(f'Source and rehearsal use different global Git attribute files: {repo}')
+        paths = tuple(sorted({item.path for item in original.files} | {marker, 'flake.lock'}))
+        self._filter_views(destination, paths)
         self._git(destination, 'checkout-index', '--all', '--force')
         if original.worktree_patch:
             self._git(destination, 'apply', '--binary', input_data=original.worktree_patch)
         with tempfile.TemporaryDirectory(prefix='flurry-checkout-', dir=destination.parent) as temporary:
             env = {'GIT_INDEX_FILE': str(Path(temporary) / 'index')}
             self._git(destination, 'read-tree', original.untracked_tree, env=env)
+            self._reject_filters(destination, original.untracked, (), env, 'untracked restoration')
             self._git(destination, 'checkout-index', '--all', env=env)
+        self._filter_views(destination, paths)
         if self._files(destination, tuple(item.path for item in original.files)) != original.files:
             raise FlurryError(f'Source content does not roundtrip losslessly in rehearsal: {repo}')
-        marker = f'.flurry-{uuid.uuid4().hex}'
         prepared = Prepared(repo, destination, original, original.head, '', original.branch,
                             remote, url, '', marker, dirty_mode)
         if dirty_mode == 'commit' and dirty:
@@ -350,13 +417,19 @@ class Git:
                 self._git(destination, 'add', '--all')
             if self._text(destination, 'write-tree') != self._text(destination, 'rev-parse', 'HEAD^{tree}'):
                 self._commit(prepared, message)
-        remaining_paths = set(self._paths(self._git(destination, 'diff', 'HEAD', '--name-only', '-z')))
+        remaining_paths = set(self._paths(self._git(destination, 'diff', '--cached', 'HEAD', '--name-only', '-z')))
+        remaining_paths.update(self._paths(self._git(destination, 'diff', '--name-only', '-z')))
         remaining_paths.update(self._paths(self._git(destination, 'ls-files', '--others', '--exclude-standard', '-z')))
         if remaining_paths.intersection({'flake.nix', 'flake.lock'}):
             raise FlurryError(f'Preserved user flake.nix/flake.lock edits overlap lock generation: {repo}')
         prepared.remaining_stash = self._stash(destination, marker)
         self._git(destination, 'fetch', '--no-recurse-submodules', 'origin', f'+{ref}:refs/flurry/baseline')
         prepared.baseline = self._text(destination, 'rev-parse', 'refs/flurry/baseline')
+        if any(Path(path).name == '.gitattributes' for path in remaining_paths):
+            incoming = self._paths(self._git(destination, 'diff', '--name-only', '-z', original.head, prepared.baseline))
+            if any(Path(path).name == '.gitattributes' for path in incoming):
+                raise FlurryError(f'Cannot safely merge preserved .gitattributes with incoming attribute changes: {repo}')
+        self._tree_filters(prepared, prepared.baseline)
         try:
             self._git(destination, '-c', 'core.editor=true', 'rebase', '--no-autostash', '--no-update-refs', 'refs/flurry/baseline',
                       env={'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_CONFIG_NOSYSTEM': '1'})
@@ -368,11 +441,12 @@ class Git:
         return prepared
 
     def verify(self, prepared: Prepared) -> None:
-        self._preflight(prepared.repo)
+        self._preflight(prepared.repo, (prepared.marker,))
         if self._capture(prepared.repo, prepared.trial.parent) != prepared.original or self._text(prepared.repo, 'remote', 'get-url', prepared.remote) != prepared.remote_url:
             raise FlurryError(f'Source changed during rehearsal: {prepared.repo}')
 
     def rehearse_restore(self, prepared: Prepared) -> None:
+        self._tree_filters(prepared, prepared.head)
         if self._text(prepared.trial, 'rev-parse', 'HEAD') != prepared.head or self._git(prepared.trial, 'status', '--porcelain'):
             raise FlurryError('Restore rehearsal requires a clean trial at the prepared commit')
         self._collisions(prepared)
@@ -458,7 +532,8 @@ class Git:
         # An incomplete checkout/restore may contain uncaptured concurrent edits: never guess.
         if record.phase != 'promoted' or record.promoted is None:
             raise FlurryError(f'Ambiguous incomplete promotion; manual recovery required using {record.stash_ref}')
-        self._preflight(repo)
+        self._preflight(repo, (prepared.marker,))
+        self._tree_filters(prepared, prepared.original.head)
         if self._capture(repo, prepared.trial.parent) != record.promoted:
             raise FlurryError(f'Source changed since promotion; refusing destructive recovery: {repo}')
         if self._text(repo, 'show', f'{record.stash_ref}^2:{prepared.marker}') != self._marker_content(prepared.marker).decode().strip():

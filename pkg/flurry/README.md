@@ -3,12 +3,24 @@
 A little swarm of flakes. Maintain a directory of related Nix/Git repositories
 without publishing your half-written work by accident.
 
-Python 3.11+, Git and Nix with flakes support are required. GitHub permission
-queries use `gh`; GitLab queries use `glab`, authenticated separately for the
-appropriate host. No Python runtime dependencies.
+The authoritative source is `nix-config/pkg/flurry`. Flurry is included in
+nix-config's default NixOS, nix-darwin and Home Manager package lists; existing
+sane-default opt-outs still apply. These declarative defaults take effect when
+you next activate your configuration. It is exported as `packages.<system>.flurry`:
 
 ```bash
-./bin/flurry --help                 # run directly from this checkout
+# From nix-config; no host activation required:
+nix run .#flurry -- --help
+nix build .#flurry
+```
+
+Python 3.11+, Git with `check-attr --source` support and Nix with flakes support
+are required. GitHub permission queries use `gh`; GitLab queries use `glab`,
+authenticated separately for the appropriate host. No Python runtime dependencies.
+From the source directory (`pkg/flurry`):
+
+```bash
+./bin/flurry --help                 # run directly from this directory
 python3 -m flurry --help            # or use the module
 python3 -m pip install .            # optional installation; provides flurry
 ```
@@ -54,16 +66,27 @@ skips validation and emits a warning. Flurry never activates or deploys anything
 
 ## Configuration
 
-Optional `flurry.toml` at the workspace root:
+Configuration is optional. `flurry init` creates `flurry.toml` in the workspace
+root without Git, Nix or network access. Defaults exclude nothing and set no
+explicit GitLab hosts. Existing files, directories and symlinks are never
+overwritten; no checkouts or recovery state are created.
+
+```bash
+flurry init --root /path/to/workspace
+# Explicitly persist exclusions when initializing another workspace:
+flurry init --root /another/workspace --exclude 'wt-*'
+```
+
+Example `flurry.toml`:
 
 ```toml
 version = 1
 exclude = ["wt-*", "scratch-*"]
 gitlab_hosts = ["gitlab.example.com"]
 
-[repositories.ponygirls]
-path = "ponygirls"
-source = "github:7mind/ponygirls"
+[repositories.application]
+path = "application"
+source = "github:example/application"
 rebase_onto = "origin/main"
 push_remote = "origin"
 push_ref = "refs/heads/main"
@@ -152,14 +175,23 @@ Initial explicit restrictions:
 
 - Gitlink-bearing parent repositories cannot be synchronized yet. Discovery can
   report them; standalone child worktrees do not grant permission to rewrite pins.
-- Git clean/smudge filters, nontrivial `core.autocrlf`, source-only attributes,
-  sparse checkout, special index flags, intent-to-add and ongoing Git operations
-  are refused where preservation cannot be established safely.
+- Effective Git clean/smudge filter attributes, nontrivial `core.autocrlf`,
+  source-only attributes, sparse checkout, special index flags, intent-to-add and
+  ongoing Git operations are refused where preservation cannot be established
+  safely. Unused registered drivers, including global Git LFS, are allowed.
 - Preserve mode refuses pre-existing `flake.nix`/`flake.lock` edits that overlap
   generated lock work. Commit/reconcile those files explicitly first.
 - Same-repository and subdirectory-flake publication arrangements are reported
   unsupported instead of assuming a valid ordering. Registry-only input identifiers
   need explicit Git references.
+
+Filter checks cover HEAD/index/worktree views, incoming files, generated locks
+and sentinels, and temporary-index capture/checkout contexts. Source/trial global
+attribute-file paths must match. Uncaptured/ignored `.gitattributes` affecting
+original or incoming paths are refused. Preserved `.gitattributes` changes combined with
+incoming attribute-file changes are conservatively refused, even in different
+directories or when staged and unstaged changes cancel. Reserved driver names
+`unset` and `unspecified` are refused when attribute output is ambiguous.
 
 There is **no atomic transaction across remote repositories**. A provider may
 already be published when a consumer's Nix check, lock update or push fails.
@@ -195,6 +227,3 @@ operate on your workspace repositories. Real-Nix tests report a skip when Nix is
 unavailable; the sync leg can be explicitly disabled with `FLURRY_REAL_NIX=0`.
 The Nix package's build-time checks run the non-Nix leg; run the full command above
 in a Nix-enabled development environment for complete verification.
-
-Original workflow reference: the surrounding workspace's `flake-update` script.
-Flurry does not invoke that script or change its behavior.
