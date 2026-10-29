@@ -1043,11 +1043,11 @@
         "squish": "squish"
       },
       "locked": {
-        "lastModified": 1793230538,
-        "narHash": "sha256-c4bSa/p8uDr+63EAcufTczgIweSM1bCVwanyCe4s9AY=",
+        "lastModified": 1793310711,
+        "narHash": "sha256-EGj6eU9CShRq8cp04aXN/b7mkzT5DnawkVmVr9QOzMk=",
         "owner": "7mind",
         "repo": "ponygirls",
-        "rev": "e20bbbfa6aa22800c7bfdcf79aac17c575cfd61b",
+        "rev": "54a6cf940d92bed28ace0654dea49c400ef193ad",
         "type": "github"
       },
       "original": {
@@ -1348,11 +1348,11 @@
     },
     "systems_6": {
       "locked": {
-        "lastModified": 1791244623,
-        "narHash": "sha256-uuanbkFk8a313Zfrxdcz8Us/yQtaxNnKJtX8v0ZPpd8=",
+        "lastModified": 1681028828,
+        "narHash": "sha256-Vy1rq5AaRuLzOxct8nz4T6wlgyUR7zLU309k9mBC768=",
         "owner": "nix-systems",
         "repo": "default",
-        "rev": "d36eeed142f88b5a636f2e3856a53c61654cf29b",
+        "rev": "da67096a3b9bf56a91d16901293e51ba5b49a27e",
         "type": "github"
       },
       "original": {
