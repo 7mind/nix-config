@@ -54,6 +54,7 @@
       } else { };
 
     environment.systemPackages = with pkgs; [
+      flurry
       nnn
 
       nano

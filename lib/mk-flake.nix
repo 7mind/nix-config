@@ -109,6 +109,7 @@ in
       overlays = [
         inputs.agenix-rekey.overlays.default
         (import ../pkg/openlinkhub/overlay.nix)
+        (final: _: { flurry = final.callPackage ../pkg/flurry/package.nix { }; })
       ]
       ++ privateOutputs.overlays;
     };
@@ -116,14 +117,20 @@ in
   {
     inherit pkgs;
     packages = {
+      flurry = pkgs.flurry;
       home-manager-cli = inputs.home-manager.packages.${system}.default;
     }
     // pkgs.lib.optionalAttrs (system == "x86_64-linux") {
       hyprwhspr = pkgs.callPackage ../pkg/hyprwhspr { src = inputs.hyprwhspr; };
     }
     // privateOutputs.packages;
-    checks =
-      inputs.nixpkgs.lib.optionalAttrs
+    checks = {
+      flurry = pkgs.flurry;
+      flurry-default-packages = import ../tests/flurry.nix {
+        inherit pkgs inputs;
+        packages = self.packages;
+      };
+    } // inputs.nixpkgs.lib.optionalAttrs
         (builtins.elem system [
           "x86_64-linux"
           "aarch64-linux"

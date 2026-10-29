@@ -170,6 +170,7 @@
       };
 
     home.packages = with pkgs; [
+      flurry
       lsd
       viddy
       curl
