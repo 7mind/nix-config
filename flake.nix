@@ -110,7 +110,7 @@
     };
 
     kanata-switcher = {
-      url = "github:7mind/kanata-switcher/persistent-daemon";
+      url = "github:7mind/kanata-switcher/main";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
