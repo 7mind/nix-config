@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 from pathlib import Path
@@ -9,6 +8,7 @@ from typing import Sequence
 
 from .git import Git
 from .nix import Nix
+from .output import ColourMode, Console, Tone
 from .permissions import Permissions
 from .process import FlurryError, Runner, redact
 from .pull import Pull
@@ -24,7 +24,8 @@ def _common(parser: argparse.ArgumentParser, suppress: bool) -> None:
     default = argparse.SUPPRESS
     parser.add_argument("--root", type=Path, default=default if suppress else Path.cwd(), help="Workspace directory (default: current directory)")
     parser.add_argument("--exclude", dest="exclude" if suppress else "global_excludes", action="append", default=default if suppress else [], metavar="PATTERN", help="Add a workspace-relative exclusion; repeatable")
-    parser.add_argument("--json", action="store_true", default=default if suppress else False, help="Machine-readable output")
+    parser.add_argument("--json", action="store_true", default=default if suppress else False, help="Machine-readable output (never coloured)")
+    parser.add_argument("--color", choices=tuple(mode.value for mode in ColourMode), default=default if suppress else ColourMode.AUTO.value, help="Colour output: auto on terminals, always, or never (default: auto; respects NO_COLOR)")
     parser.add_argument("--timeout", type=float, default=default if suppress else COMMAND_TIMEOUT, help="Timeout per Git/Nix/API command, in seconds")
 
 
@@ -71,25 +72,21 @@ def _options(args: argparse.Namespace, excludes: tuple[str, ...]) -> SyncOptions
     return SyncOptions(mode, args.commit, args.message, args.check, excludes)
 
 
-def _print(data: object) -> None:
-    print(json.dumps(data, indent=2, sort_keys=True))
-
-
-def execute(args: argparse.Namespace) -> int:
+def execute(args: argparse.Namespace, console: Console) -> int:
     if args.timeout <= 0:
         raise FlurryError("--timeout must be positive")
     excludes = tuple(args.global_excludes + args.exclude)
     if args.command == "init":
         path = init_config(args.root, excludes)
         if args.json:
-            _print({"path": str(path)})
+            console.document({"path": str(path)})
         else:
-            print(f"Created {path}")
+            console.line(f"Created {path}", Tone.SUCCESS)
         return 0
     config = load_config(args.root, excludes)
     runner = Runner(os.environ, args.timeout)
     nix = Nix(runner)
-    report = lambda message: print(message, file=sys.stderr)
+    report = lambda message: console.diagnostic(message, Tone.INFO)
     if args.command == "status":
         repositories = discover(config, runner)
         rows = [{
@@ -101,14 +98,17 @@ def execute(args: argparse.Namespace) -> int:
             "common_dir": str(repo.common_dir),
         } for repo in repositories]
         if args.json:
-            _print({"repositories": rows, "remote_freshness": "not fetched"})
+            console.document({"repositories": rows, "remote_freshness": "not fetched"})
         else:
-            print("Local state only; remotes not fetched.")
+            console.line("Local state only; remotes not fetched.", Tone.MUTED)
             for row in rows:
                 state = "excluded" if row["excluded"] else "dirty" if row["changes"] else "clean"
-                print(f"{row['name']}: {row['branch'] or 'DETACHED'} [{state}]")
+                tone = Tone.MUTED if row["excluded"] else Tone.WARNING if row["changes"] else Tone.SUCCESS
+                name = console.style(row['name'], Tone.NAME)
+                branch = console.style(row['branch'], Tone.PLAIN) if row['branch'] else console.style('DETACHED', Tone.ERROR)
+                console.line(f"{name}: {branch} [{console.style(state, tone)}]", Tone.PLAIN)
                 if row["changes"]:
-                    print(row["changes"])
+                    console.line(row["changes"], Tone.WARNING)
         return 0
     if args.command == "graph":
         graph = build_graph(discover(config, runner), nix)
@@ -117,42 +117,47 @@ def execute(args: argparse.Namespace) -> int:
                  "fixed": edge.input.source.rev is not None} for edge in graph.edges]
         order = [repo.name for repo in graph.order]
         if args.json:
-            _print({"order": order, "edges": rows})
+            console.document({"order": order, "edges": rows})
         else:
             for row in rows:
                 boundary = " [excluded]" if row["excluded"] else " [fixed revision]" if row["fixed"] else ""
-                print(f"{row['provider']} -> {row['consumer']} ({row['input']}){boundary}")
-            print("Publication order: " + " -> ".join(order))
+                provider = console.style(row['provider'], Tone.NAME)
+                consumer = console.style(row['consumer'], Tone.NAME)
+                console.line(f"{provider} -> {consumer} ({row['input']}){console.style(boundary, Tone.WARNING)}", Tone.PLAIN)
+            console.line("Publication order: " + " -> ".join(console.style(name, Tone.NAME) for name in order), Tone.INFO)
         return 0
     if args.command in ("plan", "sync"):
         options = _options(args, config.excludes)
         if args.command == "plan" or args.dry_run:
             plan = plan_sync(config, runner, nix, options)
             if args.json:
-                _print(plan.to_dict())
+                console.document(plan.to_dict())
             else:
-                print(plan.to_dict()["notice"])
+                console.line(plan.to_dict()["notice"], Tone.WARNING)
                 for target in plan.targets:
-                    print(f"{target.repository.name}: rebase on {target.remote}/{target.baseline.removeprefix('refs/heads/')}; push {target.push_remote}/{target.push_ref}")
+                    name = console.style(target.repository.name, Tone.NAME)
+                    baseline = console.style(f"{target.remote}/{target.baseline.removeprefix('refs/heads/')}", Tone.INFO)
+                    destination = console.style(f"{target.push_remote}/{target.push_ref}", Tone.INFO)
+                    console.line(f"{name}: rebase on {baseline}; push {destination}", Tone.PLAIN)
                     changes = runner.git_text(target.repository.path, "status", "--porcelain=v1", "--untracked-files=all")
                     if changes:
-                        print(changes)
-                print(f"Existing edits: {options.dirty_mode}; generated locks: commit and publish; checks: {options.check_mode}")
+                        console.line(changes, Tone.WARNING)
+                console.line(f"Existing edits: {options.dirty_mode}; generated locks: commit and publish; checks: {options.check_mode}", Tone.INFO)
             return 0
         if args.check == "none":
-            report("Validation disabled explicitly (--check none).")
+            console.diagnostic("Validation disabled explicitly (--check none).", Tone.WARNING)
         journal = Sync(runner, nix, Git(runner), report).run(config, options, None)
         if args.json:
-            _print(journal.document)
+            console.document(journal.document)
         else:
-            print(f"Published selected flakes and lock updates. Run: {journal.path}")
+            console.line(f"Published selected flakes and lock updates. Run: {journal.path}", Tone.SUCCESS)
         return 0
     if args.command == "resume":
         journal = Sync(runner, nix, Git(runner), report).resume(config, args.run_id)
         if args.json:
-            _print(journal.document)
+            console.document(journal.document)
         else:
-            print(f"Completed. Run: {journal.path}")
+            console.line(f"Completed. Run: {journal.path}", Tone.SUCCESS)
         return 0
     if args.command == "pull":
         reference = args.flake
@@ -172,25 +177,26 @@ def execute(args: argparse.Namespace) -> int:
             plan = service.plan(reference, config.root, config.excludes, mappings)
             data = plan.to_dict()
             if not plan.complete:
-                _print(data)
+                console.document(data)
                 return 1
         else:
             with workspace_lock(config.root):
                 plan = service.plan(reference, config.root, config.excludes, mappings)
                 results = service.apply(plan)
                 data = {"plan": plan.to_dict(), "results": [item.to_dict() for item in results]}
-        _print(data)
+        console.document(data)
         return 0
     raise FlurryError("Unknown command")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
+    console = Console(sys.stdout, sys.stderr, dict(os.environ), ColourMode(args.color), args.json)
     try:
-        return execute(args)
+        return execute(args, console)
     except (FlurryError, OSError, ValueError) as error:
-        print(f"flurry: {redact(str(error))}", file=sys.stderr)
+        console.diagnostic(f"flurry: {redact(str(error))}", Tone.ERROR)
         return 1
     except KeyboardInterrupt:
-        print("flurry: interrupted; inspect retained run/recovery data before retrying", file=sys.stderr)
+        console.diagnostic("flurry: interrupted; inspect retained run/recovery data before retrying", Tone.ERROR)
         return 130

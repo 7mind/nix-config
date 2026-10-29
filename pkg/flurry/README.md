@@ -60,6 +60,13 @@ validation can still fail. Use `--json` for structured output and `--root DIR`
 to select a workspace explicitly. Global flags may appear before or after the
 command. Every subprocess has a configurable `--timeout` (seconds).
 
+Human command output is coloured by default on terminals: repository names and
+progress in cyan, clean/success states in green, warnings/dirty changes in yellow,
+and errors in red. Redirected output and `--json` stay plain. A nonempty
+`NO_COLOR` or `TERM=dumb` disables automatic colouring. Use `--color=always` to
+force colour, `--color=never` to disable it, or `--color=auto` for the default;
+explicit controls override the environment, but `--json` always stays uncoloured.
+
 Validation defaults to `--check eval` (`nix flake check --no-build`, no lock
 writes). `--check full` additionally builds checks; `--check none` explicitly
 skips validation and emits a warning. Flurry never activates or deploys anything.
