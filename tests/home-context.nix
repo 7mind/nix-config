@@ -23,8 +23,10 @@ let
   # "github-*", pavel-am5 loads the full set. The consumers live in private HM
   # modules, so these checks only run when the downstream root is present.
   hasPrivate = privateRoot != null && builtins.pathExists (privateRoot + "/home/pavel-trx40.nix");
+  hasTrx40 = builtins.hasAttr "pavel-trx40" flake.nixosConfigurations;
   trx40Pavel = flake.nixosConfigurations.pavel-trx40.config.home-manager.users.pavel;
   am5Pavel = flake.nixosConfigurations.pavel-am5.config.home-manager.users.pavel;
+  testbenchPavel = flake.nixosConfigurations.testbench.config.home-manager.users.pavel;
   root = system: make {
     source = "root";
     username = "root";
@@ -46,10 +48,10 @@ let
     assert lib.assertMsg (!home.value.pkgs.stdenv.hostPlatform.isLinux || !(config.systemd.user.services ? agenix)) "Disabled standalone agenix must not install a user service";
     assert lib.assertMsg (!home.value.pkgs.stdenv.hostPlatform.isDarwin || !(config.launchd.agents ? activate-agenix)) "Disabled standalone agenix must not install a launch agent";
     true;
-  worker = flake.nixosConfigurations.pavel-trx40.config.home-manager.users.llm;
+  worker = flake.nixosConfigurations.testbench.config.home-manager.users.llm;
   config = standalone.value.config;
   otherConfig = relocated.value.config;
-  nixos = flake.nixosConfigurations.pavel-trx40;
+  nixos = flake.nixosConfigurations.testbench;
   privateContexts = flake.globals.importPrivate "tests/home-context.nix" (_: { exports = [ ]; }) { inherit flake; };
 in
 assert lib.assertMsg (!hasPrivate || trx40Pavel.smind.hm.nix.githubAccessTokenFile == "/run/agenix/github-token-autopeasant") "pavel-trx40: the agent GitHub token must survive owner secret filtering";
@@ -57,10 +59,10 @@ assert lib.assertMsg (!hasPrivate || trx40Pavel.smind.hm.dev.llm.yolo.secretSess
 assert lib.assertMsg (!hasPrivate || trx40Pavel.programs.git.signing.key == null) "pavel-trx40: git SSH signing must deactivate when id_ed25519.pub is filtered out";
 assert lib.assertMsg (!hasPrivate || am5Pavel.smind.hm.nix.githubAccessTokenFile == "/run/agenix/github-token-autopeasant") "pavel-am5: GitHub wiring must be unchanged for the unfiltered set";
 assert lib.assertMsg (!hasPrivate || am5Pavel.programs.git.signing.key == "/run/agenix/id_ed25519.pub") "pavel-am5: git SSH signing must stay wired for the unfiltered set";
-assert lib.assertMsg (trx40Pavel.smind.hm.dev.git.enable && trx40Pavel.programs.git.enable) "pavel-trx40: dev.git must be enabled directly (headless homes do not get it via roles.desktop)";
-assert lib.assertMsg (builtins.any (p: lib.getName p == "tig") trx40Pavel.home.packages) "pavel-trx40: tig must be in home.packages";
-assert lib.assertMsg (!trx40Pavel.smind.hm.dev.git.rewriteGithubToSsh) "pavel-trx40: GitHub must stay on HTTPS (the host SSH key is not registered on GitHub)";
-assert lib.assertMsg (lib.hasInfix "gh auth git-credential" (trx40Pavel.programs.git.settings.credential."https://github.com".helper or "")) "pavel-trx40: GitHub HTTPS credentials must come from gh (a manual ~/.gitconfig would shadow the HM git config)";
+assert lib.assertMsg (testbenchPavel.smind.hm.dev.git.enable && testbenchPavel.programs.git.enable) "testbench: dev.git must be enabled via roles.desktop";
+assert lib.assertMsg (builtins.any (p: lib.getName p == "tig") testbenchPavel.home.packages) "testbench: tig must be in home.packages";
+assert lib.assertMsg (!hasTrx40 || !trx40Pavel.smind.hm.dev.git.rewriteGithubToSsh) "pavel-trx40: GitHub must stay on HTTPS (the host SSH key is not registered on GitHub)";
+assert lib.assertMsg (!hasTrx40 || lib.hasInfix "gh auth git-credential" (trx40Pavel.programs.git.settings.credential."https://github.com".helper or "")) "pavel-trx40: GitHub HTTPS credentials must come from gh (a manual ~/.gitconfig would shadow the HM git config)";
 assert lib.assertMsg (standalone.name == "pavel@ubuntu-x86_64") "Standalone export must use the supplied hostname and architecture";
 assert lib.assertMsg (config.home.username == "pavel" && config.home.homeDirectory == "/home/pavel") "Standalone identity must come from its context";
 assert lib.assertMsg (config.smind.hm.globals.isDesktop && !config.smind.hm.globals.llama-swap.enable) "Standalone capabilities must come from its declaration";
