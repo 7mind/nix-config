@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flurry-flakes"
+version = "0.1.0"
+description = "A little swarm of flakes: safe multi-repository Nix maintenance"
+requires-python = ">=3.11"
+license = "MIT"
+
+[project.scripts]
+flurry = "flurry.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["flurry*"]
