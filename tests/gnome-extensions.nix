@@ -20,7 +20,6 @@ let
     ];
   }).config;
   current = policy { classic-app-switcher.enable = true; };
-  older = policy { shellVersion = "48"; classic-app-switcher.enable = true; };
   disabledCaffeine = policy { caffeine.enable = false; };
   gestures = policy {
     touchpad-gesture-customization = { enable = true; remap-3-to-4 = true; };
@@ -33,7 +32,7 @@ let
     (throw "Missing expected test extension ${uuid}") selected.packages;
   placementUuid = extensionPkgs.gnomeExtensions.native-window-placement.extensionUuid;
   calendarUuid = extensionPkgs.gnomeExtensions.dim-completed-calendar-events.extensionUuid;
-  extra = extensionPkgs.gnome48Extensions.${extensionPkgs.gnomeExtensions.hibernate-status-button.extensionUuid};
+  extra = extensionPkgs.gnomeExtensions.move-clock;
   home = settings: home-manager.lib.homeManagerConfiguration {
     pkgs = extensionPkgs;
     modules = [
@@ -51,7 +50,6 @@ let
       desktop.gnome = {
         enable = true;
         extensions = {
-          shellVersion = "48";
           classic-app-switcher.enable = true;
           run-or-raise.enable = true;
           extraPackages = [ extra ];
@@ -77,13 +75,10 @@ let
   }) selected.packages));
 in
 # BG: shared policy and Home Manager; Effectual-Good for built package metadata.
-assert lib.assertMsg (uuids current == uuids older) "Shell version selection must preserve extension UUIDs";
-assert lib.assertMsg ((find current placementUuid).drvPath == extensionPkgs.gnomeExtensions.native-window-placement.drvPath
-  && (find older placementUuid).drvPath == extensionPkgs.gnome48Extensions.${placementUuid}.drvPath)
-  "Each Shell version must select its native-window-placement release";
-assert lib.assertMsg ((find current calendarUuid).drvPath == extensionPkgs.gnomeExtensions.dim-completed-calendar-events.drvPath
-  && (find older calendarUuid).drvPath == extensionPkgs.gnome48Extensions.${calendarUuid}.drvPath)
-  "Each Shell version must select its calendar release";
+assert lib.assertMsg ((find current placementUuid).drvPath == extensionPkgs.gnomeExtensions.native-window-placement.drvPath)
+  "Current Shell must select its native-window-placement release";
+assert lib.assertMsg ((find current calendarUuid).drvPath == extensionPkgs.gnomeExtensions.dim-completed-calendar-events.drvPath)
+  "Current Shell must select its calendar release";
 assert lib.assertMsg (!(builtins.elem extensionPkgs.gnomeExtensions.caffeine.extensionUuid (uuids disabledCaffeine)))
   "Disabled extensions must not be enabled";
 assert lib.assertMsg (gestures.dconfSettings."org/gnome/shell/extensions/touchpad-gesture-customization".vertical-swipe-3-fingers-gesture == "NONE")
@@ -134,8 +129,8 @@ pkgs.runCommand "gnome-extensions" { nativeBuildInputs = [ pkgs.python3 ]; } ''
   for package in json.loads(pathlib.Path(sys.argv[1]).read_text()):
       metadata = json.loads((pathlib.Path(package["path"]) / "metadata.json").read_text())
       assert metadata["uuid"] == package["extensionUuid"], package
-      assert "48" in map(str, metadata["shell-version"]), package
-  print("All selected extension packages declare GNOME 48 support")
+      assert "${lib.versions.major extensionPkgs.gnome-shell.version}" in map(str, metadata["shell-version"]), package
+  print("All selected extension packages declare GNOME ${lib.versions.major extensionPkgs.gnome-shell.version} support")
 
   desktop = configparser.ConfigParser(interpolation=None)
   desktop.read(sys.argv[2])
