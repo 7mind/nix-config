@@ -249,7 +249,7 @@ class Sync:
         self.report = report
 
     def run(self, config: Config, options: SyncOptions, guard: ResumeGuard | None) -> Journal:
-        with workspace_lock(config.root):
+        with workspace_lock(config.root, self.runner):
             if guard is not None:
                 if config_digest(config.root) != guard.configuration:
                     raise FlurryError("Configuration changed before resume acquired the workspace lock")
@@ -360,7 +360,7 @@ class Sync:
             raise FlurryError("Could not verify push ancestry")
 
     def resume(self, config: Config, run_id: str) -> Journal:
-        with workspace_lock(config.root):
+        with workspace_lock(config.root, self.runner):
             data = load_journal(config.root, run_id)
             if data.get("status") == "complete":
                 raise FlurryError("This run is already complete")

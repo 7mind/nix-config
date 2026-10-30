@@ -76,6 +76,15 @@ class Runner:
     def text(self, args: Sequence[str], cwd: Path | None) -> str:
         return self.run(args, cwd).decode(errors="surrogateescape").strip()
 
+    def git_path(self, repo: Path, *args: str) -> Path:
+        # Native configuration matters when resolving source core.hooksPath.
+        data = self.run(["git", "-C", os.fspath(repo), "rev-parse", *args], None)
+        if not data.endswith(b"\n"):
+            raise FlurryError(f"Invalid Git path response: {repo}")
+        path = Path(os.fsdecode(data[:-1]))
+        # --path-format=absolute canonicalizes leaf symlinks, hiding unsafe metadata writes.
+        return path if path.is_absolute() else repo.absolute() / path
+
     def git(self, repo: Path, *args: str) -> bytes:
         return self.run([
             "git", "-C", os.fspath(repo), "-c", "submodule.recurse=false",

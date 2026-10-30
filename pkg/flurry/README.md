@@ -177,9 +177,22 @@ Preservation follows Git's content/executable-bit model, including staged versus
 unstaged changes, visible untracked files and old stashes—not arbitrary Unix
 metadata, ignored file snapshots, ownership, ACLs or timestamps. Preservation
 checks and dirty restore are rehearsed in isolated local clones. Required Git
-identity/signing settings are retained. Internal checkout/stash hooks are disabled;
-ordinary push hooks run. Intentional commits with active commit hooks are refused
-when their execution context cannot be safely reproduced, never silently bypassed.
+identity/signing settings are retained. Internal checkout/stash/rebase hooks are
+disabled; ordinary push hooks run in the source repository. Intentional user and
+generated-lock commits run native Git commit hooks from the source's resolved
+hooks directory, including local/global/conditional `core.hooksPath` settings.
+Hooks run with the **trial checkout and candidate index**, not the dirty source.
+Source-side hook scripts and their adjacent helpers remain available; source-only
+ignored tools and arbitrary repository-local configuration are not copied.
+Hooks must support that isolated context; failures stop the operation without
+publishing that candidate. There is no commit-hook bypass, even with `--check none`.
+
+Hooks may validate or edit the commit message, but changing the planned tree,
+remaining Git-visible working contents, branch, index or configuration is refused.
+Hook-staged extras and formatter rewrites are not silently accepted. Failed trials
+are retained for inspection. Hooks are trusted executable code: Flurry does not
+sandbox their external side effects, and already-published providers are not
+rolled back if a consumer hook rejects its commit.
 
 Initial explicit restrictions:
 
@@ -211,6 +224,13 @@ Flurry stops and reports what was published; it never force-pushes or automatica
 rewrites published history.
 
 Private run journals and trial clones are retained under `.flurry/runs/RUN_ID/`.
+When the workspace is inside a Git worktree, Flurry automatically adds a literal,
+workspace-scoped exclusion to Git's local `info/exclude` before journaling. This
+also covers existing state, without modifying tracked `.gitignore` or the index.
+Tracked state or overriding unignore rules cause an explicit refusal; Flurry does
+not silently untrack files or overwrite those rules. Non-Git workspaces need no
+Git metadata changes.
+
 Git recovery refs under `refs/flurry/RUN_ID/` retain captured original state and
 prepared commits. Do not delete them while investigating a failure. They can
 contain unpublished source content; keep the state directory private.

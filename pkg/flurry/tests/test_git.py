@@ -355,13 +355,162 @@ class GitTests(unittest.TestCase):
         with self.assertRaisesRegex(FlurryError, 'flake'):
             self.prepare()
 
-    def test_requested_commit_hook_not_silently_skipped(self):
-        self.dirty()
-        hook = self.repo / '.git/hooks/pre-commit'
-        hook.write_text('#!/bin/sh\nexit 1\n')
+    def install_commit_hook(self, directory, name, body):
+        directory.mkdir(parents=True, exist_ok=True)
+        hook = directory / name
+        hook.write_text('#!/bin/sh\nset -eu\n' + body + '\n')
         hook.chmod(0o755)
-        with self.assertRaisesRegex(FlurryError, 'hook'):
-            self.prepare('commit', 'all')
+        return hook
+
+    def test_generated_lock_runs_source_hooks_against_candidate_only(self):
+        self.dirty()
+        before = self.snapshot()
+        directory = self.repo / '.git/hooks'
+        audit = self.root / 'hook-context'
+        self.install_commit_hook(directory, 'check-candidate',
+            f'git rev-parse --show-toplevel > "{audit}"\n'
+            f'git diff --cached --name-only >> "{audit}"\n'
+            f'git show :flake.lock >> "{audit}"\n'
+            'test "$(git show :mixed)" = base')
+        self.install_commit_hook(directory, 'pre-commit', 'exec "$(dirname "$0")/check-candidate"')
+        prepared = self.prepare()
+        (prepared.trial / 'flake.lock').write_text('generated\n')
+        self.adapter.commit_lock(prepared)
+        self.assertEqual(audit.read_text().splitlines(), [str(prepared.trial), 'flake.lock', 'generated'])
+        self.assertEqual(self.snapshot(), before)
+        self.adapter.promote(prepared, 'hook-preserve')
+        self.assertEqual(self.snapshot()[1:], before[1:])
+        self.assertEqual((self.repo / 'new file').read_bytes(), b'new\x00\xff')
+        self.assertEqual(self.git(self.repo, 'show', 'HEAD:flake.lock'), 'generated')
+
+    def test_relative_hooks_path_uses_source_scripts_and_helpers(self):
+        directory = self.repo / 'source hooks'
+        (self.repo / '.git/info/exclude').write_text('source hooks/\n')
+        self.git(self.repo, 'config', 'core.hooksPath', 'source hooks')
+        audit = self.root / 'hook-context'
+        self.install_commit_hook(directory, 'helper', f'git rev-parse --show-toplevel > "{audit}"')
+        self.install_commit_hook(directory, 'pre-commit', 'exec "$(dirname "$0")/helper"')
+        prepared = self.prepare()
+        (prepared.trial / 'flake.lock').write_text('generated\n')
+        self.adapter.commit_lock(prepared)
+        self.assertEqual(audit.read_text().strip(), str(prepared.trial))
+
+    def test_source_conditional_global_hooks_path_is_honored(self):
+        directory = self.root / 'global hooks'
+        audit = self.root / 'hook-context'
+        self.install_commit_hook(directory, 'pre-commit', f'git rev-parse --show-toplevel > "{audit}"')
+        included = self.root / 'source-config'
+        configuration = self.root / 'global-config'
+        self.git(self.root, 'config', '--file', str(included), 'core.hooksPath', str(directory))
+        self.git(self.root, 'config', '--file', str(configuration),
+                 f'includeIf.gitdir:{self.repo}/.git.path', str(included))
+        self.runner.environment['GIT_CONFIG_GLOBAL'] = str(configuration)
+        configured = self.runner.text(['git', '-C', str(self.repo), 'config', '--get', 'core.hooksPath'], None)
+        self.assertEqual(configured, str(directory))
+        prepared = self.prepare()
+        (prepared.trial / 'flake.lock').write_text('generated\n')
+        self.adapter.commit_lock(prepared)
+        self.assertEqual(audit.read_text().strip(), str(prepared.trial))
+
+    def test_linked_worktree_resolves_common_and_per_worktree_hooks(self):
+        primary = self.repo
+        linked = self.root / 'linked checkout'
+        self.git(primary, 'worktree', 'add', '-b', 'linked', str(linked))
+        self.repo = linked
+        audit = self.root / 'hook-context'
+        common_hooks = primary / '.git/hooks'
+        self.install_commit_hook(common_hooks, 'pre-commit', f'git rev-parse --show-toplevel > "{audit}"')
+        prepared = self.prepare()
+        (prepared.trial / 'flake.lock').write_text('generated\n')
+        self.adapter.commit_lock(prepared)
+        self.assertEqual(audit.read_text().strip(), str(prepared.trial))
+        worktree_hooks = self.root / 'worktree hooks'
+        self.install_commit_hook(worktree_hooks, 'pre-commit', f'printf worktree > "{audit}"')
+        self.git(primary, 'config', 'extensions.worktreeConfig', 'true')
+        self.git(linked, 'config', '--worktree', 'core.hooksPath', str(worktree_hooks))
+        prepared = self.adapter.prepare(linked, self.root / 'worktree trial', 'main', 'preserve', None, None)
+        (prepared.trial / 'flake.lock').write_text('generated\n')
+        self.adapter.commit_lock(prepared)
+        self.assertEqual(audit.read_text(), 'worktree')
+
+    def test_requested_commits_honor_hooks_and_explicit_scope(self):
+        self.dirty()
+        before = self.snapshot()
+        directory = self.repo / '.git/hooks'
+        audit = self.root / 'hook-context'
+        self.install_commit_hook(directory, 'pre-commit', f'git diff --cached --name-only > "{audit}"')
+        self.install_commit_hook(directory, 'prepare-commit-msg', 'test "$2" = message')
+        self.install_commit_hook(directory, 'commit-msg', 'printf "policy-approved message\\n" > "$1"')
+        self.install_commit_hook(directory, 'post-commit', 'test "$(git log -1 --format=%s)" = "policy-approved message"')
+        for scope, paths in [('staged', {'mixed'}), ('all', {'mixed', 'new file'})]:
+            with self.subTest(scope=scope):
+                prepared = self.adapter.prepare(self.repo, self.root / scope, 'main', 'commit', 'User work', scope)
+                self.assertEqual(set(audit.read_text().splitlines()), paths)
+                self.assertEqual(self.git(prepared.trial, 'log', '-1', '--format=%s'), 'policy-approved message')
+                self.assertEqual(self.snapshot(), before)
+
+    def test_intentional_commits_allow_staged_deletions_and_renames(self):
+        self.git(self.repo, 'rm', 'other')
+        self.git(self.repo, 'mv', 'mixed', 'renamed')
+        before = self.snapshot()
+        for scope in ('staged', 'all'):
+            with self.subTest(scope=scope):
+                prepared = self.adapter.prepare(self.repo, self.root / scope, 'main', 'commit', 'Remove and rename', scope)
+                paths = self.git(prepared.trial, 'ls-tree', '-r', '--name-only', 'HEAD').splitlines()
+                self.assertNotIn('other', paths)
+                self.assertNotIn('mixed', paths)
+                self.assertIn('renamed', paths)
+                self.assertEqual(self.snapshot(), before)
+
+    def test_commit_gates_execute_and_veto_without_touching_source(self):
+        self.dirty()
+        before = self.snapshot()
+        directory = self.repo / '.git/hooks'
+        audit = self.root / 'hook-context'
+        for name in ('pre-commit', 'prepare-commit-msg', 'commit-msg'):
+            with self.subTest(hook=name):
+                hook = self.install_commit_hook(directory, name,
+                    f'git rev-parse --show-toplevel > "{audit}"\nprintf "policy-refused\\n" >&2\nexit 1')
+                trial = self.root / name
+                with self.assertRaisesRegex(FlurryError, 'policy-refused'):
+                    self.adapter.prepare(self.repo, trial, 'main', 'commit', 'User work', 'all')
+                self.assertEqual(audit.read_text().strip(), str(trial))
+                self.assertEqual(self.snapshot(), before)
+                self.assertEqual(self.git(trial, 'rev-parse', 'HEAD'), before[0])
+                hook.unlink()
+
+    def test_hook_mutations_cannot_publish_a_different_candidate(self):
+        self.dirty()
+        before = self.snapshot()
+        directory = self.repo / '.git/hooks'
+        cases = [
+            ('extra-staged', 'pre-commit', 'printf extra > other\ngit add other'),
+            ('lock-rewrite', 'pre-commit', 'printf wrong > flake.lock\ngit add flake.lock'),
+            ('unstaged', 'pre-commit', 'printf changed > mixed'),
+            ('untracked', 'pre-commit', 'printf hidden > unexpected'),
+            ('config', 'pre-commit', 'git config hook.changed true'),
+            ('branch', 'post-commit', 'git checkout -b unexpected'),
+            ('extra-commit', 'post-commit', 'git -c core.hooksPath=/dev/null commit --allow-empty -m extra'),
+        ]
+        for name, event, body in cases:
+            with self.subTest(mutation=name):
+                prepared = self.adapter.prepare(self.repo, self.root / name, 'main', 'preserve', None, None)
+                hook = self.install_commit_hook(directory, event, body)
+                (prepared.trial / 'flake.lock').write_text('generated\n')
+                with self.assertRaisesRegex(FlurryError, 'Commit hook.*changed'):
+                    self.adapter.commit_lock(prepared)
+                self.assertEqual(self.snapshot(), before)
+                self.assertEqual(self.git(self.origin, 'rev-parse', 'main'), before[0])
+                hook.unlink()
+
+    def test_internal_checkout_hooks_stay_disabled(self):
+        marker = self.root / 'internal-hook-ran'
+        self.install_commit_hook(self.repo / '.git/hooks', 'post-checkout', f'touch "{marker}"')
+        prepared = self.prepare()
+        (prepared.trial / 'flake.lock').write_text('generated\n')
+        self.adapter.commit_lock(prepared)
+        self.adapter.promote(prepared, 'internal-hooks')
+        self.assertFalse(marker.exists())
 
     def test_push_normal_and_remote_verified(self):
         self.advance()

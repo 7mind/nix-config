@@ -113,6 +113,53 @@ class SyncTests(unittest.TestCase):
         self.run_sync(self.options("preserve"))
         self.assertEqual(heads, [self.remote_head(name) for name in ("a", "b", "c")])
 
+    def test_checks_none_still_runs_consumer_commit_hook_before_publishing_lock(self):
+        a = self.add_repo("a", {})
+        b = self.add_repo("b", {"a": "a"})
+        old_b = self.remote_head("b")
+        (a / "feature").write_text("provider change\n")
+        self.git(a, "add", "feature")
+        self.git(a, "commit", "-m", "provider change")
+        (b / "edit.txt").write_text("private consumer edit\n")
+        audit = self.directory / "hook-context"
+        hook = b / ".git/hooks/pre-commit"
+        hook.write_text('#!/bin/sh\nset -eu\n'
+                        f'git rev-parse --show-toplevel > "{audit}"\n'
+                        f'git diff --cached --name-only >> "{audit}"\n')
+        hook.chmod(0o755)
+        options = SyncOptions("preserve", None, None, "none", ())
+        self.assertEqual(self.run_sync(options).document["status"], "complete")
+        context, paths = audit.read_text().splitlines()
+        self.assertNotEqual(Path(context), b)
+        self.assertEqual(paths, "flake.lock")
+        self.assertNotEqual(old_b, self.remote_head("b"))
+        self.assertEqual(self.nix.locked_inputs(b)["a"].rev, self.remote_head("a"))
+        self.assertEqual((b / "edit.txt").read_text(), "private consumer edit\n")
+        self.assertEqual(self.git(self.repos["b"][1], "show", "main:edit.txt"), "base")
+
+    def test_checks_none_does_not_publish_consumer_rejected_by_commit_hook(self):
+        a = self.add_repo("a", {})
+        b = self.add_repo("b", {"a": "a"})
+        old_b = self.remote_head("b")
+        (a / "feature").write_text("provider change\n")
+        self.git(a, "add", "feature")
+        self.git(a, "commit", "-m", "provider change")
+        (b / "edit.txt").write_text("private consumer edit\n")
+        audit = self.directory / "hook-rejection"
+        hook = b / ".git/hooks/pre-commit"
+        hook.write_text('#!/bin/sh\nset -eu\n'
+                        f'git diff --cached --name-only > "{audit}"\n'
+                        'printf "policy-refused\\n" >&2\nexit 1\n')
+        hook.chmod(0o755)
+        options = SyncOptions("preserve", None, None, "none", ())
+        with self.assertRaisesRegex(FlurryError, "policy-refused"):
+            self.run_sync(options)
+        self.assertEqual(audit.read_text().strip(), "flake.lock")
+        self.assertEqual(self.remote_head("a"), self.git(a, "rev-parse", "HEAD"))
+        self.assertEqual(self.remote_head("b"), old_b)
+        self.assertEqual(self.git(b, "rev-parse", "HEAD"), old_b)
+        self.assertEqual((b / "edit.txt").read_text(), "private consumer edit\n")
+
     def test_new_lock_is_git_visible_to_the_validation_gate(self):
         self.add_repo("a", {})
         b = self.add_repo("b", {"a": "a"})

@@ -8,10 +8,13 @@ from flurry.state import Journal, config_digest, fingerprint, load_journal, work
 
 
 class StateTests(unittest.TestCase):
+    def setUp(self):
+        self.runner = Runner(os.environ, 10)
+
     def test_journal_is_private_durable_and_root_bound(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            with workspace_lock(root):
+            with workspace_lock(root, self.runner):
                 journal = Journal(root, {"mode": "preserve"})
                 journal.repository("a", {"state": "published", "head": "abc"})
                 journal.finish("complete", "done")
@@ -25,9 +28,9 @@ class StateTests(unittest.TestCase):
     def test_second_operation_cannot_take_workspace_lock(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            with workspace_lock(root):
+            with workspace_lock(root, self.runner):
                 with self.assertRaisesRegex(FlurryError, "Another flurry"):
-                    with workspace_lock(root):
+                    with workspace_lock(root, self.runner):
                         self.fail("Concurrent operation admitted")
 
     def test_symlink_state_directory_is_rejected(self):
@@ -37,7 +40,7 @@ class StateTests(unittest.TestCase):
             elsewhere.mkdir()
             (root / ".flurry").symlink_to(elsewhere, target_is_directory=True)
             with self.assertRaisesRegex(FlurryError, "symlink"):
-                with workspace_lock(root):
+                with workspace_lock(root, self.runner):
                     pass
             self.assertEqual(list(elsewhere.iterdir()), [])
 

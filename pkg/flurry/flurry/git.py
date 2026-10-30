@@ -283,20 +283,28 @@ class Git:
         if attributes.exists() and attributes.read_bytes().strip():
             raise FlurryError(f'Source-only info/attributes are unsupported: {repo}')
 
-    def _no_commit_hooks(self, repo: Path) -> None:
-        path = self.runner.text(['git', '-C', str(repo), 'rev-parse', '--git-path', 'hooks'], None)
-        hooks = Path(path)
-        if not hooks.is_absolute():
-            hooks = repo / hooks
-        for name in ('pre-commit', 'prepare-commit-msg', 'commit-msg', 'post-commit'):
-            hook = hooks / name
-            if hook.exists() and os.access(hook, os.X_OK):
-                raise FlurryError(f'Commit hook requires unsupported isolated execution context: {hook}')
-
     def _commit(self, prepared: Prepared, message: str) -> None:
-        self._no_commit_hooks(prepared.repo)
-        self._git(prepared.trial, 'commit', '-m', message,
+        hooks = self.runner.git_path(prepared.repo, '--git-path', 'hooks')
+        before = self._capture(prepared.trial, prepared.trial.parent)
+        self._git(prepared.trial, '-c', f'core.hooksPath={hooks}', 'commit', '-m', message,
                   env={'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_CONFIG_NOSYSTEM': '1'})
+        changed = f'Commit hooks changed the prepared candidate; inspect retained trial: {prepared.trial}'
+        parents = self._text(prepared.trial, 'rev-list', '--parents', '--max-count=1', 'HEAD').split()
+        if len(parents) != 2 or parents[1] != before.head or self._text(prepared.trial, 'rev-parse', 'HEAD^{tree}') != before.index_tree:
+            raise FlurryError(changed)
+        # Check raw contents/configuration before snapshotting can invoke attribute machinery.
+        untracked = self._paths(self._git(prepared.trial, 'ls-files', '--others', '--exclude-standard', '-z'))
+        paths = tuple(item.path for item in before.files) + untracked
+        if (self._text(prepared.trial, 'write-tree') != before.index_tree
+                or self._git(prepared.trial, 'config', '--null', '--list') != before.config
+                or self._files(prepared.trial, paths) != before.files):
+            raise FlurryError(changed)
+        after = self._capture(prepared.trial, prepared.trial.parent)
+        # Raw files above retain deleted HEAD paths that the new snapshot no longer lists.
+        fields = ('branch', 'index_tree', 'worktree_patch', 'untracked_tree', 'untracked',
+                  'flags', 'stashes', 'config', 'identity')
+        if any(getattr(after, field) != getattr(before, field) for field in fields):
+            raise FlurryError(changed)
 
     def _stash(self, repo: Path, marker: str) -> str:
         path = repo / marker

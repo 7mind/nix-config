@@ -4,6 +4,7 @@ import fcntl
 import hashlib
 import json
 import os
+import stat
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -26,8 +27,57 @@ def private_directory(path: Path) -> None:
     path.chmod(0o700)
 
 
+def ignore_state_directory(root: Path, runner: Runner) -> None:
+    result = runner.call(["git", "-C", os.fspath(root), "rev-parse", "--is-inside-work-tree"],
+                         None, None, {"LC_ALL": "C"}, False)
+    if result.returncode == 128 and result.stderr.startswith(b"fatal: not a git repository"):
+        return
+    if result.returncode or result.stdout not in (b"true\n", b"false\n"):
+        raise FlurryError(f"Cannot determine Git workspace for private state: {root}")
+    if result.stdout == b"false\n":
+        return
+    top = runner.git_path(root, "--show-toplevel")
+    relative = (root.resolve().relative_to(top) / STATE_DIRECTORY).as_posix()
+    if runner.git(root, "ls-files", "-z", "--", f":(top,literal){relative}"):
+        raise FlurryError(f"Flurry state is already tracked; untrack it explicitly before continuing: {root / STATE_DIRECTORY}")
+    if "\n" in relative or "\r" in relative:
+        raise FlurryError("Cannot encode a workspace with line breaks in Git exclude rules")
+    literal = "".join("\\" + character if character in "\\*?[]" else character for character in relative)
+    rule = os.fsencode("/" + literal + "/")
+    target = os.fspath(root / STATE_DIRECTORY) + "/"
+
+    def ignored() -> bool:
+        check = runner.call(["git", "-C", os.fspath(root), "check-ignore", "--quiet", "--no-index", "--", target],
+                            None, None, {}, False)
+        if check.returncode not in (0, 1):
+            raise FlurryError(f"Cannot inspect Git exclusion for private state: {target}")
+        return check.returncode == 0
+
+    if ignored():
+        return
+    exclude = runner.git_path(root, "--git-path", "info/exclude")
+    try:
+        if exclude.parent.is_symlink():
+            raise FlurryError(f"Refusing symlink Git exclude directory: {exclude.parent}")
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        descriptor = os.open(exclude, os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o666)
+        with os.fdopen(descriptor, "r+b") as output:
+            if not stat.S_ISREG(os.fstat(output.fileno()).st_mode):
+                raise FlurryError(f"Git exclude path is not a regular file: {exclude}")
+            fcntl.flock(output.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            data = output.read()
+            if data.rstrip(b"\r\n").split(b"\n")[-1] != rule:
+                output.write((b"\n" if data and not data.endswith(b"\n") else b"") + rule + b"\n")
+                output.flush()
+                os.fsync(output.fileno())
+    except OSError as error:
+        raise FlurryError(f"Cannot update Git exclusion for private state: {exclude}: {error}") from error
+    if not ignored():
+        raise FlurryError(f"Flurry state is not ignored; reconcile overriding .gitignore rules: {target}")
+
+
 @contextmanager
-def workspace_lock(root: Path) -> Iterator[None]:
+def workspace_lock(root: Path, runner: Runner) -> Iterator[None]:
     directory = root / STATE_DIRECTORY
     private_directory(directory)
     descriptor = os.open(directory / "workspace.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
@@ -36,6 +86,7 @@ def workspace_lock(root: Path) -> Iterator[None]:
             fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
             raise FlurryError(f"Another flurry operation holds {directory / 'workspace.lock'}") from error
+        ignore_state_directory(root, runner)
         yield
     finally:
         os.close(descriptor)

@@ -180,7 +180,7 @@ def execute(args: argparse.Namespace, console: Console) -> int:
                 console.document(data)
                 return 1
         else:
-            with workspace_lock(config.root):
+            with workspace_lock(config.root, runner):
                 plan = service.plan(reference, config.root, config.excludes, mappings)
                 results = service.apply(plan)
                 data = {"plan": plan.to_dict(), "results": [item.to_dict() for item in results]}
