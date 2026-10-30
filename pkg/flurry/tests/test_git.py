@@ -1,6 +1,7 @@
 """Behavioral/Effectual-GoodCommunication: disposable real Git and local remotes."""
 import os
 from pathlib import Path
+import shlex
 import subprocess
 import tempfile
 import unittest
@@ -339,6 +340,44 @@ class GitTests(unittest.TestCase):
         self.git(self.repo, 'add', '-N', 'intent')
         with self.assertRaisesRegex(FlurryError, 'Intent-to-add'):
             self.prepare()
+
+    def test_intent_refusal_suggests_safe_commands_for_only_affected_paths(self):
+        renamed = self.root / "repo with 'quote"
+        self.repo.rename(renamed)
+        self.repo = renamed
+        self.dirty()
+        paths = ['intent file', "quote'file", '-leading', ':(glob)*', 'line\nbreak', '$(touch injected)']
+        for path in paths:
+            (self.repo / path).write_text('intent contents')
+        self.git(self.repo, '--literal-pathspecs', 'add', '-N', '--', *paths)
+        before = self.snapshot()
+        with self.assertRaisesRegex(FlurryError, 'Intent-to-add') as error:
+            self.prepare('commit', 'all')
+        self.assertEqual(self.snapshot(), before)
+        message = str(error.exception)
+        self.assertIn('\nStage current contents:\n  ', message)
+        commands = [part.strip() for part in message.split('\nStage current contents:\n  ', 1)[1].split(
+            '\nOr unstage (keep working files):\n  ', 1)]
+        self.assertEqual(len(commands), 2)
+        for command, action in zip(commands, ('add', 'reset')):
+            self.assertEqual(shlex.split(command), [
+                'git', '--literal-pathspecs', '-C', str(self.repo), action, '--', *sorted(paths),
+            ])
+        staged_mixed = self.runner.git(self.repo, 'show', ':mixed')
+        for command in reversed(commands):
+            subprocess.run(command, shell=True, cwd=self.root, env=self.env, check=True, capture_output=True)
+            if command == commands[1]:
+                tracked = set(self.runner.git(self.repo, 'ls-files', '-z').split(b'\0'))
+                self.assertTrue(all(os.fsencode(path) not in tracked for path in paths))
+                self.git(self.repo, '--literal-pathspecs', 'add', '-N', '--', *paths)
+            else:
+                added = set(self.runner.git(self.repo, 'diff', '--cached', '--name-only', '--diff-filter=A', '-z').split(b'\0')) - {b''}
+                self.assertEqual(added, {os.fsencode(path) for path in paths})
+            self.assertEqual(self.runner.git(self.repo, 'show', ':mixed'), staged_mixed)
+            self.assertEqual((self.repo / 'mixed').read_text(), 'base\nstaged\nunstaged\n')
+            self.assertIn(b'new file\0', self.runner.git(self.repo, 'ls-files', '--others', '--exclude-standard', '-z'))
+            self.assertTrue(all((self.repo / path).read_text() == 'intent contents' for path in paths))
+            self.assertFalse((self.root / 'injected').exists())
 
     def test_ignored_incoming_collision_refused(self):
         (self.repo / '.git/info/exclude').write_text('upstream\n')

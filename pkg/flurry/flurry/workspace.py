@@ -214,7 +214,6 @@ def discover(config: Config, runner: Runner) -> tuple[Repository, ...]:
                 pending.append(child)
     found: list[Repository] = []
     all_repositories: list[Repository] = []
-    matched_excludes: set[str] = set()
     for path, settings in sorted(candidates.items(), key=lambda pair: pair[1].name):
         top = Path(runner.git_text(path, "rev-parse", "--show-toplevel")).resolve()
         if top != path:
@@ -226,7 +225,6 @@ def discover(config: Config, runner: Runner) -> tuple[Repository, ...]:
         upstream = _optional(runner, path, "rev-parse", "--symbolic-full-name", "@{upstream}")
         relative = os.path.relpath(path, config.root).replace(os.sep, "/")
         matches = {pattern for pattern in config.excludes if fnmatch.fnmatchcase(relative, pattern)}
-        matched_excludes.update(matches)
         repository = Repository(settings.name, path, common_dir, branch, head, origin, upstream, bool(matches), settings)
         all_repositories.append(repository)
         if path in configured or (path / "flake.nix").is_file():
@@ -243,9 +241,6 @@ def discover(config: Config, runner: Runner) -> tuple[Repository, ...]:
         source = parse_source(repository.origin, repository.path)
         if source is not None and source.repository_id in identities:
             found.append(repository)
-    unmatched = set(config.excludes) - matched_excludes
-    if unmatched:
-        raise FlurryError("Exclusion patterns matched no repository: " + ", ".join(sorted(unmatched)))
     return tuple(sorted(found, key=lambda repository: repository.name))
 
 

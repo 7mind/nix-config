@@ -1,6 +1,7 @@
 """Dirty-policy contract: real Git with both dummy and production Nix adapters."""
 import contextlib
 import io
+import json
 import os
 from pathlib import Path
 import shutil
@@ -169,6 +170,20 @@ class PlanPolicyContract:
         self.git(self.repo, 'commit', '-m', 'nested fixture')
         lock.write_text('local nested work\n')
         self.assertEqual(len(self.plan(self.options('preserve', None)).targets), 1)
+
+    def test_cli_plan_and_dry_run_allow_unmatched_exclusions(self):
+        (self.root / 'flurry.toml').write_text('exclude = ["*worktree*"]\n')
+        before = self.snapshot()
+        for command in (['plan'], ['sync', '--dry-run']):
+            with self.subTest(command=command):
+                output, errors = io.StringIO(), io.StringIO()
+                with patch.dict(os.environ, self.env), patch('flurry.cli.Nix', self.nix_adapter), \
+                        contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+                    result = main(command + ['--preserve', '--json', '--exclude', 'absent-*', '--root', str(self.root)])
+                self.assertEqual(result, 0, errors.getvalue())
+                self.assertEqual(json.loads(output.getvalue())['order'], ['application'])
+                self.assertFalse((self.root / '.flurry').exists())
+                self.assertEqual(before, self.snapshot())
 
     def test_cli_plan_and_dry_run_both_refuse_the_local_blocker(self):
         declaration = self.repo / 'flake.nix'

@@ -5,6 +5,7 @@ import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 import re
+import shlex
 import stat
 import tempfile
 import uuid
@@ -253,8 +254,16 @@ class Git:
             if entry and (chr(entry[0]).islower() or entry.startswith(b'S')):
                 raise FlurryError(f'Special index flags in {repo}; clear assume-unchanged/skip-worktree')
         index = self._text(repo, 'write-tree')
-        if self._git(repo, 'ls-files', '-z') != self._git(repo, 'ls-tree', '-r', '--name-only', '-z', index):
-            raise FlurryError(f'Intent-to-add entries in {repo}; stage content or unstage first')
+        intent_paths = sorted(set(self._paths(self._git(repo, 'ls-files', '-z'))) - set(self._tree_paths(repo, index)))
+        if intent_paths:
+            command = ['git', '--literal-pathspecs', '-C', str(repo)]
+            stage = shlex.join([*command, 'add', '--', *intent_paths])
+            unstage = shlex.join([*command, 'reset', '--', *intent_paths])
+            raise FlurryError(
+                f'Intent-to-add entries in {repo}.\n'
+                f'Stage current contents:\n  {stage}\n'
+                f'Or unstage (keep working files):\n  {unstage}'
+            )
         for tree in ('HEAD', index):
             self._no_gitlinks(repo, tree)
             for name in self._tree_paths(repo, tree):

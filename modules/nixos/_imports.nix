@@ -93,6 +93,7 @@
   ./sway.nix
   ./sudo.nix
   ./tailscale.nix
+  ./netbird.nix
   ./three-finger-drag.nix
   ./trezor.nix
   ./uhk-keyboard.nix

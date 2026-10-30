@@ -104,8 +104,8 @@ push_ref = "refs/heads/main"
 
 `flurry.local.toml` overlays repository fields for machine-local settings.
 Exclusions from both files and repeated `--exclude` flags are additive. Unknown
-keys, invalid paths and unmatched sync exclusions are errors. Prefer narrow
-patterns: the sample excludes match only if such checkouts actually exist.
+keys and invalid paths are errors. Exclusion patterns that match no repository
+are harmless no-ops, so patterns can cover checkouts that are not currently present.
 Paths must remain inside the workspace. Do not put credentials in configuration.
 
 Normally Flurry discovers immediate sibling Git flakes and initialized submodules,

@@ -158,6 +158,19 @@ class WorkspaceTests(unittest.TestCase):
         with self.assertRaisesRegex(FlurryError, "escapes workspace"):
             load_config(self.root, ())
 
-    def test_unmatched_exclusion_is_an_explicit_error(self):
-        with self.assertRaisesRegex(FlurryError, "matched no repository"):
-            discover(load_config(self.root, ("typo-*",)), self.runner)
+    def test_unmatched_exclusion_does_not_block_discovery(self):
+        self.assertEqual(discover(load_config(self.root, ("*worktree*",)), self.runner), ())
+
+    def test_unmatched_exclusion_preserves_matching_exclusions(self):
+        included = self.root / "app"
+        excluded = self.root / "scratch-worktree"
+        self.initialize(included, flake=False)
+        self.initialize(excluded, flake=False)
+        (self.root / "flurry.toml").write_text(
+            '[repositories.app]\npath = "app"\n'
+            '[repositories.scratch]\npath = "scratch-worktree"\n'
+        )
+        repositories = discover(load_config(self.root, ("*worktree*", "absent-*")), self.runner)
+        self.assertEqual({repo.path: repo.excluded for repo in repositories}, {
+            included: False, excluded: True,
+        })
