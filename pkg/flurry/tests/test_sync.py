@@ -1,11 +1,16 @@
 """Effectual-GoodCommunication: actual Git and Nix, temporary file-only remotes."""
+import contextlib
+import io
 import json
 import os
+import shlex
 import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from flurry.cli import main
 from flurry.git import Git
 from flurry.nix import Nix
 from flurry.process import FlurryError, Runner
@@ -160,6 +165,47 @@ class SyncTests(unittest.TestCase):
         self.assertEqual(self.git(b, "rev-parse", "HEAD"), old_b)
         self.assertEqual((b / "edit.txt").read_text(), "private consumer edit\n")
 
+    def test_failed_check_reports_and_retains_reproduction_without_publishing(self):
+        repo = self.add_repo("a", {})
+        before = self.remote_head("a")
+        declaration = repo / "flake.nix"
+        declaration.write_text('{ outputs = _: throw "check-refused https://token@forge.example/x"; }')
+        self.git(repo, "add", "flake.nix")
+        self.git(repo, "commit", "-m", "failing check fixture")
+        with self.assertRaises(FlurryError) as error:
+            self.run_sync(self.options("preserve"))
+        reports = [event for event in self.events if event.startswith("Checking: ")]
+        self.assertEqual(len(reports), 1)
+        command = reports[0].removeprefix("Checking: ")
+        tokens = shlex.split(command)
+        self.assertEqual(tokens[0], "cd")
+        trial = Path(tokens[1])
+        self.assertTrue(trial.is_dir(), "Failure must retain the check working directory")
+        self.assertNotEqual(trial, repo)
+        self.assertEqual(tokens[2:4], ["&&", "nix"])
+        self.assertIn(command, str(error.exception))
+        journal = next((self.root / ".flurry" / "runs").glob("*/run.json"))
+        data = json.loads(journal.read_text())
+        self.assertEqual(data["status"], "failed")
+        self.assertIn(command, data["detail"])
+        self.assertIn("check-refused", data["detail"])
+        self.assertNotIn("token@", str(error.exception) + journal.read_text() + reports[0])
+        self.assertEqual(self.remote_head("a"), before)
+
+    def test_cli_check_progress_keeps_json_stdout_pure(self):
+        self.add_repo("a", {})
+        output, errors = io.StringIO(), io.StringIO()
+        with patch.dict(os.environ, self.env), contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+            result = main(["sync", "--preserve", "--json", "--color=always", "--root", str(self.root)])
+        self.assertEqual(result, 0, errors.getvalue())
+        self.assertEqual(json.loads(output.getvalue())["status"], "complete")
+        self.assertNotIn("Checking:", output.getvalue())
+        self.assertIn("Checking: cd ", errors.getvalue())
+        self.assertIn("--option accept-flake-config false", errors.getvalue())
+        self.assertIn("--option allow-import-from-derivation false", errors.getvalue())
+        self.assertIn("flake check --no-write-lock-file --no-build", errors.getvalue())
+        self.assertNotIn("\x1b", output.getvalue() + errors.getvalue())
+
     def test_new_lock_is_git_visible_to_the_validation_gate(self):
         self.add_repo("a", {})
         b = self.add_repo("b", {"a": "a"})
@@ -167,12 +213,12 @@ class SyncTests(unittest.TestCase):
         self.git(b, "commit", "-m", "defer initial lock")
 
         class TrackingNix(Nix):
-            def check(inner, path, full):
+            def check(inner, path, full, *, report):
                 if (path / "flake.lock").exists():
                     result = inner.runner.call(["git", "-C", str(path), "ls-files", "--error-unmatch", "flake.lock"], None, None, {}, False)
                     if result.returncode:
                         raise FlurryError("Generated flake.lock must be Git-visible before validation")
-                super().check(path, full)
+                super().check(path, full, report=report)
 
         gate = TrackingNix(self.runner)
         service = Sync(self.runner, gate, Git(self.runner), self.events.append)

@@ -1,5 +1,6 @@
 import json
 import os
+import shlex
 import shutil
 import tempfile
 import unittest
@@ -12,6 +13,60 @@ from flurry.process import FlurryError, Runner
 class ForbiddenRunner:
     def run(self, arguments, cwd):
         raise AssertionError("Subprocess executed before symlink preflight")
+
+
+class CheckRunner:
+    """Hand-written process boundary: record argv/cwd and optionally fail."""
+    def __init__(self, events, failure):
+        self.events = events
+        self.failure = failure
+
+    def run(self, arguments, cwd):
+        self.events.append((list(arguments), cwd))
+        if self.failure:
+            raise FlurryError(self.failure)
+        return b""
+
+
+class NixCheckDiagnosticsTests(unittest.TestCase):
+    """Behavioral-Active Effectual-Group; regression: checks lacked reproduction data."""
+    def test_reports_exact_safe_command_and_quoted_cwd_before_each_check(self):
+        with tempfile.TemporaryDirectory(prefix="flurry check's ") as temporary:
+            path = Path(temporary).resolve()
+            for full in (False, True):
+                with self.subTest(full=full):
+                    events = []
+                    nix = Nix(CheckRunner(events, None))
+                    nix.check(path, full, report=events.append)
+                    self.assertEqual(len(events), 2)
+                    report, (argv, cwd) = events
+                    expected = [
+                        "nix", "--extra-experimental-features", "nix-command flakes",
+                        "--option", "accept-flake-config", "false",
+                        "--option", "allow-import-from-derivation", "false",
+                        "flake", "check", "--no-write-lock-file",
+                    ] + ([] if full else ["--no-build"])
+                    self.assertEqual(argv, expected)
+                    self.assertEqual(cwd, path)
+                    self.assertEqual(shlex.split(report.removeprefix("Checking: ")),
+                                     ["cd", str(path), "&&", *argv])
+                    self.assertIn(shlex.quote(str(path)), report)
+
+    def test_failure_retains_reproduction_command_and_redacts_url_userinfo(self):
+        with tempfile.TemporaryDirectory(prefix="flurry check ") as temporary:
+            path = Path(temporary).resolve()
+            for url in ("https://token@forge.example/x", "https://user:secret@forge.example/x"):
+                with self.subTest(url=url):
+                    events = []
+                    nix = Nix(CheckRunner(events, f"nix failed (1): {url}"))
+                    with self.assertRaises(FlurryError) as error:
+                        nix.check(path, False, report=events.append)
+                    detail = str(error.exception)
+                    self.assertIn(events[0].removeprefix("Checking: "), detail)
+                    self.assertIn("nix failed (1)", detail)
+                    self.assertIn("https://[redacted]@forge.example/x", detail)
+                    self.assertNotIn("token@", detail)
+                    self.assertNotIn("user:secret@", detail)
 
 
 class NixLockTests(unittest.TestCase):
@@ -50,7 +105,7 @@ class NixLockTests(unittest.TestCase):
         target.write_bytes(original)
         (checkout / "flake.lock").symlink_to(target)
         guarded = Nix(ForbiddenRunner())
-        for operation in (lambda: guarded.update(checkout, ("a",)), lambda: guarded.check(checkout, False), lambda: guarded.locked_inputs(checkout)):
+        for operation in (lambda: guarded.update(checkout, ("a",)), lambda: guarded.check(checkout, False, report=lambda message: None), lambda: guarded.locked_inputs(checkout)):
             with self.subTest(operation=operation), self.assertRaisesRegex(FlurryError, "symlink"):
                 operation()
             self.assertEqual(target.read_bytes(), original)
@@ -147,4 +202,4 @@ class RealNixTests(unittest.TestCase):
         lock = (c / "flake.lock").read_bytes()
         self.nix.update(c, ("a", "b"))
         self.assertEqual((c / "flake.lock").read_bytes(), lock)
-        self.nix.check(c, False)
+        self.nix.check(c, False, report=lambda message: None)

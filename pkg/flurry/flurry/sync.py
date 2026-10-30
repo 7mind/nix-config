@@ -317,7 +317,7 @@ class Sync:
                         raise FlurryError(f"{name}: lock update crossed an excluded provider boundary")
                     if options.check_mode != "none" and (item.trial / "flake.nix").is_file():
                         journal.action(f"checking:{name}")
-                        self.nix.check(item.trial, options.check_mode == "full")
+                        self.nix.check(item.trial, options.check_mode == "full", report=self.report)
                     self.git.commit_lock(item)
                     self.git.rehearse_restore(item)
                     self._check_push_base(target, item)

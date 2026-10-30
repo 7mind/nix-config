@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+import shlex
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from .process import FlurryError, Runner
+from .process import FlurryError, Runner, redact
 from .source import Source, parse_source
 
 
@@ -30,12 +31,15 @@ class Nix:
                 raise FlurryError(f"Refusing symlink flake boundary: {candidate}")
         return root
 
-    def _command(self, arguments: Sequence[str], path: Path) -> bytes:
-        return self.runner.run([
+    def _argv(self, arguments: Sequence[str]) -> list[str]:
+        return [
             "nix", "--extra-experimental-features", "nix-command flakes",
             "--option", "accept-flake-config", "false",
             "--option", "allow-import-from-derivation", "false", *arguments,
-        ], path)
+        ]
+
+    def _command(self, arguments: Sequence[str], path: Path) -> bytes:
+        return self.runner.run(self._argv(arguments), path)
 
     def inputs(self, path: Path, *, base: Path | None = None) -> tuple[Input, ...]:
         path = self._preflight(path)
@@ -76,12 +80,18 @@ class Nix:
             raise FlurryError("Invalid targeted input name")
         self._command(["flake", "update", "--refresh", *names], path)
 
-    def check(self, path: Path, full: bool) -> None:
+    def check(self, path: Path, full: bool, *, report: Callable[[str], None]) -> None:
         path = self._preflight(path)
         arguments = ["flake", "check", "--no-write-lock-file"]
         if not full:
             arguments.append("--no-build")
-        self._command(arguments, path)
+        argv = self._argv(arguments)
+        command = redact(f"cd {shlex.quote(str(path))} && {shlex.join(argv)}")
+        report(f"Checking: {command}")
+        try:
+            self.runner.run(argv, path)
+        except FlurryError as error:
+            raise FlurryError(redact(f"Nix check failed: {command}\n{error}")) from error
 
     def locked_inputs(self, path: Path) -> Mapping[str, Source]:
         path = self._preflight(path)
