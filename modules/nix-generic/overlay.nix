@@ -10,6 +10,7 @@
 
       far2l-noui = prev.callPackage ../../pkg/far2l-noui { };
       flurry = prev.callPackage ../../pkg/flurry/package.nix { };
+      jabracli = prev.callPackage ../../pkg/jabracli/package.nix { };
 
       # ripgrep's `misc::compressed_{brotli,lz4,zstd}` integration tests fail
       # with exit 2 / empty stderr when an aarch64 build runs under qemu-user

@@ -122,6 +122,7 @@ in
     }
     // pkgs.lib.optionalAttrs (system == "x86_64-linux") {
       hyprwhspr = pkgs.callPackage ../pkg/hyprwhspr { src = inputs.hyprwhspr; };
+      jabracli = pkgs.callPackage ../pkg/jabracli/package.nix { };
     }
     // privateOutputs.packages;
     checks = {
