@@ -1043,11 +1043,11 @@
         "squish": "squish"
       },
       "locked": {
-        "lastModified": 1793451540,
-        "narHash": "sha256-ol2+IYvIbyrTIdqerrrXbbGHNBwr/DZ3EQ1PyBVW4H4=",
+        "lastModified": 1793464922,
+        "narHash": "sha256-8SPeVpN9ccuc7t2W6o4oi7mos3cuuQbzxwJKj/8ekkU=",
         "owner": "7mind",
         "repo": "ponygirls",
-        "rev": "faede3e6aa9d8ed532563f88f7f3d6368c8653b6",
+        "rev": "77fb680340e1e1aae032d45c6a86c6d5b676f36f",
         "type": "github"
       },
       "original": {
