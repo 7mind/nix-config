@@ -12,52 +12,18 @@
       hyprwhspr = prev.callPackage ../../pkg/hyprwhspr { src = inputs.hyprwhspr; };
 
       # Standalone ghostty terminfo, avoiding the full GUI app (gtk4, libadwaita,
-      # gstreamer, ...). Parses the terminfo from ghostty's Zig source, tic-compiles.
+      # gstreamer, ...), using upstream's dedicated output.
       ghostty-terminfo = prev.callPackage ../../pkg/ghostty-terminfo { };
 
       llama-swap = prev.llama-swap.overrideAttrs (old: {
-        version = "256";
+        version = "268";
         src = old.src.override {
-          tag = "v256";
-          hash = "sha256-midZ5/eq4ULDhCC3wtzman0OdH5bHMIO8FsmzizU8sc=";
+          tag = "v268";
+          hash = "sha256-nwH4AMiC5b4elrG9m/HExOYM8P3r1YaWghPXUpoW/xU=";
         };
-        vendorHash = "sha256-R9VOAmoRXet7zoEYo7LW/awJludS4AxRlFDR6skPxbo=";
-        excludedPackages = [
-          "cmd/misc"
-          "cmd/fake-model"
-          "cmd/monitor-test"
-          "cmd/test-concurrency"
-          "cmd/vllm-wrapper"
-        ] ++ prev.lib.optionals (!prev.stdenv.buildPlatform.canExecute prev.stdenv.hostPlatform) [
-          "cmd/simple-responder"
-        ];
-        # v256 predates the upstream binary/output split (kubeswap, wol,
-        # vllm_wrapper, utils in v262): the inherited installPhase moves
-        # binaries this version does not build into outputs it declares.
-        outputs = [ "out" ];
-        installPhase = ''
-          runHook preInstall
-          install -Dm444 -t "$out/share/llama-swap" config.example.yaml
-          mkdir -p "$out/bin"
-          mv "$GOPATH/bin/llama-swap" "$out/bin/"
-          runHook postInstall
-        '';
-        passthru = old.passthru // {
-          ui = old.passthru.ui.overrideAttrs (ui:
-            let
-              sourceRoot = "${ui.src.name}/ui";
-              npmDepsHash = "sha256-lmhRJ8275PIQ+7vHdr9aZ31lYeXUkXrWnlvuwOadjRQ=";
-            in {
-              inherit sourceRoot npmDepsHash;
-              npmDeps = ui.npmDeps.overrideAttrs {
-                inherit sourceRoot;
-                outputHash = npmDepsHash;
-              };
-            });
-        };
+        vendorHash = "sha256-nauMUxfDugvYnA74eVm8jaUt+l1V7gNvL89f6l2Ls8w=";
       });
 
-      # nixpkgs' 0.3.38 accesses struct nilfs internals removed in nilfs-utils 2.3.
       # intel-llvm's Sphinx docs targets run with warnings-as-errors and
       # Sphinx >= 8.2 trips over the SYCL attribute examples (pygments
       # misc.highlighting_failure warnings become fatal) — upstream:
@@ -106,25 +72,11 @@
       });
 
       partclone = prev.partclone.overrideAttrs (old: {
-        version = "0.3.50";
-        src = prev.fetchFromGitHub {
-          owner = "Thomas-Tsai";
-          repo = "partclone";
-          rev = "0.3.50";
-          hash = "sha256-k63VP/F8mGdE17CWMBTuJeJ9W2MdPLcG4bxsWm08VcA=";
+        version = "0.3.52";
+        src = old.src.override {
+          rev = "0.3.52";
+          hash = "sha256-tffPKO28Qh/6hY46HuRQP4XsSqq2sideEQGQC/SwMC8=";
         };
-        nativeBuildInputs = old.nativeBuildInputs ++ [
-          prev.gettext
-          prev.libxslt
-          prev.docbook_xsl
-          prev.docbook_xml_dtd_45
-        ];
-        buildInputs = old.buildInputs ++ [
-          prev.xxhash
-          prev.liburcu
-          prev.zlib
-          prev.zstd
-        ];
       });
     })
     (
@@ -167,21 +119,6 @@
         matter-mqtt-bridge = pkgs.callPackage "${cfg-meta.paths.pkg}/matter-mqtt-bridge/default.nix" { };
 
         resock = pkgs.callPackage "${cfg-meta.paths.pkg}/resock/default.nix" { };
-        # nixpkgs liblinphone 5.4.85 includes ZXing/TextUtfEncoding.h, removed
-        # in zxing-cpp 3.x. encode() now takes UTF-8 std::string directly.
-        linphonePackages = super.linphonePackages.overrideScope (
-          _lfinal: lprev: {
-            liblinphone = lprev.liblinphone.overrideAttrs (old: {
-              postPatch = (old.postPatch or "") + ''
-                substituteInPlace src/factory/factory.cpp \
-                  --replace-fail '#include <ZXing/TextUtfEncoding.h>' '/* zxing-cpp 3.x dropped TextUtfEncoding.h */' \
-                  --replace-fail '#include <TextUtfEncoding.h>' '/* zxing-cpp 3.x dropped TextUtfEncoding.h */' \
-                  --replace-fail 'ZXing::TextUtfEncoding::FromUtf8(code)' 'code'
-              '';
-            });
-          }
-        );
-
         flexisip = pkgs.callPackage "${cfg-meta.paths.pkg}/flexisip/default.nix" { };
         flexisip-conference = pkgs.callPackage "${cfg-meta.paths.pkg}/flexisip-conference/default.nix" { };
         flexisip-http-file-transfer-server =
@@ -215,14 +152,13 @@
             '';
           });
 
-        # nixpkgs still ships 22.8.2. Use the complete upstream security release
-        # rather than carrying one advisory's patch while leaving the other fixes
-        # from 22.9.0 onward absent.
+        # Use the complete upstream 23.5 release, including its security fixes.
+        # The paired pjproject archive matches third-party/versions.mak.
         asterisk = super.asterisk.overrideAttrs (old: rec {
-          version = "22.11.0";
+          version = "23.5.0";
           src = super.fetchurl {
             url = "https://downloads.asterisk.org/pub/telephony/asterisk/old-releases/asterisk-${version}.tar.gz";
-            hash = "sha256-O9XuBAUJo9PNmxupUgwY5uwKfnmBymjEV9zTa6PFTZQ=";
+            hash = "sha256-jtOiN+bY3/lKCVJ6gxQ1MLWvzBruc/p7hcBpvaUHraw=";
           };
           preConfigure = (old.preConfigure or "") + ''
             chmod +w externals_cache
@@ -248,19 +184,6 @@
               hash = "sha256-ZJ+Mq7VbYYZLC4/3iM9L7ZAiZX2FcrRZCOI2s7cSQCw=";
             })
           ];
-        });
-
-        # Ensure GNOME Settings can load org.gnome.login-screen schema from gdm.
-        # Without this, fingerprint settings row is hidden even when fprintd works.
-        gnome-control-center = super.gnome-control-center.overrideAttrs (old: {
-          preFixup =
-            let
-              gdmSchemas = "${super.gdm}/share/gsettings-schemas/${super.gdm.name}";
-            in
-            (old.preFixup or "")
-            + ''
-              gappsWrapperArgs+=(--prefix XDG_DATA_DIRS : "${gdmSchemas}")
-            '';
         });
 
         # https://github.com/NixOS/nixpkgs/issues/408853
@@ -292,14 +215,14 @@
 
         smfc = super.python3Packages.buildPythonApplication rec {
           pname = "smfc";
-          version = "6.4.2";
+          version = "6.5.0";
           pyproject = true;
 
           src = super.fetchFromGitHub {
             owner = "petersulyok";
             repo = "smfc";
             tag = "v${version}";
-            hash = "sha256-2YRQnHiG+4vWKJ3CZ+jyra5A6i+wAz2x+1ET1gas41o=";
+            hash = "sha256-SkxV5hlNudEp+f+cysRgS623Ayibxp12nRYNuvSDRv4=";
           };
 
           build-system = [ super.python3Packages.setuptools ];

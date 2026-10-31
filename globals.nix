@@ -135,49 +135,35 @@ rec {
                 inputs.rust-overlay.overlays.default
                 (final: prev:
                   let
+                    upgradeOllama = package: package.overrideAttrs (finalAttrs: old: {
+                      version = "0.40.13";
+                      src = prev.fetchFromGitHub {
+                        owner = "ollama";
+                        repo = "ollama";
+                        tag = "v${finalAttrs.version}";
+                        hash = "sha256-cxpgG6l97S7f+XZy5Hb689MYpVnbaqxBhzHLL62zAKM=";
+                      };
+                      vendorHash = "sha256-1mzJrZUHH2ouP6I+LVojHbft7No5AumqKZVq0I/Ubsg=";
+                      passthru = old.passthru // {
+                        llamaCppVersion = "b11963";
+                        llamaCppSrc = prev.fetchFromGitHub {
+                          owner = "ggml-org";
+                          repo = "llama.cpp";
+                          tag = finalAttrs.passthru.llamaCppVersion;
+                          hash = "sha256-DUggBODOVSOydWopvdXt/K9ZiRrbWrl+mywpr1vjJwM=";
+                        };
+                      };
+                    });
                     llamaCppPatches = [ ./pkg/llama-cpp/json-schema-regex-shorthand.patch ];
                     patchLlamaCpp = package: package.overrideAttrs (old: {
                       patches = (old.patches or [ ]) ++ llamaCppPatches;
                     });
                   in {
-                  # Patch intel-graphics-compiler into the RPATH of the Level
-                  # Zero driver `libze_intel_gpu.so.1` in `$out/lib`.
-                  # nixpkgs postFixup only fixes RPATH on the OpenCL
-                  # ICD (`libigdrcl.so`), leaving the L0 driver without IGC on
-                  # any search path; NEO's runtime dlopen of `libigdfcl.so.2`/
-                  # `libigc.so.2` during eager device init then fails via
-                  # `abortUnrecoverable` (`gmm_helper/resource_info.cpp:15`).
-                  # Verified: putting `${intel-graphics-compiler}/lib` on
-                  # LD_LIBRARY_PATH yields clean `zeInit = 0x0`, device
-                  # enumeration, and USM allocations. The former 26.18 source
-                  # pin is dropped — locked nixpkgs is already 26.31.39395.13.
-                  intel-compute-runtime = prev.intel-compute-runtime.overrideAttrs (oldAttrs: {
-                    postFixup = (oldAttrs.postFixup or "") + ''
-                      for lib in "$out"/lib/libze_intel*.so* ; do
-                        # symlinks have no headers — skip cleanly
-                        [ -L "$lib" ] && continue
-                        patchelf --set-rpath ${
-                          prev.lib.makeLibraryPath [
-                            prev.intel-gmmlib
-                            prev.intel-graphics-compiler
-                            prev.libva
-                            prev.stdenv.cc.cc
-                          ]
-                        } "$lib"
-                      done
-                    '';
-                  });
-                  # nixpkgs `intel-llvm` (PR #470035, merged April 2026)
-                  # packaging bug: its merged output uses symlinkJoin +
-                  # __structuredAttrs = true, which silently produces an empty
-                  # $out (the lndir loop references $pathsPath that
-                  # structuredAttrs doesn't populate the legacy way). Disable
-                  # structuredAttrs on the merge step so $paths is a plain
-                  # shell variable again. Verify:
-                  # `ls $(nix eval --raw nixpkgs#intel-llvm.outPath)/bin`
-                  # should list clang/clang++/clang-22 etc.
                   intel-llvm = (prev.intel-llvm.overrideScope (_: intelPrev: {
-                    unwrapped = intelPrev.unwrapped.overrideAttrs (old: {
+                    # Level Zero is required even when host-wide ROCm support is enabled.
+                    unwrapped = (intelPrev.unwrapped.override {
+                      levelZeroSupport = true;
+                    }).overrideAttrs (old: {
                       # LLVM detects x86_64-pc-linux-gnu from GCC, but Nix's
                       # compiler wrapper targets x86_64-unknown-linux-gnu.
                       # Libdevice passes LLVM's detected triple explicitly,
@@ -188,16 +174,14 @@ rec {
                         (prev.lib.cmakeFeature "LLVM_DEFAULT_TARGET_TRIPLE" prev.stdenv.hostPlatform.config)
                       ];
                     });
-                  })).overrideAttrs (old: {
-                    __structuredAttrs = false;
-                    paths = builtins.toString old.paths;
-                    # The buildCommand still references `$pathsPath` (it
-                    # `cat`s it inside the lndir loop), so `paths` must be
-                    # in passAsFile alongside buildCommand.
-                    passAsFile = [ "buildCommand" "paths" ];
-                  });
-                  # Intel oneMKL 2026.1.0 — ABI-matched to nixpkgs
-                  # intel-llvm 7.0.1 (libsycl.so.9). Sister-package, not
+                  }));
+                  # Keep every Ollama flavor and the planted SYCL backend on one ggml ABI.
+                  ollama = upgradeOllama prev.ollama;
+                  ollama-cuda = upgradeOllama prev.ollama-cuda;
+                  ollama-rocm = upgradeOllama prev.ollama-rocm;
+                  ollama-vulkan = upgradeOllama prev.ollama-vulkan;
+                  # Intel oneMKL 2026.1.0 — 2026.2 imports unavailable SYCL symbols.
+                  # Pair with intel-llvm 7.1.1. Sister-package, not
                   # an override of `mkl`, so the rest of nixpkgs
                   # (numpy/scipy/octave) keeps using 2023.1.
                   mkl-sycl = final.callPackage ./pkg/mkl-sycl/default.nix { };
@@ -214,7 +198,7 @@ rec {
                   });
 
                   # llama.cpp built with the SYCL backend, pinned to the same
-                  # llama.cpp tag nixpkgs ollama vendors (b10760). Linux-only —
+                  # llama.cpp tag nixpkgs ollama vendors (b11963). Linux-only —
                   # needs intel-llvm + intel-compute-runtime + level-zero, none
                   # of which exist on Darwin.
                   llama-cpp-sycl = final.callPackage ./pkg/llama-cpp-sycl/default.nix {
@@ -224,12 +208,12 @@ rec {
 
                   # ollama with the GGML SYCL backend wired in for the Intel
                   # Arc Pro B70. Plants llama-cpp-sycl's libggml-sycl.so into
-                  # the nixpkgs ollama (0.33.3) backend dir. Both share llama.cpp
-                  # b10760 so the planted .so is ABI-matched to ollama's ggml-base.
+                  # the nixpkgs ollama (0.40.13) backend dir. Both share llama.cpp
+                  # b11963 so the planted .so is ABI-matched to ollama's ggml-base.
                   ollama-sycl = final.callPackage ./pkg/ollama-sycl/default.nix { };
 
                   # Stock ollama flavors (ollama/-cuda/-rocm/-vulkan) ride
-                  # nixpkgs' own version (0.33.3), matching the in-container
+                  # the same version (0.40.13), matching the in-container
                   # ollama-sycl server.
                 })
               ];

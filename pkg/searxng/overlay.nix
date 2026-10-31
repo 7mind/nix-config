@@ -1,40 +1,62 @@
 # searxng built from upstream master instead of the commit pinned in nixpkgs.
 #
 # nixpkgs tracks rolling master snapshots of searxng (version `0-unstable-…`),
-# so repointing `src` is enough to ride master. The runtime dependency list is
-# replaced because upstream swapped httpx/httpx-socks/sniffio for curl_cffi
-# after the commit nixpkgs pins (cloudscraper was never in requirements.txt).
+# so repointing `src` is enough to ride master. Newer HTTP/browser and date
+# parsing dependencies are private to SearXNG. The runtime list excludes
+# cloudscraper, which is absent from upstream requirements.txt.
 #
 # To bump to a newer master commit: update `version`, `rev` and `hash` below.
 # `hash` is the NAR hash of the fetched tree as reported by:
 #   nix flake prefetch github:searxng/searxng/<rev> --json
 final: prev:
 let
-  # Keep this aligned with upstream requirements.txt; nixpkgs currently lags.
-  curlCffi = final.python3.pkgs.curl-cffi.overridePythonAttrs (previousAttrs: rec {
-    version = "0.16.3";
-
-    src = previousAttrs.src.override {
-      tag = "v${version}";
-      hash = "sha256-KagVuHhsHmA5/CY/1y5GLOFXx2ETPud6xk2vn4sG1hI=";
+  curlImpersonate = prev.callPackage ./curl-impersonate.nix {
+    curl-impersonate = prev.curl-impersonate;
+  };
+  python = final.python3.override {
+    packageOverrides = python-final: python-prev: {
+      curl-cffi = (python-prev.curl-cffi.override {
+        curl-impersonate = curlImpersonate;
+      }).overridePythonAttrs (old: rec {
+        version = "0.17.0";
+        src = old.src.override {
+          tag = "v${version}";
+          hash = "sha256-1QN7gf0WPACxFgjK560M7/TA40+/zsQQ7HBCRdx6BLc=";
+        };
+        patches = [ ./curl-cffi-use-system-libs.patch ];
+        # curl-cffi uses certifi.where(); Nix's NSS 3.131.1 CA certificates
+        # match certifi 2026.10.23's bundle, independently of the version metadata.
+        pythonRelaxDeps = (old.pythonRelaxDeps or [ ]) ++ [ "certifi" ];
+        nativeCheckInputs = old.nativeCheckInputs ++ [ python-final.jsonpath-ng ];
+      });
+    };
+  };
+  # Only SearXNG requires dateutil 3; do not upgrade unrelated test dependencies.
+  dateutil = python.pkgs.python-dateutil.overridePythonAttrs (old: {
+    version = "3.0.0";
+    propagatedBuildInputs = old.propagatedBuildInputs ++ [ python.pkgs.tzdata ];
+    src = prev.fetchPypi {
+      pname = "python_dateutil";
+      version = "3.0.0";
+      hash = "sha256-fryzwpqS886v55p6SKXEVnfp4AS77sV0KsC7sAVgt6I=";
     };
   });
 in
 {
-  searxng = prev.searxng.overrideAttrs (finalAttrs: previousAttrs: {
-    version = "0-unstable-2026-09-25";
+  searxng = (prev.searxng.override { python3 = python; }).overrideAttrs (finalAttrs: previousAttrs: {
+    version = "0-unstable-2026-10-30";
 
     src = previousAttrs.src.override {
-      rev = "487f519227f5bec68c394493f69f3d43b1135112";
-      hash = "sha256-LD35VRvEpfiRSu+telJ29/S1o2GtrCJtM0ewh1i1OLo=";
+      rev = "1cd13d98d65a58f1126fa5bb5c77e42c0ea625f3";
+      hash = "sha256-RWiS7JAcq+j9/Ge9FHkyFfXvuXgPARv6aeTUbAkw5Xc=";
     };
 
     passthru = (previousAttrs.passthru or { }) // {
       # Master's requirements.txt, mapped onto the python package set.
-      dependencies = with final.python3.pkgs; [
+      dependencies = with python.pkgs; [
         babel
         certifi
-        curlCffi
+        curl-cffi
         flask
         flask-babel
         isodate
@@ -43,7 +65,7 @@ in
         markdown-it-py
         msgspec
         pygments
-        python-dateutil
+        dateutil
         pyyaml
         typer
         typing-extensions
@@ -51,7 +73,7 @@ in
         whitenoise
       ];
       # toPythonModule computes this from the pre-override dependency list.
-      requiredPythonModules = prev.python3.pkgs.requiredPythonModules finalAttrs.passthru.dependencies;
+      requiredPythonModules = python.pkgs.requiredPythonModules finalAttrs.passthru.dependencies;
     };
 
     # nixpkgs bakes its pinned version and source rev into searx/version_frozen.py

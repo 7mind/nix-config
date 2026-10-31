@@ -6,7 +6,7 @@
   makeWrapper,
 }:
 let
-  hoymilesWifiVersion = "0.5.6";
+  hoymilesWifiVersion = "0.6.0";
 
   # Upstream library: not in nixpkgs, packaged inline. Pure-Python protobuf
   # client for the local Hoymiles DTU/HMS-W protocol.
@@ -19,7 +19,7 @@ let
       owner = "suaveolent";
       repo = "hoymiles-wifi";
       rev = "v${version}";
-      hash = "sha256-xVaXJOZdnoodsN8F6I35Lm/z1D7yBqBgia5GwB61Wbg=";
+      hash = "sha256-+24A3vBU3uMsT66IhMOb/zU5OE2Boss5jl2qvmkXTxE=";
     };
 
     build-system = [ python3.pkgs.setuptools ];
@@ -30,8 +30,12 @@ let
       cryptography
     ];
 
-    # Upstream has no test suite in the sdist. Smoke-import is enough.
-    doCheck = false;
+    doCheck = true;
+    checkPhase = ''
+      runHook preCheck
+      python -m unittest discover -s tests -v
+      runHook postCheck
+    '';
     pythonImportsCheck = [ "hoymiles_wifi" "hoymiles_wifi.dtu" ];
 
     meta = {
@@ -66,6 +70,7 @@ stdenvNoCC.mkDerivation {
   checkPhase = ''
     runHook preCheck
     ${typecheckEnv}/bin/python -m py_compile $src
+    ${pythonEnv}/bin/python $src --help > /dev/null
     runHook postCheck
   '';
 

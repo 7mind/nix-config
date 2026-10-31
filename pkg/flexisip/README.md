@@ -21,7 +21,7 @@ Or via the repo overlay: `pkgs.flexisip` on any host that imports `modules/nixos
 
 ## Notes
 
-- **MWI stubs**: two B2BUA methods that need newer liblinphone MWI APIs than nixpkgs 5.4.85 are stubbed (household PBX does not use MWI).
+- **MWI**: B2BUA Message Waiting Indication handlers use the APIs provided by the nixpkgs Linphone SDK 5.5.13.
 - **Recording / echo**: not provided by Flexisip itself. See `modules/nixos/flexisip.nix`.
 - **Refreshing sofia-sip vendor**: the pin is only on `gitlab.linphone.org`. From a host that can reach it:
 

@@ -9,16 +9,25 @@ let
     gnome-shell-extension-touchpad-gesture-customization-app-expose =
       inputs.touchpad-gesture-customization-app-expose.packages.${pkgs.stdenv.hostPlatform.system}.default;
   });
-  policy = settings: (lib.evalModules {
+  policyWithPackages = selectedPkgs: settings: (lib.evalModules {
     modules = [
       (import ../modules/shared/gnome-extensions.nix {
-        pkgs = extensionPkgs;
+        pkgs = selectedPkgs;
         minimizeModifier = "ctrl-alt";
         defaults = { gsconnect = false; touchpadGestures = false; runOrRaise = true; };
       })
       settings
     ];
   }).config;
+  policy = policyWithPackages extensionPkgs;
+  shellMajor = lib.versions.major extensionPkgs.gnome-shell.version;
+  expectedForShell = shell: package: extensionPkgs."gnome${shell}Extensions".${package.extensionUuid};
+  nonNative = policy { shellVersion = "49"; };
+  disabledLazy = policyWithPackages (extensionPkgs.extend (_: previous: {
+    gnomeExtensions = previous.gnomeExtensions // {
+      vicinae = throw "Disabled extension package must not be evaluated";
+    };
+  })) { vicinae.enable = false; };
   current = policy { classic-app-switcher.enable = true; };
   disabledCaffeine = policy { caffeine.enable = false; };
   gestures = policy {
@@ -59,6 +68,7 @@ let
       tailscale.systray.enable = true;
     };
   }).config;
+  hibernateCheck = import ./gnome-hibernate.nix { pkgs = extensionPkgs; };
   disabledHome = (home { }).config;
   inheritedHome = (home {
     smind.hm.globals = {
@@ -75,10 +85,15 @@ let
   }) selected.packages));
 in
 # BG: shared policy and Home Manager; Effectual-Good for built package metadata.
-assert lib.assertMsg ((find current placementUuid).drvPath == extensionPkgs.gnomeExtensions.native-window-placement.drvPath)
+assert lib.assertMsg ((find current placementUuid).drvPath == (expectedForShell shellMajor extensionPkgs.gnomeExtensions.native-window-placement).drvPath)
   "Current Shell must select its native-window-placement release";
-assert lib.assertMsg ((find current calendarUuid).drvPath == extensionPkgs.gnomeExtensions.dim-completed-calendar-events.drvPath)
+assert lib.assertMsg ((find current calendarUuid).drvPath == (expectedForShell shellMajor extensionPkgs.gnomeExtensions.dim-completed-calendar-events).drvPath)
   "Current Shell must select its calendar release";
+assert lib.assertMsg ((find nonNative placementUuid).drvPath
+  == (expectedForShell "49" extensionPkgs.gnomeExtensions.native-window-placement).drvPath)
+  "A non-native Shell must select its versioned extension release";
+assert lib.assertMsg (builtins.deepSeq (map (package: package.drvPath) disabledLazy.packages) true)
+  "Disabled extension packages must remain unevaluated";
 assert lib.assertMsg (!(builtins.elem extensionPkgs.gnomeExtensions.caffeine.extensionUuid (uuids disabledCaffeine)))
   "Disabled extensions must not be enabled";
 assert lib.assertMsg (gestures.dconfSettings."org/gnome/shell/extensions/touchpad-gesture-customization".vertical-swipe-3-fingers-gesture == "NONE")
@@ -120,6 +135,7 @@ assert lib.assertMsg current.status-tray.enable "Shared Status Tray must remain 
 assert lib.assertMsg (builtins.all (assertion: assertion.assertion) enabledHome.assertions)
   "Standalone GNOME Home Manager must pass its assertions";
 pkgs.runCommand "gnome-extensions" { nativeBuildInputs = [ pkgs.python3 ]; } ''
+  test -s ${hibernateCheck}
   python3 - ${manifest} ${links."applications/org.gnome.Extensions.desktop".source} <<'PY'
   import configparser
   import json

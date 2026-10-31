@@ -1,8 +1,5 @@
-# Port of nixpkgs master `pkgs/development/python-modules/mcp/1.nix`
-# (mcp 1.29.0). The pinned nixpkgs has python3Packages.mcp at 2.2.0 but
-# predates the upstream `mcp_1` alias added to unbreak mcp-proxy (which
-# requires `mcp<2`). Remove this file and the overlay's mcp-proxy scoping
-# once the nixpkgs pin includes `mcp_1`.
+# MCP 1.x compatibility package for mcp-proxy, which requires mcp<2.
+# Keep the local package while it is newer than nixpkgs' mcp_1.
 {
   lib,
   stdenv,
@@ -25,6 +22,8 @@
   sse-starlette,
   starlette,
   uvicorn,
+  typing-extensions,
+  typing-inspection,
 
   # optional-dependencies
   # cli
@@ -47,7 +46,7 @@
 
 buildPythonPackage (finalAttrs: {
   pname = "mcp";
-  version = "1.29.0";
+  version = "1.30.0";
   pyproject = true;
   __structuredAttrs = true;
 
@@ -55,7 +54,7 @@ buildPythonPackage (finalAttrs: {
     owner = "modelcontextprotocol";
     repo = "python-sdk";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-lRlj5RT/R5zrYL5XpdQR2l9t99G94WTsubN0gSQekMc=";
+    hash = "sha256-EkmTqsK+vBJcURuwFkhtNJMFgtzgw/7Cd+Fpav4P/ko=";
   };
 
   # time.sleep(0.1) feels a bit optimistic and it has been flaky whilst
@@ -86,6 +85,8 @@ buildPythonPackage (finalAttrs: {
     sse-starlette
     starlette
     uvicorn
+    typing-extensions
+    typing-inspection
   ];
 
   optional-dependencies = {

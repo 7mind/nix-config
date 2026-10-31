@@ -3,7 +3,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     hyprwhspr = {
-      url = "github:goodroot/hyprwhspr/v1.49.2";
+      url = "github:goodroot/hyprwhspr/v1.50.0";
       flake = false;
     };
 
@@ -135,28 +135,12 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Track `develop`: the latest release (= `main`) predates nixpkgs 26.11's
-    # removal of `stdenv.hostPlatform.linux-kernel`, so its bootloader module
-    # aborts evaluation with `attribute 'linux-kernel' missing` / `buildDTBs
-    # missing` on our unstable (26.11) nixpkgs. `develop` carries the 26.11
-    # compatibility fixes (PRs #198, #199). Move back to a pinned release once
-    # one ships with those changes.
+    # Keep develop for platform fixes newer than the August 2026 release.
     nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi/develop";
 
     fractal = {
       url = "git+https://gitlab.gnome.org/pshirshov/fractal.git?ref=wip/full-patchset";
       inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    # zimt — multi-model image-gen REPL + web UI, pre-built per backend
-    # (xpu/cuda/rocm/cpu). Used on vm (Arc Pro B70, XPU). Deliberately does
-    # NOT follow our nixpkgs: it vendors pip wheels (torch+IPEX, diffusers,
-    # transformers, fastapi …) whose compatibility window tracks zimt's own
-    # pinned nixpkgs; drifting breaks the wheel build.
-    zimt = {
-      url = "github:pshirshov/zimt";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.flake-utils.follows = "flake-utils";
     };
 
     # Legacy github:7mind/cq input removed. Replacement is ../cq4; not wired yet.

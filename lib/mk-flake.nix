@@ -94,7 +94,11 @@ in
     in
     builtins.mapAttrs extractMeta allConfigs;
 }
-// inputs.flake-utils.lib.eachDefaultSystem (
+// inputs.flake-utils.lib.eachSystem [
+  "x86_64-linux"
+  "aarch64-linux"
+  "aarch64-darwin"
+] (
   system:
   let
     privateOutputs =
@@ -168,6 +172,7 @@ in
             openlinkhub = import ../tests/openlinkhub.nix { inherit pkgs; };
             home-manager-persistence = import ../tests/home-manager-persistence.nix { inherit pkgs; flake = self; };
             searxng = import ../tests/searxng.nix { inherit pkgs; };
+            dev-llm-plugins = import ../tests/dev-llm-plugins.nix { flake = self; inherit pkgs; };
           }
           // pkgs.lib.optionalAttrs (system == "x86_64-linux") {
             hyprwhspr = import ../tests/hyprwhspr.nix {

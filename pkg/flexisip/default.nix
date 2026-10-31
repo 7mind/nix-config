@@ -195,13 +195,8 @@ stdenv.mkDerivation rec {
 
         # External libbelr only knows its own output. Register the application
         # grammar directories before Flexisip or its Linphone libraries parse.
-        # Flexisip 2.6.0 expects a slightly newer liblinphone than nixpkgs 5.4.85
-        # for Message Waiting Indication helpers (getNbNewUrgent, Content::clone,
-        # createMessageWaitingIndicationFromContent). Short-circuit the two MWI
-        # handlers; household PBX does not use MWI/voicemail.
         python3 <<'PY'
     from pathlib import Path
-    import re
 
     p = Path("src/main/flexisip.cc")
     t = p.read_text()
@@ -222,33 +217,6 @@ stdenv.mkDerivation rec {
         grammarLoader.addPath("${linphonePackages.liblinphone}/share/belr/grammars");""")
     p.write_text(t)
 
-    p = Path("src/b2bua/b2bua-server.cc")
-    t = p.read_text()
-    # Replace function bodies between the opening brace after the signature and the matching close.
-    def stub_method(src: str, signature: str) -> str:
-        i = src.find(signature)
-        if i < 0:
-            raise SystemExit(f"b2bua-server.cc compat: signature not found:\n{signature}")
-        j = src.find("{", i)
-        if j < 0:
-            raise SystemExit("no opening brace")
-        depth = 0
-        k = j
-        while k < len(src):
-            if src[k] == "{":
-                depth += 1
-            elif src[k] == "}":
-                depth -= 1
-                if depth == 0:
-                    break
-            k += 1
-        else:
-            raise SystemExit("unbalanced braces")
-        return src[: j + 1] + "\n\t// Stubbed: requires newer liblinphone MWI API than nixpkgs 5.4.85.\n" + src[k:]
-
-    t = stub_method(t, "void B2buaServer::onMessageWaitingIndicationChanged(")
-    t = stub_method(t, "void B2buaServer::onNotifyReceived(")
-    p.write_text(t)
     PY
   '';
 

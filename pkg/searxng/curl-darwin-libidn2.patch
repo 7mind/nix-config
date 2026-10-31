@@ -1,0 +1,16 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -612,6 +612,12 @@ endif()
+ if(CMAKE_MSVC_RUNTIME_LIBRARY)
+   list(APPEND _curl_platform_flags "-DCMAKE_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}")
+ endif()
++if(APPLE AND USE_LIBIDN2)
++  set(_curl_exe_linker_flags "${CMAKE_EXE_LINKER_FLAGS} -liconv")
++  set(_curl_shared_linker_flags "${CMAKE_SHARED_LINKER_FLAGS} -liconv")
++  list(APPEND _curl_platform_flags "-DCMAKE_EXE_LINKER_FLAGS=${_curl_exe_linker_flags}")
++  list(APPEND _curl_platform_flags "-DCMAKE_SHARED_LINKER_FLAGS=${_curl_shared_linker_flags}")
++endif()
+ 
+ set(_curl_openssl_flags)
+ if(CURL_SUBPROJECT_FORCE_OPENSSL_PATHS)

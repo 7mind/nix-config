@@ -4,14 +4,12 @@
 let
   cfg = config;
   packageForShell = package:
-    if cfg.shellVersion == lib.versions.major pkgs.gnome-shell.version then package
-    else
-      let
-        extensions = pkgs."gnome${cfg.shellVersion}Extensions" or
-          (throw "No GNOME ${cfg.shellVersion} extension catalog in the pinned nixpkgs");
-      in
-      extensions.${package.extensionUuid} or
-        (throw "GNOME extension ${package.extensionUuid} does not support Shell ${cfg.shellVersion}");
+    let
+      extensions = pkgs."gnome${cfg.shellVersion}Extensions" or
+        (throw "No GNOME ${cfg.shellVersion} extension catalog in the pinned nixpkgs");
+    in
+    extensions.${package.extensionUuid} or
+      (throw "GNOME extension ${package.extensionUuid} does not support Shell ${cfg.shellVersion}");
   catalog = [
     { name = "run-or-raise"; package = pkgs.gnomeExtensions.run-or-raise; }
     # AppIndicator v64 registers SNI items but does not render them on GNOME 50: https://github.com/ubuntu/gnome-shell-extension-appindicator/issues/628

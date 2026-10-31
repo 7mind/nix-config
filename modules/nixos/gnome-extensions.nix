@@ -16,7 +16,7 @@ let
     '';
   });
 
-  hibernateExtensionPatched = patchGnomeExtension pkgs.gnomeExtensions.hibernate-status-button;
+  hibernateExtensionPatched = patchGnomeExtension (pkgs.callPackage ../../pkg/hibernate-status-button { });
 
   ghosttyCfg = config.smind.desktop.gnome.ghostty-toggle;
 

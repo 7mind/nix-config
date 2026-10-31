@@ -32,13 +32,7 @@
   perl,
 }:
 
-# Use the plain stdenv (not intel-llvm.stdenv): intel-llvm's stdenv
-# passthru is built via `overrideCC baseLlvm.stdenv self.merged`, where
-# self.merged refers to the package-internal merged derivation. Our
-# overlay-level overrideAttrs (in globals.nix) fixes that merged output
-# but doesn't propagate back into the scope, so intel-llvm.stdenv keeps
-# the broken-empty CC. Working around by depending on intel-llvm as a
-# nativeBuildInput and pointing CC/CXX at it explicitly in preConfigure.
+# Keep the regular stdenv and select DPC++ explicitly for MKL's compiler detection.
 stdenv.mkDerivation (finalAttrs: {
   pname = "llama-cpp-sycl";
   version = ollama.llamaCppVersion;

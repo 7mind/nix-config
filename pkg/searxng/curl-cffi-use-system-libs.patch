@@ -1,0 +1,41 @@
+--- a/scripts/build.py
++++ b/scripts/build.py
+@@ -221,28 +221,8 @@
+ ffibuilder = FFI()
+ system = platform.system()
+ root_dir = Path(__file__).parent.parent
+-download_libcurl()
+-
+-# With mega archive, we only have one to link
+-static_libs = get_curl_archives()
+ extra_link_args = []
+-if is_static:
+-    if system == "Darwin":
+-        extra_link_args = [
+-            f"-Wl,-force_load,{static_libs[0]}",
+-        ]
+-        # Only macOS release archives ship the .pc with required system frameworks.
+-        extra_link_args.extend(get_static_link_args())
+-    elif system in ("FreeBSD", "OpenBSD", "Linux") or is_android:
+-        extra_link_args = [
+-            "-Wl,--whole-archive",
+-            static_libs[0],
+-            "-Wl,--no-whole-archive",
+-        ]
+-        if system in ("FreeBSD", "OpenBSD") or is_android:
+-            extra_link_args.append("-lc++")
+-
+-libraries = get_curl_libraries()
++libraries = ["curl-impersonate"]
+ 
+ ffibuilder.set_source(
+     "curl_cffi._wrapper",
+@@ -253,7 +233,7 @@
+     runtime_library_dirs=(
+         [str(libdir)] if is_dynamic and arch["system"] != "Windows" else []
+     ),
+-    libraries=get_curl_libraries(),
++    libraries=libraries,
+     extra_objects=[],  # linked via extra_link_args
+     source_extension=".c",
+     include_dirs=[

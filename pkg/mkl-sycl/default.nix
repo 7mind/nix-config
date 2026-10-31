@@ -1,4 +1,4 @@
-# Intel oneMKL 2025.3.1 — packaged just enough to satisfy ggml-sycl's
+# Intel oneMKL 2026.1.0 — packaged just enough to satisfy ggml-sycl's
 # `find_package(MKL REQUIRED)` with the namespaced `MKL::MKL_SYCL::BLAS`
 # target. Sister-package to nixpkgs `mkl@2023.1.0`.
 #
@@ -10,19 +10,22 @@
 #     `mkl` argument override — the upstream package keeps 2023.1.
 #
 # Why 2026.1.0 specifically?
-#   nixpkgs `intel-llvm` is now 7.0.1 and ships `libsycl.so.9`.
+#   nixpkgs `intel-llvm` is now 7.1.1 and ships `libsycl.so.9`.
 #   mkl@2025.3.x NEEDs `libsycl.so.8`; dlopen of libggml-sycl.so then
 #   fails (`libsycl.so.8 => not found`), llama.cpp reports "no usable
 #   GPU", and the B70 falls back to CPU (~0.6 t/s on 27B).
-#     - mkl@2025.3.x → NEEDED libsycl.so.8  (✗ vs intel-llvm 7.0.1)
+#     - mkl@2025.3.x → NEEDED libsycl.so.8  (✗ vs intel-llvm 7.1.1)
 #     - mkl@2026.1.0 → NEEDED libsycl.so.9  (✓ verified on
 #       libmkl_sycl_blas.so.6 from the 2026.1.0-236 rpm)
+#   SONAME parity alone is insufficient: 2026.2 also needs libsycl.so.9,
+#   but imports half/bfloat16 stream and reportAdjustedRange symbols absent
+#   from intel-llvm 7.1.1. Retain 2026.1, whose host relocations resolve.
 #
 # Layout differences from nixpkgs mkl@2023.1.0:
 #   - oneMKL ≥ 2024.0 splits the SYCL implementation per-domain
 #     (mkl-sycl-blas, mkl-sycl-lapack, mkl-sycl-dft, …). ggml-sycl uses
 #     BLAS only; we skip the rest to keep the closure small.
-#   - Install paths under `mkl/2025.3/` (was `mkl/${version}/`).
+#   - Install paths under `mkl/2026.1/` (was `mkl/${version}/`).
 #   - openmp + tbb directory layouts changed too — single `lib/` instead
 #     of `linux/compiler/lib/intel64_lin/` and `intel64/gcc4.8/`.
 {

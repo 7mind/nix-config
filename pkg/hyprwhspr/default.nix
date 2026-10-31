@@ -15,7 +15,7 @@ let
     ln -s ${runtimes.cpu} "$out/cpu"
     ln -s ${runtimes.vulkan} "$out/vulkan"
   '';
-  upstream = callPackage (src + "/nix/package.nix") { version = "1.49.2"; };
+  upstream = callPackage (src + "/nix/package.nix") { version = "1.50.0"; };
 in
 upstream.overrideAttrs (old: {
   postPatch = (old.postPatch or "") + ''

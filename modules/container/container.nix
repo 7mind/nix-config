@@ -5,32 +5,9 @@
     "${cfg-meta.paths.modules}/nixos/ssh.nix"
   ];
 
-  # nspawn containers re-evaluate nixpkgs fresh and do not inherit the
-  # host's overlays. Mirror the host-side `intel-compute-runtime` RPATH
-  # fix (see `globals.nix`): patchelf intel-graphics-compiler into the
-  # Level Zero driver's RPATH so NEO can dlopen `libigdfcl.so.2` /
-  # `libigc.so.2` at eager device init. Without it every container's L0
-  # path aborts at `gmm_helper/resource_info.cpp:15`. Dormant on
-  # containers that don't reference `pkgs.intel-compute-runtime`.
   nixpkgs.overlays = [
     (final: prev: {
       ghostty-terminfo = prev.callPackage ../../pkg/ghostty-terminfo { };
-
-      intel-compute-runtime = prev.intel-compute-runtime.overrideAttrs (oldAttrs: {
-        postFixup = (oldAttrs.postFixup or "") + ''
-          for lib in "$out"/lib/libze_intel*.so* ; do
-            [ -L "$lib" ] && continue
-            patchelf --set-rpath ${
-              prev.lib.makeLibraryPath [
-                prev.intel-gmmlib
-                prev.intel-graphics-compiler
-                prev.libva
-                prev.stdenv.cc.cc
-              ]
-            } "$lib"
-          done
-        '';
-      });
     })
   ];
 

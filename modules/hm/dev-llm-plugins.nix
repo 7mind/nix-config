@@ -27,17 +27,23 @@ let
 
   iHaveAdhdPlugin = pkgs.fetchFromGitHub {
     pname = "i-have-adhd";
-    version = "0.3.0";
+    version = "0.4.1";
     owner = "ayghri";
     repo = "i-have-adhd";
-    rev = "b15d0be58f55b33972ba3e39709e0e5208ef30cb";
-    hash = "sha256-wnD5crIal23Vtk6GReG2vCkjDuhrpmhWXvrNUq5mZfE=";
+    rev = "1ecea1993b7fce257ffbd686c070948b5e07eda6";
+    hash = "sha256-GTqrnZxQvzo/ogAuUrffkOaMK1BYm/4rAZsnfmDt7DU=";
   };
 
-  cavemanSkill = pkgs.fetchurl {
-    name = "caveman";
-    url = "https://raw.githubusercontent.com/JuliusBrussee/caveman/880114a42067d045b91dffe6a553f6ab2cc399ad/skills/caveman/SKILL.md";
-    hash = "sha256-C/CaCpoBfQBKgdS2k+Wi2DDhooIwpYhd93Ph7ZwFccw=";
+  # Codex 0.165 approves the reviewed bundle as well as its hook declaration.
+  iHaveAdhdContentHash = "sha256:01ff4c97c9d3862b76fa2a141fc868bd615d22dec5665e0895d579ee42b9a612";
+
+  cavemanSkills = lib.mapAttrs (name: hash: builtins.readFile (pkgs.fetchurl {
+    inherit name hash;
+    url = "https://raw.githubusercontent.com/JuliusBrussee/caveman/d262ab3882952a59312ff3537cd86d894523c5ab/skills/${name}/SKILL.md";
+  })) {
+    caveman = "sha256-QV1DUY8rGpSYwVpEXUZXEXsSnuXoGxlFTONIQ5zGZys=";
+    ultracave = "sha256-qNpbCzUBuFPhuY8q4J/o3JwO30gbHT+pUp+FVwEcHvg=";
+    megacave = "sha256-E5EFKWwGhsHuJGEMrKHbKTq4QWK+sNlKp6mtfLwzUr8=";
   };
 
   claudeAlwaysEnabledMarker = "${config.programs.claude-code.configDir}/.i-have-adhd-always";
@@ -129,6 +135,7 @@ in
               (gi: group:
                 lib.map (pair: {
                   name = "${pluginKey}:hooks/hooks.json:${label}:${toString gi}:${toString pair.hi}";
+                  value.trusted_content_hash = iHaveAdhdContentHash;
                   value.trusted_hash =
                     "sha256:${builtins.hashString "sha256" (builtins.toJSON ({
                       event_name = label;
@@ -167,13 +174,13 @@ in
       ))
 
       (lib.mkIf cfg.cavemanPlugin.claude.enable {
-        programs.claude-code.skills.caveman = builtins.readFile cavemanSkill;
+        programs.claude-code.skills = cavemanSkills;
       })
       (lib.mkIf cfg.cavemanPlugin.codex.enable {
-        programs.codex.skills.caveman = builtins.readFile cavemanSkill;
+        programs.codex.skills = cavemanSkills;
       })
       (lib.mkIf cfg.cavemanPlugin.pi.enable {
-        programs.pi.skills.caveman = builtins.readFile cavemanSkill;
+        programs.pi.skills = cavemanSkills;
       })
     ]
   );

@@ -71,11 +71,7 @@
       # man pages. fwupd depends on the tools, not their documentation.
       tpm2-tools = prev.tpm2-tools.override { enableManpages = false; };
 
-      # mcp-proxy 0.13.0 requires `mcp<2`; the pinned nixpkgs bumped
-      # python3Packages.mcp to 2.2.0 before upstream scoped mcp-proxy to the
-      # 1.x line (master: `mcp_1` alias + a python3Packages scope override in
-      # pkgs/by-name/mc/mcp-proxy). Mirror that fix until the pin catches up;
-      # remove together with pkg/mcp-1.
+      # mcp-proxy requires mcp<2; keep its scope on the compatibility package.
       mcp-proxy = prev.mcp-proxy.override {
         python3Packages = prev.python3Packages.overrideScope (mcp-final: _: {
           mcp = mcp-final.mcp_1;
@@ -84,17 +80,27 @@
 
       pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
         (python-final: python-prev: {
-          # mcp 1.x for mcp-proxy (see the mcp-proxy entry above); port of
-          # nixpkgs master's `mcp_1` alias. Remove when the pin provides it.
-          mcp_1 = python-final.callPackage ../../pkg/mcp-1 { };
+          mcp = python-prev.mcp.overridePythonAttrs (old: {
+            version = "2.3.0";
+            src = old.src.override {
+              tag = "v2.3.0";
+              hash = "sha256-CnXi78zYxm0/R4fON/DzRYMSDYM/XM/9SE3s+Cf1BR0=";
+            };
+            nativeCheckInputs = old.nativeCheckInputs ++ [
+              (python-prev.blockbuster.overridePythonAttrs (blockbusterOld: {
+                version = "1.5.29";
+                nativeCheckInputs = blockbusterOld.nativeCheckInputs ++ [ python-prev.pytest-benchmark ];
+                src = prev.fetchPypi {
+                  pname = "blockbuster";
+                  version = "1.5.29";
+                  hash = "sha256-D9UHpKEV65Pt31gNegwp8KjvLUR97X+FPQz5qxz5eH0=";
+                };
+              }))
+            ];
+          });
 
-          # CMake executes this ROCm code generator before the fixup-phase shebang hook.
-          torch = python-prev.torch.overrideAttrs (old:
-            prev.lib.optionalAttrs old.passthru.rocmSupport {
-              postPatch = old.postPatch + ''
-                patchShebangs --build aten/src/ATen/native/transformers/hip/flash_attn/ck/add_make_kernel_pt.sh
-              '';
-            });
+          # Local MCP 1.x release, newer than nixpkgs' compatibility package.
+          mcp_1 = python-final.callPackage ../../pkg/mcp-1 { };
 
           # web3's test-only py-evm dependency is archived and disabled on
           # Python 3.14. Trezor needs web3 at runtime, not its EVM test backend.
@@ -115,13 +121,6 @@
               disabledTests = (old.disabledTests or [ ]) ++ [
                 "test_callback_v1_mqtt3"
                 "test_callback_v2_mqtt3"
-              ];
-            });
-
-          anyio = python-prev.anyio.overridePythonAttrs (old:
-            prev.lib.optionalAttrs prev.stdenv.hostPlatform.isAarch64 {
-              disabledTests = (old.disabledTests or [ ]) ++ [
-                "test_keyboard_interrupt_does_not_resume_test"
               ];
             });
 

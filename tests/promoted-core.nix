@@ -55,15 +55,17 @@ let
       licenseKeyFile = "/run/fixture/geoip";
     };
   };
-  wifi = evaluateWith firmwarePkgs {
-    boot.kernelPackages = pkgs.linuxPackages_7_2;
+  wifiFor = kernelPackages: evaluateWith firmwarePkgs {
+    boot.kernelPackages = kernelPackages;
     smind.hw.mt7927 = {
       enable = true;
       driverZip = pkgs.writeText "fixture-driver.zip" "evaluation-only fixture";
     };
   };
+  wifi = wifiFor pkgs.linuxPackages_7_2;
+  wifi73 = wifiFor pkgs.linuxPackages_7_3;
   unsupportedWifi = evaluate {
-    boot.kernelPackages = pkgs.linuxPackages_7_3;
+    boot.kernelPackages = pkgs.linuxPackages_6_18;
     smind.hw.mt7927.enable = true;
   };
   missingZip = evaluateWith firmwarePkgs {
@@ -100,6 +102,8 @@ assert !pkgs.stdenv.hostPlatform.isx86_64 || (
   && (builtins.head wifi.boot.extraModulePackages).pname == "mt7927-mt76"
   && lib.any (package: lib.hasInfix "mt7927-firmware" (toString package)) wifi.hardware.firmware.paths
   && failedWifiAssertions wifi == [ ]
+  && builtins.length wifi73.boot.extraModulePackages == 1
+  && failedWifiAssertions wifi73 == [ ]
   && builtins.length (failedWifiAssertions unsupportedWifi) == 1
   && !(builtins.tryEval missingZip.hardware.firmware.drvPath).success
 );

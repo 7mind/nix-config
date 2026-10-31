@@ -1,18 +1,18 @@
 # Out-of-tree MediaTek MT7927 (Filogic 380, internally MT6639) kernel modules.
 #
-# Mirrors jetm/mediatek-mt7927-dkms v2.15-1: mt76 + bluetooth source from the
-# pristine linux-7.2 tarball, then the remaining out-of-tree patches (4 AP-mode
-# additions, 2 teardown fixes + pre-7.2 compat shims). Sean Wang's MT7927 series landed in
-# mainline 7.2, so the old 28-patch 7.1.3 backport is gone.
+# Mirrors jetm/mediatek-mt7927-dkms v2.17-2: mt76 + bluetooth source from the
+# pristine linux-7.3 tarball, then the remaining out-of-tree patches (4 AP-mode
+# additions + compatibility shims). Linux 7.3 absorbs the two teardown
+# backports; Sean Wang's MT7927 series landed in mainline 7.2.
 #
 # Built against the *running* kernel's headers. Compat shims cover host
 # kernels back through 7.0. Modules install into `.../updates/`, which
 # depmod/modprobe prefer over the identically-named in-tree modules.
 #
 # Bluetooth: MT6639 is native from linux 7.1. The out-of-tree btusb/btmtk
-# modules only add HP EliteMini ID 0489:e156 and would replace the in-tree
-# stack for every BT device, so they are skipped on 7.1+ (same default as
-# jetm 2.15-1). Firmware for the in-tree BT driver is still the ASUS blob
+# modules add HP EliteMini ID 0489:e156 and firmware/PM fixes, but replace
+# the stack for every BT device, so they are skipped on 7.1+ (same default as
+# jetm 2.17-2). Firmware for the in-tree BT driver is still the ASUS blob
 # — see ./firmware.nix.
 {
   lib,
@@ -24,30 +24,30 @@
 
 let
   # Kernel version whose mt76/bluetooth subtree the patches target. Pinned to
-  # match jetm's v2.15-1 `_mt76_kver`; bump in lockstep with the patch set.
-  mt76Kver = "7.2";
+  # match jetm's v2.17-2 `_mt76_kver`; bump in lockstep with the patch set.
+  mt76Kver = "7.3";
 
   # Pristine upstream tarball (sha256 from jetm's PKGBUILD). We only consume the
   # mt76 + bluetooth subtrees from it; building happens against `kernel.dev`.
   linuxSrc = fetchurl {
     url = "https://cdn.kernel.org/pub/linux/kernel/v${lib.versions.major mt76Kver}.x/linux-${mt76Kver}.tar.xz";
-    hash = "sha256-+f7z0UwN9TgZAm9L50RZg1wqCw3L9bW72eoZ8IKUArM=";
+    hash = "sha256-hzY8JPEOBjIes2J2VSEJTpRHH2v/i84taz5A858ASVM=";
   };
 
-  # jetm 2.15-1: skip out-of-tree btusb/btmtk once the host has native MT6639.
+  # jetm 2.17-2: skip out-of-tree btusb/btmtk once the host has native MT6639.
   buildBluetooth = lib.versionOlder (lib.versions.majorMinor kernel.version) "7.1";
 in
 stdenv.mkDerivation {
   pname = "mt7927-mt76";
   # Tie the version to the kernel: extraModulePackages must be rebuilt per
   # kernel, and this keeps the store path distinct across kernel bumps.
-  version = "2.15-${kernel.version}";
+  version = "2.17-${kernel.version}";
 
   src = ./.;
 
   nativeBuildInputs = kernel.moduleBuildDependencies ++ [ kmodigest ];
 
-  # The patches are context diffs against linux-7.2; -p1 from the respective
+  # The patches are context diffs against linux-7.3; -p1 from the respective
   # subtree root, applied in the same order as jetm's Makefile `sources` target.
   buildPhase = ''
     runHook preBuild

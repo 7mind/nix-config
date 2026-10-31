@@ -27,14 +27,19 @@
 }:
 
 let
-  version = "1.0.0";
+  version = "1.0.2";
 
   flexisipSrc = fetchurl {
-    url = "https://github.com/BelledonneCommunications/flexisip/archive/e1438f391d06ad9603c24e06c625cdac1c1f79d7.tar.gz";
-    hash = "sha256-P83uClpiLnmd4mMxRfgvbnYoLFENsfWHTtYpzBld+v8=";
+    url = "https://github.com/BelledonneCommunications/flexisip/archive/32c1968f8c1f506101c2689a630038f0536c60dd.tar.gz";
+    hash = "sha256-ydu/AGu99iQSRxVO9ysb1C8kUlmlVE/uaGQ6tG5l3Ls=";
   };
 
   sofiaSrc = ../flexisip/vendor/bc-sofia-sip-02b6544.tar.gz;
+
+  xsdSrc = fetchurl {
+    url = "https://gitlab.linphone.org/BC/public/external/xsd/-/archive/a2ca5f3676c1139346f386648f16e95ab4f34044/xsd-a2ca5f3676c1139346f386648f16e95ab4f34044.tar.gz";
+    hash = "sha256-aOPerU4PjjNCcJO7ymD6OwVh0Jp3/kTqIPOxvqL1qG4=";
+  };
 
   pythonEnv = python3.withPackages (ps: [
     ps.pystache
@@ -100,9 +105,10 @@ stdenv.mkDerivation {
   pname = "flexisip-conference";
   inherit version;
 
+  # Official mirror: the canonical GitLab archive is unreachable from builders.
   src = fetchurl {
-    url = "https://gitlab.linphone.org/BC/public/flexisip-conference/-/archive/${version}/flexisip-conference-${version}.tar.gz";
-    hash = "sha256-glv5f803pMbhcyD71gLL/lgsnsZ1PUoOlDW5FFbz3sY=";
+    url = "https://github.com/BelledonneCommunications/flexisip-conference/archive/${version}.tar.gz";
+    hash = "sha256-W/95VVW9XAFaTJ+ltAthbqJDU0d0v2ans5EaCPSFY4s=";
   };
 
   nativeBuildInputs = [
@@ -164,7 +170,7 @@ stdenv.mkDerivation {
 
     rm -rf flexisip
     tar xzf ${flexisipSrc}
-    mv flexisip-e1438f391d06ad9603c24e06c625cdac1c1f79d7 flexisip
+    mv flexisip-32c1968f8c1f506101c2689a630038f0536c60dd flexisip
 
     substituteInPlace flexisip/CMakeLists.txt \
       --replace-fail 'include("./linphone-sdk/bctoolbox/cmake/BCToolboxCMakeUtils.cmake")' \
@@ -178,6 +184,11 @@ stdenv.mkDerivation {
     tar xzf ${sofiaSrc} -C flexisip/submodules/externals
     mv flexisip/submodules/externals/bc-sofia-sip-02b6544 flexisip/submodules/externals/sofia-sip
     test -f flexisip/submodules/externals/sofia-sip/CMakeLists.txt
+
+    rm -rf flexisip/submodules/externals/xsd
+    tar xzf ${xsdSrc} -C flexisip/submodules/externals
+    mv flexisip/submodules/externals/xsd-a2ca5f3676c1139346f386648f16e95ab4f34044 flexisip/submodules/externals/xsd
+    test -f flexisip/submodules/externals/xsd/libxsd/xsd/cxx/config.hxx
   '';
 
   NIX_CFLAGS_COMPILE = "-isystem ${libmysqlclient.dev}/include/mysql";

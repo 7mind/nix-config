@@ -1,6 +1,10 @@
 { pkgs }:
 let
   settings = import ../pkg/searxng/settings.nix;
+  referenceCertifi = pkgs.fetchzip {
+    url = "https://github.com/certifi/python-certifi/archive/refs/tags/2026.10.23.tar.gz";
+    hash = "sha256-uESJgC07To+bUePmwi180SCtAzAZkmEn1UolTWpB4X0=";
+  };
   searchPkgs = pkgs.extend (import ../pkg/searxng/overlay.nix);
   package = searchPkgs.callPackage ../pkg/searxng { };
   python = searchPkgs.python3.withPackages (ps: [ package ps.pyyaml ]);
@@ -25,6 +29,25 @@ pkgs.runCommand "searxng-policy" { nativeBuildInputs = [ python ]; } ''
 from pathlib import Path
 import searx
 import yaml
+import certifi
+import base64
+import hashlib
+import re
+
+
+def fingerprints(bundle):
+    return {
+        hashlib.sha256(base64.b64decode(pem)).hexdigest()
+        for pem in re.findall(
+            rb"-----BEGIN CERTIFICATE-----(.*?)-----END CERTIFICATE-----", bundle, re.S
+        )
+    }
+
+
+reference = fingerprints(Path("${referenceCertifi}/certifi/cacert.pem").read_bytes())
+assert len(reference) == 118
+assert fingerprints(Path(certifi.where()).read_bytes()) == reference
+print("Native certifi.where() uses the same CA certificates as certifi 2026.10.23")
 
 settings = yaml.safe_load((Path(searx.__file__).parent / "settings.yml").read_text())
 plugins = settings["plugins"]

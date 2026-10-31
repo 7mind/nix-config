@@ -1,0 +1,37 @@
+Bluetooth: btmtk: fail the WMT command when its event never arrives
+
+When a WMT command is woken without an event buffer, btmtk_usb_hci_wmt_sync()
+returned success with the status the caller initialised, and left
+BTMTK_TX_WAIT_VND_EVT set on the error path, so the next transaction saw a
+stale wait. Return -EIO instead, and clear the wait flag on every exit.
+
+The btusb.c half of this change, which released the runtime PM reference after
+both MediaTek reset paths, is gone: Linux 7.3 fixes the same leak upstream by
+dropping the reference through the BTUSB_RESET flag at disconnect, and keeping
+a second put here would release it twice.
+
+Source: Linux 7.3 drivers/bluetooth/btmtk.c
+SPDX-License-Identifier: ISC
+
+--- a/btmtk.c
++++ b/btmtk.c
+@@ -716,8 +716,10 @@
+ 		goto err_free_wc;
+ 	}
+
+-	if (data->evt_skb == NULL)
++	if (data->evt_skb == NULL) {
++		err = -EIO;
+ 		goto err_free_wc;
++	}
+
+ 	wmt_evt = skb_pull_data(data->evt_skb, sizeof(*wmt_evt));
+ 	if (!wmt_evt) {
+@@ -772,6 +774,7 @@
+ 	kfree_skb(data->evt_skb);
+ 	data->evt_skb = NULL;
+ err_free_wc:
++	clear_bit(BTMTK_TX_WAIT_VND_EVT, &data->flags);
+ 	kfree(wc);
+ 	return err;
+ }

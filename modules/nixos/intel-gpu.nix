@@ -189,14 +189,7 @@ in
         enable = true;
         enable32Bit = true;
         extraPackages = lib.optionals cfg.compute.enable (with pkgs; [
-          # The Level Zero driver is included in the main runtime output.
-          # Our overlay (see globals.nix) patches
-          # intel-graphics-compiler into the Level Zero driver's RPATH
-          # so NEO can dlopen libigdfcl.so.2 / libigc.so.2 during
-          # eager device init — without that fix, NEO's
-          # `abortUnrecoverable` routes through
-          # `gmm_helper/resource_info.cpp:15` on first allocation,
-          # which masquerades as upstream `intel/compute-runtime#922`.
+          # nixpkgs includes the Level Zero driver and its IGC runtime search path.
           intel-compute-runtime
           level-zero
           ocl-icd
