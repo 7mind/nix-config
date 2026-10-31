@@ -193,7 +193,7 @@ in
           message = "age.rekey.hostPubkey must be exactly 'ssh-ed25519 <ed25519 base64 key blob>' with no prefix or suffix";
         }
         {
-          assertion = standardOwnerSecretNames == [ ] || unmatchedOwnerSecretPatterns == [ ];
+          assertion = !loadOwnerSecrets || standardOwnerSecretNames == [ ] || unmatchedOwnerSecretPatterns == [ ];
           message = "smind.age.owner-secrets patterns matching no standard secret: ${lib.concatStringsSep ", " unmatchedOwnerSecretPatterns}";
         }
       ];
