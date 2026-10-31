@@ -55,6 +55,12 @@ in
     smind.hm.dev.llm.pi.subagentsNesting = true; # children may delegate further
     smind.hm.dev.llm.pi.subagentsGateBypassAllowed = true; # governor may bypass gates
     smind.hm.dev.llm.pi.subagentsGateMaxRoundsCeiling = null; # unlimited agreement rounds
+    # Runnable slots are shared by the whole tree (nested children and
+    # reviewers too); each runnable agent is a full pi worker process, so host
+    # CPU/RAM and provider rate limits are the real ceiling. Resident workers
+    # must be >= runnable (asserted by the ponygirls module).
+    smind.hm.dev.llm.pi.subagentsMaxRunnable = 8;
+    smind.hm.dev.llm.pi.subagentsMaxResidentWorkers = 12;
     # smind.hm.dev.llm.pi.subagentsRepos = [
     #   { repoId = "ponygirls"; checkoutPath = "/home/pavel/work/safe/flakes/ponygirls"; allowWriters = true; }
     # ];
