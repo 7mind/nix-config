@@ -149,8 +149,9 @@ in
                 explicitModules = import ../tests/home-from-modules.nix { flake = self; };
                 darwinModules = import ../tests/home-from-modules-darwin.nix { flake = self; };
                 credentials = import ../tests/dev-llm-credentials.nix { flake = self; };
+                firefox = import ../tests/firefox.nix { flake = self; };
               in
-              assert builtins.deepSeq [ capabilities contexts explicitModules darwinModules credentials ] true;
+              assert builtins.deepSeq [ capabilities contexts explicitModules darwinModules credentials firefox ] true;
               pkgs.runCommand "home-configurations" { } "touch $out";
             home-shell = import ../tests/home-shell.nix { inherit pkgs; home-manager = inputs.home-manager; };
             nix-access-tokens = import ../tests/nix-access-tokens.nix { inherit pkgs; home-manager = inputs.home-manager; };
