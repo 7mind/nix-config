@@ -45,7 +45,7 @@ in
 
         pulsemeeter
         d-spy # needs gtk!!!
-      ];
+      ] ++ lib.optional (pkgs.stdenv.hostPlatform.system == "x86_64-linux") pkgs.jabracli;
 
       programs.obs-studio = {
         enable = true;

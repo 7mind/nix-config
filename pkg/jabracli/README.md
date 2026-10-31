@@ -13,8 +13,9 @@ NIXPKGS_ALLOW_UNFREE=1 nix run --impure .#jabracli -- device list
 
 The shared overlay also exposes `pkgs.jabracli` for NixOS/Home Manager packages.
 Enable unfree packages (or allow `jabracli` with `allowUnfreePredicate`) in the
-consuming configuration. This package does not install device permission rules
-or enable itself on any host. Device access requires appropriate USB/hidraw
+consuming configuration. The NixOS and Home Manager Linux desktop defaults
+include it on x86-64. This package does not install device permission rules.
+Device access requires appropriate USB/hidraw
 permissions; consult Jabra's documentation before running privileged commands.
 Run from a writable working directory for configuration and firmware downloads.
 

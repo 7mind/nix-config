@@ -63,7 +63,7 @@
       geekbench
 
       rpi-imager
-    ]);
+    ] ++ lib.optional (pkgs.stdenv.hostPlatform.system == "x86_64-linux") pkgs.jabracli);
 
     programs.chromium = lib.mkIf cfg-meta.isLinux {
       enable = true;
