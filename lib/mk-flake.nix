@@ -106,6 +106,7 @@ in
         { inherit pkgs; publicRoot = (globals.pathsFor self).root; };
     pkgs = import inputs.nixpkgs {
       localSystem = system;
+      config.allowUnfreePredicate = package: inputs.nixpkgs.lib.getName package == "jabracli";
       overlays = [
         inputs.agenix-rekey.overlays.default
         (import ../pkg/openlinkhub/overlay.nix)

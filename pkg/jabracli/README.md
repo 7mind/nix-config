@@ -7,10 +7,12 @@ an FHS environment without requiring FUSE. Other platforms are not packaged.
 From the flake root:
 
 ```bash
-NIXPKGS_ALLOW_UNFREE=1 nix run --impure .#jabracli -- --help
-NIXPKGS_ALLOW_UNFREE=1 nix run --impure .#jabracli -- device list
+nix run .#jabracli -- --help
+nix run .#jabracli -- device list
 ```
 
+The flake's package set explicitly permits only JabraCLI's unfree license,
+so its package output and pure flake checks need no environment opt-in.
 The shared overlay also exposes `pkgs.jabracli` for NixOS/Home Manager packages.
 Enable unfree packages (or allow `jabracli` with `allowUnfreePredicate`) in the
 consuming configuration. The NixOS and Home Manager Linux desktop defaults
@@ -27,12 +29,13 @@ The package is marked `unfree`, not redistributable `unfreeRedistributable`.
 ## Verification
 
 ```bash
-NIXPKGS_ALLOW_UNFREE=1 nix build --impure .#jabracli
+nix build .#jabracli
 # Disable networking during smoke tests, including any upstream telemetry.
 bwrap --unshare-net --dev-bind / / ./result/bin/jabracli --version
 bwrap --unshare-net --dev-bind / / ./result/bin/jabracli --help
 bwrap --unshare-net --dev-bind / / ./result/bin/jabracli device list --output-format json
-NIXPKGS_ALLOW_UNFREE=1 nix flake check --impure --no-build .
+env -u NIXPKGS_ALLOW_UNFREE nix --option accept-flake-config false \
+  --option allow-import-from-derivation false flake check --no-write-lock-file --no-build .
 ```
 
 Version 1.6.48.0 built and passed these smoke checks; device enumeration returned
