@@ -63,6 +63,7 @@
       geekbench
 
       rpi-imager
+      jabridge
     ] ++ lib.optional (pkgs.stdenv.hostPlatform.system == "x86_64-linux") pkgs.jabracli);
 
     programs.chromium = lib.mkIf cfg-meta.isLinux {
@@ -74,6 +75,12 @@
 
     xdg = lib.mkIf cfg-meta.isLinux (lib.mkMerge [
       {
+        # Standalone HM needs the host to install Jabridge's udev rules separately.
+        # Link the complete packaged unit: HM service attributes would replace it.
+        configFile = {
+          "systemd/user/jabridge.service".source = "${pkgs.jabridge}/lib/systemd/user/jabridge.service";
+          "systemd/user/default.target.wants/jabridge.service".source = "${pkgs.jabridge}/lib/systemd/user/jabridge.service";
+        };
         userDirs = {
           enable = true;
         };

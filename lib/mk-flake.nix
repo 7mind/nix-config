@@ -125,6 +125,9 @@ in
       flurry = pkgs.flurry;
       home-manager-cli = inputs.home-manager.packages.${system}.default;
     }
+    // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+      jabridge = pkgs.callPackage ../pkg/jabridge/package.nix { };
+    }
     // pkgs.lib.optionalAttrs (system == "x86_64-linux") {
       hyprwhspr = pkgs.callPackage ../pkg/hyprwhspr { src = inputs.hyprwhspr; };
       jabracli = pkgs.callPackage ../pkg/jabracli/package.nix { };
@@ -171,6 +174,11 @@ in
             asterisk-linphone-fallback = import ../tests/asterisk-linphone-fallback.nix { inherit pkgs; };
             flexisip-file-transfer = import ../tests/flexisip.nix { inherit pkgs; };
             openlinkhub = import ../tests/openlinkhub.nix { inherit pkgs; };
+            jabridge = self.packages.${system}.jabridge;
+            jabridge-desktops = import ../tests/jabridge.nix {
+              inherit pkgs inputs;
+              packages = self.packages;
+            };
             home-manager-persistence = import ../tests/home-manager-persistence.nix { inherit pkgs; flake = self; };
             searxng = import ../tests/searxng.nix { inherit pkgs; };
             dev-llm-plugins = import ../tests/dev-llm-plugins.nix { flake = self; inherit pkgs; };

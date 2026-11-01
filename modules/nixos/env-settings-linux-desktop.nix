@@ -44,8 +44,13 @@ in
         libnotify # notify-send command
 
         pulsemeeter
+        jabridge
         d-spy # needs gtk!!!
       ] ++ lib.optional (pkgs.stdenv.hostPlatform.system == "x86_64-linux") pkgs.jabracli;
+
+      services.udev.packages = [ pkgs.jabridge ];
+      systemd.packages = [ pkgs.jabridge ];
+      systemd.user.services.jabridge.wantedBy = [ "default.target" ];
 
       programs.obs-studio = {
         enable = true;
