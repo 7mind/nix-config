@@ -12,7 +12,9 @@
       hyprwhspr = prev.callPackage ../../pkg/hyprwhspr { src = inputs.hyprwhspr; };
 
       # Standalone ghostty terminfo, avoiding the full GUI app (gtk4, libadwaita,
-      # gstreamer, ...), using upstream's dedicated output.
+      # gstreamer, ...): compiled with tic from the vendored terminfo source,
+      # because upstream's dedicated terminfo output is a split output of the
+      # full ghostty derivation and building it builds all of ghostty.
       ghostty-terminfo = prev.callPackage ../../pkg/ghostty-terminfo { };
 
       llama-swap = prev.llama-swap.overrideAttrs (old: {
