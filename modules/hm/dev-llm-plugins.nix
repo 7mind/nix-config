@@ -1,7 +1,6 @@
 {
   config,
   lib,
-  pkgs,
   ...
 }:
 let
@@ -25,20 +24,18 @@ let
       };
     };
 
-  iHaveAdhdPlugin = pkgs.fetchFromGitHub {
-    pname = "i-have-adhd";
-    version = "0.4.1";
-    owner = "ayghri";
-    repo = "i-have-adhd";
-    rev = "1ecea1993b7fce257ffbd686c070948b5e07eda6";
-    hash = "sha256-GTqrnZxQvzo/ogAuUrffkOaMK1BYm/4rAZsnfmDt7DU=";
+  # These sources are read during evaluation; built-in fetchers avoid IFD.
+  iHaveAdhdPlugin = builtins.fetchTarball {
+    name = "i-have-adhd-0.4.1";
+    url = "https://github.com/ayghri/i-have-adhd/archive/1ecea1993b7fce257ffbd686c070948b5e07eda6.tar.gz";
+    sha256 = "sha256-GTqrnZxQvzo/ogAuUrffkOaMK1BYm/4rAZsnfmDt7DU=";
   };
 
   # Codex 0.165 approves the reviewed bundle as well as its hook declaration.
   iHaveAdhdContentHash = "sha256:01ff4c97c9d3862b76fa2a141fc868bd615d22dec5665e0895d579ee42b9a612";
 
-  cavemanSkills = lib.mapAttrs (name: hash: builtins.readFile (pkgs.fetchurl {
-    inherit name hash;
+  cavemanSkills = lib.mapAttrs (name: sha256: builtins.readFile (builtins.fetchurl {
+    inherit name sha256;
     url = "https://raw.githubusercontent.com/JuliusBrussee/caveman/d262ab3882952a59312ff3537cd86d894523c5ab/skills/${name}/SKILL.md";
   })) {
     caveman = "sha256-QV1DUY8rGpSYwVpEXUZXEXsSnuXoGxlFTONIQ5zGZys=";

@@ -21,11 +21,12 @@ let
     ];
   }).config;
   plugin = builtins.head configuration.programs.codex.plugins;
+  pluginManifest = builtins.fromJSON (builtins.readFile "${plugin}/.codex-plugin/plugin.json");
   trust = configuration.programs.codex.settings.hooks.state;
   skills = configuration.programs.codex.skills;
 in
 # BG @specified: all harnesses retain the approved skill and its advertised aliases.
-assert lib.assertMsg (plugin.version == "0.4.1") "The plugin must use the reviewed version";
+assert lib.assertMsg (pluginManifest.version == "0.4.1") "The plugin must use the reviewed version";
 assert lib.assertMsg (builtins.attrNames trust == [ "i-have-adhd@home-manager:hooks/hooks.json:session_start:0:0" ]) "Only the declared command hook may be trusted";
 assert lib.assertMsg (lib.all (name: lib.hasInfix "name: ${name}" skills.${name}
   && configuration.programs.claude-code.skills.${name} == skills.${name}
