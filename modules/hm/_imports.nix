@@ -29,6 +29,7 @@
   ./nix-access-tokens.nix
   ./nushell.nix
   ./prusa-3d-printing.nix
+  ./services.nix
   ./ssh.nix
   ./tailscale.nix
   ./three-finger-drag.nix
