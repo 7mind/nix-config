@@ -44,6 +44,24 @@ let
     assert lib.assertMsg (!home.value.pkgs.stdenv.hostPlatform.isDarwin || !(config.launchd.agents ? activate-agenix)) "Disabled standalone agenix must not install a launch agent";
     true;
   worker = flake.nixosConfigurations.testbench.config.home-manager.users.llm;
+  flurrySkill = builtins.readFile ../modules/hm/skills/flurry/SKILL.md;
+  skillHome = vm: (standalone.value.extendModules {
+    modules = [ {
+      smind.hm.dev.llm = {
+        enable = lib.mkForce true;
+        yolo.vm.enable = lib.mkForce vm;
+      };
+    } ];
+  }).config;
+  skillWiring = vm:
+    let home = skillHome vm;
+    in builtins.all (skills:
+      skills.flurry == flurrySkill && (skills ? local-test-vms) == vm
+    ) [
+      home.programs.claude-code.skills
+      home.programs.codex.skills
+      home.programs.pi.skills
+    ];
   config = standalone.value.config;
   otherConfig = relocated.value.config;
   nixos = flake.nixosConfigurations.testbench;
@@ -59,6 +77,8 @@ assert lib.assertMsg (builtins.any (p: lib.getName p == "tig") testbenchPavel.ho
 assert lib.assertMsg (!hasTrx40 || !trx40Pavel.smind.hm.dev.git.rewriteGithubToSsh) "pavel-trx40: GitHub must stay on HTTPS (the host SSH key is not registered on GitHub)";
 assert lib.assertMsg (!hasTrx40 || lib.hasInfix "gh auth git-credential" (trx40Pavel.programs.git.settings.credential."https://github.com".helper or "")) "pavel-trx40: GitHub HTTPS credentials must come from gh (a manual ~/.gitconfig would shadow the HM git config)";
 assert lib.assertMsg (!hasPrivate || am5Pavel.smind.hm.electron-wrappers.slack.netns == (if builtins.elem "vpn" am5Pavel.smind.hm.globals.net.namespaces then "vpn" else null)) "pavel-am5: Slack namespace must follow declared host namespaces";
+# BG @specified: Flurry reaches every harness independently of VM support.
+assert lib.assertMsg (skillWiring false && skillWiring true) "Flurry must reach Claude/Codex/Pi with or without VMs; local-test-vms must remain conditional";
 assert lib.assertMsg (standalone.name == "pavel@ubuntu-x86_64") "Standalone export must use the supplied hostname and architecture";
 assert lib.assertMsg (config.home.username == "pavel" && config.home.homeDirectory == "/home/pavel") "Standalone identity must come from its context";
 assert lib.assertMsg (config.smind.hm.globals.isDesktop && !config.smind.hm.globals.llama-swap.enable) "Standalone capabilities must come from its declaration";

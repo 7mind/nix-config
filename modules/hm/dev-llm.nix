@@ -22,7 +22,9 @@ in
   imports = [ inputs.ponygirls.homeManagerModules.dev-llm ];
 
   config = lib.mkIf cfg.enable {
-    smind.hm.dev.llm.extraSkills = lib.mkIf cfg.yolo.vm.enable {
+    smind.hm.dev.llm.extraSkills = {
+      flurry = builtins.readFile ./skills/flurry/SKILL.md;
+    } // lib.optionalAttrs cfg.yolo.vm.enable {
       local-test-vms = builtins.readFile ./skills/local-test-vms/SKILL.md;
     };
 
