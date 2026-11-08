@@ -47,6 +47,15 @@ still committed and pushed in preserve mode.** A nontrivial rebase also replaces
 commit IDs. `--commit all` includes Git-visible untracked files, so review the
 `plan`/`status` output first. It never includes ignored files.
 
+Flurry prepares up to four independent repositories concurrently, including remote
+fetches, rebase/restore rehearsals and initial push-ancestry checks. Linked worktrees
+sharing Git storage prepare serially. Journal writes stay serialized, and all
+preparations must succeed before any source promotion or publication. On failure or
+interruption, queued preparations are cancelled and running rehearsals are drained
+before releasing the workspace lock; subprocess timeouts still apply. Intentional
+user-commit hooks in different repositories may therefore run concurrently.
+Lock updates, validation, promotion and publication remain dependency-ordered.
+
 For A → B → C, Flurry rehearses all Git rebases/restorations first, then publishes
 A, updates/checks/commits B's lock and publishes B, then does the same for C.
 Consumers' resulting lock revisions must equal the actual prepared/published

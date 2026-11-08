@@ -6,6 +6,7 @@ import os
 import shlex
 import shutil
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -88,6 +89,122 @@ class SyncTests(unittest.TestCase):
 
     def remote_head(self, name):
         return self.git(self.repos[name][1], "rev-parse", "refs/heads/main")
+
+    def test_independent_preparations_overlap_before_any_publication(self):
+        self.add_repo("a", {})
+        self.add_repo("b", {})
+        ready = threading.Barrier(2, timeout=10)
+        prepare = self.sync.git.prepare
+        finished = set()
+        lock = threading.Lock()
+        push = self.sync.git.push
+
+        def overlapping_prepare(repo, *args, **kwargs):
+            ready.wait()
+            item = prepare(repo, *args, **kwargs)
+            with lock:
+                finished.add(repo.name)
+            return item
+
+        def checked_push(*args, **kwargs):
+            self.assertEqual(finished, {"a", "b"})
+            return push(*args, **kwargs)
+
+        with patch.object(self.sync.git, "prepare", side_effect=overlapping_prepare), patch.object(self.sync.git, "push", side_effect=checked_push):
+            journal = self.run_sync(self.options("preserve"))
+        self.assertEqual(journal.document["status"], "complete")
+        self.assertEqual(set(journal.document["repositories"]), finished)
+
+    def test_linked_worktrees_prepare_serially(self):
+        a = self.add_repo("a", {})
+        b = self.root / "b"
+        self.git(a, "worktree", "add", "-b", "topic", str(b))
+        self.git(b, "branch", "--set-upstream-to=origin/main")
+        prepare = self.sync.git.prepare
+        lock = threading.Lock()
+        active = 0
+        maximum = 0
+        started = []
+
+        def tracked_prepare(repo, *args, **kwargs):
+            nonlocal active, maximum
+            with lock:
+                active += 1
+                maximum = max(maximum, active)
+                started.append(repo.name)
+            try:
+                return prepare(repo, *args, **kwargs)
+            finally:
+                with lock:
+                    active -= 1
+
+        with patch.object(self.sync.git, "prepare", side_effect=tracked_prepare):
+            self.run_sync(self.options("preserve"))
+        self.assertEqual(maximum, 1)
+        self.assertEqual(set(started), {"a", "b"})
+
+    def test_preparation_concurrency_is_bounded(self):
+        for name in ("a", "b", "c", "d", "e", "f"):
+            self.add_repo(name, {})
+        ready = threading.Barrier(4, timeout=10)
+        prepare = self.sync.git.prepare
+        lock = threading.Lock()
+        active = 0
+        maximum = 0
+        started = 0
+
+        def bounded_prepare(*args, **kwargs):
+            nonlocal active, maximum, started
+            with lock:
+                active += 1
+                maximum = max(maximum, active)
+                started += 1
+                initial = started <= 4
+            try:
+                if initial:
+                    ready.wait()
+                return prepare(*args, **kwargs)
+            finally:
+                with lock:
+                    active -= 1
+
+        with patch.object(self.sync.git, "prepare", side_effect=bounded_prepare):
+            self.run_sync(self.options("preserve"))
+        self.assertEqual(maximum, 4)
+        self.assertEqual(started, 6)
+
+    def test_preparation_failure_drains_workers_without_promotion_or_publication(self):
+        self.add_repo("a", {})
+        self.add_repo("b", {})
+        before = {name: self.remote_head(name) for name in self.repos}
+        ready = threading.Barrier(2, timeout=10)
+        failed = threading.Event()
+        finished = threading.Event()
+        prepare = self.sync.git.prepare
+
+        def failing_prepare(repo, *args, **kwargs):
+            ready.wait()
+            if repo.name == "a":
+                failed.set()
+                raise FlurryError("preparation-refused")
+            self.assertTrue(failed.wait(timeout=10))
+            try:
+                return prepare(repo, *args, **kwargs)
+            finally:
+                finished.set()
+
+        with patch.object(self.sync.git, "prepare", side_effect=failing_prepare), patch.object(self.sync.git, "promote") as promote, patch.object(self.sync.git, "push") as push:
+            with self.assertRaisesRegex(FlurryError, "preparation-refused"):
+                self.run_sync(self.options("preserve"))
+            self.assertTrue(finished.is_set(), "Workers must finish before releasing the workspace")
+            promote.assert_not_called()
+            push.assert_not_called()
+        for name, (repo, _, _) in self.repos.items():
+            self.assertEqual(self.remote_head(name), before[name])
+            self.assertEqual(self.git(repo, "rev-parse", "HEAD"), before[name])
+            self.assertEqual(self.git(repo, "status", "--porcelain"), "")
+        journal = next((self.root / ".flurry" / "runs").glob("*/run.json"))
+        self.assertEqual(json.loads(journal.read_text())["status"], "failed")
 
     def test_real_nix_cascade_publishes_locks_preserving_user_edits_and_is_idempotent(self):
         a = self.add_repo("a", {})

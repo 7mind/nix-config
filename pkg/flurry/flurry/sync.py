@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, replace
 from pathlib import Path
+from threading import Lock
 from typing import Callable
 
 from .git import Git, Prepared
@@ -274,15 +276,7 @@ class Sync:
                         "push_ref": target.push_ref, "push_remote": target.push_remote,
                     })
                 validate_edges(plan.graph, targets, self.runner)
-                prepared: dict[str, Prepared] = {}
-                for index, target in enumerate(plan.targets):
-                    name = target.repository.name
-                    journal.action(f"preparing:{name}")
-                    self.report(f"Rehearsing {name}")
-                    item = self.git.prepare(target.repository.path, journal.directory / f"trial-{index}", target.baseline, options.dirty_mode, options.message, options.commit_scope, remote=target.remote)
-                    prepared[name] = item
-                    journal.repository(name, {"state": "prepared", "head": item.head, "trial": os.fspath(item.trial)})
-                    self._check_push_base(target, item)
+                prepared = self._prepare_all(plan.targets, options, journal)
                 trial_repositories = tuple(
                     replace(repo, path=prepared[repo.name].trial, head=prepared[repo.name].head)
                     if repo.name in prepared else repo
@@ -347,6 +341,37 @@ class Sync:
                     self.report(f"Interrupted. Published: {done}. Run: {journal.path}")
                     raise
                 raise FlurryError(f"{detail}\nPublished: {done}. Run journal/recovery data: {journal.path}\nNo published history was rolled back.") from error
+
+    def _prepare_all(self, targets: tuple[Target, ...], options: SyncOptions, journal: Journal) -> dict[str, Prepared]:
+        max_preparations = 4
+        storage_locks = {target.repository.common_dir: Lock() for target in targets}
+
+        def prepare(index: int, target: Target) -> Prepared:
+            # Linked worktrees share Git metadata; never capture them concurrently.
+            with storage_locks[target.repository.common_dir]:
+                item = self.git.prepare(target.repository.path, journal.directory / f"trial-{index}", target.baseline, options.dirty_mode, options.message, options.commit_scope, remote=target.remote)
+                self._check_push_base(target, item)
+                return item
+
+        prepared: dict[str, Prepared] = {}
+        journal.action("preparing")
+        with ThreadPoolExecutor(max_workers=min(max_preparations, len(targets))) as executor:
+            futures = {}
+            try:
+                for index, target in enumerate(targets):
+                    self.report(f"Rehearsing {target.repository.name}")
+                    futures[executor.submit(prepare, index, target)] = target.repository.name
+                for future in as_completed(futures):
+                    name = futures[future]
+                    item = future.result()
+                    prepared[name] = item
+                    journal.repository(name, {"state": "prepared", "head": item.head, "trial": os.fspath(item.trial)})
+            except BaseException:
+                for future in futures:
+                    future.cancel()
+                # Drain running rehearsals before releasing the workspace lock or failing the journal.
+                raise
+        return {target.repository.name: prepared[target.repository.name] for target in targets}
 
     def _check_push_base(self, target: Target, item: Prepared) -> None:
         remote = remote_head(self.runner, item.trial, target.push_url, target.push_ref)
