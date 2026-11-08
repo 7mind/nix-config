@@ -89,7 +89,6 @@ in
   smind.hm = {
     roles.desktop = true;
     dev.jetbrains.enable = true;
-    dev.llm.fullscreenTui.enable = false;
     desktop.cosmic.minimal-keybindings = true;
 
     autostart.programs = [
