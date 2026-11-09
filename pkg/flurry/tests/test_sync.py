@@ -90,6 +90,55 @@ class SyncTests(unittest.TestCase):
     def remote_head(self, name):
         return self.git(self.repos[name][1], "rev-parse", "refs/heads/main")
 
+    def test_success_removes_only_current_run_refs_and_preserves_dirty_state(self):
+        a = self.add_repo("a", {})
+        (a / "edit.txt").write_text("existing stash\n")
+        self.git(a, "stash", "push", "-m", "user stash")
+        (a / "edit.txt").write_text("staged\n")
+        self.git(a, "add", "edit.txt")
+        (a / "edit.txt").write_text("unstaged\n")
+        (a / "untracked.txt").write_text("untracked\n")
+        self.git(a, "update-ref", "refs/flurry/previous/prepared", "HEAD")
+        self.git(a, "update-ref", "refs/custom/keep", "HEAD")
+        commands = (
+            ("diff", "--cached", "--binary"), ("diff", "--binary"),
+            ("stash", "list", "--format=%H"), ("ls-files", "--others", "--exclude-standard"),
+        )
+        before = [self.git(a, *args) for args in commands]
+        refs_before = self.git(a, "for-each-ref", "--format=%(refname) %(objectname)")
+        journal = self.run_sync(self.options("preserve"))
+        self.assertEqual(journal.document["status"], "complete")
+        self.assertEqual([self.git(a, *args) for args in commands], before)
+        self.assertEqual((a / "untracked.txt").read_text(), "untracked\n")
+        self.assertEqual(self.git(a, "for-each-ref", "--format=%(refname) %(objectname)"), refs_before)
+
+    def test_success_cleans_refs_for_each_dirty_policy(self):
+        a = self.add_repo("a", {})
+        options = (
+            self.options("reject"),
+            SyncOptions("commit", "staged", "staged work", "eval", ()),
+            SyncOptions("commit", "all", "all work", "eval", ()),
+        )
+        for option in options:
+            with self.subTest(option=option):
+                if option.dirty_mode == "commit":
+                    (a / "edit.txt").write_text(option.commit_scope + "\n")
+                    self.git(a, "add", "edit.txt")
+                journal = self.run_sync(option)
+                self.assertEqual(journal.document["status"], "complete")
+                self.assertEqual(self.git(a, "for-each-ref", "refs/flurry/"), "")
+
+    def test_cleanup_failure_is_reported_after_publication(self):
+        a = self.add_repo("a", {})
+        with patch.object(self.sync.git, "cleanup", side_effect=FlurryError("cleanup refused")):
+            with self.assertRaisesRegex(FlurryError, "cleanup refused.*\\nPublished: a"):
+                self.run_sync(self.options("preserve"))
+        data = json.loads(next((self.root / ".flurry" / "runs").glob("*/run.json")).read_text())
+        self.assertEqual(data["status"], "failed")
+        self.assertEqual(data["action"], "cleaning:a")
+        self.assertEqual(data["repositories"]["a"]["state"], "published")
+        self.assertEqual(len(self.git(a, "for-each-ref", "--format=%(refname)", "refs/flurry/").splitlines()), 3)
+
     def test_independent_preparations_overlap_before_any_publication(self):
         self.add_repo("a", {})
         self.add_repo("b", {})
@@ -142,6 +191,8 @@ class SyncTests(unittest.TestCase):
             self.run_sync(self.options("preserve"))
         self.assertEqual(maximum, 1)
         self.assertEqual(set(started), {"a", "b"})
+        self.assertEqual(self.git(a, "for-each-ref", "refs/flurry/"), "")
+        self.assertEqual(self.git(b, "for-each-ref", "refs/flurry/"), "")
 
     def test_preparation_concurrency_is_bounded(self):
         for name in ("a", "b", "c", "d", "e", "f"):
@@ -476,9 +527,16 @@ class SyncTests(unittest.TestCase):
         data = json.loads(journals[0].read_text())
         self.assertEqual(data["status"], "failed")
         self.assertEqual(data["repositories"]["a"]["state"], "published")
+        retained = {}
+        for name, (repo, _, _) in self.repos.items():
+            refs = self.git(repo, "for-each-ref", "--format=%(refname) %(objectname)", "refs/flurry/")
+            self.assertEqual(len(refs.splitlines()), 3)
+            retained[name] = refs
         hook.unlink()
         resumed = self.sync.resume(load_config(self.root, ()), data["id"])
         self.assertEqual(resumed.document["status"], "complete")
+        for name, (repo, _, _) in self.repos.items():
+            self.assertEqual(self.git(repo, "for-each-ref", "--format=%(refname) %(objectname)", "refs/flurry/"), retained[name])
         self.assertEqual(self.nix.locked_inputs(self.repos["b"][0])["a"].rev, self.remote_head("a"))
 
     def test_new_repository_after_failure_is_not_silently_enrolled_by_resume(self):

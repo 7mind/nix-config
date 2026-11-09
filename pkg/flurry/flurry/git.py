@@ -63,6 +63,7 @@ class Prepared:
 class Recovery:
     prepared: Prepared
     stash_ref: str
+    remaining_ref: str
     prepared_ref: str
     original_stash: str
     promoted: Snapshot | None
@@ -74,7 +75,8 @@ class Recovery:
             'original': self.prepared.original.to_dict(),
             'prepared_head': self.prepared.head, 'marker': self.prepared.marker,
             'dirty_mode': self.prepared.dirty_mode,
-            'stash_ref': self.stash_ref, 'prepared_ref': self.prepared_ref,
+            'stash_ref': self.stash_ref, 'remaining_ref': self.remaining_ref,
+            'prepared_ref': self.prepared_ref,
             'original_stash': self.original_stash, 'phase': self.phase,
             'promoted': None if self.promoted is None else self.promoted.to_dict(),
         }
@@ -510,12 +512,12 @@ class Git:
         self.rehearse_restore(prepared)
         suffix = hashlib.sha256(str(prepared.repo).encode()).hexdigest()[:16]
         prefix = f'refs/flurry/{run_id}/{suffix}'
-        record = Recovery(prepared, f'{prefix}/stash', f'{prefix}/prepared', '', None, 'untouched')
-        for ref in (record.stash_ref, record.prepared_ref):
+        record = Recovery(prepared, f'{prefix}/stash', f'{prefix}/remaining', f'{prefix}/prepared', '', None, 'untouched')
+        for ref in (record.stash_ref, record.remaining_ref, record.prepared_ref):
             if self._succeeds(prepared.repo, 'show-ref', '--verify', '--quiet', ref):
                 raise FlurryError(f'Recovery ref already exists: {ref}')
         self._git(prepared.repo, 'fetch', '--no-tags', '--no-recurse-submodules', str(prepared.trial),
-                  f'{prepared.remaining_stash}:{prefix}/remaining', f'{prepared.head}:{record.prepared_ref}')
+                  f'{prepared.remaining_stash}:{record.remaining_ref}', f'{prepared.head}:{record.prepared_ref}')
         self.verify(prepared)
         try:
             record.phase = 'stashing'
@@ -526,7 +528,7 @@ class Git:
             # Checkout is restricted to the verified source, captured by the owned recovery stash.
             self._git(prepared.repo, 'checkout', '--no-recurse-submodules', '--no-overwrite-ignore', '-B', prepared.branch.removeprefix('refs/heads/'), prepared.head)
             record.phase = 'checked-out'
-            restore = record.original_stash if prepared.dirty_mode != 'commit' else f'{prefix}/remaining'
+            restore = record.original_stash if prepared.dirty_mode != 'commit' else record.remaining_ref
             self._git(prepared.repo, 'stash', 'apply', '--index', restore)
             self._remove_marker(prepared.repo, prepared.marker)
             self._drop_stash(prepared.repo, record.original_stash)
@@ -542,6 +544,19 @@ class Git:
             return record
         except FlurryError as error:
             raise PromotionError(f'Promotion failed; recovery artifacts retained under {prefix}: {error}', record) from error
+
+    def cleanup(self, record: Recovery) -> None:
+        if record.phase != 'promoted':
+            raise FlurryError('Refusing cleanup of incomplete promotion recovery data')
+        refs = (
+            (record.stash_ref, record.original_stash),
+            (record.remaining_ref, record.prepared.remaining_stash),
+            (record.prepared_ref, record.prepared.head),
+        )
+        # Compare-and-delete all owned refs atomically; never follow symbolic refs.
+        commands = 'start\n' + ''.join(f'delete {ref} {oid}\n' for ref, oid in refs) + 'prepare\ncommit\n'
+        self._git(record.prepared.repo, 'update-ref', '--no-deref', '--stdin', input_data=commands.encode())
+        record.phase = 'cleaned'
 
     def recover(self, record: Recovery) -> None:
         prepared = record.prepared

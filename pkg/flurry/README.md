@@ -241,8 +241,15 @@ not silently untrack files or overwrite those rules. Non-Git workspaces need no
 Git metadata changes.
 
 Git recovery refs under `refs/flurry/RUN_ID/` retain captured original state and
-prepared commits. Do not delete them while investigating a failure. They can
-contain unpublished source content; keep the state directory private.
+prepared commits until all selected pushes have been verified. Successful runs
+remove their own `stash`, `remaining` and `prepared` refs using expected-object-ID
+checks and an atomic transaction per repository. Cleanup does not alter branches,
+user stashes or checkout contents. A cleanup failure is reported, not silently
+counted as success; already-published history is never rolled back.
+
+Failed or interrupted runs retain recovery refs that have not already been cleaned.
+Do not delete them while investigating a failure. They can contain unpublished
+source content; keep the state directory private.
 
 ```bash
 flurry resume RUN_ID               # repeat original --exclude flags, if any
@@ -253,8 +260,10 @@ then creates a fresh validated plan. Added repositories are not silently enrolle
 them. Changed checkouts require a new reviewed plan. Interrupted promotion is
 not automatically reset: inspect the journal, retained original/prepared refs and
 owned stash before manual recovery. In particular, never apply a recovery stash
-over unrelated newer edits. Successful runs also retain recovery objects; pruning
-is deliberately not automatic in this version.
+over unrelated newer edits. Resume creates a new run: on success it removes only
+that new run's refs, leaving the earlier failed run's recovery data for inspection.
+Historical refs (including those from older successful runs), private journals and
+trial clones are not automatically pruned.
 
 ## Tests
 

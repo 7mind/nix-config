@@ -9,7 +9,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Callable
 
-from .git import Git, Prepared
+from .git import Git, Prepared, Recovery
 from .nix import Nix
 from .process import FlurryError, Runner, redact
 from .source import Source, parse_source
@@ -266,6 +266,7 @@ class Sync:
             journal.document["inventory"] = [entry.to_dict() for entry in selected_inventory]
             journal.save()
             published: list[str] = []
+            recoveries: dict[str, Recovery] = {}
             try:
                 targets = {target.repository.name: target for target in plan.targets}
                 for target in plan.targets:
@@ -319,9 +320,11 @@ class Sync:
                     journal.repository(name, {"head": item.head})
                     journal.action(f"promoting:{name}")
                     recovery = self.git.promote(item, journal.run_id)
+                    recoveries[name] = recovery
                     journal.repository(name, {
                         "state": "promoted", "checkpoint": fingerprint(target.repository.path, self.runner),
-                        "recovery": {"stash_ref": recovery.stash_ref, "prepared_ref": recovery.prepared_ref,
+                        "recovery": {"stash_ref": recovery.stash_ref, "remaining_ref": recovery.remaining_ref,
+                                     "prepared_ref": recovery.prepared_ref,
                                      "original_head": item.original.head, "marker": item.marker,
                                      "phase": recovery.phase},
                     })
@@ -330,8 +333,12 @@ class Sync:
                     self.git.push(target.repository.path, target.push_remote, target.push_ref, item.head)
                     published.append(name)
                     journal.repository(name, {"state": "published", "checkpoint": fingerprint(target.repository.path, self.runner)})
+                for name, recovery in recoveries.items():
+                    journal.action(f"cleaning:{name}")
+                    self.git.cleanup(recovery)
+                    journal.repository(name, {"recovery_refs_cleaned": True})
                 journal.action("complete")
-                journal.finish("complete", "All selected repositories and generated locks published")
+                journal.finish("complete", "All selected repositories and generated locks published; current-run recovery refs removed")
                 return journal
             except BaseException as error:
                 detail = redact(str(error))

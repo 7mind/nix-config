@@ -75,6 +75,61 @@ class GitTests(unittest.TestCase):
         self.runner.environment['GIT_CONFIG_GLOBAL'] = str(configuration)
         return marker
 
+    def test_cleanup_atomically_refuses_changed_recovery_refs(self):
+        self.dirty()
+        self.advance()
+        prepared = self.prepare()
+        record = self.adapter.promote(prepared, 'cleanup')
+        expected = (
+            (record.stash_ref, record.original_stash),
+            (record.remaining_ref, prepared.remaining_stash),
+            (record.prepared_ref, prepared.head),
+        )
+        before = self.snapshot()
+        for ref, oid in expected:
+            with self.subTest(ref=ref):
+                self.git(self.repo, 'update-ref', ref, prepared.original.head)
+                refs_before = self.git(self.repo, 'for-each-ref', '--format=%(refname) %(objectname)')
+                with self.assertRaises(FlurryError):
+                    self.adapter.cleanup(record)
+                self.assertEqual(self.git(self.repo, 'for-each-ref', '--format=%(refname) %(objectname)'), refs_before)
+                self.assertEqual(record.phase, 'promoted')
+                self.git(self.repo, 'update-ref', ref, oid)
+        self.adapter.cleanup(record)
+        self.assertEqual(self.git(self.repo, 'for-each-ref', 'refs/flurry/cleanup/'), '')
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(record.phase, 'cleaned')
+
+    def test_cleanup_does_not_follow_symbolic_refs(self):
+        prepared = self.prepare()
+        record = self.adapter.promote(prepared, 'cleanup')
+        self.git(self.repo, 'update-ref', 'refs/custom/keep', prepared.head)
+        self.git(self.repo, 'symbolic-ref', record.prepared_ref, 'refs/custom/keep')
+        self.adapter.cleanup(record)
+        self.assertEqual(self.git(self.repo, 'rev-parse', 'refs/custom/keep'), prepared.head)
+        self.assertEqual(self.git(self.repo, 'for-each-ref', 'refs/flurry/cleanup/'), '')
+
+    def test_cleanup_refuses_incomplete_promotion(self):
+        prepared = self.prepare()
+        record = self.adapter.promote(prepared, 'cleanup')
+        record.phase = 'captured'
+        refs_before = self.git(self.repo, 'for-each-ref', '--format=%(refname) %(objectname)')
+        with self.assertRaisesRegex(FlurryError, 'incomplete promotion'):
+            self.adapter.cleanup(record)
+        self.assertEqual(self.git(self.repo, 'for-each-ref', '--format=%(refname) %(objectname)'), refs_before)
+
+    def test_promotion_refuses_existing_remaining_recovery_ref(self):
+        self.dirty()
+        prepared = self.prepare()
+        record = self.adapter.promote(prepared, 'collision')
+        self.adapter.recover(record)
+        self.git(self.repo, 'update-ref', '-d', record.stash_ref)
+        self.git(self.repo, 'update-ref', '-d', record.prepared_ref)
+        before = self.snapshot()
+        with self.assertRaisesRegex(FlurryError, 'Recovery ref already exists'):
+            self.adapter.promote(prepared, 'collision')
+        self.assertEqual(self.snapshot(), before)
+
     def test_unused_global_filter_registration_preserves_dirty_state(self):
         marker = self.configure_filter('lfs')
         self.dirty()
