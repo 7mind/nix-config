@@ -449,11 +449,18 @@ class Git:
             if any(Path(path).name == '.gitattributes' for path in incoming):
                 raise FlurryError(f'Cannot safely merge preserved .gitattributes with incoming attribute changes: {repo}')
         self._tree_filters(prepared, prepared.baseline)
-        try:
-            self._git(destination, '-c', 'core.editor=true', 'rebase', '--no-autostash', '--no-update-refs', 'refs/flurry/baseline',
-                      env={'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_CONFIG_NOSYSTEM': '1'})
-        except FlurryError as error:
-            raise FlurryError(f'Rebase rehearsal failed; originals unchanged: {error}') from error
+        ancestry = self.runner.call([
+            'git', '-C', str(destination), '-c', 'submodule.recurse=false',
+            '-c', 'core.hooksPath=/dev/null', 'merge-base', '--is-ancestor', prepared.baseline, 'HEAD',
+        ], None, None, {}, False)
+        if ancestry.returncode not in (0, 1):
+            raise FlurryError('Could not verify rebase ancestry; originals unchanged')
+        if ancestry.returncode == 1:
+            try:
+                self._git(destination, '-c', 'core.editor=true', 'rebase', '--no-autostash', '--no-update-refs', 'refs/flurry/baseline',
+                          env={'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_CONFIG_NOSYSTEM': '1'})
+            except FlurryError as error:
+                raise FlurryError(f'Rebase rehearsal failed; originals unchanged: {error}') from error
         prepared.head = self._text(destination, 'rev-parse', 'HEAD')
         self._no_gitlinks(destination, prepared.head)
         self.rehearse_restore(prepared)

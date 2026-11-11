@@ -43,8 +43,13 @@ flurry sync --preserve --exclude 'scratch-*'
 ```
 
 `--without-committing` is an alias for `--preserve`. **Generated lock changes are
-still committed and pushed in preserve mode.** A nontrivial rebase also replaces
-commit IDs. `--commit all` includes Git-visible untracked files, so review the
+still committed and pushed in preserve mode.** When the fetched baseline is already
+an ancestor of the prepared trial HEAD, Flurry retains its commits and merge topology
+instead of needlessly replaying local history. Dirty restoration and publication
+checks still run. Otherwise Flurry rehearses plain rebase: commit IDs can change,
+merge topology and merge-only changes are not preserved, and conflicts can still
+require manual reconciliation. This guard is not general merge-preserving rebase
+support. `--commit all` includes Git-visible untracked files, so review the
 `plan`/`status` output first. It never includes ignored files.
 
 Flurry prepares up to four independent repositories concurrently, including remote

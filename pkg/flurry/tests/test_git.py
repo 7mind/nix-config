@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 from flurry.git import Git
-from flurry.process import FlurryError, Runner
+from flurry.process import FlurryError, Result, Runner
 
 
 class GitTests(unittest.TestCase):
@@ -74,6 +74,94 @@ class GitTests(unittest.TestCase):
         self.git(self.root, 'config', '--file', str(configuration), f'filter.{name}.required', 'true')
         self.runner.environment['GIT_CONFIG_GLOBAL'] = str(configuration)
         return marker
+
+    def merged_duplicate_patches(self):
+        base = self.git(self.repo, 'rev-parse', 'HEAD')
+        self.git(self.repo, 'checkout', '-b', 'ui')
+        (self.repo / 'dashboard').write_text('let requested = null;\n')
+        self.git(self.repo, 'add', 'dashboard')
+        self.git(self.repo, 'commit', '-m', 'dashboard')
+        first = self.git(self.repo, 'rev-parse', 'HEAD')
+        (self.repo / 'dashboard').write_text('let requested = null, outcome = null;\n')
+        self.git(self.repo, 'commit', '-am', 'retain outcome')
+        followup = self.git(self.repo, 'rev-parse', 'HEAD')
+        self.git(self.repo, 'checkout', '-b', 'package', base)
+        self.git(self.repo, 'cherry-pick', '-x', first)
+        self.assertNotEqual(self.git(self.repo, 'rev-parse', 'HEAD'), first)
+        self.git(self.repo, 'cherry-pick', '-x', followup)
+        self.git(self.repo, 'checkout', 'main')
+        self.git(self.repo, 'merge', '--no-ff', 'ui', '-m', 'merge ui')
+        self.git(self.repo, 'merge', '--no-ff', 'package', '-m', 'merge package')
+        return self.git(self.repo, 'rev-parse', 'HEAD')
+
+    # Regression: flattening two merged copies of a patch replays it after its follow-up.
+    def test_contained_upstream_keeps_merged_duplicate_patches(self):
+        head = self.merged_duplicate_patches()
+        before = self.snapshot()
+        prepared = self.prepare('reject')
+        self.assertEqual(prepared.head, head)
+        self.assertEqual(self.git(prepared.trial, 'rev-parse', 'HEAD^{tree}'), self.git(self.repo, 'rev-parse', 'HEAD^{tree}'))
+        self.assertEqual(self.snapshot(), before)
+
+    def test_contained_merged_history_preserves_split_edits(self):
+        head = self.merged_duplicate_patches()
+        self.dirty()
+        before = self.snapshot()
+        prepared = self.prepare()
+        self.assertEqual(prepared.head, head)
+        self.assertEqual(self.snapshot(), before)
+        record = self.adapter.promote(prepared, 'contained')
+        self.assertEqual(self.snapshot(), before)
+        self.adapter.cleanup(record)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_contained_merged_history_retains_requested_staged_commit(self):
+        head = self.merged_duplicate_patches()
+        self.dirty()
+        before = self.snapshot()
+        prepared = self.prepare('commit', 'staged')
+        self.assertEqual(self.git(prepared.trial, 'rev-parse', 'HEAD^'), head)
+        self.assertEqual(self.git(prepared.trial, 'show', 'HEAD:mixed'), 'base\nstaged')
+        self.assertEqual(self.snapshot(), before)
+        record = self.adapter.promote(prepared, 'contained-commit')
+        self.assertEqual((self.repo / 'mixed').read_text(), 'base\nstaged\nunstaged\n')
+        self.assertEqual(self.git(self.repo, 'diff', '--cached'), '')
+        self.assertEqual((self.repo / 'new file').read_bytes(), b'new\x00\xff')
+        self.adapter.cleanup(record)
+
+    def test_divergent_upstream_still_rebases(self):
+        (self.repo / 'local').write_text('local\n')
+        self.git(self.repo, 'add', 'local')
+        self.git(self.repo, 'commit', '-m', 'local')
+        before = self.snapshot()
+        self.advance()
+        prepared = self.prepare()
+        self.assertNotEqual(prepared.head, before[0])
+        self.assertEqual(self.git(prepared.trial, 'rev-parse', 'HEAD^'), prepared.baseline)
+        self.assertEqual((prepared.trial / 'local').read_text(), 'local\n')
+        self.assertEqual((prepared.trial / 'upstream').read_text(), 'upstream\n')
+        self.assertEqual(self.snapshot(), before)
+
+    def test_behind_upstream_still_fast_forwards(self):
+        before = self.snapshot()
+        self.advance()
+        prepared = self.prepare()
+        self.assertEqual(prepared.head, prepared.baseline)
+        self.assertEqual((prepared.trial / 'upstream').read_text(), 'upstream\n')
+        self.assertEqual(self.snapshot(), before)
+
+    def test_rebase_ancestry_failure_is_not_a_negative_answer(self):
+        class FailedAncestry(Runner):
+            def call(self, args, cwd, input_data, extra_env, check):
+                if 'merge-base' in args and '--is-ancestor' in args:
+                    return Result(b'', b'fixture ancestry failure', 128)
+                return super().call(args, cwd, input_data, extra_env, check)
+
+        self.adapter = Git(FailedAncestry(self.env, 20))
+        before = self.snapshot()
+        with self.assertRaisesRegex(FlurryError, 'rebase ancestry'):
+            self.prepare()
+        self.assertEqual(self.snapshot(), before)
 
     def test_cleanup_atomically_refuses_changed_recovery_refs(self):
         self.dirty()
