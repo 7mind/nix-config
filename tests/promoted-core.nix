@@ -62,14 +62,14 @@ let
       driverZip = pkgs.writeText "fixture-driver.zip" "evaluation-only fixture";
     };
   };
-  wifi = wifiFor pkgs.linuxPackages_7_2;
+  wifi = wifiFor pkgs.linuxPackages_7_3;
   wifi73 = wifiFor pkgs.linuxPackages_7_3;
   unsupportedWifi = evaluate {
     boot.kernelPackages = pkgs.linuxPackages_6_18;
     smind.hw.mt7927.enable = true;
   };
   missingZip = evaluateWith firmwarePkgs {
-    boot.kernelPackages = pkgs.linuxPackages_7_2;
+    boot.kernelPackages = pkgs.linuxPackages_7_3;
     smind.hw.mt7927.enable = true;
   };
   failedWifiAssertions = config: lib.filter (assertion:

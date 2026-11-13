@@ -7,6 +7,10 @@
 }:
 
 {
+  # Flexisip (pkgs.flexisip below) links against linphone's bc-mbedtls fork
+  # (mbedtls 3.6.1, marked insecure in current nixpkgs).
+  nixpkgs.config.permittedInsecurePackages = [ "mbedtls-3.6.1-unstable-2025-08-11" ];
+
   nixpkgs.overlays = [
     (final: prev: {
       hyprwhspr = prev.callPackage ../../pkg/hyprwhspr { src = inputs.hyprwhspr; };

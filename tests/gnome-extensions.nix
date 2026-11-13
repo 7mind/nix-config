@@ -41,6 +41,7 @@ let
     (throw "Missing expected test extension ${uuid}") selected.packages;
   placementUuid = extensionPkgs.gnomeExtensions.native-window-placement.extensionUuid;
   calendarUuid = extensionPkgs.gnomeExtensions.dim-completed-calendar-events.extensionUuid;
+  calendarSupported = builtins.hasAttr calendarUuid extensionPkgs."gnome${shellMajor}Extensions";
   extra = extensionPkgs.gnomeExtensions.move-clock;
   home = settings: home-manager.lib.homeManagerConfiguration {
     pkgs = extensionPkgs;
@@ -87,8 +88,11 @@ in
 # BG: shared policy and Home Manager; Effectual-Good for built package metadata.
 assert lib.assertMsg ((find current placementUuid).drvPath == (expectedForShell shellMajor extensionPkgs.gnomeExtensions.native-window-placement).drvPath)
   "Current Shell must select its native-window-placement release";
-assert lib.assertMsg ((find current calendarUuid).drvPath == (expectedForShell shellMajor extensionPkgs.gnomeExtensions.dim-completed-calendar-events).drvPath)
+assert lib.assertMsg (!calendarSupported
+  || (find current calendarUuid).drvPath == (expectedForShell shellMajor extensionPkgs.gnomeExtensions.dim-completed-calendar-events).drvPath)
   "Current Shell must select its calendar release";
+assert lib.assertMsg (calendarSupported || !(builtins.elem calendarUuid (uuids current)))
+  "Extensions without a current-Shell release must be skipped by default, not fail";
 assert lib.assertMsg ((find nonNative placementUuid).drvPath
   == (expectedForShell "49" extensionPkgs.gnomeExtensions.native-window-placement).drvPath)
   "A non-native Shell must select its versioned extension release";

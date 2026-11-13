@@ -10,6 +10,8 @@ let
     in
     extensions.${package.extensionUuid} or
       (throw "GNOME extension ${package.extensionUuid} does not support Shell ${cfg.shellVersion}");
+  supportsShell = package:
+    builtins.hasAttr package.extensionUuid (pkgs."gnome${cfg.shellVersion}Extensions" or { });
   catalog = [
     { name = "run-or-raise"; package = pkgs.gnomeExtensions.run-or-raise; }
     # AppIndicator v64 registers SNI items but does not render them on GNOME 50: https://github.com/ubuntu/gnome-shell-extension-appindicator/issues/628
@@ -78,7 +80,10 @@ in
     caffeine.enable = lib.mkEnableOption "Caffeine - disable screensaver and auto suspend" // { default = true; };
     vicinae.enable = lib.mkEnableOption "Vicinae extension" // { default = true; };
     steal-my-focus-window.enable = lib.mkEnableOption "steal focus for windows that request attention" // { default = true; };
-    dim-completed-calendar-events.enable = lib.mkEnableOption "dimming of completed calendar events" // { default = true; };
+    # The upstream extension has no Shell 51 release yet, so the default follows
+    # catalog availability; an explicit enable still fails loudly in packageForShell.
+    dim-completed-calendar-events.enable = lib.mkEnableOption "dimming of completed calendar events"
+      // { default = supportsShell pkgs.gnomeExtensions.dim-completed-calendar-events; };
     rounded-window-corners-reborn.enable = lib.mkEnableOption "rounded-window-corners extension" // { default = false; };
     tiling-shell.enable = lib.mkEnableOption "tiling-shell extension" // { default = false; };
     open-bar.enable = lib.mkEnableOption "open-bar extension" // { default = false; };

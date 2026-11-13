@@ -39,10 +39,25 @@
   cfg-packages = { inputs, pkgs, arch }:
     {
       jdk-main = pkgs.graalvmPackages.graalvm-ce;
-      # OpenZFS 2.4.4 META already declares Linux-Maximum: 7.2 (nixpkgs
-      # kernelMaxSupportedMajorMinor matches). The previous 7.0 → 7.1
-      # substituteInPlace is stale and fails --replace-fail against 2.4.4.
-      linux-kernel = pkgs.linuxKernel.packages.linux_7_2;
+      # linux 7.2 is EOL and removed from nixpkgs; OpenZFS 2.4.4 still declares
+      # Linux-Maximum: 7.2 and predates the 7.3 kernel API changes. Carry the
+      # upstream-tested 7.3 compat set (pkg/zfs/README.md) and raise the META
+      # gate like the previous 7.0 → 7.1 workaround (f8876ff3).
+      linux-kernel = pkgs.linuxKernel.packages.linux_7_3.extend (_: prev: {
+        zfs_unstable = prev.zfs_unstable.overrideAttrs (oldAttrs: {
+          patches = oldAttrs.patches ++ [
+            ./pkg/zfs/patches/zfs-73-01-iops-create-no-flag.patch
+            ./pkg/zfs/patches/zfs-73-02-bvec-iter-bi-offset.patch
+            ./pkg/zfs/patches/zfs-73-03-cpu-feature-enabled.patch
+            ./pkg/zfs/patches/zfs-73-04-kthread-init-fs.patch
+          ];
+          preConfigure = ''
+            substituteInPlace META \
+              --replace-fail "Linux-Maximum: 7.2" "Linux-Maximum: 7.3"
+          '' + oldAttrs.preConfigure;
+          meta = oldAttrs.meta // { broken = false; };
+        });
+      });
     };
 
 
