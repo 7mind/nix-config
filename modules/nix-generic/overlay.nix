@@ -75,6 +75,12 @@
         });
       };
 
+      # bws 2.1.0 links sqlite but the recipe at the pinned nixpkgs omits it;
+      # fixed on nixpkgs master (sqlite added to buildInputs) — drop on bump.
+      bws = prev.bws.overrideAttrs (old: {
+        buildInputs = (old.buildInputs or [ ]) ++ [ prev.sqlite ];
+      });
+
       pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
         (python-final: python-prev: {
           mcp = python-prev.mcp.overridePythonAttrs (old: {
