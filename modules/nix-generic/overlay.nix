@@ -68,10 +68,6 @@
         '';
       });
 
-      # tpm2-tools exposes a supported switch for omitting its pandoc-generated
-      # man pages. fwupd depends on the tools, not their documentation.
-      tpm2-tools = prev.tpm2-tools.override { enableManpages = false; };
-
       # mcp-proxy requires mcp<2; keep its scope on the compatibility package.
       mcp-proxy = prev.mcp-proxy.override {
         python3Packages = prev.python3Packages.overrideScope (mcp-final: _: {
