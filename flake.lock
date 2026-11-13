@@ -519,11 +519,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789752695,
-        "narHash": "sha256-lSwsQNxwbJ3VWLpSURjDt4kwSzf3oLeb0Cl3niXwjCQ=",
+        "lastModified": 1794602703,
+        "narHash": "sha256-DmDXwk1dZRWUlvw5LEljeFSp7WVM1vqgU8veN+s9oF0=",
         "ref": "wip/full-patchset",
-        "rev": "1731413bca349954d9e5e1fc56b88b9b4af9fa9f",
-        "revCount": 3282,
+        "rev": "3baeb11f20d264f8bba636aefff76764340d678f",
+        "revCount": 3283,
         "type": "git",
         "url": "https://gitlab.gnome.org/pshirshov/fractal.git"
       },
