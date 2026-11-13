@@ -5,13 +5,6 @@ let
   vscodiumLdLibraries = [ pkgs.icu pkgs.openssl ];
   archiveFsImport = ''import{createWriteStream as'';
   ownerWritableArchiveFsImport = ''import{statSync as nixStatSync,createWriteStream as'';
-  # Minified identifiers churn between VSCodium releases (1.140 renamed the
-  # locals and the receiver differs per bundle), so match the addFile call
-  # without its receiver.
-  archiveAddFile = ''addFile(s.localPath,s.path)'';
-  ownerWriteBit = 128; # S_IWUSR (octal 0200)
-  ownerWritableArchiveAddFile =
-    ''addFile(s.localPath,s.path,{mode:nixStatSync(s.localPath).mode|${toString ownerWriteBit}})'';
   extensionId = extension: "${extension.vscodeExtPublisher}.${extension.vscodeExtName}";
   remoteSshExtension = pkgs.open-vsx.jeanp413.open-remote-ssh;
   managedExtensions = with pkgs.vscode-marketplace; with pkgs.vscode-extensions; [
@@ -53,14 +46,27 @@ let
       ${lib.optionalString cfg-meta.isLinux ''
         # Remote extension installation preserves archive modes, then rewrites
         # package.json. Nix store mode 0444 therefore fails with EACCES.
+        # Minified identifiers and even the containing bundle churn between
+        # VSCodium releases (1.143 moved the call and added a compress arg),
+        # so match the addFile call via regex in whichever bundle carries it
+        # and fail loudly when the call shape drifts again.
+        patched=""
         for bundle in \
           "$out/lib/vscode/resources/app/out/vs/code/node/cliProcessMain.js" \
           "$out/lib/vscode/resources/app/out/vs/code/electron-utility/sharedProcess/sharedProcessMain.js"
         do
-          substituteInPlace "$bundle" \
-            --replace-fail '${archiveFsImport}' '${ownerWritableArchiveFsImport}' \
-            --replace-fail '${archiveAddFile}' '${ownerWritableArchiveAddFile}'
+          if grep -q 'addFile(' "$bundle"; then
+            substituteInPlace "$bundle" \
+              --replace-fail '${archiveFsImport}' '${ownerWritableArchiveFsImport}'
+            sed -i -E 's/addFile\(([A-Za-z_$][A-Za-z0-9_$]*)\.localPath,\1\.path,\{compress:\1\.compress\}\)/addFile(\1.localPath,\1.path,{compress:\1.compress,mode:nixStatSync(\1.localPath).mode|128})/' "$bundle"
+            grep -q 'mode:nixStatSync' "$bundle" || {
+              echo "vscodium: addFile call shape drifted; update the owner-writable mode override" >&2
+              exit 1
+            }
+            patched="$patched $bundle"
+          fi
         done
+        test -n "$patched" || { echo "vscodium: archive addFile call not found in any bundle" >&2; exit 1; }
       ''}
       wrapProgram $out/bin/codium \
         --set LD_LIBRARY_PATH ${lib.makeLibraryPath vscodiumLdLibraries}
