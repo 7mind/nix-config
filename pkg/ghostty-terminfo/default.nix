@@ -12,7 +12,7 @@
 # On a ghostty version bump, regenerate ./ghostty.terminfo from the new
 # upstream terminfo output (`infocmp -x`, see the file header); the assert
 # below fails the build until that is done.
-assert lib.assertMsg (ghostty.version == "1.3.1")
+assert lib.assertMsg (ghostty.version == "1.4.0")
   "pkg/ghostty-terminfo: ghostty is now ${ghostty.version}; regenerate ghostty.terminfo from the new upstream terminfo output";
 stdenv.mkDerivation {
   pname = "ghostty-terminfo";

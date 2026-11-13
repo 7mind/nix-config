@@ -3,8 +3,8 @@
 #	+terminfo, from src/terminfo/ghostty.zig); it is vendored here so the
 #	terminfo database can be compiled with tic without building the full
 #	ghostty derivation. Reconstructed with `infocmp -x` from the compiled
-#	entries shipped in the upstream ghostty 1.3.1 terminfo output (its
-#	g/ghostty and x/xterm-ghostty files are aliases of this single entry);
+#	entries shipped in the upstream ghostty 1.4.0 terminfo output (its
+#	x/xterm-ghostty file is the single entry);
 #	regenerate on a ghostty version bump (see default.nix's assert).
 xterm-ghostty|ghostty|Ghostty,
 	am, bce, ccc, hs, km, mc5i, mir, msgr, npc, xenl, AX, Su, Tc, XT, fullkbd,
@@ -60,9 +60,9 @@ xterm-ghostty|ghostty|Ghostty,
 	BD=\E[?2004l, BE=\E[?2004h, Clmg=\E[s,
 	Cmg=\E[%i%p1%d;%p2%ds, Dsmg=\E[?69l, E3=\E[3J,
 	Enmg=\E[?69h, Ms=\E]52;%p1%s;%p2%s\007, PE=\E[201~,
-	PS=\E[200~, RV=\E[>c, Se=\E[2 q,
+	PS=\E[200~, RV=\E[>c, Rmol=\E[55m, Se=\E[0 q,
 	Setulc=\E[58:2::%p1%{65536}%/%d:%p1%{256}%/%{255}%&%d:%p1%{255}%&%d%;m,
-	Smulx=\E[4:%p1%dm, Ss=\E[%p1%d q,
+	Smol=\E[53m, Smulx=\E[4:%p1%dm, Ss=\E[%p1%d q,
 	Sync=\E[?2026%?%p1%{1}%-%tl%eh%;,
 	XM=\E[?1006;1000%?%p1%{1}%=%th%el%;, XR=\E[>0q,
 	fd=\E[?1004l, fe=\E[?1004h, kDC3=\E[3;3~, kDC4=\E[3;4~,
