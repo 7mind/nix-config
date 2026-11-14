@@ -679,11 +679,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794603329,
-        "narHash": "sha256-LS3C23CSjz1hRZt0e0m54v9z23ozjq1dVDc3PcC79S8=",
+        "lastModified": 1794656175,
+        "narHash": "sha256-nInfNE5UA1nJrT5S1K0gnWehk3vnervHB+3WH9V2ZWw=",
         "owner": "pshirshov",
         "repo": "mqtt-controller",
-        "rev": "c4c5b0ef3d39128c9856f5472c9f4cfd9e027b7a",
+        "rev": "fe7f5ef530b5c46544a85015931d57b36a6bba7b",
         "type": "github"
       },
       "original": {
@@ -1043,11 +1043,11 @@
         "squish": "squish"
       },
       "locked": {
-        "lastModified": 1794578819,
-        "narHash": "sha256-ZCPjDg57Zk+kF3cqWnB2afnb94DwB+H0C2s2nwcNkJE=",
+        "lastModified": 1794589917,
+        "narHash": "sha256-wxZI25bDb4l8R1HULU3nRQXbx3iE48AimOTh1Q6Bw3k=",
         "owner": "7mind",
         "repo": "ponygirls",
-        "rev": "88b9963483a8a023e4255627134fc94ea3f5aebc",
+        "rev": "a456f8cbed74d595d83747e9671b5c7b33205119",
         "type": "github"
       },
       "original": {
