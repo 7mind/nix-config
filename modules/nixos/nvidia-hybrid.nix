@@ -272,13 +272,13 @@ in
           '')
         ];
 
-        # Default session to AMD iGPU so the dGPU can power down via RTD3;
+        # Prefer Mesa for GLX so the dGPU can power down via RTD3;
         # use nvidia-offload for explicit GPU workloads.
         environment.sessionVariables = lib.mkIf cfg.prime.enable {
           __GLX_VENDOR_LIBRARY_NAME = "mesa";
+          # EGL must discover both vendors for hybrid compositor initialization.
           # Don't set VK_DRIVER_FILES - Vulkan auto-discovers; nvidia-offload
           # uses __VK_LAYER_NV_optimus to select NVIDIA for Vulkan.
-          __EGL_VENDOR_LIBRARY_FILENAMES = "/run/opengl-driver/share/glvnd/egl_vendor.d/50_mesa.json";
         };
       };
 
