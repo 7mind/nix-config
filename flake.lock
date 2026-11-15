@@ -106,11 +106,11 @@
     "classic-app-switcher": {
       "flake": false,
       "locked": {
-        "lastModified": 1787686436,
-        "narHash": "sha256-jRk7GqlS03VAclAzBhyUA6gLUC0ZhRn2DJfmQqije7I=",
+        "lastModified": 1794701145,
+        "narHash": "sha256-wxVLDl2ru69AoYFtlZOvcF95c8J9Bd3dMsCts5UMsUw=",
         "owner": "neko-kai",
         "repo": "classic-app-switcher",
-        "rev": "8d665df9e0041c1bcce9a37a29c1335552ce8592",
+        "rev": "0ab0afde0683cc9221cdc0a6b7c671b2926827f1",
         "type": "github"
       },
       "original": {
@@ -1043,11 +1043,11 @@
         "squish": "squish"
       },
       "locked": {
-        "lastModified": 1794701183,
-        "narHash": "sha256-kBgEaMjdmlXGbIx7QPgyAgcqg178iPDKLn2LgzqX3I4=",
+        "lastModified": 1794703369,
+        "narHash": "sha256-693u0It9vzBooYfAYN0VtpClKKLBNyCu1cToyaiKhtU=",
         "owner": "7mind",
         "repo": "ponygirls",
-        "rev": "ba92c694c0a5e8e589321695dd795ee455ad65d1",
+        "rev": "f27969fcf83667ea618a1d1c4b0a318d2aa11e0c",
         "type": "github"
       },
       "original": {
@@ -1385,11 +1385,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790788516,
-        "narHash": "sha256-GSzh5qZKQ70KIV15R6ed9AK4oyMu0j+9kMVosBOHGXo=",
+        "lastModified": 1794701145,
+        "narHash": "sha256-Jow20SujGjE1SSQ1xpbhG6l21cChwzkb+o63MfW2wUM=",
         "owner": "7mind",
         "repo": "touchpad-gesture-customization-app-expose",
-        "rev": "f2d467a5ef4759fc81a3afb57b0a020b57b667c1",
+        "rev": "811b78e61c92f70a5b3599d89c39e896888e579c",
         "type": "github"
       },
       "original": {
