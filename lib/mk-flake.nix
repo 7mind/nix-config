@@ -173,6 +173,7 @@ in
             nix-access-tokens = import ../tests/nix-access-tokens.nix { inherit pkgs; home-manager = inputs.home-manager; };
             gnome-extensions = import ../tests/gnome-extensions.nix { inherit pkgs inputs; home-manager = inputs.home-manager; };
             gnome-mouse = import ../tests/gnome-mouse.nix { inherit pkgs; };
+            gnome-auto-suspend = import ../tests/gnome-auto-suspend.nix { inherit pkgs; };
             age-owner-secrets = import ../tests/age-owner-secrets.nix { inherit pkgs; };
             netbird = import ../tests/netbird.nix { inherit pkgs; };
             promoted-core = import ../tests/promoted-core.nix { inherit pkgs; };

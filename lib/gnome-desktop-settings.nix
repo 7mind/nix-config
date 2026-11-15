@@ -81,11 +81,11 @@ lib.mkMerge ([
     "stickykeys-modifier-beep" = true;
   };
 } ++ [{
+  # sleep-inactive-ac-type/-timeout are deliberately absent: user-overridable,
+  # declared in modules/nixos/gnome.nix's unlocked dconf database.
   "org/gnome/settings-daemon/plugins/power" = {
     idle-brightness = lib.gvariant.mkInt32 100;
-    sleep-inactive-ac-type = gnome.auto-suspend.onAC;
     sleep-inactive-battery-type = gnome.auto-suspend.onBattery;
-    sleep-inactive-ac-timeout = lib.gvariant.mkInt32 gnome.auto-suspend.timeoutAC;
     sleep-inactive-battery-timeout = lib.gvariant.mkInt32 gnome.auto-suspend.timeoutBattery;
   } // lib.optionalAttrs (powerButton != null) {
     # Let logind handle power button (polkit rule denies gsd-media-keys inhibitor)

@@ -6,7 +6,8 @@
 
     smind.desktop.gnome.auto-suspend.onAC = lib.mkOption {
       type = lib.types.enum [ "nothing" "suspend" "hibernate" "blank" ];
-      default = if config.smind.isLaptop then "suspend" else "nothing";
+      # "nothing" = never (GNOME Settings "Automatic Suspend / When Plugged In" off)
+      default = "nothing";
       description = "Action when idle on AC power";
     };
 
@@ -203,9 +204,19 @@
           };
         }
         {
-          settings."org/gnome/desktop/peripherals/mouse" = {
-            speed = lib.gvariant.mkDouble config.smind.desktop.gnome.mouse.acceleration;
-            accel-profile = config.smind.desktop.gnome.mouse.accelProfile;
+          # User-overridable defaults: only the initial values live here, users
+          # may change these keys (no locks).
+          settings = {
+            "org/gnome/desktop/peripherals/mouse" = {
+              speed = lib.gvariant.mkDouble config.smind.desktop.gnome.mouse.acceleration;
+              accel-profile = config.smind.desktop.gnome.mouse.accelProfile;
+            };
+            # Automatic Suspend "When Plugged In" (action + delay), tunable in
+            # GNOME Settings
+            "org/gnome/settings-daemon/plugins/power" = {
+              sleep-inactive-ac-type = config.smind.desktop.gnome.auto-suspend.onAC;
+              sleep-inactive-ac-timeout = lib.gvariant.mkInt32 config.smind.desktop.gnome.auto-suspend.timeoutAC;
+            };
           };
         }
       ];
