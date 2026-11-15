@@ -12,6 +12,8 @@
   nixpkgs.config.permittedInsecurePackages = [ "mbedtls-3.6.1-unstable-2025-08-11" ];
 
   nixpkgs.overlays = [
+    (import ../../pkg/dim-completed-calendar-events/overlay.nix)
+    (import ../../pkg/gsconnect/overlay.nix)
     (final: prev: {
       hyprwhspr = prev.callPackage ../../pkg/hyprwhspr { src = inputs.hyprwhspr; };
 

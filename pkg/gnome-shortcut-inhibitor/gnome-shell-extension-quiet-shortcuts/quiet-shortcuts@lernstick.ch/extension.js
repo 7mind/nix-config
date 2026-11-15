@@ -1,4 +1,4 @@
-import Meta from 'gi://GLib';
+import Meta from 'gi://Meta';
 import * as ShortcutsDialog from 'resource:///org/gnome/shell/ui/inhibitShortcutsDialog.js';
 
 let injections = [];

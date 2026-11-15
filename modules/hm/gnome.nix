@@ -34,8 +34,8 @@ in
       home.packages = extCfg.packages;
       xdg.desktopEntries."org.gnome.Extensions" = {
         name = "Extensions";
-        exec = "${pkgs.gnome-shell}/bin/gnome-extensions-app";
-        icon = "${pkgs.gnome-shell}/share/icons/hicolor/scalable/apps/org.gnome.Extensions.svg";
+        exec = "${pkgs.gnome-extensions-app}/bin/gnome-extensions-app";
+        icon = "${pkgs.gnome-extensions-app}/share/icons/hicolor/scalable/apps/org.gnome.Extensions.svg";
         categories = [ "GNOME" "GTK" "Utility" ];
         terminal = false;
       };
