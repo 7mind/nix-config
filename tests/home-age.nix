@@ -109,6 +109,16 @@ let
   overriddenFiles = home "other" "missing" [ {
     age.secrets = lib.mapAttrs (_: secret: { file = lib.mkForce secret.file; }) scoped.config.age.secrets;
   } ];
+  contextlessSecrets = map (secret: {
+    file = builtins.unsafeDiscardStringContext (toString secret.file);
+    inherit (secret) path mode;
+    group = "users";
+  }) (builtins.attrValues scoped.config.age.secrets);
+  contextlessRefresh = pkgs.callPackage ../pkg/home-age-refresh {
+    username = "tester";
+    secrets = contextlessSecrets;
+  };
+  contextlessClosure = pkgs.closureInfo { rootPaths = [ contextlessRefresh ]; };
   renamed = scoped.extendModules { modules = [ { age.secrets."tester/token".path = lib.mkForce "/run/agenix/tester/renamed"; } ]; };
   invalidPath = path: scoped.extendModules { modules = [ { age.secrets."tester/token".path = lib.mkForce path; } ]; };
   invalidMode = mode: scoped.extendModules { modules = [ { age.secrets."tester/token".mode = lib.mkForce mode; } ]; };
@@ -180,10 +190,16 @@ assert lib.assertMsg (runtimeOnly.edit-view.drvPath != withRuntime.edit-view.drv
 pkgs.runCommand "home-age" {
   nativeBuildInputs = [ pkgs.age pkgs.gnugrep ];
   passthru = {
-    inherit fixtures scoped legacy rotated corrupt wrong switch disabledMissingSource disabledMissingCiphertext;
+    inherit fixtures scoped legacy rotated corrupt wrong switch disabledMissingSource disabledMissingCiphertext contextlessRefresh;
     inherit entryDisabled restricted effectiveEmpty allDisabled allDisabledMissing disabledMissingEntry overriddenFiles renamed unowned missingRuntime withoutRuntime;
   };
 } ''
+  ${lib.concatMapStrings (secret: ''
+    grep -Fx -- ${builtins.path { path = secret.file; }} ${contextlessClosure}/store-paths || {
+      echo "Encrypted input is absent from the refresh closure: ${secret.file}" >&2
+      exit 1
+    }
+  '') contextlessSecrets}
   ${noAgeArtifacts disabledMissingSource}
   ${noAgeArtifacts disabledMissingCiphertext}
   test ${lib.boolToString disabledMissingSource.config.smind.hm.age.runtimeOnly} = false

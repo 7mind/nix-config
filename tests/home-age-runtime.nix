@@ -3,7 +3,7 @@ let
   lib = pkgs.lib;
   evaluation = import ./home-age.nix { inherit flake pkgs; };
   inherit (evaluation) fixtures scoped legacy rotated corrupt wrong switch entryDisabled restricted renamed;
-  inherit (evaluation) disabledMissingEntry overriddenFiles effectiveEmpty allDisabled allDisabledMissing;
+  inherit (evaluation) disabledMissingEntry overriddenFiles effectiveEmpty allDisabled allDisabledMissing contextlessRefresh;
   apply = profile: "runuser -u tester -- ${switch profile}/bin/switch-home /etc/smind/home-manager /etc/NIXOS";
   helper = path: file: pkgs.callPackage ../pkg/home-age-refresh {
     username = "tester";
@@ -58,7 +58,7 @@ pkgs.testers.runNixOSTest {
       entryDisabled.activationPackage restricted.activationPackage renamed.activationPackage
       disabledMissingEntry.activationPackage overriddenFiles.activationPackage
       effectiveEmpty.activationPackage allDisabled.activationPackage allDisabledMissing.activationPackage
-      slow outside otherUser rootSecret restore badGroup duplicate
+      slow outside otherUser rootSecret restore badGroup duplicate contextlessRefresh
     ];
     system.activationScripts.testHostKey = {
       deps = [ "specialfs" ];
@@ -102,6 +102,15 @@ pkgs.testers.runNixOSTest {
         machine.fail(command)
         assert machine.succeed(f"readlink -f {profile}; cat /home/tester/.hm-age-setting; sha256sum /run/agenix/tester/{{token,second}}") == before
         check("rotated", "tester/")
+
+    with subtest("refresh uses packaged ciphertext when its original source is unavailable"):
+        machine.succeed("mkdir /run/hidden-ciphertext; mount --bind /run/hidden-ciphertext ${fixtures}")
+        try:
+            machine.succeed("${direct contextlessRefresh}")
+            check("new", "tester/")
+        finally:
+            machine.succeed("umount ${fixtures}")
+    machine.succeed("${direct restore}")
 
     with subtest("first current-user namespace is created after successful decryption"):
         machine.succeed("mv /run/agenix/tester /run/agenix/held-tester")
