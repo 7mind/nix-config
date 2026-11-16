@@ -28,13 +28,22 @@ trusted_directory /run/agenix.d
 generation=$(readlink /run/agenix)
 [[ $generation =~ ^/run/agenix\.d/[0-9]+$ ]] || fail "unsupported agenix generation"
 trusted_directory "$generation"
+namespace=
+declare -A destinations_seen=()
 for i in "${!files[@]}"; do
     relative=${destinations[$i]}
     [[ $relative != */* || ${relative%/*} == "$username" ]] || fail "unsupported namespace: $relative"
     [[ ${relative##*/} =~ ^[a-zA-Z0-9_.-]+$ && ${relative##*/} != . && ${relative##*/} != .. ]] || fail "invalid destination: $relative"
     [[ ${modes[$i]} =~ ^0?[0-7]{3}$ ]] || fail "invalid file mode"
+    [[ -z ${destinations_seen[$relative]:-} ]] || fail "duplicate destination: $relative"
+    destinations_seen[$relative]=present
     target="$generation/$relative"
-    trusted_directory "$(dirname "$target")"
+    parent=$(dirname "$target")
+    if [[ "$parent" == "$generation/$username" && ! -e "$parent" && ! -L "$parent" ]]; then
+        namespace=$parent
+    else
+        trusted_directory "$parent"
+    fi
     [[ ! -L "$target" ]] || fail "symlinked destination: $relative"
     if [[ -e "$target" ]]; then
         [[ -f "$target" && $(stat -c %u -- "$target") == "$uid" ]] || fail "destination owner/type mismatch: $relative"
@@ -44,7 +53,24 @@ done
 umask 077
 stage=$(mktemp -d "$generation/.hm-age.XXXXXXXX")
 phase=decryption
-trap 'status=$?; rm -rf -- "$stage"; if (( status != 0 )); then echo "Error: user secret refresh failed during $phase; published files are not rolled back" >&2; fi' EXIT
+created_namespace=
+published=false
+cleanup() {
+    status=$?
+    rm -rf -- "$stage"
+    if [[ -n "$created_namespace" && "$published" == false ]]; then
+        if [[ ! -L "$created_namespace" && -d "$created_namespace" && $(stat -c %u -- "$created_namespace") == 0 ]] &&
+            (( (8#$(stat -c %a -- "$created_namespace") & 0022) == 0 )); then
+            rmdir -- "$created_namespace" || echo "Error: user secret refresh could not remove its empty namespace" >&2
+        else
+            echo "Error: user secret refresh left an untrusted namespace untouched" >&2
+        fi
+    fi
+    if (( status != 0 )); then
+        echo "Error: user secret refresh failed during $phase; published files are not rolled back" >&2
+    fi
+}
+trap cleanup EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -56,7 +82,15 @@ for i in "${!files[@]}"; do
     chown -- "$uid:${groups[$i]}" "$stage/$i"
     chmod -- "${modes[$i]}" "$stage/$i"
 done
+phase=namespace
+if [[ -n "$namespace" ]]; then
+    mkdir -m 0755 -- "$namespace"
+    created_namespace=$namespace
+    chown 0:0 -- "$namespace"
+    trusted_directory "$namespace"
+fi
 phase=publication
 for i in "${!files[@]}"; do
     mv -fT -- "$stage/$i" "$generation/${destinations[$i]}"
+    published=true
 done

@@ -18,7 +18,7 @@ let
       value = { rekeyFile = "''${cfg-meta.paths.secrets}/tester/''${name}.age"; inherit owner group; mode = "0440"; };
     }) [ "token" "second" ])
     EOF
-    for variant in new rotated corrupt wrong missing; do
+    for variant in new rotated corrupt wrong missing partial; do
       root="$out/$variant/secrets"
       mkdir -p "$root/tester" "$root/rekeyed/fixture" "$root/rekeyed/fixture-tester"
       for name in token second; do
@@ -34,7 +34,7 @@ let
           esac
         fi
         cp "$file" "$root/rekeyed/fixture-tester/"
-        if [[ $variant == missing ]]; then rm "$file" "$root/rekeyed/fixture-tester/$(basename "$file")"; fi
+        if [[ $variant == missing || ( $variant == partial && $name == token ) ]]; then rm "$file" "$root/rekeyed/fixture-tester/$(basename "$file")"; fi
       done
       cp "$out/age-secrets.nix" "$root/tester/age-secrets.nix"
     done
@@ -96,6 +96,31 @@ let
   precedence = legacy.extendModules { modules = [ {
     smind.hm.globals.age.secrets."tester/token" = { owner = "tester"; path = "/run/agenix/tester/token"; };
   } ]; };
+  entryDisabled = scoped.extendModules { modules = [ { age.secrets."tester/token".enable = false; } ]; };
+  restricted = scoped.extendModules { modules = [ { age.secrets."tester/token".mode = lib.mkForce "0400"; } ]; };
+  effectiveEmpty = scoped.extendModules { modules = [ { age.secrets = lib.mkForce { }; } ]; };
+  disableEntries = { age.secrets = builtins.listToAttrs (map (name: {
+    name = "tester/${name}";
+    value.enable = false;
+  }) [ "token" "second" ]); };
+  allDisabled = scoped.extendModules { modules = [ disableEntries ]; };
+  allDisabledMissing = home "other" "missing" [ disableEntries ];
+  disabledMissingEntry = home "other" "partial" [ { age.secrets."tester/token".enable = false; } ];
+  overriddenFiles = home "other" "missing" [ {
+    age.secrets = lib.mapAttrs (_: secret: { file = lib.mkForce secret.file; }) scoped.config.age.secrets;
+  } ];
+  renamed = scoped.extendModules { modules = [ { age.secrets."tester/token".path = lib.mkForce "/run/agenix/tester/renamed"; } ]; };
+  invalidPath = path: scoped.extendModules { modules = [ { age.secrets."tester/token".path = lib.mkForce path; } ]; };
+  invalidMode = mode: scoped.extendModules { modules = [ { age.secrets."tester/token".mode = lib.mkForce mode; } ]; };
+  invalid = (map invalidPath [ "/tmp/token" "/run/agenix/other/token" "/run/agenix/token" "/run/agenix/tester/../root" "/run/agenix/tester/." "/run/agenix/tester/nested/token" ])
+    ++ (map invalidMode [ "invalid" "u=rw" "04777" ])
+    ++ [ (invalidPath "/run/agenix/tester/second") ];
+  withoutSources = secrets: home "other" "missing-source" [ { smind.hm.globals.age.secrets = lib.mkForce secrets; } ];
+  unowned = map withoutSources [
+    { root = { owner = "root"; path = "/run/agenix/root"; }; }
+    { service = { owner = "service"; path = "/run/agenix/service"; }; other = { owner = "other"; path = "/run/agenix/other"; }; }
+    { "tester/token" = { owner = "tester"; path = "/run/agenix/tester/token"; enable = false; }; }
+  ];
   check = profile: names:
     assert lib.assertMsg profile.config.age.enable "host-backed standalone age was disabled";
     assert lib.assertMsg (builtins.attrNames profile.config.age.secrets == names) "standalone age did not select only source-defined user secrets";
@@ -103,14 +128,13 @@ let
     assert lib.assertMsg (!profile.config.xdg.configFile."systemd/user/agenix.service".enable && profile.config.systemd.user.services.agenix.Install.WantedBy == [ ] && !profile.config.launchd.agents.activate-agenix.enable) "runtime-only age must not start a stock user service";
     assert lib.assertMsg (profile.config.age.rekey.masterIdentities == [ { identity = "/does-not-exist"; pubkey = "age"; } ]) "runtime-only age must not inherit another user's master identity";
     true;
-  rekeyable = flake.inputs.home-manager.lib.homeManagerConfiguration {
+  rekeyableFor = extraModules: flake.inputs.home-manager.lib.homeManagerConfiguration {
     inherit pkgs;
     extraSpecialArgs.cfg-meta = { isStandalone = true; isLinux = true; isDarwin = false; paths.secrets = "/missing-native-secrets"; };
     modules = [
       flake.inputs.agenix.homeManagerModules.default
       flake.inputs.agenix-rekey.homeManagerModules.default
       ../modules/hm/globals.nix
-      ../modules/hm/age.nix
       {
         home = { username = "rekeyable"; homeDirectory = "/home/rekeyable"; stateVersion = "25.05"; };
         age.enable = true;
@@ -123,8 +147,10 @@ let
         };
         age.secrets.token.rekeyFile = "${fixtures}/new/secrets/tester/token.age";
       }
-    ];
+    ] ++ extraModules;
   };
+  rekeyable = rekeyableFor [ ../modules/hm/age.nix ];
+  foreign = rekeyableFor [ ];
   aggregate = homes: (import ../lib/mk-flake.nix {
     inputs = flake.inputs;
     self = { outPath = toString fixtures; nixosConfigurations = { }; darwinConfigurations = { }; homeConfigurations = homes; };
@@ -132,6 +158,8 @@ let
   withoutRuntime = aggregate { inherit rekeyable; };
   withRuntime = aggregate { inherit rekeyable; runtime = scoped; };
   runtimeOnly = aggregate { runtime = scoped; };
+  missingRuntime = aggregate { inherit rekeyable; runtime = home "other" "missing" [ ]; };
+  foreignRuntime = aggregate { rekeyable = foreign; runtime = home "other" "missing" [ ]; };
   switch = profile: import ../lib/home-switch.nix { inherit pkgs; home = profile; };
   noAgeArtifacts = profile: ''
     test ${lib.boolToString (profile.config.systemd.user.services ? agenix)} = false
@@ -151,11 +179,29 @@ assert lib.assertMsg (withoutRuntime.edit-view.drvPath == withRuntime.edit-view.
 assert lib.assertMsg (runtimeOnly.edit-view.drvPath != withRuntime.edit-view.drvPath) "explicitly rekeyable homes must contribute their identities and sources";
 pkgs.runCommand "home-age" {
   nativeBuildInputs = [ pkgs.age pkgs.gnugrep ];
-  passthru = { inherit fixtures scoped legacy rotated corrupt wrong switch disabledMissingSource disabledMissingCiphertext; };
+  passthru = {
+    inherit fixtures scoped legacy rotated corrupt wrong switch disabledMissingSource disabledMissingCiphertext;
+    inherit entryDisabled restricted effectiveEmpty allDisabled allDisabledMissing disabledMissingEntry overriddenFiles renamed unowned missingRuntime withoutRuntime;
+  };
 } ''
   ${noAgeArtifacts disabledMissingSource}
   ${noAgeArtifacts disabledMissingCiphertext}
+  test ${lib.boolToString disabledMissingSource.config.smind.hm.age.runtimeOnly} = false
+  test ${lib.boolToString disabledMissingCiphertext.config.smind.hm.age.runtimeOnly} = false
   ${noAgeArtifacts empty}
+  test ${lib.boolToString (withoutRuntime.edit-view.drvPath == missingRuntime.edit-view.drvPath && withoutRuntime.update-masterkeys.drvPath == missingRuntime.update-masterkeys.drvPath)} = true
+  test ${lib.boolToString (withoutRuntime.edit-view.drvPath == foreignRuntime.edit-view.drvPath && withoutRuntime.update-masterkeys.drvPath == foreignRuntime.update-masterkeys.drvPath)} = true
+  ${lib.concatMapStrings (profile: ''
+    test ! -e ${profile.activationPackage}/refresh-user-secrets
+    test ${lib.boolToString profile.config.xdg.configFile."systemd/user/agenix.service".enable} = false
+  '') [ effectiveEmpty allDisabled allDisabledMissing ]}
+  ${lib.concatMapStrings (profile: ''
+    test ${lib.boolToString profile.config.age.enable} = false
+    test ! -e ${profile.activationPackage}/refresh-user-secrets
+  '') unowned}
+  test ${lib.boolToString (builtins.all (profile: !(builtins.tryEval (builtins.deepSeq profile.config.home.extraBuilderCommands true)).success) invalid)} = true
+  test -x ${disabledMissingEntry.activationPackage}/refresh-user-secrets
+  test -x ${overriddenFiles.activationPackage}/refresh-user-secrets
   test ${lib.boolToString (darwin.config.launchd.agents ? activate-agenix)} = false
   test ${lib.boolToString (darwin.config.systemd.user.services ? agenix)} = false
   test ${lib.boolToString (darwin.config.xdg.configFile ? "systemd/user/agenix.service")} = false
@@ -166,7 +212,7 @@ pkgs.runCommand "home-age" {
   test ! -e ${disabledMissingCiphertext.activationPackage}/refresh-user-secrets
   test ! -e ${empty.activationPackage}/refresh-user-secrets
   test ! -e ${rekeyable.activationPackage}/refresh-user-secrets
-  wrapper=$(grep -Eo '/nix/store/[^ ]+/bin/ageWrapper' ${withRuntime.edit-view}/bin/agenix-edit-view | head -1)
+  wrapper=$(grep -Eo '/nix/store/[^ ]+/bin/ageWrapper' ${missingRuntime.edit-view}/bin/agenix-edit-view | head -1)
   ! grep -F -- /does-not-exist "$wrapper"
   ! grep -E -- "-r '?age'?([[:space:]]|$)" "$wrapper"
   grep -F -- '${fixtures}/master' "$wrapper"
@@ -175,10 +221,10 @@ pkgs.runCommand "home-age" {
   touch flake.nix
   cp -r ${fixtures}/new .
   chmod -R u+w new
-  ${withRuntime.update-masterkeys}/bin/agenix-update-masterkeys
+  ${missingRuntime.update-masterkeys}/bin/agenix-update-masterkeys
   age -d -i ${fixtures}/master new/secrets/tester/token.age | grep -Fx new-token
   printf 'edited\n' > input
-  ${withRuntime.edit-view}/bin/agenix-edit-view edit -i input created.age
+  ${missingRuntime.edit-view}/bin/agenix-edit-view edit -i input created.age
   age -d -i ${fixtures}/master created.age | grep -Fx edited
   touch "$out"
 ''

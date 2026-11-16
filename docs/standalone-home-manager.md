@@ -78,18 +78,29 @@ It does not switch the system or install a privileged service or sudo policy.
 A successful full NixOS switch must already have installed persistent HM
 integration and the stock `/run/agenix -> /run/agenix.d/<generation>` storage.
 The host SSH ed25519 identity must exist at `/etc/ssh/ssh_host_ed25519_key`.
-Source definitions and current host-rekeyed ciphertext must be present and staged
-before building. Additional users first run the existing user-specific rekey,
+Source definitions and current host-rekeyed ciphertext for enabled selected
+secrets must be present and staged before building. Users with no enabled owned
+host secrets do not need personal source definitions. Additional users first run the existing user-specific rekey,
 for example `./rekey-user-secrets vm kai`; HM-only refresh does not unlock a
 master identity or rekey source files. Runtime-only profiles are excluded from
-aggregate master-key operations; explicitly rekeyable profiles still contribute.
+aggregate master-key operations even while their deployment ciphertext needs
+regeneration; explicitly rekeyable profiles still contribute.
 
 Only enabled, source-defined secrets projected as owned by the invoking user
-are refreshed. Existing paths are retained: `/run/agenix/kai/<secret>` on the
+are refreshed. Effective Home Manager per-secret enable, ciphertext file, path
+and mode overrides control refresh; the source-defined group is retained.
+Destination overrides must remain safe single filenames in the user's supported
+runtime namespace. An effectively empty or all-disabled secret set performs no
+privileged refresh. Existing default paths are retained: `/run/agenix/kai/<secret>` on the
 shared `vm`, and legacy `/run/agenix/<secret>` paths on owner hosts. Other users,
 root and unrelated service secrets are untouched. Ubuntu, Darwin and disabled
 or empty age configurations do not acquire a refresh helper or require sudo.
 The ordinary Home Manager CLI does not perform this privileged refresh.
+
+The first `/run/agenix/<user>` namespace can be created by refresh, root-owned
+with mode `0755`, after all decryptions and file permissions succeed. Existing
+namespace ownership and permissions must already be trusted and are not repaired.
+Refresh never creates stock storage ancestors or changes the generation link.
 
 Refresh takes the existing NixOS switch lock nonblockingly; retry after a
 concurrent switch or refresh finishes. All files decrypt before publication,

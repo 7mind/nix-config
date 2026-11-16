@@ -51,7 +51,7 @@ in
     userFlake = self;
     nixosConfigurations = self.nixosConfigurations // self.darwinConfigurations;
     homeConfigurations = inputs.nixpkgs.lib.filterAttrs
-      (_: home: home.config.age.enable && builtins.any
+      (_: home: home.config.age.enable && !(home.config.smind.hm.age.runtimeOnly or false) && builtins.any
         (secret: secret.rekeyFile != null) (builtins.attrValues home.config.age.secrets))
       self.homeConfigurations;
   };

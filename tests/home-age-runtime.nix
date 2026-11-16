@@ -2,7 +2,8 @@
 let
   lib = pkgs.lib;
   evaluation = import ./home-age.nix { inherit flake pkgs; };
-  inherit (evaluation) fixtures scoped legacy rotated corrupt wrong switch;
+  inherit (evaluation) fixtures scoped legacy rotated corrupt wrong switch entryDisabled restricted renamed;
+  inherit (evaluation) disabledMissingEntry overriddenFiles effectiveEmpty allDisabled allDisabledMissing;
   apply = profile: "runuser -u tester -- ${switch profile}/bin/switch-home /etc/smind/home-manager /etc/NIXOS";
   helper = path: file: pkgs.callPackage ../pkg/home-age-refresh {
     username = "tester";
@@ -13,6 +14,19 @@ let
   otherUser = helper "/run/agenix/other/token" scoped.config.age.secrets."tester/token".file;
   rootSecret = helper "/run/agenix/root" scoped.config.age.secrets."tester/token".file;
   direct = package: "runuser -u tester -- /run/wrappers/bin/sudo -- ${lib.getExe package}";
+  refresh = profile: "runuser -u tester -- /run/wrappers/bin/sudo -- ${profile.activationPackage}/refresh-user-secrets";
+  restore = pkgs.callPackage ../pkg/home-age-refresh {
+    username = "tester";
+    secrets = map (name: { path = "/run/agenix/tester/${name}"; file = "${fixtures}/system-${name}.age"; group = "users"; mode = "0440"; }) [ "token" "second" ];
+  };
+  badGroup = pkgs.callPackage ../pkg/home-age-refresh {
+    username = "tester";
+    secrets = [ { path = "/run/agenix/tester/token"; file = scoped.config.age.secrets."tester/token".file; group = "missing-refresh-group"; mode = "0440"; } ];
+  };
+  duplicate = pkgs.callPackage ../pkg/home-age-refresh {
+    username = "tester";
+    secrets = builtins.genList (_: { path = "/run/agenix/tester/token"; file = scoped.config.age.secrets."tester/token".file; group = "users"; mode = "0440"; }) 2;
+  };
 in
 pkgs.testers.runNixOSTest {
   name = "home-age-runtime";
@@ -41,7 +55,10 @@ pkgs.testers.runNixOSTest {
     environment.etc."smind/home-manager/denied".text = "/home/denied/unused-profile\n";
     virtualisation.additionalPaths = [
       evaluation (switch scoped) (switch legacy) (switch rotated) (switch corrupt) (switch wrong)
-      slow outside otherUser rootSecret
+      entryDisabled.activationPackage restricted.activationPackage renamed.activationPackage
+      disabledMissingEntry.activationPackage overriddenFiles.activationPackage
+      effectiveEmpty.activationPackage allDisabled.activationPackage allDisabledMissing.activationPackage
+      slow outside otherUser rootSecret restore badGroup duplicate
     ];
     system.activationScripts.testHostKey = {
       deps = [ "specialfs" ];
@@ -85,6 +102,79 @@ pkgs.testers.runNixOSTest {
         machine.fail(command)
         assert machine.succeed(f"readlink -f {profile}; cat /home/tester/.hm-age-setting; sha256sum /run/agenix/tester/{{token,second}}") == before
         check("rotated", "tester/")
+
+    with subtest("first current-user namespace is created after successful decryption"):
+        machine.succeed("mv /run/agenix/tester /run/agenix/held-tester")
+        try:
+            machine.succeed("${apply scoped}", "test $(stat -c %u:%g:%a /run/agenix/tester) = 0:0:755")
+            check("new", "tester/")
+        finally:
+            machine.succeed("rm -rf /run/agenix/tester; mv /run/agenix/held-tester /run/agenix/tester")
+
+    with subtest("effective per-entry disable preserves the destination"):
+        token = machine.succeed("sha256sum /run/agenix/tester/token; stat -c '%u:%g:%a:%i:%Y' /run/agenix/tester/token")
+        machine.succeed("${refresh entryDisabled}")
+        assert machine.succeed("sha256sum /run/agenix/tester/token; stat -c '%u:%g:%a:%i:%Y' /run/agenix/tester/token") == token
+        machine.succeed("grep -Fx new-second /run/agenix/tester/second")
+    machine.succeed("${direct restore}")
+
+    with subtest("disabled missing ciphertext is not consumed"):
+        token = machine.succeed("sha256sum /run/agenix/tester/token; stat -c '%u:%g:%a:%i:%Y' /run/agenix/tester/token")
+        machine.succeed("${refresh disabledMissingEntry}", "grep -Fx partial-second /run/agenix/tester/second")
+        assert machine.succeed("sha256sum /run/agenix/tester/token; stat -c '%u:%g:%a:%i:%Y' /run/agenix/tester/token") == token
+    machine.succeed("${direct restore}")
+
+    with subtest("effective file override does not consume absent default ciphertext"):
+        machine.succeed("${refresh overriddenFiles}")
+        check("new", "tester/")
+    machine.succeed("${direct restore}")
+
+    with subtest("empty and disabled effective sets do not attach a helper"):
+        for activation in ["${effectiveEmpty.activationPackage}", "${allDisabled.activationPackage}", "${allDisabledMissing.activationPackage}"]:
+            machine.succeed(f"test ! -e {activation}/refresh-user-secrets")
+
+    with subtest("effective restrictive mode controls publication"):
+        machine.succeed("${refresh restricted}", "test $(stat -c %a /run/agenix/tester/token) = 400")
+    machine.succeed("${direct restore}")
+
+    with subtest("effective safe path override preserves the old destination"):
+        token = machine.succeed("sha256sum /run/agenix/tester/token; stat -c '%u:%g:%a:%i:%Y' /run/agenix/tester/token")
+        machine.succeed("${refresh renamed}", "grep -Fx new-token /run/agenix/tester/renamed")
+        assert machine.succeed("sha256sum /run/agenix/tester/token; stat -c '%u:%g:%a:%i:%Y' /run/agenix/tester/token") == token
+    machine.succeed("${direct restore}")
+
+    with subtest("failed decryptions and permissions do not create a namespace"):
+        machine.succeed("mv /run/agenix/tester /run/agenix/held-tester")
+        before = machine.succeed(f"readlink -f {profile}; cat /home/tester/.hm-age-setting; stat -c '%n %u %g %a' /run/agenix.d {generation}")
+        try:
+            for command, phase in [("${apply corrupt}", "decryption"), ("${apply wrong}", "decryption"), ("${direct badGroup}", "permissions")]:
+                status, output = machine.execute(command + " 2>&1")
+                assert status != 0, output
+                assert f"failed during {phase}" in output, output
+                machine.succeed("test ! -e /run/agenix/tester", f"test -z \"$(find {generation} -maxdepth 1 -name '.hm-age.*' -print)\"")
+                assert machine.succeed(f"readlink -f {profile}; cat /home/tester/.hm-age-setting; stat -c '%n %u %g %a' /run/agenix.d {generation}") == before
+                assert machine.succeed(sentinels) == initial_sentinels
+        finally:
+            machine.succeed("mv /run/agenix/held-tester /run/agenix/tester")
+
+    with subtest("namespace files and dangling symlinks are rejected without mutation"):
+        machine.succeed("mv /run/agenix/tester /run/agenix/held-tester")
+        try:
+            for create in ["touch /run/agenix/tester", "ln -s absent /run/agenix/tester"]:
+                machine.succeed(create)
+                before = machine.succeed("stat -c '%u:%g:%a:%i:%F' /run/agenix/tester")
+                machine.fail("${apply scoped}")
+                assert machine.succeed("stat -c '%u:%g:%a:%i:%F' /run/agenix/tester") == before
+                machine.succeed("rm /run/agenix/tester", "test ! -e /run/agenix/absent")
+                assert machine.succeed(sentinels) == initial_sentinels
+        finally:
+            machine.succeed("rm -f /run/agenix/tester; mv /run/agenix/held-tester /run/agenix/tester")
+
+    with subtest("duplicate destinations fail before publication"):
+        token = machine.succeed("sha256sum /run/agenix/tester/token; stat -c '%u:%g:%a:%i:%Y' /run/agenix/tester/token")
+        machine.fail("${direct duplicate}")
+        assert machine.succeed("sha256sum /run/agenix/tester/token; stat -c '%u:%g:%a:%i:%Y' /run/agenix/tester/token") == token
+    machine.succeed("${direct restore}")
 
     check("old", "tester/")
     machine.succeed("${apply scoped}")
