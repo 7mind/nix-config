@@ -2,7 +2,7 @@
 
 {
   options = {
-    smind.security.sudo.wheel-permissive-rules = lib.mkEnableOption "passwordless access to nix and systemd commands for wheel group";
+    smind.security.sudo.wheel-permissive-rules = lib.mkEnableOption "passwordless access to nix, systemd and Home Manager secret refresh commands for wheel group";
     smind.security.sudo.wheel-passwordless = lib.mkEnableOption "passwordless sudo wheel group";
   };
 

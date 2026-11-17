@@ -192,6 +192,13 @@ in
             home-manager-persistence = import ../tests/home-manager-persistence.nix { inherit pkgs; flake = self; };
             home-age = import ../tests/home-age.nix { inherit pkgs; flake = self; };
             home-age-runtime = import ../tests/home-age-runtime.nix { inherit pkgs; flake = self; };
+            home-switch-sudo = pkgs.runCommand "home-switch-sudo-test" {
+              nativeBuildInputs = [ pkgs.bash pkgs.nix pkgs.python3 ];
+              NIX_CONFIG_SOURCE = ../.;
+            } ''
+              python3 ${../tests/home-switch-sudo-test.py} -v
+              touch $out
+            '';
             searxng = import ../tests/searxng.nix { inherit pkgs; };
             dev-llm-plugins = import ../tests/dev-llm-plugins.nix { flake = self; inherit pkgs; };
           }

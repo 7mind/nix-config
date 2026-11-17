@@ -18,7 +18,7 @@ pkgs.testers.runNixOSTest {
   name = "home-manager-persistence";
   nodes.machine = { lib, ... }: {
     imports = [ flake.inputs.home-manager.nixosModules.home-manager
-      ../modules/nix-generic/home-manager.nix ../modules/nixos/home-manager.nix ];
+      ../modules/nix-generic/home-manager.nix ../modules/nixos/home-manager.nix ../modules/nixos/sudo.nix ];
     _module.args.specialArgsSelfRef.cfg-hm-modules = [ ];
     smind.home-manager.enable = true;
     boot.loader.grub.enable = false;

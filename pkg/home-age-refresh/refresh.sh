@@ -8,9 +8,30 @@ trusted_directory() {
     (( (8#$(stat -c %a -- "$1") & 0022) == 0 )) || fail "writable directory: $1"
 }
 
-[[ $# == 0 && -e /etc/NIXOS && $EUID == 0 ]] || fail "run this generation's helper with sudo on NixOS"
+[[ $# == 0 && -e /etc/NIXOS && $EUID == 0 ]] || fail "run the system helper with sudo on NixOS, with a manifest on stdin"
+username=${SUDO_USER:-}
+[[ -n "$username" ]] || fail "missing invoking user"
 uid=$(id -u -- "$username")
-[[ ${SUDO_USER:-} == "$username" && ${SUDO_UID:-} == "$uid" && $uid -ge 1000 ]] || fail "invoking user does not match this generation"
+[[ ${SUDO_UID:-} == "$uid" && $uid -ge 1000 ]] || fail "invalid invoking user"
+records=$(jq -ers '
+    def matches($pattern): type == "string" and test("\\A" + $pattern + "\\z");
+    if length == 1 and (.[0] | type == "array" and length > 0 and all(.[];
+        type == "object"
+        and (.file | matches("/nix/store/[0-9a-df-np-sv-z]{32}-[-A-Za-z0-9+._?=]+"))
+        and (.destination | matches("[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)?"))
+        and (.group | matches("[A-Za-z0-9_.-]+"))
+        and (.mode | matches("0?[0-7]{3}"))
+    )) then .[0][] | [.file, .destination, .group, .mode] | @tsv
+    else error("invalid secret manifest") end
+') || fail "invalid secret manifest"
+files=() destinations=() groups=() modes=()
+while IFS=$'\t' read -r file destination group mode; do
+    [[ -f "$file" && ! -L "$file" ]] || fail "invalid ciphertext file: $file"
+    files+=("$file")
+    destinations+=("$destination")
+    groups+=("$group")
+    modes+=("$mode")
+done <<< "$records"
 identity=/etc/ssh/ssh_host_ed25519_key
 [[ ! -L "$identity" && -f "$identity" && -r "$identity" && $(stat -c %u -- "$identity") == 0 ]] || fail "host identity is missing, unreadable or untrusted"
 trusted_directory /run/nixos
@@ -34,7 +55,6 @@ for i in "${!files[@]}"; do
     relative=${destinations[$i]}
     [[ $relative != */* || ${relative%/*} == "$username" ]] || fail "unsupported namespace: $relative"
     [[ ${relative##*/} =~ ^[a-zA-Z0-9_.-]+$ && ${relative##*/} != . && ${relative##*/} != .. ]] || fail "invalid destination: $relative"
-    [[ ${modes[$i]} =~ ^0?[0-7]{3}$ ]] || fail "invalid file mode"
     [[ -z ${destinations_seen[$relative]:-} ]] || fail "duplicate destination: $relative"
     destinations_seen[$relative]=present
     target="$generation/$relative"

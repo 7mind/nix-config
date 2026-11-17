@@ -8,6 +8,7 @@ let
   profilePath = username: "${profileRoot}/${username}/generation";
   requestRoot = "/run/smind-home-manager";
   profileCommand = lib.getExe (pkgs.callPackage ../../pkg/home-manager-switch { nix = config.nix.package; });
+  refresh = pkgs.callPackage ../../pkg/home-age-refresh { };
 in
 {
   options.environment.etc = lib.mkOption {
@@ -27,6 +28,12 @@ in
       ) homes;
   };
   config = lib.mkIf config.smind.home-manager.enable {
+    environment.systemPackages = [ refresh ];
+    security.sudo.extraRules = lib.mkIf config.smind.security.sudo.wheel-permissive-rules [ {
+      groups = [ "wheel" ];
+      runAs = "root";
+      commands = [ { command = ''${lib.getExe refresh} ""''; options = [ "NOPASSWD" ]; } ];
+    } ];
     assertions = [
       { assertion = config.home-manager.useUserPackages && !config.home-manager.startAsUserService && !config.system.nixos-init.enable;
         message = "Persistent Home Manager requires external packages and NixOS system activation services"; }

@@ -114,11 +114,8 @@ let
     inherit (secret) path mode;
     group = "users";
   }) (builtins.attrValues scoped.config.age.secrets);
-  contextlessRefresh = pkgs.callPackage ../pkg/home-age-refresh {
-    username = "tester";
-    secrets = contextlessSecrets;
-  };
-  contextlessClosure = pkgs.closureInfo { rootPaths = [ contextlessRefresh ]; };
+  contextlessManifest = pkgs.callPackage ../pkg/home-age-refresh/manifest.nix { secrets = contextlessSecrets; };
+  contextlessClosure = pkgs.closureInfo { rootPaths = [ contextlessManifest ]; };
   renamed = scoped.extendModules { modules = [ { age.secrets."tester/token".path = lib.mkForce "/run/agenix/tester/renamed"; } ]; };
   invalidPath = path: scoped.extendModules { modules = [ { age.secrets."tester/token".path = lib.mkForce path; } ]; };
   invalidMode = mode: scoped.extendModules { modules = [ { age.secrets."tester/token".mode = lib.mkForce mode; } ]; };
@@ -190,7 +187,7 @@ assert lib.assertMsg (runtimeOnly.edit-view.drvPath != withRuntime.edit-view.drv
 pkgs.runCommand "home-age" {
   nativeBuildInputs = [ pkgs.age pkgs.gnugrep ];
   passthru = {
-    inherit fixtures scoped legacy rotated corrupt wrong switch disabledMissingSource disabledMissingCiphertext contextlessRefresh;
+    inherit fixtures scoped legacy rotated corrupt wrong switch disabledMissingSource disabledMissingCiphertext contextlessManifest;
     inherit entryDisabled restricted effectiveEmpty allDisabled allDisabledMissing disabledMissingEntry overriddenFiles renamed unowned missingRuntime withoutRuntime;
   };
 } ''
@@ -208,26 +205,26 @@ pkgs.runCommand "home-age" {
   test ${lib.boolToString (withoutRuntime.edit-view.drvPath == missingRuntime.edit-view.drvPath && withoutRuntime.update-masterkeys.drvPath == missingRuntime.update-masterkeys.drvPath)} = true
   test ${lib.boolToString (withoutRuntime.edit-view.drvPath == foreignRuntime.edit-view.drvPath && withoutRuntime.update-masterkeys.drvPath == foreignRuntime.update-masterkeys.drvPath)} = true
   ${lib.concatMapStrings (profile: ''
-    test ! -e ${profile.activationPackage}/refresh-user-secrets
+    test ! -e ${profile.activationPackage}/refresh-user-secrets.json
     test ${lib.boolToString profile.config.xdg.configFile."systemd/user/agenix.service".enable} = false
   '') [ effectiveEmpty allDisabled allDisabledMissing ]}
   ${lib.concatMapStrings (profile: ''
     test ${lib.boolToString profile.config.age.enable} = false
-    test ! -e ${profile.activationPackage}/refresh-user-secrets
+    test ! -e ${profile.activationPackage}/refresh-user-secrets.json
   '') unowned}
   test ${lib.boolToString (builtins.all (profile: !(builtins.tryEval (builtins.deepSeq profile.config.home.extraBuilderCommands true)).success) invalid)} = true
-  test -x ${disabledMissingEntry.activationPackage}/refresh-user-secrets
-  test -x ${overriddenFiles.activationPackage}/refresh-user-secrets
+  test -f ${disabledMissingEntry.activationPackage}/refresh-user-secrets.json
+  test -f ${overriddenFiles.activationPackage}/refresh-user-secrets.json
   test ${lib.boolToString (darwin.config.launchd.agents ? activate-agenix)} = false
   test ${lib.boolToString (darwin.config.systemd.user.services ? agenix)} = false
   test ${lib.boolToString (darwin.config.xdg.configFile ? "systemd/user/agenix.service")} = false
-  test -x ${scoped.activationPackage}/refresh-user-secrets
-  test -x ${legacy.activationPackage}/refresh-user-secrets
-  test ! -e ${disabled.activationPackage}/refresh-user-secrets
-  test ! -e ${disabledMissingSource.activationPackage}/refresh-user-secrets
-  test ! -e ${disabledMissingCiphertext.activationPackage}/refresh-user-secrets
-  test ! -e ${empty.activationPackage}/refresh-user-secrets
-  test ! -e ${rekeyable.activationPackage}/refresh-user-secrets
+  test -f ${scoped.activationPackage}/refresh-user-secrets.json
+  test -f ${legacy.activationPackage}/refresh-user-secrets.json
+  test ! -e ${disabled.activationPackage}/refresh-user-secrets.json
+  test ! -e ${disabledMissingSource.activationPackage}/refresh-user-secrets.json
+  test ! -e ${disabledMissingCiphertext.activationPackage}/refresh-user-secrets.json
+  test ! -e ${empty.activationPackage}/refresh-user-secrets.json
+  test ! -e ${rekeyable.activationPackage}/refresh-user-secrets.json
   wrapper=$(grep -Eo '/nix/store/[^ ]+/bin/ageWrapper' ${missingRuntime.edit-view}/bin/agenix-edit-view | head -1)
   ! grep -F -- /does-not-exist "$wrapper"
   ! grep -E -- "-r '?age'?([[:space:]]|$)" "$wrapper"

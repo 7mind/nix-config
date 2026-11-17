@@ -71,12 +71,17 @@ The helper uses the pinned CLI and `hmbak` backups from the command above.
 
 In a downstream configuration root, `./setup --hm-only -s` refreshes the invoking
 user's host-encrypted secrets before changing the persistent Home Manager
-profile. It explicitly invokes the selected generation's immutable helper with
-`sudo`, which may prompt for a password. A failed refresh aborts the HM switch.
-It does not switch the system or install a privileged service or sudo policy.
+profile. It sends the selected HM generation's JSON manifest to the
+system-installed `refresh-user-secrets` helper with `sudo`. The helper uses
+sudo's caller identity, not a username in the manifest. A failed refresh
+aborts the HM switch.
 
-A successful full NixOS switch must already have installed persistent HM
-integration and the stock `/run/agenix -> /run/agenix.d/<generation>` storage.
+A full NixOS switch must first install persistent HM integration, the helper,
+and the stock `/run/agenix -> /run/agenix.d/<generation>` storage. On hosts
+with `smind.security.sudo.wheel-permissive-rules`, wheel users can invoke the
+exact installed helper without a password. This policy trusts those users as
+administrators: their HM manifests are not separately authenticated.
+Changing the manifest or ciphertext does not require a new system switch.
 The host SSH ed25519 identity must exist at `/etc/ssh/ssh_host_ed25519_key`.
 Source definitions and current host-rekeyed ciphertext for enabled selected
 secrets must be present and staged before building. Users with no enabled owned
@@ -93,8 +98,9 @@ Destination overrides must remain safe single filenames in the user's supported
 runtime namespace. An effectively empty or all-disabled secret set performs no
 privileged refresh. Existing default paths are retained: `/run/agenix/kai/<secret>` on the
 shared `vm`, and legacy `/run/agenix/<secret>` paths on owner hosts. Other users,
-root and unrelated service secrets are untouched. Ubuntu, Darwin and disabled
-or empty age configurations do not acquire a refresh helper or require sudo.
+root and unrelated service secrets are untouched by the generated manifest.
+Ubuntu, Darwin and disabled or empty age configurations do not provide a
+manifest or require sudo for this refresh.
 The ordinary Home Manager CLI does not perform this privileged refresh.
 
 The first `/run/agenix/<user>` namespace can be created by refresh, root-owned

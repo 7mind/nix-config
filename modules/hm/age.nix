@@ -65,10 +65,7 @@ let
       }
     ) effective;
   refreshEnabled = runtimeOnly && effective != { };
-  refresh = pkgs.callPackage ../../pkg/home-age-refresh {
-    username = user;
-    secrets = manifest;
-  };
+  refreshManifest = pkgs.callPackage ../../pkg/home-age-refresh/manifest.nix { secrets = manifest; };
 in
 if cfg-meta.isStandalone or false then {
   options.smind.hm.age.runtimeOnly = lib.mkOption {
@@ -86,7 +83,7 @@ if cfg-meta.isStandalone or false then {
     xdg.configFile = lib.mkIf runtimeOnly { "systemd/user/agenix.service".enable = lib.mkForce false; };
     launchd.agents = lib.mkIf runtimeOnly { activate-agenix.enable = lib.mkForce false; };
     home.extraBuilderCommands = lib.mkIf refreshEnabled ''
-      ln -s ${lib.getExe refresh} "$out/refresh-user-secrets"
+      ln -s ${refreshManifest} "$out/refresh-user-secrets.json"
     '';
     age.rekey = {
       # agenix-rekey requires an identity even without secrets; reuse the

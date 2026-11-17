@@ -14,8 +14,12 @@ pkgs.writeShellApplication {
         echo "Error: install persistent Home Manager integration with a full NixOS switch first" >&2
         exit 1
       fi
-      if [[ -x ${external.activationPackage}/refresh-user-secrets ]]; then
-        /run/wrappers/bin/sudo -- ${external.activationPackage}/refresh-user-secrets
+      if [[ -f ${external.activationPackage}/refresh-user-secrets.json ]]; then
+        if ! refresh="$(${pkgs.coreutils}/bin/readlink -e /run/current-system/sw/bin/refresh-user-secrets)" || [[ ! -x "$refresh" ]]; then
+          echo "Error: install the system secret refresh helper with a full NixOS switch first" >&2
+          exit 1
+        fi
+        /run/wrappers/bin/sudo -- "$refresh" < ${external.activationPackage}/refresh-user-secrets.json
       fi
       exec ${pkgs.lib.getExe profile} switch "$profile" ${external.activationPackage}
     fi''}

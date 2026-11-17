@@ -3,30 +3,23 @@ let
   lib = pkgs.lib;
   evaluation = import ./home-age.nix { inherit flake pkgs; };
   inherit (evaluation) fixtures scoped legacy rotated corrupt wrong switch entryDisabled restricted renamed;
-  inherit (evaluation) disabledMissingEntry overriddenFiles effectiveEmpty allDisabled allDisabledMissing contextlessRefresh;
+  inherit (evaluation) disabledMissingEntry overriddenFiles effectiveEmpty allDisabled allDisabledMissing contextlessManifest;
   apply = profile: "runuser -u tester -- ${switch profile}/bin/switch-home /etc/smind/home-manager /etc/NIXOS";
-  helper = path: file: pkgs.callPackage ../pkg/home-age-refresh {
-    username = "tester";
-    secrets = [ { inherit path file; group = "users"; mode = "0440"; } ];
-  };
-  slow = helper "/run/agenix/tester/token" "${fixtures}/slow.age";
-  outside = helper "/run/agenix/../outside" scoped.config.age.secrets."tester/token".file;
-  otherUser = helper "/run/agenix/other/token" scoped.config.age.secrets."tester/token".file;
-  rootSecret = helper "/run/agenix/root" scoped.config.age.secrets."tester/token".file;
-  direct = package: "runuser -u tester -- /run/wrappers/bin/sudo -- ${lib.getExe package}";
-  refresh = profile: "runuser -u tester -- /run/wrappers/bin/sudo -- ${profile.activationPackage}/refresh-user-secrets";
-  restore = pkgs.callPackage ../pkg/home-age-refresh {
-    username = "tester";
-    secrets = map (name: { path = "/run/agenix/tester/${name}"; file = "${fixtures}/system-${name}.age"; group = "users"; mode = "0440"; }) [ "token" "second" ];
-  };
-  badGroup = pkgs.callPackage ../pkg/home-age-refresh {
-    username = "tester";
-    secrets = [ { path = "/run/agenix/tester/token"; file = scoped.config.age.secrets."tester/token".file; group = "missing-refresh-group"; mode = "0440"; } ];
-  };
-  duplicate = pkgs.callPackage ../pkg/home-age-refresh {
-    username = "tester";
-    secrets = builtins.genList (_: { path = "/run/agenix/tester/token"; file = scoped.config.age.secrets."tester/token".file; group = "users"; mode = "0440"; }) 2;
-  };
+  manifest = secrets: pkgs.callPackage ../pkg/home-age-refresh/manifest.nix { inherit secrets; };
+  secret = path: file: { inherit path file; group = "users"; mode = "0440"; };
+  token = scoped.config.age.secrets."tester/token".file;
+  slow = manifest [ (secret "/run/agenix/tester/token" "${fixtures}/slow.age") ];
+  outside = manifest [ (secret "/run/agenix/../outside" token) ];
+  otherUser = manifest [ (secret "/run/agenix/other/token" token) ];
+  invalidManifest = pkgs.writeText "invalid-home-age.json" ''[{"file":"/etc/passwd","destination":"tester/token","group":"users","mode":"0440"}]'';
+  rootSecret = manifest [ (secret "/run/agenix/root" token) ];
+  helper = lib.getExe (pkgs.callPackage ../pkg/home-age-refresh { });
+  asUser = user: data: "runuser -u ${user} -- /run/wrappers/bin/sudo -n -- ${helper} < ${data}";
+  direct = asUser "tester";
+  refresh = profile: direct "${profile.activationPackage}/refresh-user-secrets.json";
+  restore = manifest (map (name: secret "/run/agenix/tester/${name}" "${fixtures}/system-${name}.age") [ "token" "second" ]);
+  badGroup = manifest [ ((secret "/run/agenix/tester/token" token) // { group = "missing-refresh-group"; }) ];
+  duplicate = manifest (builtins.genList (_: secret "/run/agenix/tester/token" token) 2);
 in
 pkgs.testers.runNixOSTest {
   name = "home-age-runtime";
@@ -36,6 +29,7 @@ pkgs.testers.runNixOSTest {
       flake.inputs.agenix.nixosModules.default
       ../modules/nix-generic/home-manager.nix
       ../modules/nixos/home-manager.nix
+      ../modules/nixos/sudo.nix
     ];
     _module.args.specialArgsSelfRef.cfg-hm-modules = [ ];
     smind.home-manager.enable = true;
@@ -44,10 +38,10 @@ pkgs.testers.runNixOSTest {
     systemd.sysusers.enable = lib.mkForce false;
     users.users = {
       tester = { isNormalUser = true; uid = 1000; extraGroups = [ "wheel" ]; };
-      other = { isNormalUser = true; uid = 1001; };
+      other = { isNormalUser = true; uid = 1001; extraGroups = [ "wheel" ]; };
       denied = { isNormalUser = true; uid = 1002; };
     };
-    security.sudo.wheelNeedsPassword = false;
+    smind.security.sudo.wheel-permissive-rules = true;
     home-manager.users.tester = {
       home.stateVersion = "25.05";
       home.file.".hm-age-setting".text = "old";
@@ -58,7 +52,7 @@ pkgs.testers.runNixOSTest {
       entryDisabled.activationPackage restricted.activationPackage renamed.activationPackage
       disabledMissingEntry.activationPackage overriddenFiles.activationPackage
       effectiveEmpty.activationPackage allDisabled.activationPackage allDisabledMissing.activationPackage
-      slow outside otherUser rootSecret restore badGroup duplicate contextlessRefresh
+      slow outside otherUser rootSecret restore badGroup duplicate contextlessManifest invalidManifest
     ];
     system.activationScripts.testHostKey = {
       deps = [ "specialfs" ];
@@ -69,12 +63,12 @@ pkgs.testers.runNixOSTest {
     age.secrets = builtins.listToAttrs (map (name: {
       inherit name;
       value = {
-        file = "${fixtures}/system-${builtins.baseNameOf name}.age";
-        owner = if name == "other" then "other" else if name == "root" then "root" else "tester";
+        file = "${fixtures}/system-${if name == "other-sentinel" then "other" else builtins.baseNameOf name}.age";
+        owner = if name == "other-sentinel" then "other" else if name == "root" then "root" else "tester";
         group = "users";
         mode = "0440";
       };
-    }) [ "tester/token" "tester/second" "token" "second" "other" "root" "service" ]);
+    }) [ "tester/token" "tester/second" "token" "second" "other-sentinel" "root" "service" ]);
   };
   testScript = ''
     machine.start(allow_reboot=True)
@@ -82,7 +76,7 @@ pkgs.testers.runNixOSTest {
     system = machine.succeed("readlink -f /run/current-system").strip()
     generation = machine.succeed("readlink /run/agenix").strip()
     profile = "/nix/var/nix/profiles/smind-home/tester/generation"
-    sentinels = "sha256sum /run/agenix/{other,root,service}; stat -c '%n %u %g %a %i %Y' /run/agenix/{other,root,service}"
+    sentinels = "sha256sum /run/agenix/{other-sentinel,root,service}; stat -c '%n %u %g %a %i %Y' /run/agenix/{other-sentinel,root,service}"
     initial_sentinels = machine.succeed(sentinels)
 
     def check(label, prefix):
@@ -106,7 +100,7 @@ pkgs.testers.runNixOSTest {
     with subtest("refresh uses packaged ciphertext when its original source is unavailable"):
         machine.succeed("mkdir /run/hidden-ciphertext; mount --bind /run/hidden-ciphertext ${fixtures}")
         try:
-            machine.succeed("${direct contextlessRefresh}")
+            machine.succeed("${direct contextlessManifest}")
             check("new", "tester/")
         finally:
             machine.succeed("umount ${fixtures}")
@@ -138,9 +132,9 @@ pkgs.testers.runNixOSTest {
         check("new", "tester/")
     machine.succeed("${direct restore}")
 
-    with subtest("empty and disabled effective sets do not attach a helper"):
+    with subtest("empty and disabled effective sets do not attach a manifest"):
         for activation in ["${effectiveEmpty.activationPackage}", "${allDisabled.activationPackage}", "${allDisabledMissing.activationPackage}"]:
-            machine.succeed(f"test ! -e {activation}/refresh-user-secrets")
+            machine.succeed(f"test ! -e {activation}/refresh-user-secrets.json")
 
     with subtest("effective restrictive mode controls publication"):
         machine.succeed("${refresh restricted}", "test $(stat -c %a /run/agenix/tester/token) = 400")
@@ -186,6 +180,13 @@ pkgs.testers.runNixOSTest {
     machine.succeed("${direct restore}")
 
     check("old", "tester/")
+    with subtest("two wheel users share the same passwordless helper"):
+        machine.succeed("${asUser "other" otherUser}",
+                        "grep -Fx new-token /run/agenix/other/token",
+                        "test $(stat -c %u:%g:%a /run/agenix/other/token) = 1001:100:440")
+        machine.fail("${asUser "denied" otherUser}")
+        machine.fail("${asUser "other" contextlessManifest}")
+        check("old", "tester/")
     machine.succeed("${apply scoped}")
     check("new", "tester/")
     machine.succeed("grep -Fx old-token /run/agenix/token", "grep -Fx new /home/tester/.hm-age-setting",
@@ -199,6 +200,7 @@ pkgs.testers.runNixOSTest {
     failed("${apply wrong}")
     failed("setsid runuser -u denied -- ${switch scoped}/bin/switch-home /etc/smind/home-manager /etc/NIXOS < /dev/null")
     failed("${direct outside}")
+    failed("${direct invalidManifest}")
     failed("${direct otherUser}")
     failed("${direct rootSecret}")
     machine.succeed("mv /etc/ssh/ssh_host_ed25519_key /etc/ssh/held")
@@ -223,10 +225,10 @@ pkgs.testers.runNixOSTest {
     machine.fail("${apply scoped}")
     machine.succeed(f"ln -sfn {generation} /run/agenix; rm /run/agenixXd")
     check("rotated", "tester/")
-    machine.succeed("( setsid ${direct slow} < /dev/null > /run/slow.log 2>&1 & "
+    machine.succeed("( setsid ${direct slow} > /run/slow.log 2>&1 & "
                     "for n in $(seq 1 1000); do "
                     f"if compgen -G '{generation}/.hm-age.*' > /dev/null; then "
-                    "pid=$(pgrep -f '^${pkgs.runtimeShell} ${lib.getExe slow}$'); "
+                    "pid=$(pgrep -f '^${pkgs.runtimeShell} ${helper}$'); "
                     "kill -STOP $pid; echo $pid > /run/slow.pid; exit 0; fi; sleep 0.01; done; exit 1 )", timeout=30)
     selected_profile = machine.succeed(f"readlink -f {profile}")
     machine.fail("${apply scoped}")
