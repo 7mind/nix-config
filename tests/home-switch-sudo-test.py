@@ -28,7 +28,8 @@ class HomeSwitchSudoTest(unittest.TestCase):
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.executable(self.bin / "id", 'printf "tester\\n"\n')
-        (self.bin / "readlink").symlink_to(shutil.which("readlink"))
+        for command in ("cat", "readlink"):
+            (self.bin / command).symlink_to(shutil.which(command))
         self.executable(self.bin / "profile", 'printf "profile\\n" >> "$EVENTS"\n')
         self.helper = self.bin / "system-refresh"
         self.executable(self.helper, 'IFS= read -r manifest\nprintf "%s\\n" "$manifest" >> "$EVENTS"\nexit "${REFRESH_EXIT:-0}"\n')
