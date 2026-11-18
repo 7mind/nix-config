@@ -1,6 +1,7 @@
 { pkgs, home }:
 let
   profile = pkgs.callPackage ../pkg/home-manager-switch { };
+  bundledRefresh = pkgs.callPackage ../pkg/home-age-refresh { };
   external = home.extendModules {
     modules = [ { submoduleSupport = { enable = true; externalPackageInstall = true; }; } ];
   };
@@ -17,8 +18,8 @@ pkgs.writeShellApplication {
       manifest=${external.activationPackage}/refresh-user-secrets.json
       if [[ -f "$manifest" ]]; then
         if ! refresh="$(${pkgs.coreutils}/bin/readlink -e /run/current-system/sw/bin/refresh-user-secrets)" || [[ ! -x "$refresh" ]]; then
-          echo "Error: install the system secret refresh helper with a full NixOS switch first" >&2
-          exit 1
+          echo "System secret refresh helper not installed; using the bundled helper with sudo" >&2
+          refresh=${pkgs.lib.getExe bundledRefresh}
         fi
         ${pkgs.coreutils}/bin/cat "$manifest" | /run/wrappers/bin/sudo -- "$refresh"
       fi

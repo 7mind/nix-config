@@ -32,7 +32,9 @@ class HomeSwitchSudoTest(unittest.TestCase):
             (self.bin / command).symlink_to(shutil.which(command))
         self.executable(self.bin / "profile", 'printf "profile\\n" >> "$EVENTS"\n')
         self.helper = self.bin / "system-refresh"
-        self.executable(self.helper, 'IFS= read -r manifest\nprintf "%s\\n" "$manifest" >> "$EVENTS"\nexit "${REFRESH_EXIT:-0}"\n')
+        self.bundled_helper = self.bin / "bundled-refresh"
+        for helper in (self.helper, self.bundled_helper):
+            self.executable(helper, 'IFS= read -r manifest\nprintf "%s\\n" "$manifest" >> "$EVENTS"\nexit "${REFRESH_EXIT:-0}"\n')
         self.installed = self.bin / "refresh-user-secrets"
         self.installed.symlink_to(self.helper)
         self.executable(self.generation / "activate", 'printf "activate\\n" >> "$EVENTS"\n')
@@ -43,7 +45,10 @@ class HomeSwitchSudoTest(unittest.TestCase):
               lib.getExe = package: package.exe;
               coreutils = {json.dumps(str(self.root))};
               stdenv.hostPlatform.isLinux = true;
-              callPackage = _: _: {{ exe = {json.dumps(str(self.bin / "profile"))}; }};
+              callPackage = path: _: {{
+                exe = if builtins.baseNameOf path == "home-age-refresh" then {json.dumps(str(self.bundled_helper))}
+                      else {json.dumps(str(self.bin / "profile"))};
+              }};
               writeShellApplication = application: application.text;
             }};
             home = {{
@@ -90,11 +95,16 @@ exec "$2"
         self.assertEqual(result.returncode, 19)
         self.assertEqual(self.observed(), [])
 
-    def test_missing_system_helper_prevents_profile_switch(self):
+    def test_missing_system_helper_uses_bundled_helper(self):
         self.installed.unlink()
-        result = self.run_switch()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("full NixOS switch", result.stderr)
+        result = self.run_switch(HELPER=str(self.bundled_helper))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.observed(), [self.manifest.read_text().strip(), "profile"])
+
+    def test_bundled_helper_still_requires_sudo_permission(self):
+        self.installed.unlink()
+        result = self.run_switch(HELPER=str(self.bundled_helper), DENY_SUDO="1")
+        self.assertEqual(result.returncode, 19)
         self.assertEqual(self.observed(), [])
 
     def test_no_manifest_needs_no_sudo(self):

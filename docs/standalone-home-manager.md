@@ -72,14 +72,15 @@ The helper uses the pinned CLI and `hmbak` backups from the command above.
 In a downstream configuration root, `./setup --hm-only -s` refreshes the invoking
 user's host-encrypted secrets before changing the persistent Home Manager
 profile. It sends the selected HM generation's JSON manifest to the
-system-installed `refresh-user-secrets` helper with `sudo`. The helper uses
-sudo's caller identity, not a username in the manifest. A failed refresh
-aborts the HM switch.
+`refresh-user-secrets` helper with `sudo`. The helper uses sudo's caller
+identity, not a username in the manifest. A failed refresh aborts the HM switch.
 
-A full NixOS switch must first install persistent HM integration, the helper,
-and the stock `/run/agenix -> /run/agenix.d/<generation>` storage. On hosts
-with `smind.security.sudo.wheel-permissive-rules`, wheel users can invoke the
-exact installed helper without a password. This policy trusts those users as
+Persistent HM integration and the stock `/run/agenix -> /run/agenix.d/<generation>`
+storage must already be in place. The switch prefers the system-installed
+helper. If it is missing, the switch runs the bundled helper with ordinary
+sudo, which may prompt for a password and requires permission to run it.
+On hosts with `smind.security.sudo.wheel-permissive-rules`, wheel users can
+invoke the exact system-installed helper without a password. This policy trusts those users as
 administrators: their HM manifests are not separately authenticated.
 Changing the manifest or ciphertext does not require a new system switch.
 The host SSH ed25519 identity must exist at `/etc/ssh/ssh_host_ed25519_key`.
