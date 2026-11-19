@@ -74,6 +74,19 @@ class ConsoleTests(unittest.TestCase):
                 self.assertEqual(stdout.getvalue(), expected + "\nplain\n")
                 self.assertEqual(stderr.getvalue(), expected + "\n")
 
+    def test_diagnostic_writes_complete_line_at_once(self):
+        writes = []
+
+        class RecordingStream(io.StringIO):
+            def write(self, text):
+                writes.append(text)
+                return super().write(text)
+
+        console = Console(io.StringIO(), RecordingStream(), {}, ColourMode.NEVER, False)
+        console.diagnostic("Rehearsing repo", Tone.INFO)
+        console.diagnostic("[cmd 1] exit 0 in 0.001s", Tone.INFO)
+        self.assertEqual(writes, ["Rehearsing repo\n", "[cmd 1] exit 0 in 0.001s\n"])
+
     def test_user_content_including_ansi_is_preserved(self):
         text = "  path with spaces\t\x1b[35muser colour\x1b[0m\nnext line  "
         for colour in ColourMode:

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
+from threading import Lock
 from typing import Mapping, TextIO
 
 
@@ -34,6 +35,7 @@ class Console:
     environment: Mapping[str, str]
     colour: ColourMode
     machine_readable: bool
+    _diagnostic_lock: Lock = field(default_factory=Lock, init=False, repr=False, compare=False)
 
     def _style(self, text: str, tone: Tone, stream: TextIO) -> str:
         if tone == Tone.PLAIN or self.machine_readable or self.colour == ColourMode.NEVER:
@@ -52,7 +54,8 @@ class Console:
         print(self.style(text, tone), file=self.stdout)
 
     def diagnostic(self, text: str, tone: Tone) -> None:
-        print(self._style(text, tone, self.stderr), file=self.stderr)
+        with self._diagnostic_lock:
+            self.stderr.write(self._style(text, tone, self.stderr) + "\n")
 
     def document(self, data: object) -> None:
         self.line(json.dumps(data, indent=JSON_INDENT, sort_keys=True), Tone.INFO)

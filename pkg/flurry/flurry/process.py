@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import signal
 import subprocess
 from dataclasses import dataclass
+from itertools import count
 from pathlib import Path
-from typing import Mapping, Sequence
+from threading import Lock
+from time import monotonic
+from typing import Callable, Mapping, Sequence
 
 
 class FlurryError(Exception):
@@ -14,7 +18,7 @@ class FlurryError(Exception):
 
 
 def redact(text: str) -> str:
-    return re.sub(r"(https?://)[^\s/@]+@", r"\1[redacted]@", text)
+    return re.sub(r"(https?://)[^\s/@]+@", r"\1[redacted]@", text, flags=re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -25,7 +29,7 @@ class Result:
 
 
 class Runner:
-    def __init__(self, environment: Mapping[str, str], timeout: float):
+    def __init__(self, environment: Mapping[str, str], timeout: float, *, trace: Callable[[str], None] | None = None):
         self.environment = dict(environment)
         routing = {
             "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
@@ -36,6 +40,9 @@ class Runner:
         if conflicts:
             raise FlurryError("Unset ambient Git routing/config overrides: " + ", ".join(conflicts))
         self.timeout = timeout
+        self._trace = trace
+        self._trace_ids = count(1)
+        self._trace_lock = Lock()
 
     def call(
         self,
@@ -46,25 +53,46 @@ class Runner:
         check: bool,
     ) -> Result:
         env = self.environment | dict(extra_env) | {"GIT_TERMINAL_PROMPT": "0"}
+        trace = self._trace
+        if trace is not None:
+            command = shlex.join([redact(arg) for arg in args])
+            if cwd is not None:
+                command = f"cd {shlex.quote(redact(str(cwd)))} && {command}"
+            command = "".join(char if char.isprintable() else ascii(char)[1:-1] for char in command)
+            with self._trace_lock:
+                command_id = next(self._trace_ids)
+                trace(f"[cmd {command_id}] start: {command}")
+            started = monotonic()
+        outcome = "aborted"
         try:
-            process = subprocess.Popen(
-                list(args), cwd=cwd, env=env, stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
-            )
-        except OSError as error:
-            raise FlurryError(redact(f"Cannot execute {args[0]}: {error}")) from error
-        try:
-            stdout, stderr = process.communicate(input_data, timeout=self.timeout)
-        except (subprocess.TimeoutExpired, KeyboardInterrupt) as error:
             try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            process.communicate()
-            if isinstance(error, KeyboardInterrupt):
-                raise
-            raise FlurryError(f"Cannot execute {args[0]}: timed out after {self.timeout} seconds; process group stopped") from error
-        result = Result(stdout, stderr, process.returncode)
+                process = subprocess.Popen(
+                    list(args), cwd=cwd, env=env, stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
+                )
+            except OSError as error:
+                outcome = "launch failed"
+                raise FlurryError(redact(f"Cannot execute {args[0]}: {error}")) from error
+            try:
+                stdout, stderr = process.communicate(input_data, timeout=self.timeout)
+            except (subprocess.TimeoutExpired, KeyboardInterrupt) as error:
+                outcome = "interrupted" if isinstance(error, KeyboardInterrupt) else "timed out"
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.communicate()
+                if isinstance(error, KeyboardInterrupt):
+                    raise
+                raise FlurryError(f"Cannot execute {args[0]}: timed out after {self.timeout} seconds; process group stopped") from error
+            result = Result(stdout, stderr, process.returncode)
+            if trace is not None:
+                outcome = f"exit {result.returncode}"
+        finally:
+            if trace is not None:
+                elapsed = monotonic() - started
+                with self._trace_lock:
+                    trace(f"[cmd {command_id}] {outcome} in {elapsed:.3f}s")
         if check and result.returncode:
             detail = result.stderr.decode(errors="replace").strip()
             raise FlurryError(redact(f"{args[0]} failed ({result.returncode}): {detail}"))

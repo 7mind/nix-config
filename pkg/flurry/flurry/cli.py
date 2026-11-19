@@ -25,6 +25,7 @@ def _common(parser: argparse.ArgumentParser, suppress: bool) -> None:
     parser.add_argument("--root", type=Path, default=default if suppress else Path.cwd(), help="Workspace directory (default: current directory)")
     parser.add_argument("--exclude", dest="exclude" if suppress else "global_excludes", action="append", default=default if suppress else [], metavar="PATTERN", help="Add a workspace-relative exclusion; repeatable")
     parser.add_argument("--json", action="store_true", default=default if suppress else False, help="Machine-readable output (never coloured)")
+    parser.add_argument("--verbose", action="store_true", default=default if suppress else False, help="Log subprocess commands and elapsed times to stderr")
     parser.add_argument("--color", choices=tuple(mode.value for mode in ColourMode), default=default if suppress else ColourMode.AUTO.value, help="Colour output: auto on terminals, always, or never (default: auto; respects NO_COLOR)")
     parser.add_argument("--timeout", type=float, default=default if suppress else COMMAND_TIMEOUT, help="Timeout per Git/Nix/API command, in seconds")
 
@@ -84,9 +85,9 @@ def execute(args: argparse.Namespace, console: Console) -> int:
             console.line(f"Created {path}", Tone.SUCCESS)
         return 0
     config = load_config(args.root, excludes)
-    runner = Runner(os.environ, args.timeout)
-    nix = Nix(runner)
     report = lambda message: console.diagnostic(message, Tone.INFO)
+    runner = Runner(os.environ, args.timeout, trace=report if args.verbose else None)
+    nix = Nix(runner)
     if args.command == "status":
         repositories = discover(config, runner)
         rows = [{

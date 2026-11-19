@@ -75,7 +75,12 @@ Plans remain local and provisional: no fetch, commit or push. `status`/`graph`
 also do not fetch. Remote races, authentication, rebase/restore rehearsals and
 later Nix validation can still fail. Use `--json` for structured output and `--root DIR`
 to select a workspace explicitly. Global flags may appear before or after the
-command. Every subprocess has a configurable `--timeout` (seconds).
+command. Every subprocess has a configurable `--timeout` (seconds). Use
+`--verbose` to log each command Flurry starts to stderr, then its exit status
+or failure and elapsed time in seconds. Matching command IDs pair the two lines
+when commands overlap. HTTP(S) URL userinfo is redacted; avoid putting secrets
+in other arguments. Subprocess output, environment variables, and stdin are not
+logged. `--json` still writes only the JSON document to stdout.
 
 Human command output is coloured by default on terminals: repository names and
 progress in cyan, clean/success states in green, warnings/dirty changes in yellow,

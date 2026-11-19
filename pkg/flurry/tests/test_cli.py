@@ -42,6 +42,32 @@ class CliTests(unittest.TestCase):
                 json.loads(output.getvalue())
                 self.assertFalse((root / ".flurry").exists())
 
+    def test_verbose_traces_commands_to_stderr_without_changing_json(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            repo = root / "test workspace"
+            (root / "flurry.toml").write_text('[repositories."test workspace"]\n')
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            subprocess.run(["git", "-C", str(repo), "-c", "user.name=Flurry Test", "-c", "user.email=test@example.invalid",
+                            "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null",
+                            "commit", "-qm", "Initial commit", "--allow-empty"], check=True)
+            previous_output = None
+            for before, after in (([], []), (["--verbose"], []), ([], ["--verbose"])):
+                with self.subTest(before=before, after=after):
+                    output, errors = io.StringIO(), io.StringIO()
+                    with contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+                        status = main([*before, "status", "--root", temporary, "--json", "--color=always", *after])
+                    self.assertEqual(status, 0, errors.getvalue())
+                    self.assertEqual(len(json.loads(output.getvalue())["repositories"]), 1)
+                    if previous_output is None:
+                        previous_output = output.getvalue()
+                        self.assertEqual(errors.getvalue(), "")
+                    else:
+                        self.assertEqual(output.getvalue(), previous_output)
+                        self.assertIn(f"git -C '{repo}'", errors.getvalue())
+                        self.assertRegex(errors.getvalue(), r"\[cmd \d+\] exit 0 in \d+\.\d{3}s")
+                        self.assertNotIn("\x1b", errors.getvalue())
+
     def test_unknown_config_keys_fail_without_state_creation(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
