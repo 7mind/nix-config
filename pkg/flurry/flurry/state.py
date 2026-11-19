@@ -177,7 +177,7 @@ class Journal:
         self.document["action"] = name
         self.save()
 
-    def repository(self, name: str, fields: dict[str, object]) -> None:
+    def repository(self, name: str, fields: dict[str, object], *, action: str | None = None) -> None:
         repositories = self.document["repositories"]
         if not isinstance(repositories, dict):
             raise FlurryError("Invalid in-memory run journal")
@@ -185,6 +185,8 @@ class Journal:
         if not isinstance(previous, dict):
             raise FlurryError("Invalid in-memory repository journal")
         repositories[name] = previous | fields
+        if action is not None:
+            self.document["action"] = action
         self.save()
 
     def finish(self, status: str, detail: str) -> None:

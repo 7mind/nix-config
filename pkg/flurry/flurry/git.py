@@ -9,8 +9,9 @@ import shlex
 import stat
 import tempfile
 import uuid
+from typing import Callable
 
-from .process import FlurryError, Runner
+from .process import FlurryError, Runner, remote_head
 
 
 @dataclass(frozen=True)
@@ -121,6 +122,14 @@ class Git:
 
     def _tree_paths(self, repo: Path, tree: str) -> tuple[str, ...]:
         return self._paths(self._git(repo, 'ls-tree', '-r', '--name-only', '-z', tree))
+
+    def _tree_modes(self, repo: Path, tree: str) -> dict[str, bytes]:
+        modes = {}
+        for entry in self._git(repo, 'ls-tree', '-r', '-z', tree).split(b'\0'):
+            if entry:
+                metadata, path = entry.split(b'\t', 1)
+                modes[os.fsdecode(path)] = metadata.split(b' ', 1)[0]
+        return modes
 
     def _files(self, repo: Path, paths: tuple[str, ...]) -> tuple[FileState, ...]:
         result = []
@@ -256,7 +265,8 @@ class Git:
             if entry and (chr(entry[0]).islower() or entry.startswith(b'S')):
                 raise FlurryError(f'Special index flags in {repo}; clear assume-unchanged/skip-worktree')
         index = self._text(repo, 'write-tree')
-        intent_paths = sorted(set(self._paths(self._git(repo, 'ls-files', '-z'))) - set(self._tree_paths(repo, index)))
+        index_modes = self._tree_modes(repo, index)
+        intent_paths = sorted(set(self._paths(self._git(repo, 'ls-files', '-z'))) - index_modes.keys())
         if intent_paths:
             command = ['git', '--literal-pathspecs', '-C', str(repo)]
             stage = shlex.join([*command, 'add', '--', *intent_paths])
@@ -266,9 +276,11 @@ class Git:
                 f'Stage current contents:\n  {stage}\n'
                 f'Or unstage (keep working files):\n  {unstage}'
             )
-        for tree in ('HEAD', index):
-            self._no_gitlinks(repo, tree)
-            for name in self._tree_paths(repo, tree):
+        head_modes = self._tree_modes(repo, 'HEAD')
+        for modes in (head_modes, index_modes):
+            if b'160000' in modes.values():
+                raise FlurryError(f'Gitlink-bearing parent repositories are unsupported: {repo}')
+            for name in modes:
                 path = repo / name
                 if path.is_dir() and not path.is_symlink():
                     raise FlurryError(f'Directory obstructs original tracked path: {path}')
@@ -281,7 +293,7 @@ class Git:
             path = repo / name
             if (path.exists() or path.is_symlink()) and self._succeeds(repo, 'check-ignore', '--quiet', '--no-index', '--', name):
                 raise FlurryError(f'Ignored replacement of staged-deleted path: {path}')
-        paths = tuple(sorted(set(self._tree_paths(repo, 'HEAD')) | set(self._tree_paths(repo, index))
+        paths = tuple(sorted(head_modes.keys() | index_modes.keys()
                              | set(self._paths(self._git(repo, 'ls-files', '--others', '--exclude-standard', '-z')))
                              | set(extra_paths) | {'flake.lock'}))
         self._uncaptured_attributes(repo, paths, set(paths))
@@ -512,7 +524,7 @@ class Git:
             prepared.head = self._text(prepared.trial, 'rev-parse', 'HEAD')
             prepared.restored = None
 
-    def promote(self, prepared: Prepared, run_id: str) -> Recovery:
+    def promote(self, prepared: Prepared, run_id: str, *, before_source_write: Callable[[], None] | None = None) -> Recovery:
         if re.fullmatch(r'[A-Za-z0-9_-]+', run_id) is None:
             raise FlurryError('Invalid recovery run identifier')
         self.verify(prepared)
@@ -520,6 +532,8 @@ class Git:
         suffix = hashlib.sha256(str(prepared.repo).encode()).hexdigest()[:16]
         prefix = f'refs/flurry/{run_id}/{suffix}'
         record = Recovery(prepared, f'{prefix}/stash', f'{prefix}/remaining', f'{prefix}/prepared', '', None, 'untouched')
+        if before_source_write is not None:
+            before_source_write()
         for ref in (record.stash_ref, record.remaining_ref, record.prepared_ref):
             if self._succeeds(prepared.repo, 'show-ref', '--verify', '--quiet', ref):
                 raise FlurryError(f'Recovery ref already exists: {ref}')
@@ -587,7 +601,7 @@ class Git:
             raise FlurryError(f'Recovery postcondition failed; retain {record.stash_ref}')
         record.phase = 'recovered'
 
-    def push(self, repo: Path, remote: str, destination_ref: str, expected_oid: str) -> None:
+    def push(self, repo: Path, remote: str, destination_ref: str, expected_oid: str, *, push_url: str) -> None:
         if not destination_ref.startswith('refs/heads/') or not self._succeeds(repo, 'check-ref-format', destination_ref):
             raise FlurryError(f'Invalid push branch: {destination_ref}')
         if self._text(repo, 'rev-parse', 'HEAD') != expected_oid or re.fullmatch(r'[0-9a-f]{40,64}', expected_oid) is None:
@@ -595,6 +609,5 @@ class Git:
         # Ordinary source push hooks are honored; force and recursive submodule pushes are forbidden.
         self.runner.run(['git', '-C', str(repo), '-c', 'submodule.recurse=false', 'push',
                          '--recurse-submodules=no', '--', remote, f'{expected_oid}:{destination_ref}'], None)
-        advertised = self.runner.git_text(repo, 'ls-remote', '--refs', '--', remote, destination_ref)
-        if advertised != f'{expected_oid}\t{destination_ref}':
+        if remote_head(self.runner, repo, push_url, destination_ref) != expected_oid:
             raise FlurryError(f'Remote verification failed after push: {repo} {destination_ref}')

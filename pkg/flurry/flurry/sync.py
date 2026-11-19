@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -11,7 +10,7 @@ from typing import Callable
 
 from .git import Git, Prepared, Recovery
 from .nix import Nix
-from .process import FlurryError, Runner, redact
+from .process import FlurryError, Runner, redact, remote_head
 from .source import Source, parse_source
 from .state import Journal, config_digest, fingerprint, load_journal, workspace_lock
 from .workspace import Config, Repository, WorkspaceGraph, build_graph, discover, provider_identities
@@ -184,16 +183,6 @@ def plan_sync(config: Config, runner: Runner, nix: Nix, options: SyncOptions) ->
     return SyncPlan(graph, targets, options, repositories)
 
 
-def remote_head(runner: Runner, repo: Path, url: str, ref: str) -> str | None:
-    lines = runner.git_text(repo, "ls-remote", "--refs", url, ref).splitlines()
-    matches = [line.split() for line in lines if len(line.split()) == 2 and line.split()[1] == ref]
-    if not matches:
-        return None
-    if len(matches) != 1 or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", matches[0][0]):
-        raise FlurryError("Malformed/ambiguous remote ref response")
-    return matches[0][0]
-
-
 def default_branch(runner: Runner, repo: Path, source: Source) -> str:
     if source.clone_url is None:
         raise FlurryError("Cannot resolve branch for non-Git source")
@@ -314,12 +303,12 @@ class Sync:
                         journal.action(f"checking:{name}")
                         self.nix.check(item.trial, options.check_mode == "full", report=self.report)
                     self.git.commit_lock(item)
-                    self.git.rehearse_restore(item)
                     self._check_push_base(target, item)
-                    self.git.verify(item)
-                    journal.repository(name, {"head": item.head})
-                    journal.action(f"promoting:{name}")
-                    recovery = self.git.promote(item, journal.run_id)
+
+                    def before_source_write() -> None:
+                        journal.repository(name, {"head": item.head}, action=f"promoting:{name}")
+
+                    recovery = self.git.promote(item, journal.run_id, before_source_write=before_source_write)
                     recoveries[name] = recovery
                     journal.repository(name, {
                         "state": "promoted", "checkpoint": fingerprint(target.repository.path, self.runner),
@@ -330,7 +319,7 @@ class Sync:
                     })
                     journal.action(f"pushing:{name}")
                     self.report(f"Publishing {name} -> {target.push_remote}/{target.push_ref}")
-                    self.git.push(target.repository.path, target.push_remote, target.push_ref, item.head)
+                    self.git.push(target.repository.path, target.push_remote, target.push_ref, item.head, push_url=target.push_url)
                     published.append(name)
                     journal.repository(name, {"state": "published", "checkpoint": fingerprint(target.repository.path, self.runner)})
                 for name, recovery in recoveries.items():
@@ -382,9 +371,10 @@ class Sync:
 
     def _check_push_base(self, target: Target, item: Prepared) -> None:
         remote = remote_head(self.runner, item.trial, target.push_url, target.push_ref)
-        if remote is None:
+        if remote is None or remote == item.head:
             return
-        self.runner.git(item.trial, "fetch", "--no-tags", "--no-recurse-submodules", target.push_url, f"+{target.push_ref}:refs/flurry/push-base")
+        if remote != item.baseline:
+            self.runner.git(item.trial, "fetch", "--no-tags", "--no-recurse-submodules", target.push_url, f"+{target.push_ref}:refs/flurry/push-base")
         result = self.runner.call(["git", "-C", os.fspath(item.trial), "merge-base", "--is-ancestor", remote, item.head], None, None, {}, False)
         if result.returncode == 1:
             raise FlurryError(f"{target.repository.name}: planned push is not fast-forward; reconcile published history manually (no force pushes)")
