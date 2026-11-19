@@ -1,8 +1,5 @@
-{ privateRoot ? null }:
+{ publicRoot, privateRoot ? null }:
 
-let
-  publicRoot = builtins.path { path = ./.; name = "source"; };
-in
 rec {
   import_if_exists_or = path: default: if builtins.pathExists path then import path else default;
   import_if_exists = path: import_if_exists_or path { };

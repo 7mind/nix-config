@@ -158,7 +158,7 @@ let
   };
   rekeyable = rekeyableFor [ ../modules/hm/age.nix ];
   foreign = rekeyableFor [ ];
-  aggregate = homes: (import ../lib/mk-flake.nix {
+  aggregate = homes: (flake.lib.mkFlake {
     inputs = flake.inputs;
     self = { outPath = toString fixtures; nixosConfigurations = { }; darwinConfigurations = { }; homeConfigurations = homes; };
   }).agenix-rekey.${pkgs.stdenv.hostPlatform.system};

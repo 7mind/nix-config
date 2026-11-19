@@ -1,6 +1,6 @@
-{ inputs, self, privateRoot ? null }:
+publicRoot: { inputs, self, privateRoot ? null }:
 let
-  globals = import ../globals.nix { inherit privateRoot; };
+  globals = import ../globals.nix { inherit publicRoot privateRoot; };
   hosts-public = import ../hosts.nix;
   hosts-private = globals.importPrivate "hosts.nix" (
     { ... }: {
@@ -30,7 +30,7 @@ in
 {
   inherit globals; # this makes this flake reusable by other flakes
 
-  lib.mkFlake = import ./mk-flake.nix;
+  lib.mkFlake = import ./mk-flake.nix publicRoot;
 
   nixosConfigurations = builtins.listToAttrs (
     (hosts-public builders).nixos ++ (hosts-private builders).nixos
