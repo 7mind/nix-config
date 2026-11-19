@@ -34,6 +34,13 @@ jobs:
       - uses: 7mind/github-env@minimal
         with:
           setup-nix: ${{ matrix.preconfigured != true }}
+      - name: Materialize the Home Manager checks' evaluation inputs
+        run: |
+          for check in home-age home-age-runtime home-configurations; do
+            nix eval --no-write-lock-file --raw ".#checks.x86_64-linux.$check.drvPath"
+            printf '\n'
+          done
+          nix eval --no-write-lock-file --raw '.#nixosConfigurations.testbench.config.system.build.toplevel.drvPath'
       - name: Check flake
         run: |
           nix flake check --no-build '.'
