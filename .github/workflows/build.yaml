@@ -35,15 +35,9 @@ jobs:
         with:
           setup-nix: ${{ matrix.preconfigured != true }}
       - name: Materialize the Home Manager checks' evaluation inputs
-        run: |
-          for check in home-age home-age-runtime home-configurations; do
-            nix eval --no-write-lock-file --raw ".#checks.x86_64-linux.$check.drvPath"
-            printf '\n'
-          done
-          nix eval --no-write-lock-file --raw '.#nixosConfigurations.testbench.config.system.build.toplevel.drvPath'
+        run: bash .github/check-linux/run.sh materialize
       - name: Check flake
-        run: |
-          nix flake check --no-build '.'
+        run: bash .github/check-linux/run.sh check
   build-mac:
     strategy:
       fail-fast: false

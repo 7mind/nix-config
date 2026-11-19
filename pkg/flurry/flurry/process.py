@@ -41,6 +41,7 @@ class Runner:
             raise FlurryError("Unset ambient Git routing/config overrides: " + ", ".join(conflicts))
         self.timeout = timeout
         self._trace = trace
+        self._valid_branches: set[str] = set()
         self._trace_ids = count(1)
         self._trace_lock = Lock()
 
@@ -112,6 +113,13 @@ class Runner:
         path = Path(os.fsdecode(data[:-1]))
         # --path-format=absolute canonicalizes leaf symlinks, hiding unsafe metadata writes.
         return path if path.is_absolute() else repo.absolute() / path
+
+    def check_branch(self, repo: Path, ref: str) -> None:
+        if not ref.startswith('refs/heads/'):
+            raise FlurryError(f'Invalid branch ref: {ref}')
+        if ref not in self._valid_branches:
+            self.git(repo, 'check-ref-format', ref)
+            self._valid_branches.add(ref)
 
     def git(self, repo: Path, *args: str) -> bytes:
         return self.run([

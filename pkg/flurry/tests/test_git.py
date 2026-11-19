@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import unittest
 
+from flurry.clean import Manifest, clean_checkout
 from flurry.git import Git
 from flurry.process import FlurryError, Result, Runner
 
@@ -242,6 +243,27 @@ class GitTests(unittest.TestCase):
         self.assertEqual(before, after)
         self.assertFalse(marker.exists(), 'The unsupported filter was executed before refusal')
 
+    def test_inert_attribute_profile_does_not_admit_macros_extra_tokens_or_ambiguous_syntax(self):
+        attributes = self.repo / '.gitattributes'
+        for rules in (b'[attr]binary filter=unsafe\nother binary\n', b'other binary filter=unsafe\n',
+                      b'other binary\r\n', b'other binary\0 -filter\n', b'"other" binary\n', b'!other binary\n',
+                      b'other\\ file -whitespace\n', b'other working-tree-encoding=utf-16\n'):
+            with self.subTest(rules=rules):
+                attributes.write_bytes(rules)
+                self.git(self.repo, 'add', '--', '.gitattributes')
+                self.git(self.repo, 'commit', '-m', 'candidate rules')
+                self.assertIsNone(clean_checkout(self.repo, self.runner))
+
+    def test_configured_alternate_attributes_tree_is_not_a_clean_checkout(self):
+        self.git(self.repo, 'config', 'attr.tree', 'HEAD~1')
+        self.assertIsNone(clean_checkout(self.repo, self.runner))
+
+    def test_ambiguous_historical_tree_is_not_an_ordinary_manifest(self):
+        blob = bytes.fromhex(self.git(self.repo, 'rev-parse', 'HEAD:mixed'))
+        tree = self.runner.call(['git', '-C', str(self.repo), 'hash-object', '-w', '-t', 'tree', '--literally', '--stdin'],
+                                None, (b'100644 repeated\0' + blob) * 2, {}, True).stdout.decode().strip()
+        self.assertIsNone(Manifest.load(self.repo, self.runner, tree))
+
     def test_effective_filter_is_rejected_in_worktree_index_and_head_views(self):
         marker = self.configure_filter('lfs')
         attributes = self.repo / '.gitattributes'
@@ -398,6 +420,53 @@ class GitTests(unittest.TestCase):
                 marker = self.configure_filter(name)
                 (self.repo / '.gitattributes').write_text(f'mixed filter={name}\n')
                 self.assert_filter_refused_without_source_changes(marker, 'Ambiguous reserved Git filter name')
+
+    def test_prepare_rejects_a_clean_witness_from_another_checkout_before_cloning(self):
+        other = self.root / 'other-checkout'
+        self.git(self.root, 'clone', str(self.origin), str(other))
+        (other / 'mixed').write_text('other index\n')
+        self.git(other, 'add', 'mixed')
+        (other / 'mixed').write_text('other working copy\n')
+        self.git(other, 'config', 'fixture.label', 'other')
+        index = self.git(other, 'write-tree')
+        witness = clean_checkout(self.repo, self.runner)
+        self.assertIsNotNone(witness)
+        trial = self.root / 'unexpected-trial'
+        with self.assertRaisesRegex(FlurryError, 'witness.*checkout'):
+            self.adapter.prepare(other, trial, 'main', 'reject', None, None, witness=witness)
+        self.assertFalse(trial.exists())
+        self.assertEqual(self.git(other, 'write-tree'), index)
+        self.assertEqual((other / 'mixed').read_text(), 'other working copy\n')
+        self.assertEqual(self.git(other, 'rev-parse', 'HEAD'), self.git(self.repo, 'rev-parse', 'HEAD'))
+
+    def test_clean_lock_promotion_rechecks_attributes_after_import_before_capturing_source(self):
+        attributes = self.repo / '.gitattributes'
+        attributes.write_text('*.patch -whitespace\n')
+        self.git(self.repo, 'add', '.gitattributes')
+        self.git(self.repo, 'commit', '-m', 'local attributes')
+        marker = self.configure_filter('late')
+        original = self.git(self.repo, 'rev-parse', 'HEAD')
+        witness = clean_checkout(self.repo, self.runner)
+        self.assertIsNotNone(witness)
+        item = self.adapter.prepare(self.repo, self.root / 'trial', 'main', 'reject', None, None, witness=witness)
+        (item.trial / 'flake.lock').write_text('validated new lock\n')
+        self.adapter.commit_lock(item)
+        call = self.runner.call
+
+        def mutate_after_import(args, *rest):
+            result = call(args, *rest)
+            if 'fetch' in args and str(self.repo) in args and any(arg.endswith('/prepared') for arg in args):
+                attributes.write_text('mixed filter=late\n')
+            return result
+
+        self.runner.call = mutate_after_import
+        with self.assertRaisesRegex(FlurryError, 'Source changed'):
+            self.adapter.promote(item, 'fault')
+        self.assertEqual(attributes.read_text(), 'mixed filter=late\n')
+        self.assertFalse(marker.exists())
+        self.assertEqual(self.git(self.repo, 'stash', 'list'), '')
+        self.assertEqual(self.git(self.repo, 'rev-parse', 'HEAD'), original)
+        self.assertEqual((self.repo / 'flake.lock').read_text(), 'base\n')
 
     def test_prepare_promote_preserves_split_untracked_stash_and_lock_commit(self):
         (self.repo / 'other').write_text('old stash\n')

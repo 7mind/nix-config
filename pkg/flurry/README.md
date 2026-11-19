@@ -89,6 +89,18 @@ and errors in red. Redirected output and `--json` stay plain. A nonempty
 force colour, `--color=never` to disable it, or `--color=auto` for the default;
 explicit controls override the environment, but `--json` always stays uncoloured.
 
+For an ordinary, physically clean checkout at or ahead of its freshly fetched
+baseline, Flurry compares Git's index, visible untracked paths and raw file
+contents/modes with the committed tree. If the commits differ, Git must prove
+the baseline is an ancestor. Both trees must have no attribute rules or use only
+simple `-whitespace` or `binary` rules; other attribute contexts use the full
+rehearsal. Flurry still makes a private Git trial, evaluates its declarations,
+refreshes the selected inputs and runs the configured checks. With nothing to
+restore, an unchanged candidate needs no stash or source checkout. Dirty,
+rebasing or more complex checkouts use the full preservation rehearsal. New
+lock commits still use source commit hooks and recoverable promotion. Every
+publication uses a normal source push and verifies the exact remote ref afterward.
+
 Validation defaults to `--check eval` (`nix flake check --no-build`, no lock
 writes). `--check full` additionally builds checks; `--check none` explicitly
 skips validation and emits a warning. Flurry never activates or deploys anything.
@@ -250,8 +262,14 @@ Tracked state or overriding unignore rules cause an explicit refusal; Flurry doe
 not silently untrack files or overwrite those rules. Non-Git workspaces need no
 Git metadata changes.
 
-Git recovery refs under `refs/flurry/RUN_ID/` retain captured original state and
-prepared commits until all selected pushes have been verified. Successful runs
+If the final commit and rehearsed staged, unstaged and untracked state already
+match the original checkout, Flurry revalidates the source and publishes without
+stashing or checking it out again. Lock updates, configured checks and normal
+hook-honoring pushes still run. No source recovery refs are needed in this case.
+
+For checkouts that need promotion, Git recovery refs under `refs/flurry/RUN_ID/`
+retain captured original state and prepared commits until all selected pushes
+have been verified. Successful runs
 remove their own `stash`, `remaining` and `prepared` refs using expected-object-ID
 checks and an atomic transaction per repository. Cleanup does not alter branches,
 user stashes or checkout contents. A cleanup failure is reported, not silently

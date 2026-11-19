@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
+from .clean import checkout_head, clean_checkout, config_values, pack, physical_file
 from .process import FlurryError, Runner
 
 
@@ -121,6 +122,37 @@ def fingerprint(repo: Path, runner: Runner) -> str:
             raise FlurryError(f"Unsupported untracked file: {path}")
         digest.update(item + b"\0" + kind + b"\0" + len(data).to_bytes(8, "big") + data)
     return digest.hexdigest()
+
+
+def full_checkpoint(repo: Path, runner: Runner) -> str:
+    index = runner.git(repo, '--no-optional-locks', '-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false',
+                       'ls-files', '-v', '--stage', '--cached', '--others', '--exclude-standard', '-z')
+    untracked = {row[2:] for row in index.split(b'\0') if row.startswith(b'? ')}
+    names = {row[2:] if row.startswith(b'? ') else row.partition(b'\t')[2] for row in index.split(b'\0') if row}
+    names.update(row for row in runner.git(repo, 'ls-tree', '-r', '--name-only', '-z', 'HEAD').split(b'\0') if row)
+    values = [*map(os.fsencode, checkout_head(repo, runner)),
+              runner.git(repo, 'stash', 'list', '--format=%H'), config_values(repo, runner), index,
+              runner.git(repo, 'diff', '--binary', '--no-ext-diff', '--no-textconv'),
+              runner.git(repo, 'diff', '--cached', '--binary', '--no-ext-diff', '--no-textconv'),
+              runner.git(repo, '--no-optional-locks', 'diff-index', '--cached', '--ita-invisible-in-index', '--raw', '-z', 'HEAD')]
+    for name in sorted(names):
+        path = Path(os.fsdecode(name))
+        mode, digest, _ = physical_file(repo / path) if not any((repo / parent).is_symlink() for parent in path.parents) else (b'obstructed', b'', None)
+        if name in untracked:
+            if mode in (b'missing', b'obstructed'):
+                raise FlurryError(f'Unsupported untracked file: {repo / path}')
+            values.append(str((repo / path).lstat().st_mode & 0o111).encode())
+        values.extend((name, mode, digest))
+    return 'full-v1:' + pack(values).hex()
+
+
+def matches_checkpoint(repo: Path, runner: Runner, expected: str) -> bool:
+    if expected.startswith('clean-v1:'):
+        witness = clean_checkout(repo, runner)
+        return witness is not None and witness.checkpoint == expected
+    if expected.startswith('full-v1:'):
+        return full_checkpoint(repo, runner) == expected
+    return fingerprint(repo, runner) == expected
 
 
 def config_digest(root: Path) -> str:

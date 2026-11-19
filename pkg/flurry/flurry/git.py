@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 import re
 import shlex
@@ -11,6 +11,7 @@ import tempfile
 import uuid
 from typing import Callable
 
+from .clean import REFS, CleanCheckout, Context, Manifest, checkout_head, physical_file, unscoped
 from .process import FlurryError, Runner, remote_head
 
 
@@ -36,6 +37,10 @@ class Snapshot:
     config: bytes
     identity: tuple[tuple[str, str], ...]
 
+    def same_checkout(self, other: Snapshot) -> bool:
+        fields = ('head', 'branch', 'index_tree', 'worktree_patch', 'untracked_tree', 'untracked', 'files', 'flags')
+        return all(getattr(self, field) == getattr(other, field) for field in fields)
+
     def to_dict(self) -> dict:
         result = asdict(self)
         for field in ('worktree_patch', 'flags', 'stashes'):
@@ -48,7 +53,7 @@ class Snapshot:
 class Prepared:
     repo: Path
     trial: Path
-    original: Snapshot
+    original: Snapshot | CleanCheckout
     head: str
     baseline: str
     branch: str
@@ -58,6 +63,10 @@ class Prepared:
     marker: str
     dirty_mode: str
     restored: Snapshot | None = None
+    clean_trial: CleanCheckout | None = None
+    pristine: Snapshot | None = None
+    source_witness: CleanCheckout | None = None
+    lock_state: tuple[bytes, bytes, bytes | None] | None = None
 
 
 @dataclass
@@ -162,31 +171,53 @@ class Git:
         return tuple(settings)
 
     def _capture(self, repo: Path, scratch: Path) -> Snapshot:
-        head = self._text(repo, 'rev-parse', 'HEAD')
-        branch = self._text(repo, 'symbolic-ref', 'HEAD')
+        head, tree, branch = checkout_head(repo, self.runner)
         index = self._text(repo, 'write-tree')
-        untracked = self._paths(self._git(repo, 'ls-files', '--others', '--exclude-standard', '-z'))
-        for name in untracked:
-            if not ((repo / name).is_file() or (repo / name).is_symlink()):
-                raise FlurryError(f'Unsupported untracked directory/file in {repo}: {name}')
-        with tempfile.TemporaryDirectory(prefix='flurry-index-', dir=scratch) as temporary:
-            env = {'GIT_INDEX_FILE': str(Path(temporary) / 'index'), 'GIT_LITERAL_PATHSPECS': '1'}
-            self._git(repo, 'read-tree', '--empty', env=env)
-            if untracked:
+        rows = self._git(repo, '-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false', 'ls-files', '--cached', '-v', '--others', '--exclude-standard', '-z').split(b'\0')
+        untracked = tuple(os.fsdecode(row[2:]) for row in rows if row.startswith(b'? '))
+        flags = b''.join(row + b'\0' for row in rows if row and not row.startswith(b'? '))
+        if untracked:
+            for name in untracked:
+                if not ((repo / name).is_file() or (repo / name).is_symlink()):
+                    raise FlurryError(f'Unsupported untracked directory/file in {repo}: {name}')
+            with tempfile.TemporaryDirectory(prefix='flurry-index-', dir=scratch) as temporary:
+                env = {'GIT_INDEX_FILE': str(Path(temporary) / 'index'), 'GIT_LITERAL_PATHSPECS': '1'}
+                self._git(repo, 'read-tree', '--empty', env=env)
                 self._reject_filters(repo, untracked, (), env, 'untracked snapshot')
                 data = b''.join(os.fsencode(path) + b'\0' for path in untracked)
-                self._git(repo, 'add', '--pathspec-from-file=-', '--pathspec-file-nul',
-                          input_data=data, env=env)
-            untracked_tree = self._text(repo, 'write-tree', env=env)
+                self._git(repo, 'add', '--pathspec-from-file=-', '--pathspec-file-nul', input_data=data, env=env)
+                untracked_tree = self._text(repo, 'write-tree', env=env)
+        else:
+            untracked_tree = hashlib.new('sha1' if len(head) == 40 else 'sha256', b'tree 0\0').hexdigest()
+        paths = self._tree_paths(repo, tree) + (() if tree == index else self._tree_paths(repo, index))
         return Snapshot(
             head, branch, index,
             self._git(repo, 'diff', '--binary', '--no-ext-diff', '--no-textconv'),
             untracked_tree, untracked,
-            self._files(repo, self._tree_paths(repo, head) + self._tree_paths(repo, index) + untracked),
-            self._git(repo, 'ls-files', '-v', '-z'),
+            self._files(repo, paths + untracked), flags,
             self._git(repo, 'stash', 'list', '--format=%H'),
             self._git(repo, 'config', '--null', '--list'), self._identity(repo),
         )
+
+    def _preflight_source(self, repo: Path, marker: str, witness: CleanCheckout | None) -> None:
+        if witness is None:
+            self._preflight(repo, (marker,))
+        elif not witness.matches(repo, self.runner):
+            raise FlurryError(f'Source changed during rehearsal: {repo}')
+
+    def _checked_capture(self, repo: Path, scratch: Path, witness: CleanCheckout | None) -> Snapshot:
+        snapshot = self._capture(repo, scratch)
+        if witness is not None:
+            files = tuple(FileState(name, 'symlink' if mode == b'120000' else 'file', mode == b'100755', witness.physical[name].hex())
+                          for name, (mode, _) in sorted(witness.manifest.entries.items()))
+            flags = b''.join(b'H ' + name + b'\0' for name in sorted(map(os.fsencode, witness.manifest.entries)))
+            overrides = b'submodule.recurse\nfalse\0diff.ignoresubmodules\nall\0core.hookspath\n/dev/null\0'
+            if (snapshot.head != witness.head or snapshot.branch != witness.branch or snapshot.index_tree != witness.tree
+                    or snapshot.untracked or snapshot.worktree_patch or snapshot.stashes or snapshot.files != files or snapshot.flags != flags
+                    or snapshot.config != unscoped(witness.context.config) + overrides or dict(snapshot.identity) != dict(witness.context.identity)
+                    or not witness.matches(repo, self.runner)):
+                raise FlurryError(f'Source changed during rehearsal: {repo}')
+        return snapshot
 
     def _no_gitlinks(self, repo: Path, tree: str) -> None:
         if any(item.startswith(b'160000 ') for item in self._git(repo, 'ls-tree', '-r', '-z', tree).split(b'\0')):
@@ -306,9 +337,15 @@ class Git:
         if attributes.exists() and attributes.read_bytes().strip():
             raise FlurryError(f'Source-only info/attributes are unsupported: {repo}')
 
-    def _commit(self, prepared: Prepared, message: str) -> None:
+    def _commit(self, prepared: Prepared, message: str, *, lock_only: bool = False) -> None:
         hooks = self.runner.git_path(prepared.repo, '--git-path', 'hooks')
         before = self._capture(prepared.trial, prepared.trial.parent)
+        if lock_only:
+            delta = self._paths(self._git(prepared.trial, 'diff-tree', '--no-renames', '--name-only', '-r', '-z', prepared.head, before.index_tree))
+            if delta != ('flake.lock',) or before.worktree_patch or before.untracked or before.head != prepared.head:
+                raise FlurryError('Lock commit would change paths other than the validated flake.lock')
+            if prepared.lock_state is not None and physical_file(prepared.trial / 'flake.lock') != prepared.lock_state:
+                raise FlurryError('flake.lock changed after validation')
         self._git(prepared.trial, '-c', f'core.hooksPath={hooks}', 'commit', '-m', message,
                   env={'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_CONFIG_NOSYSTEM': '1'})
         changed = f'Commit hooks changed the prepared candidate; inspect retained trial: {prepared.trial}'
@@ -394,9 +431,43 @@ class Git:
             if self._text(prepared.repo, 'rev-parse', f'{stash}^3^{{tree}}') != original.untracked_tree:
                 raise FlurryError('Source changed during capture; actual captured untracked stash retained')
 
+    def _is_ancestor(self, repo: Path, baseline: str, head: str) -> bool:
+        result = self.runner.call(['git', '-C', str(repo), '-c', 'submodule.recurse=false', '-c', 'core.hooksPath=/dev/null',
+                                   'merge-base', '--is-ancestor', baseline, head], None, None, {}, False)
+        if result.returncode not in (0, 1):
+            raise FlurryError('Could not verify rebase ancestry; originals unchanged')
+        return result.returncode == 0
+
+    def _clean_candidates(self, repo: Path, witness: CleanCheckout, destination: Path, fetched: str) -> tuple[CleanCheckout, CleanCheckout] | None:
+        context = Context.inspect(destination, self.runner)
+        if context is None or not context.valid(self.runner):
+            return None
+        if fetched != witness.head:
+            if not self._is_ancestor(destination, fetched, witness.head):
+                return None
+            baseline = Manifest.load(destination, self.runner, fetched)
+            if baseline is None:
+                return None
+            extra = set(baseline.attributes).difference(witness.manifest.attributes)
+            if extra:
+                def guarded(ctx):
+                    return replace(ctx, attrs=ctx.attrs + tuple(ctx.repo / name for name in extra))
+                witness = replace(witness, context=guarded(witness.context))
+                context = guarded(context)
+            if not witness.matches(repo, self.runner):
+                return None
+            if not context.valid(self.runner):
+                raise FlurryError(f'Git attribute or configuration context changed in the rehearsal: {destination}')
+        if os.path.lexists(destination / '.git/index') or any(os.path.lexists(destination / path) for path in witness.manifest.attributes):
+            return None
+        return witness, replace(witness, context=context)
+
     def prepare(self, repo: Path, destination: Path, baseline: str, dirty_mode: str,
-                message: str | None, commit_scope: str | None, *, remote: str = 'origin') -> Prepared:
+                message: str | None, commit_scope: str | None, *, remote: str = 'origin',
+                witness: CleanCheckout | None = None, remote_url: str | None = None) -> Prepared:
         repo, destination = repo.resolve(), destination.absolute()
+        if witness is not None and witness.context.repo != repo:
+            raise FlurryError(f'Clean witness does not belong to this checkout: {repo}')
         if destination.exists():
             raise FlurryError(f'Trial destination must not exist: {destination}')
         if destination == repo or repo in destination.parents:
@@ -408,23 +479,43 @@ class Git:
         if dirty_mode != 'commit' and (message is not None or commit_scope is not None):
             raise FlurryError('Commit message/scope only apply to dirty commit mode')
         marker = f'.flurry-{uuid.uuid4().hex}'
-        self._preflight(repo, (marker,))
-        url = self._text(repo, 'remote', 'get-url', remote)
+        url = remote_url if witness is not None and remote_url is not None else self._text(repo, 'remote', 'get-url', remote)
+        if remote_url is not None and url != remote_url:
+            raise FlurryError(f'Source remote URL changed during rehearsal: {repo}')
         if not url or url.startswith('-') or url.startswith('ext::'):
             raise FlurryError(f'Unsupported or empty remote URL in {repo}')
         ref = baseline if baseline.startswith('refs/heads/') else f'refs/heads/{baseline}'
-        if not self._succeeds(repo, 'check-ref-format', ref):
-            raise FlurryError(f'Invalid baseline branch: {baseline}')
+        self.runner.check_branch(repo, ref)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        original = self._capture(repo, destination.parent)
+        fetched = None
+        if witness is not None:
+            self._clone(repo, destination, witness.context.identity, url)
+            self._git(destination, 'fetch', '--no-recurse-submodules', 'origin', f'+{ref}:refs/flurry/baseline')
+            observed = os.fsdecode(self._git(destination, 'rev-parse', 'refs/flurry/baseline', 'HEAD', 'HEAD^{tree}', *REFS)).removesuffix('\n').split('\n')
+            fetched = observed[0]
+            if tuple(observed[1:]) != (witness.head, witness.tree, witness.branch):
+                raise FlurryError(f'Source changed during rehearsal: {repo}')
+            candidates = self._clean_candidates(repo, witness, destination, fetched)
+            if candidates is not None:
+                witness, trial = candidates
+                self._git(destination, '--no-replace-objects', 'read-tree', '--reset', '-u', witness.tree)
+                if os.path.lexists(destination / marker):
+                    raise FlurryError(f'Recovery sentinel collision: {destination / marker}')
+                if trial.context.may_ignore_marker(self.runner):
+                    ignored = self.runner.call(['git', '-C', str(destination), 'check-ignore', '--quiet', '--no-index', '--', marker], None, None, {}, False)
+                    if ignored.returncode != 1:
+                        raise FlurryError(f'Recovery sentinel collision or invalid ignore rules: {destination / marker}')
+                if not trial.matches(destination, self.runner, known_refs=fetched == witness.head):
+                    raise FlurryError(f'Source content does not roundtrip losslessly in rehearsal: {repo}')
+                return Prepared(repo, destination, witness, witness.head, fetched, witness.branch,
+                                remote, url, '', marker, dirty_mode, clean_trial=trial)
+        self._preflight_source(repo, marker, witness)
+        original = self._checked_capture(repo, destination.parent, witness)
         dirty = bool(self._git(repo, 'status', '--porcelain', '--untracked-files=all'))
         if dirty_mode == 'reject' and dirty:
             raise FlurryError(f'Dirty source rejected: {repo}')
-        self.runner.run(['git', '-c', 'core.fsmonitor=false', 'clone', '--quiet', '--local', '--no-hardlinks', '--no-checkout', '--', str(repo), str(destination)], None)
-        self._git(destination, 'config', 'core.fsmonitor', 'false')
-        for key, value in original.identity:
-            self._git(destination, 'config', '--local', '--replace-all', key, value)
-        self._git(destination, 'remote', 'set-url', 'origin', url)
+        if fetched is None:
+            self._clone(repo, destination, original.identity, url)
         self._git(destination, 'read-tree', original.index_tree)
         if self._attributes_file(repo) != self._attributes_file(destination):
             raise FlurryError(f'Source and rehearsal use different global Git attribute files: {repo}')
@@ -433,16 +524,17 @@ class Git:
         self._git(destination, 'checkout-index', '--all', '--force')
         if original.worktree_patch:
             self._git(destination, 'apply', '--binary', input_data=original.worktree_patch)
-        with tempfile.TemporaryDirectory(prefix='flurry-checkout-', dir=destination.parent) as temporary:
-            env = {'GIT_INDEX_FILE': str(Path(temporary) / 'index')}
-            self._git(destination, 'read-tree', original.untracked_tree, env=env)
-            self._reject_filters(destination, original.untracked, (), env, 'untracked restoration')
-            self._git(destination, 'checkout-index', '--all', env=env)
+        if original.untracked:
+            with tempfile.TemporaryDirectory(prefix='flurry-checkout-', dir=destination.parent) as temporary:
+                env = {'GIT_INDEX_FILE': str(Path(temporary) / 'index')}
+                self._git(destination, 'read-tree', original.untracked_tree, env=env)
+                self._reject_filters(destination, original.untracked, (), env, 'untracked restoration')
+                self._git(destination, 'checkout-index', '--all', env=env)
         self._filter_views(destination, paths)
         if self._files(destination, tuple(item.path for item in original.files)) != original.files:
             raise FlurryError(f'Source content does not roundtrip losslessly in rehearsal: {repo}')
         prepared = Prepared(repo, destination, original, original.head, '', original.branch,
-                            remote, url, '', marker, dirty_mode)
+                            remote, url, '', marker, dirty_mode, source_witness=witness)
         if dirty_mode == 'commit' and dirty:
             if commit_scope == 'all':
                 self._git(destination, 'add', '--all')
@@ -454,20 +546,16 @@ class Git:
         if remaining_paths.intersection({'flake.nix', 'flake.lock'}):
             raise FlurryError(f'Preserved user flake.nix/flake.lock edits overlap lock generation: {repo}')
         prepared.remaining_stash = self._stash(destination, marker)
-        self._git(destination, 'fetch', '--no-recurse-submodules', 'origin', f'+{ref}:refs/flurry/baseline')
-        prepared.baseline = self._text(destination, 'rev-parse', 'refs/flurry/baseline')
+        if fetched is None:
+            self._git(destination, 'fetch', '--no-recurse-submodules', 'origin', f'+{ref}:refs/flurry/baseline')
+            fetched = self._text(destination, 'rev-parse', 'refs/flurry/baseline')
+        prepared.baseline = fetched
         if any(Path(path).name == '.gitattributes' for path in remaining_paths):
             incoming = self._paths(self._git(destination, 'diff', '--name-only', '-z', original.head, prepared.baseline))
             if any(Path(path).name == '.gitattributes' for path in incoming):
                 raise FlurryError(f'Cannot safely merge preserved .gitattributes with incoming attribute changes: {repo}')
         self._tree_filters(prepared, prepared.baseline)
-        ancestry = self.runner.call([
-            'git', '-C', str(destination), '-c', 'submodule.recurse=false',
-            '-c', 'core.hooksPath=/dev/null', 'merge-base', '--is-ancestor', prepared.baseline, 'HEAD',
-        ], None, None, {}, False)
-        if ancestry.returncode not in (0, 1):
-            raise FlurryError('Could not verify rebase ancestry; originals unchanged')
-        if ancestry.returncode == 1:
+        if not self._is_ancestor(destination, prepared.baseline, 'HEAD'):
             try:
                 self._git(destination, '-c', 'core.editor=true', 'rebase', '--no-autostash', '--no-update-refs', 'refs/flurry/baseline',
                           env={'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_CONFIG_NOSYSTEM': '1'})
@@ -478,12 +566,30 @@ class Git:
         self.rehearse_restore(prepared)
         return prepared
 
+    def _clone(self, repo: Path, destination: Path, identity: tuple[tuple[str, str], ...], url: str) -> None:
+        config = [arg for key, value in dict(identity).items() for arg in ('--config', f'{key}={value}')]
+        self.runner.run(['git', '-c', 'core.fsmonitor=false', 'clone', '--quiet', '--local', '--no-hardlinks', '--no-checkout',
+                         '--config', 'core.fsmonitor=false', *config, '--', str(repo), str(destination)], None)
+        self._git(destination, 'remote', 'set-url', 'origin', url)
+
     def verify(self, prepared: Prepared) -> None:
-        self._preflight(prepared.repo, (prepared.marker,))
-        if self._capture(prepared.repo, prepared.trial.parent) != prepared.original or self._text(prepared.repo, 'remote', 'get-url', prepared.remote) != prepared.remote_url:
+        original = prepared.original
+        self._preflight_source(prepared.repo, prepared.marker, original if isinstance(original, CleanCheckout) else prepared.source_witness)
+        if isinstance(original, Snapshot) and (self._capture(prepared.repo, prepared.trial.parent) != original
+                or self._text(prepared.repo, 'remote', 'get-url', prepared.remote) != prepared.remote_url):
             raise FlurryError(f'Source changed during rehearsal: {prepared.repo}')
 
-    def rehearse_restore(self, prepared: Prepared) -> None:
+    def requires_promotion(self, prepared: Prepared) -> bool:
+        if prepared.clean_trial is not None:
+            return False
+        if (prepared.head != prepared.original.head or prepared.restored is None
+                or not prepared.restored.same_checkout(prepared.original)):
+            return True
+        if not self.rehearse_restore(prepared, checkpoint_trial=True).same_checkout(prepared.original):
+            raise FlurryError(f'Final restore rehearsal no longer matches the original checkout: {prepared.repo}')
+        return False
+
+    def rehearse_restore(self, prepared: Prepared, *, checkpoint_trial: bool = False) -> Snapshot:
         self._tree_filters(prepared, prepared.head)
         if self._text(prepared.trial, 'rev-parse', 'HEAD') != prepared.head or self._git(prepared.trial, 'status', '--porcelain'):
             raise FlurryError('Restore rehearsal requires a clean trial at the prepared commit')
@@ -497,6 +603,9 @@ class Git:
         # Destructive writes below are confined to our disposable trial and captured paths.
         self._git(prepared.trial, 'reset', '--hard', '--no-recurse-submodules', prepared.head)
         self._remove_untracked(prepared.trial, prepared.restored.untracked)
+        if checkpoint_trial:
+            prepared.pristine = self._capture(prepared.trial, prepared.trial.parent)
+        return prepared.restored
 
     def _remove_untracked(self, repo: Path, paths: tuple[str, ...]) -> None:
         for name in paths:
@@ -511,7 +620,32 @@ class Git:
             elif path.exists():
                 raise FlurryError(f'Refusing to remove non-file recovery path: {path}')
 
+    def verify_trial(self, prepared: Prepared) -> None:
+        if prepared.clean_trial is not None:
+            if not prepared.clean_trial.matches(prepared.trial, self.runner):
+                raise FlurryError(f'Final restore rehearsal no longer matches the original checkout: {prepared.repo}')
+        else:
+            self._preflight(prepared.trial, (prepared.marker,))
+            if prepared.pristine is None or self._capture(prepared.trial, prepared.trial.parent) != prepared.pristine:
+                raise FlurryError(f'Final restore rehearsal no longer matches the prepared trial: {prepared.trial}')
+
     def commit_lock(self, prepared: Prepared, message: str = 'Update flake.lock') -> None:
+        trial = prepared.clean_trial
+        lock = prepared.trial / 'flake.lock'
+        evidence = physical_file(lock)
+        if prepared.lock_state is not None and evidence != prepared.lock_state:
+            raise FlurryError('flake.lock changed after validation')
+        if trial is not None:
+            mode, digest, _ = evidence
+            old_mode = trial.manifest.entries.get('flake.lock', (b'missing', b''))[0]
+            if mode == old_mode and digest == trial.physical.get('flake.lock', b''):
+                return
+            if lock.is_symlink() or not lock.is_file() or not trial.matches(prepared.trial, self.runner, except_lock=True):
+                raise FlurryError(f'Lock generation changed the trial outside flake.lock: {prepared.trial}')
+            self.verify(prepared)
+            prepared.source_witness = prepared.original
+            prepared.original = self._checked_capture(prepared.repo, prepared.trial.parent, prepared.source_witness)
+            prepared.clean_trial = None
         if self._text(prepared.trial, 'rev-parse', 'HEAD') != prepared.head:
             raise FlurryError('Trial HEAD changed before lock commit')
         changed = set(self._paths(self._git(prepared.trial, 'diff', 'HEAD', '--name-only', '-z')))
@@ -520,15 +654,17 @@ class Git:
             raise FlurryError('Lock generation changed paths other than flake.lock')
         if changed:
             self._git(prepared.trial, 'add', '--', 'flake.lock')
-            self._commit(prepared, message)
+            self._commit(prepared, message, lock_only=True)
             prepared.head = self._text(prepared.trial, 'rev-parse', 'HEAD')
             prepared.restored = None
+        if trial is not None:
+            prepared.remaining_stash = self._stash(prepared.trial, prepared.marker)
 
     def promote(self, prepared: Prepared, run_id: str, *, before_source_write: Callable[[], None] | None = None) -> Recovery:
         if re.fullmatch(r'[A-Za-z0-9_-]+', run_id) is None:
             raise FlurryError('Invalid recovery run identifier')
         self.verify(prepared)
-        self.rehearse_restore(prepared)
+        self.rehearse_restore(prepared, checkpoint_trial=True)
         suffix = hashlib.sha256(str(prepared.repo).encode()).hexdigest()[:16]
         prefix = f'refs/flurry/{run_id}/{suffix}'
         record = Recovery(prepared, f'{prefix}/stash', f'{prefix}/remaining', f'{prefix}/prepared', '', None, 'untouched')
@@ -557,14 +693,19 @@ class Git:
             expected = prepared.restored
             if expected is None:
                 raise FlurryError('Missing restore rehearsal postcondition')
-            fields = ('head', 'branch', 'index_tree', 'worktree_patch', 'untracked_tree', 'untracked', 'files', 'flags')
-            if any(getattr(observed, field) != getattr(expected, field) for field in fields) or observed.stashes != prepared.original.stashes or observed.config != prepared.original.config or observed.identity != prepared.original.identity:
+            if not observed.same_checkout(expected) or observed.stashes != prepared.original.stashes or observed.config != prepared.original.config or observed.identity != prepared.original.identity:
                 raise FlurryError('Promotion postcondition changed; refusing ownership of unexpected edits')
             record.promoted = observed
             record.phase = 'promoted'
             return record
         except FlurryError as error:
             raise PromotionError(f'Promotion failed; recovery artifacts retained under {prefix}: {error}', record) from error
+
+    def verify_promoted(self, record: Recovery) -> None:
+        item = record.prepared
+        self._preflight(item.repo, (item.marker,))
+        if record.promoted is None or self._capture(item.repo, item.trial.parent) != record.promoted:
+            raise FlurryError(f'Source changed after promotion: {item.repo}')
 
     def cleanup(self, record: Recovery) -> None:
         if record.phase != 'promoted':
@@ -601,10 +742,11 @@ class Git:
             raise FlurryError(f'Recovery postcondition failed; retain {record.stash_ref}')
         record.phase = 'recovered'
 
-    def push(self, repo: Path, remote: str, destination_ref: str, expected_oid: str, *, push_url: str) -> None:
-        if not destination_ref.startswith('refs/heads/') or not self._succeeds(repo, 'check-ref-format', destination_ref):
-            raise FlurryError(f'Invalid push branch: {destination_ref}')
-        if self._text(repo, 'rev-parse', 'HEAD') != expected_oid or re.fullmatch(r'[0-9a-f]{40,64}', expected_oid) is None:
+    def push(self, repo: Path, remote: str, destination_ref: str, expected_oid: str, *, push_url: str, verify_source: Callable[[], None] | None = None) -> None:
+        self.runner.check_branch(repo, destination_ref)
+        if verify_source is not None:
+            verify_source()
+        if re.fullmatch(r'(?:[0-9a-f]{40}|[0-9a-f]{64})', expected_oid) is None or (verify_source is None and self._text(repo, 'rev-parse', 'HEAD') != expected_oid):
             raise FlurryError(f'HEAD changed before push: {repo}')
         # Ordinary source push hooks are honored; force and recursive submodule pushes are forbidden.
         self.runner.run(['git', '-C', str(repo), '-c', 'submodule.recurse=false', 'push',

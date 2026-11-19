@@ -137,8 +137,10 @@ class LocalGitSyncTests(SyncFixture, unittest.TestCase):
                 self.assertLess(commands.index(push), commands.index(observations[-1]))
                 self.assertEqual(observations[-1][2], str(self.repo))
                 self.assertFalse(any(args[-1].endswith(":refs/flurry/push-base") for args in commands))
-                ancestry = [args for args in commands if "merge-base" in args and args[-1] == head]
+                after_first_advertisement = commands[commands.index(observations[0]) + 1:]
+                ancestry = [args for args in after_first_advertisement if "merge-base" in args and args[-1] == head]
                 self.assertEqual(len(ancestry), 2 if advancing else 0)
+                self.assertFalse(any("stash" in args and "push" in args for args in commands))
                 self.assertEqual(self.remote_head("a"), head)
         self.assertEqual(audit.read_text().splitlines(), ["push", "push"])
 
@@ -239,10 +241,305 @@ class LocalGitSyncTests(SyncFixture, unittest.TestCase):
         self.assertEqual((self.repo / "edit.txt").read_text(), "unstaged\n")
         self.assertEqual(untracked.read_bytes(), b"private\x00\xff")
 
+    def test_clean_porcelain_does_not_prove_the_final_checkout_matches(self):
+        initial = self.remote_head("a")
+        (self.repo / ".gitattributes").write_text("edit.txt text eol=lf\n")
+        self.git(self.repo, "add", ".gitattributes")
+        self.git(self.repo, "commit", "-m", "text attributes")
+        commit_lock = self.sync.git.commit_lock
+        for change in ("normalized bytes", "hidden untracked"):
+            with self.subTest(change=change):
+                def alter_trial(item):
+                    commit_lock(item)
+                    if change == "normalized bytes":
+                        (item.trial / "edit.txt").write_bytes(b"base\r\n")
+                        self.git(item.trial, "add", "edit.txt")
+                    else:
+                        self.git(item.trial, "config", "status.showUntrackedFiles", "no")
+                        (item.trial / "late-file").write_text("not rehearsed\n")
+                    self.assertEqual(self.git(item.trial, "status", "--porcelain"), "")
+
+                with patch.object(self.sync.git, "commit_lock", side_effect=alter_trial):
+                    with self.assertRaisesRegex(FlurryError, "Final restore rehearsal"):
+                        self.run_sync(self.preserve)
+                self.assertEqual(self.remote_head("a"), initial)
+                self.assertEqual(self.git(self.repo, "for-each-ref", "refs/flurry/"), "")
+
+    def assert_unchanged_push_refuses_drift(self, mutate):
+        audit = self.directory / "pushed"
+        hook = self.repo / ".git/hooks/pre-push"
+        hook.write_text(f'#!/bin/sh\ntouch "{audit}"\n')
+        hook.chmod(0o755)
+        action = Journal.action
+
+        def mutate_at_push(journal, name):
+            action(journal, name)
+            if name == "pushing:a":
+                mutate()
+
+        with patch.object(Journal, "action", new=mutate_at_push):
+            with self.assertRaisesRegex(FlurryError, "Source changed during rehearsal"):
+                self.run_sync(self.preserve)
+        self.assertFalse(audit.exists())
+        failed = self.journal()
+        self.assertNotIn("recovery", failed["repositories"]["a"])
+        self.assertEqual(self.git(self.repo, "for-each-ref", "refs/flurry/"), "")
+        with self.assertRaisesRegex(FlurryError, "checkout changed"):
+            self.sync.resume(load_config(self.root, ()), failed["id"])
+
+    def test_unchanged_push_detects_edit_with_same_head(self):
+        path = self.repo / "edit.txt"
+        self.assert_unchanged_push_refuses_drift(lambda: path.write_text("concurrent edit\n"))
+        self.assertEqual(path.read_text(), "concurrent edit\n")
+
+    def test_unchanged_push_detects_branch_switch_with_same_head(self):
+        self.assert_unchanged_push_refuses_drift(lambda: self.git(self.repo, "checkout", "-b", "other"))
+        self.assertEqual(self.git(self.repo, "symbolic-ref", "HEAD"), "refs/heads/other")
+
+    def test_unchanged_push_refuses_late_private_trial_mutation(self):
+        original = self.remote_head("a")
+        self.git(self.repo, "commit", "--allow-empty", "-m", "ready to publish")
+        action = Journal.action
+
+        def change_trial(journal, name):
+            action(journal, name)
+            if name == "pushing:a":
+                trial = Path(journal.document["repositories"]["a"]["trial"])
+                (trial / "edit.txt").write_text("changed after validation\n")
+
+        with patch.object(Journal, "action", new=change_trial):
+            with self.assertRaisesRegex(FlurryError, "trial|rehearsal"):
+                self.run_sync(self.preserve)
+        self.assertEqual(self.remote_head("a"), original)
+
+    def test_ahead_checkout_with_inert_root_and_nested_attributes_needs_no_stash(self):
+        nested = self.repo / "patches"
+        nested.mkdir()
+        (self.repo / ".gitattributes").write_bytes(b"*.age binary\n")
+        (nested / ".gitattributes").write_bytes(b"# Preserve patch whitespace.\n*.patch -whitespace\n")
+        (self.repo / "secret.age").write_bytes(b"cipher\x00\r\n")
+        (nested / "feature.patch").write_bytes(b"context \r\n")
+        self.git(self.repo, "add", ".")
+        self.git(self.repo, "commit", "-m", "inert attribute rules")
+        self.git(self.repo, "push", "origin", "main")
+        (self.repo / "edit.txt").write_text("local work\n")
+        self.git(self.repo, "commit", "-am", "advance locally")
+        head = self.git(self.repo, "rev-parse", "HEAD")
+        with patch.object(self.runner, "call", wraps=self.runner.call) as trace:
+            result = self.run_sync(self.preserve)
+        self.assertEqual(self.remote_head("a"), head)
+        trial = Path(result.document["repositories"]["a"]["trial"])
+        self.assertEqual((trial / "secret.age").read_bytes(), b"cipher\x00\r\n")
+        self.assertEqual((trial / "patches/feature.patch").read_bytes(), b"context \r\n")
+        commands = [entry.args[0] for entry in trace.call_args_list]
+        self.assertFalse(any("stash" in args and "push" in args for args in commands))
+
+    def test_clean_local_head_does_not_skip_filter_validation_of_the_fetched_ancestor(self):
+        _, origin, seed = self.repos["a"]
+        (seed / ".gitattributes").write_text("edit.txt filter=filter-in-fetched-tree\n")
+        self.git(seed, "add", ".gitattributes")
+        self.git(seed, "commit", "-m", "filtered baseline")
+        self.git(seed, "push", "origin", "main")
+        self.git(self.repo, "pull", "--ff-only")
+        self.git(self.repo, "rm", ".gitattributes")
+        self.git(self.repo, "commit", "-m", "unfiltered local work")
+        remote = self.git(origin, "rev-parse", "refs/heads/main")
+        with self.assertRaisesRegex(FlurryError, "filter-in-fetched-tree"):
+            self.run_sync(self.preserve)
+        self.assertEqual(self.remote_head("a"), remote)
+
+    def assert_ancestor_attributes_guarded(self, location):
+        previous = self.repo / "retired" / "data"
+        previous.mkdir(parents=True)
+        (previous / "file.bin").write_bytes(b"original\n")
+        self.git(self.repo, "add", "retired")
+        (self.repo / ".gitignore").write_text("retired/\n")
+        self.git(self.repo, "add", ".gitignore")
+        self.git(self.repo, "commit", "-m", "publish a nested tree")
+        self.git(self.repo, "push", "origin", "main")
+        original = self.remote_head("a")
+        self.git(self.repo, "rm", "-r", "retired")
+        self.git(self.repo, "commit", "-m", "retire the directory locally")
+        action = Journal.action
+
+        def add_attributes(journal, name):
+            action(journal, name)
+            if name == "pushing:a":
+                repo = self.repo if location == "source" else Path(journal.document["repositories"]["a"]["trial"])
+                path = repo / "retired/data/.gitattributes"
+                path.parent.mkdir(parents=True)
+                path.write_text("*.bin filter=late-driver\n")
+                self.assertEqual(self.git(repo, "status", "--porcelain"), "")
+
+        with patch.object(Journal, "action", new=add_attributes):
+            with self.assertRaisesRegex(FlurryError, "Source changed|rehearsal"):
+                self.run_sync(self.preserve)
+        self.assertEqual(self.remote_head("a"), original)
+        self.assertEqual(self.git(self.repo, "for-each-ref", "refs/flurry/"), "")
+
+    def test_ahead_source_rechecks_ignored_attributes_along_baseline_only_paths(self):
+        self.assert_ancestor_attributes_guarded("source")
+
+    def test_ahead_trial_rechecks_ignored_attributes_along_baseline_only_paths(self):
+        self.assert_ancestor_attributes_guarded("trial")
+
+    def test_head_is_checked_after_the_last_source_index_observation(self):
+        old = self.remote_head("a")
+        next_head = self.git(self.repo, "commit-tree", "HEAD^{tree}", "-p", "HEAD", "-m", "same tree")
+        call, action = self.runner.call, Journal.action
+        pushing = False
+        changed = False
+
+        def phase(journal, name):
+            nonlocal pushing
+            action(journal, name)
+            pushing = name == "pushing:a"
+
+        def late_head(args, *rest):
+            nonlocal changed
+            result = call(args, *rest)
+            if pushing and not changed and "ls-files" in args and str(self.repo) in args:
+                changed = True
+                self.git(self.repo, "update-ref", "refs/heads/main", next_head)
+            return result
+
+        with patch.object(Journal, "action", new=phase), patch.object(self.runner, "call", side_effect=late_head):
+            with self.assertRaisesRegex(FlurryError, "Source changed|HEAD changed"):
+                self.run_sync(self.preserve)
+        self.assertTrue(changed)
+        self.assertEqual(self.remote_head("a"), old)
+
+    def test_duplicate_discovered_names_are_rejected_before_rehearsal(self):
+        (self.repo / 'flake.nix').write_text('{ outputs = _: {}; }\n')
+        self.git(self.repo, 'add', 'flake.nix')
+        self.git(self.repo, 'commit', '-m', 'make this checkout discoverable')
+        self.git(self.repo, 'push', 'origin', 'main')
+        head = self.remote_head('a')
+        other = self.root / 'other'
+        self.git(self.root, 'clone', str(self.repos['a'][1]), str(other))
+        self.git(other, 'config', 'fixture.label', 'other')
+        (other / 'edit.txt').write_text('staged\n')
+        self.git(other, 'add', 'edit.txt')
+        (other / 'edit.txt').write_text('unstaged\n')
+        (self.root / 'flurry.toml').write_text('[repositories.a]\npath = "other"\n')
+        with patch.object(self.runner, 'call', wraps=self.runner.call) as trace:
+            with self.assertRaisesRegex(FlurryError, 'Duplicate repository name'):
+                self.run_sync(self.preserve)
+        commands = [entry.args[0] for entry in trace.call_args_list]
+        self.assertFalse(any(set(args).intersection({'clone', 'fetch', 'push'}) for args in commands))
+        self.assertFalse((self.root / '.flurry/runs').exists())
+        self.assertEqual(self.remote_head('a'), head)
+        self.assertEqual(self.git(other, 'show', ':edit.txt'), 'staged')
+        self.assertEqual((other / 'edit.txt').read_text(), 'unstaged\n')
+
+    def test_ambiguous_branch_preserves_native_symbolic_ref_abbreviation(self):
+        self.git(self.repo, "update-ref", "refs/remotes/main", "HEAD")
+        branch = self.git(self.repo, "symbolic-ref", "--short", "HEAD")
+        plan = plan_sync(load_config(self.root, ()), self.runner, self.nix, self.preserve)
+        self.assertEqual(plan.targets[0].repository.branch, branch)
+        self.assertEqual(plan.targets[0].push_ref, "refs/heads/" + branch)
+
+    def test_changed_fetch_url_cannot_certify_a_stale_clean_baseline(self):
+        _, origin, seed = self.repos["a"]
+        other = self.directory / "advanced.git"
+        self.git(self.directory, "clone", "--bare", str(origin), str(other))
+        self.git(seed, "commit", "--allow-empty", "-m", "advance the replacement baseline")
+        self.git(seed, "push", str(other), "main")
+        self.git(self.repo, "remote", "set-url", "--push", "origin", str(origin))
+        self.assertNotEqual(self.git(other, "rev-parse", "main"), self.remote_head("a"))
+        initial = self.remote_head("a")
+        call = self.runner.call
+        changed = False
+
+        def switch_after_origin_read(args, *rest):
+            nonlocal changed
+            result = call(args, *rest)
+            if not changed and str(self.repo) in args and args[-3:] == ["remote", "get-url", "origin"]:
+                changed = True
+                self.git(self.repo, "remote", "set-url", "origin", str(other))
+            return result
+
+        with patch.object(self.runner, "call", side_effect=switch_after_origin_read):
+            with self.assertRaisesRegex(FlurryError, "changed"):
+                self.run_sync(self.preserve)
+        self.assertTrue(changed)
+        self.assertEqual(self.remote_head("a"), initial)
+        self.assertEqual(self.git(self.repo, "rev-parse", "HEAD"), initial)
+        self.assertFalse(any(event.startswith("Publishing") for event in self.events))
+
+    def test_symbolic_head_is_preserved_when_a_tag_is_also_named_head(self):
+        head = self.remote_head("a")
+        self.git(self.repo, "update-ref", "refs/tags/HEAD", head)
+        self.assertEqual(self.run_sync(self.preserve).document["status"], "complete")
+        self.assertEqual(self.git(self.repo, "symbolic-ref", "HEAD"), "refs/heads/main")
+        self.assertEqual(self.remote_head("a"), head)
+
+    def test_branch_name_can_contain_a_unicode_line_separator(self):
+        branch = "a\u2028b"
+        self.git(self.repo, "checkout", "-b", branch)
+        self.git(self.repo, "push", "--set-upstream", "origin", branch)
+        self.assertEqual(self.run_sync(self.preserve).document["status"], "complete")
+
+    def test_source_only_sentinel_ignore_is_irrelevant_without_source_promotion(self):
+        (self.repo / ".git/info/exclude").write_text(".flurry-*\n")
+        self.assertEqual(self.run_sync(self.preserve).document["status"], "complete")
+
+    def test_nonflake_provider_can_retain_a_dangling_tracked_lock_symlink(self):
+        (self.repo / "flake.lock").symlink_to("not-a-flake")
+        self.git(self.repo, "add", "flake.lock")
+        self.git(self.repo, "commit", "-m", "unrelated symlink")
+        self.git(self.repo, "push", "origin", "main")
+        self.assertEqual(self.run_sync(self.preserve).document["status"], "complete")
+        self.assertEqual(os.readlink(self.repo / "flake.lock"), "not-a-flake")
+
+    def test_external_attributes_path_is_not_truncated_at_a_vertical_tab(self):
+        directory = self.directory / "real\vxdg"
+        (directory / "git").mkdir(parents=True)
+        (directory / "git/attributes").write_text("edit.txt filter=external-fidelity-test\n")
+        self.runner.environment["XDG_CONFIG_HOME"] = str(directory)
+        with self.assertRaisesRegex(FlurryError, "external-fidelity-test"):
+            self.run_sync(self.preserve)
+
+    def test_intent_to_add_at_a_committed_empty_blob_is_not_clean(self):
+        name = "empty"
+        (self.repo / name).touch()
+        self.git(self.repo, "add", name)
+        self.git(self.repo, "commit", "-m", "space for data")
+        self.git(self.repo, "push", "origin", "main")
+        staged = self.git(self.repo, "ls-files", "--stage", "--", name)
+        self.git(self.repo, "rm", "--cached", name)
+        self.git(self.repo, "add", "--intent-to-add", name)
+        self.assertEqual(self.git(self.repo, "ls-files", "--stage", "--", name), staged)
+        with self.assertRaisesRegex(FlurryError, "Intent-to-add"):
+            self.run_sync(self.preserve)
+
+    def test_published_checkpoint_records_edits_made_by_the_source_push_hook(self):
+        b = self.add_repo("b", {}, flake=False)
+        (self.root / "flurry.toml").write_text('[repositories.a]\n[repositories.b]\n')
+        first = self.repo / ".git/hooks/pre-push"
+        first.write_text("#!/bin/sh\nprintf 'hook edit\\n' > edit.txt\n")
+        first.chmod(0o755)
+        second = b / ".git/hooks/pre-push"
+        second.write_text("#!/bin/sh\nexit 1\n")
+        second.chmod(0o755)
+        with self.assertRaisesRegex(FlurryError, "Published: a"):
+            self.run_sync(self.preserve)
+        saved = self.journal()
+        self.assertEqual((self.repo / "edit.txt").read_text(), "hook edit\n")
+        second.unlink()
+        (self.repo / "edit.txt").write_text("later edit\n")
+        with self.assertRaisesRegex(FlurryError, "checkout changed"):
+            self.sync.resume(load_config(self.root, ()), saved["id"])
+        (self.repo / "edit.txt").write_text("hook edit\n")
+        self.assertEqual(self.sync.resume(load_config(self.root, ()), saved["id"]).document["status"], "complete")
+
     def test_collision_guard_checks_refs_created_at_the_promotion_journal_boundary(self):
         initial = self.remote_head("a")
-        self.git(self.repo, "commit", "--allow-empty", "-m", "local work")
-        candidate = self.git(self.repo, "rev-parse", "HEAD")
+        seed = self.repos["a"][2]
+        self.git(seed, "commit", "--allow-empty", "-m", "upstream work")
+        self.git(seed, "push", "origin", "HEAD:refs/heads/baseline")
+        (self.root / "flurry.toml").write_text('[repositories.a]\nrebase_onto = "origin/baseline"\n')
+        candidate = self.git(seed, "rev-parse", "HEAD")
         suffix = hashlib.sha256(str(self.repo).encode()).hexdigest()[:16]
         save = Journal.save
 
@@ -301,6 +598,7 @@ class SyncTests(SyncFixture, unittest.TestCase):
         commands = (
             ("diff", "--cached", "--binary"), ("diff", "--binary"),
             ("stash", "list", "--format=%H"), ("ls-files", "--others", "--exclude-standard"),
+            ("reflog", "show", "--format=%H %gs", "HEAD"),
         )
         before = [self.git(a, *args) for args in commands]
         refs_before = self.git(a, "for-each-ref", "--format=%(refname) %(objectname)")
@@ -328,6 +626,9 @@ class SyncTests(SyncFixture, unittest.TestCase):
 
     def test_cleanup_failure_is_reported_after_publication(self):
         a = self.add_repo("a", {})
+        seed = self.repos["a"][2]
+        self.git(seed, "commit", "--allow-empty", "-m", "upstream work")
+        self.git(seed, "push", "origin", "main")
         with patch.object(self.sync.git, "cleanup", side_effect=FlurryError("cleanup refused")):
             with self.assertRaisesRegex(FlurryError, "cleanup refused.*\\nPublished: a"):
                 self.run_sync(self.options("preserve"))
@@ -471,6 +772,8 @@ class SyncTests(SyncFixture, unittest.TestCase):
         unstaged = self.git(a, "diff", "--binary")
         result = self.run_sync(self.options("preserve"))
         self.assertEqual(result.document["status"], "complete")
+        repositories = result.document["repositories"]
+        self.assertEqual({name for name, entry in repositories.items() if "recovery" in entry}, {"b", "c"})
         self.assertNotEqual(old_b, self.remote_head("b"))
         self.assertEqual(self.nix.locked_inputs(b)["a"].rev, self.remote_head("a"))
         self.assertEqual(self.nix.locked_inputs(c)["a"].rev, self.remote_head("a"))
@@ -481,7 +784,9 @@ class SyncTests(SyncFixture, unittest.TestCase):
         published = self.git(self.repos["a"][1], "ls-tree", "-r", "--name-only", "main")
         self.assertNotIn("untracked.txt", published)
         heads = [self.remote_head(name) for name in ("a", "b", "c")]
-        self.run_sync(self.options("preserve"))
+        unchanged = self.run_sync(self.options("preserve"))
+        for entry in unchanged.document["repositories"].values():
+            self.assertNotIn("recovery", entry)
         self.assertEqual(heads, [self.remote_head(name) for name in ("a", "b", "c")])
 
     def test_checks_none_still_runs_consumer_commit_hook_before_publishing_lock(self):
@@ -571,6 +876,65 @@ class SyncTests(SyncFixture, unittest.TestCase):
         self.assertIn("--option allow-import-from-derivation false", errors.getvalue())
         self.assertIn("flake check --no-write-lock-file --no-build", errors.getvalue())
         self.assertNotIn("\x1b", output.getvalue() + errors.getvalue())
+
+    def test_generated_lock_must_not_adopt_a_source_edit_during_promotion_capture(self):
+        a = self.add_repo("a", {})
+        b = self.add_repo("b", {"a": "a"})
+        self.git(a, "commit", "--allow-empty", "-m", "advance the provider")
+        old_b = self.remote_head("b")
+        capture = self.sync.git._capture
+        changed = False
+
+        def concurrent_capture(repo, scratch):
+            nonlocal changed
+            if repo == b and not changed and self.remote_head("a") == self.git(a, "rev-parse", "HEAD"):
+                changed = True
+                (b / "edit.txt").write_text("new user work\n")
+            return capture(repo, scratch)
+
+        with patch.object(self.sync.git, "_capture", side_effect=concurrent_capture):
+            with self.assertRaisesRegex(FlurryError, "Source changed"):
+                self.run_sync(self.options("preserve"))
+        self.assertTrue(changed)
+        self.assertEqual((b / "edit.txt").read_text(), "new user work\n")
+        self.assertEqual(self.remote_head("b"), old_b)
+        self.assertEqual(self.git(b, "for-each-ref", "refs/flurry/"), "")
+
+    def test_generated_lock_cannot_publish_a_staged_tab_suffixed_path(self):
+        a = self.add_repo("a", {})
+        b = self.add_repo("b", {"a": "a"})
+        path = "note\tflake.lock"
+        (b / path).write_text("original\n")
+        self.git(b, "add", path)
+        self.git(b, "commit", "-m", "tab-suffixed path")
+        self.git(b, "push", "origin", "main")
+        old_b = self.remote_head("b")
+        self.git(a, "commit", "--allow-empty", "-m", "advance the provider")
+        update = self.nix.update
+
+        def stage_other_lock(checkout, inputs):
+            update(checkout, inputs)
+            (checkout / path).write_text("not validated\n")
+            self.git(checkout, "add", path)
+            (checkout / path).write_text("original\n")
+
+        with patch.object(self.nix, "update", side_effect=stage_other_lock):
+            with self.assertRaisesRegex(FlurryError, "outside flake.lock|other than"):
+                self.run_sync(self.options("preserve"))
+        self.assertEqual(self.remote_head("b"), old_b)
+
+    def test_sentinel_ignored_by_consumer_blocks_before_provider_publication(self):
+        a = self.add_repo("a", {})
+        b = self.add_repo("b", {"a": "a"})
+        (b / ".gitignore").write_text(".flurry-*\n")
+        self.git(b, "add", ".gitignore")
+        self.git(b, "commit", "-m", "custom ignores")
+        self.git(b, "push", "origin", "main")
+        old = self.remote_head("a")
+        self.git(a, "commit", "--allow-empty", "-m", "not yet published")
+        with self.assertRaisesRegex(FlurryError, "sentinel collision"):
+            self.run_sync(self.options("preserve"))
+        self.assertEqual(self.remote_head("a"), old)
 
     def test_new_lock_is_git_visible_to_the_validation_gate(self):
         self.add_repo("a", {})
@@ -728,7 +1092,7 @@ class SyncTests(SyncFixture, unittest.TestCase):
         retained = {}
         for name, (repo, _, _) in self.repos.items():
             refs = self.git(repo, "for-each-ref", "--format=%(refname) %(objectname)", "refs/flurry/")
-            self.assertEqual(len(refs.splitlines()), 3)
+            self.assertEqual(len(refs.splitlines()), 3 if name == "b" else 0)
             retained[name] = refs
         hook.unlink()
         resumed = self.sync.resume(load_config(self.root, ()), data["id"])

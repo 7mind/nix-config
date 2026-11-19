@@ -7,6 +7,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from .clean import REFS, Context
 from .nix import Input, Nix
 from .process import FlurryError, Runner
 from .source import Source, parse_source
@@ -41,6 +42,7 @@ class Repository:
     upstream: str | None
     excluded: bool
     settings: RepoSettings
+    checkout_refs: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -169,7 +171,41 @@ def _optional(runner: Runner, path: Path, *arguments: str) -> str | None:
     return result.stdout.decode(errors="surrogateescape").strip() or None
 
 
-def discover(config: Config, runner: Runner) -> tuple[Repository, ...]:
+def _repository(config: Config, path: Path, settings: RepoSettings, runner: Runner,
+                contexts: dict[Path, Context] | None) -> Repository:
+    relative = os.path.relpath(path, config.root).replace(os.sep, "/")
+    excluded = any(fnmatch.fnmatchcase(relative, pattern) for pattern in config.excludes)
+    context = Context.inspect(path, runner) if contexts is not None and not excluded else None
+    metadata = runner.call(["git", "-C", str(path), "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir",
+                            "HEAD", "HEAD^{tree}", *REFS, "@{upstream}", "--abbrev-ref", "HEAD"], None, None, {}, False)
+    fields = os.fsdecode(metadata.stdout).removesuffix("\n").split("\n")
+    checkout_refs = None
+    if not metadata.returncode and len(fields) == 7 and fields[4].startswith("refs/heads/") and fields[5].startswith("refs/remotes/"):
+        root, storage, head, tree, branch_ref, upstream, branch = fields
+        top, common_dir = Path(root).resolve(), Path(storage).resolve()
+        if branch_ref == "refs/heads/" + branch:
+            checkout_refs = (head, tree, branch_ref)
+        else:
+            branch = _optional(runner, path, "symbolic-ref", "--quiet", "--short", "HEAD")
+    else:
+        top = Path(runner.git_text(path, "rev-parse", "--show-toplevel")).resolve()
+        common_dir = Path(runner.git_text(path, "rev-parse", "--path-format=absolute", "--git-common-dir")).resolve()
+        branch = _optional(runner, path, "symbolic-ref", "--quiet", "--short", "HEAD")
+        head = runner.git_text(path, "rev-parse", "--verify", "HEAD")
+        upstream = _optional(runner, path, "rev-parse", "--symbolic-full-name", "@{upstream}")
+    if top != path:
+        raise FlurryError(f"Repository path is not a checkout root: {path}")
+    origin = _optional(runner, path, "remote", "get-url", "origin")
+    if context is not None and contexts is not None:
+        if not context.config_matches(runner):
+            raise FlurryError(f"{path.name}: Git configuration changed during repository discovery")
+        if checkout_refs is not None:
+            contexts[path] = context
+    return Repository(settings.name, path, common_dir, branch, head, origin, upstream, excluded, settings, checkout_refs)
+
+
+def discover(config: Config, runner: Runner, *, verified: dict[Path, Repository] | None = None, contexts: dict[Path, Context] | None = None,
+             declarations: dict[Path, tuple[Input, ...]] | None = None, nix: Nix | None = None) -> tuple[Repository, ...]:
     configured = {settings.path.resolve(): settings for settings in config.repositories}
     candidates: dict[Path, RepoSettings] = dict(configured)
     for child in sorted(config.root.iterdir()):
@@ -215,32 +251,31 @@ def discover(config: Config, runner: Runner) -> tuple[Repository, ...]:
     found: list[Repository] = []
     all_repositories: list[Repository] = []
     for path, settings in sorted(candidates.items(), key=lambda pair: pair[1].name):
-        top = Path(runner.git_text(path, "rev-parse", "--show-toplevel")).resolve()
-        if top != path:
-            raise FlurryError(f"Repository path is not a checkout root: {path}")
-        common_dir = Path(runner.git_text(path, "rev-parse", "--path-format=absolute", "--git-common-dir")).resolve()
-        branch = _optional(runner, path, "symbolic-ref", "--quiet", "--short", "HEAD")
-        head = runner.git_text(path, "rev-parse", "--verify", "HEAD")
-        origin = _optional(runner, path, "remote", "get-url", "origin")
-        upstream = _optional(runner, path, "rev-parse", "--symbolic-full-name", "@{upstream}")
-        relative = os.path.relpath(path, config.root).replace(os.sep, "/")
-        matches = {pattern for pattern in config.excludes if fnmatch.fnmatchcase(relative, pattern)}
-        repository = Repository(settings.name, path, common_dir, branch, head, origin, upstream, bool(matches), settings)
+        enrolled = path in configured or (path / "flake.nix").is_file()
+        repository = (verified or {}).get(path) or _repository(config, path, settings, runner, contexts if enrolled else None)
         all_repositories.append(repository)
-        if path in configured or (path / "flake.nix").is_file():
+        if enrolled:
             found.append(repository)
     identities: set[str] = set()
-    if found:
-        nix = Nix(runner)
+    if len(found) < len(all_repositories):
+        nix = nix or Nix(runner)
         for repository in found:
             if not repository.excluded and (repository.path / "flake.nix").is_file():
-                identities.update(item.source.repository_id for item in nix.inputs(repository.path) if item.source is not None)
+                items = nix.inputs(repository.path)
+                if declarations is not None:
+                    declarations[repository.path] = items
+                identities.update(item.source.repository_id for item in items if item.source is not None)
     for repository in all_repositories:
         if repository in found or repository.origin is None:
             continue
         source = parse_source(repository.origin, repository.path)
         if source is not None and source.repository_id in identities:
             found.append(repository)
+    names: dict[str, Path] = {}
+    for repository in found:
+        if repository.name in names:
+            raise FlurryError(f"Duplicate repository name {repository.name!r}: {names[repository.name]} and {repository.path}")
+        names[repository.name] = repository.path
     return tuple(sorted(found, key=lambda repository: repository.name))
 
 
@@ -255,7 +290,7 @@ def provider_identities(repository: Repository) -> frozenset[str]:
     return frozenset(identities)
 
 
-def build_graph(repositories: tuple[Repository, ...], nix: Nix) -> WorkspaceGraph:
+def build_graph(repositories: tuple[Repository, ...], nix: Nix, *, declarations: dict[Path, tuple[Input, ...]] | None = None) -> WorkspaceGraph:
     providers: dict[str, list[Repository]] = {}
     for repository in repositories:
         for identity in provider_identities(repository):
@@ -264,7 +299,8 @@ def build_graph(repositories: tuple[Repository, ...], nix: Nix) -> WorkspaceGrap
     for consumer in repositories:
         if consumer.excluded or not (consumer.path / "flake.nix").is_file():
             continue
-        for item in nix.inputs(consumer.path, base=consumer.settings.path):
+        items = (declarations or {}).get(consumer.path)
+        for item in items if items is not None else nix.inputs(consumer.path, base=consumer.settings.path):
             if item.source is None:
                 continue
             choices = providers.get(item.source.repository_id, [])
