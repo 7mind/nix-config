@@ -93,3 +93,19 @@ class Runner:
 
     def git_text(self, repo: Path, *args: str) -> str:
         return self.git(repo, *args).decode(errors="surrogateescape").strip()
+
+
+def remote_head(runner: Runner, repo: Path, url: str, ref: str) -> str | None:
+    exact_ref = os.fsencode(ref)
+    head = None
+    for row in runner.git(repo, "ls-remote", "--refs", "--", url, ref).splitlines(keepends=True):
+        match = re.fullmatch(rb"([0-9a-f]{40}|[0-9a-f]{64})\t(refs/[^\x00-\x20\x7f]+)\n", row)
+        if match is None or not match[1].strip(b"0"):
+            raise FlurryError("Malformed/ambiguous remote ref response")
+        if match[2] == exact_ref:
+            if head is not None:
+                raise FlurryError("Malformed/ambiguous remote ref response")
+            head = match[1].decode("ascii")
+        elif not match[2].endswith(b"/" + exact_ref):
+            raise FlurryError("Malformed/ambiguous remote ref response")
+    return head

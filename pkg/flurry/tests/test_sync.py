@@ -1,5 +1,6 @@
 """Effectual-GoodCommunication: actual Git and Nix, temporary file-only remotes."""
 import contextlib
+import hashlib
 import io
 import json
 import os
@@ -14,7 +15,8 @@ from unittest.mock import patch
 from flurry.cli import main
 from flurry.git import Git
 from flurry.nix import Nix
-from flurry.process import FlurryError, Runner
+from flurry.process import FlurryError, Runner, remote_head
+from flurry.state import Journal
 from flurry.sync import Sync, SyncOptions, frozen_lock, plan_sync
 from flurry.workspace import load_config
 
@@ -30,8 +32,7 @@ class FrozenBoundaryTests(unittest.TestCase):
             self.assertEqual(before, frozen_lock(root, {"github.com/example/frozen"}))
 
 
-@unittest.skipUnless(shutil.which("nix") and os.environ.get("FLURRY_REAL_NIX") != "0", "real-Nix leg explicitly disabled or Nix unavailable")
-class SyncTests(unittest.TestCase):
+class SyncFixture:
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="flurry-sync-")
         self.addCleanup(self.temporary.cleanup)
@@ -60,14 +61,15 @@ class SyncTests(unittest.TestCase):
     def git(self, path, *args):
         return self.runner.git_text(path, *args)
 
-    def add_repo(self, name, dependencies):
+    def add_repo(self, name, dependencies, *, flake=True):
         origin = self.origins / (name + ".git")
         seed = self.seeds / name
         self.runner.run(["git", "init", "--bare", "--initial-branch=main", str(origin)], None)
         self.runner.run(["git", "init", "--initial-branch=main", str(seed)], None)
         inputs = "\n".join(f'  inputs.{key}.url = "git+{self.origins.joinpath(provider + ".git").as_uri()}?ref=main";' for key, provider in dependencies.items())
         args = ", ".join(["self", *dependencies])
-        (seed / "flake.nix").write_text("{\n" + inputs + f"\n  outputs = {{ {args} }}: {{ lib.answer = 1; }};\n}}\n")
+        if flake:
+            (seed / "flake.nix").write_text("{\n" + inputs + f"\n  outputs = {{ {args} }}: {{ lib.answer = 1; }};\n}}\n")
         (seed / "edit.txt").write_text("base\n")
         self.git(seed, "add", ".")
         if dependencies:
@@ -90,6 +92,202 @@ class SyncTests(unittest.TestCase):
     def remote_head(self, name):
         return self.git(self.repos[name][1], "rev-parse", "refs/heads/main")
 
+
+class PushAdvertisementTests(unittest.TestCase):
+    def test_remote_head_rejects_malformed_output_instead_of_treating_it_as_absent(self):
+        ref = "refs/heads/main"
+        record = b"a" * 40 + b"\trefs/heads/main\n"
+        for output in (b"garbage\n", b"\n", record + b"garbage\n", record * 2, record.replace(b"\t", b" "),
+                       b"b" * 41 + b"\trefs/heads/main\n", record.replace(b"main", b"unrelated")):
+            with self.subTest(output=output), patch.object(Runner, "run", return_value=output):
+                with self.assertRaisesRegex(FlurryError, "Malformed/ambiguous remote ref response"):
+                    remote_head(Runner(os.environ, 10), Path("."), "file:///unused", ref)
+
+
+class LocalGitSyncTests(SyncFixture, unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        self.repo = self.add_repo("a", {}, flake=False)
+        (self.root / "flurry.toml").write_text('[repositories.a]\n')
+        self.preserve = SyncOptions("preserve", None, None, "none", ())
+
+    def journal(self):
+        return json.loads(next((self.root / ".flurry" / "runs").glob("*/run.json")).read_text())
+
+    def test_common_push_tips_need_no_refetch_but_still_push_and_verify(self):
+        hook = self.repo / ".git/hooks/pre-push"
+        audit = self.directory / "pushes"
+        hook.write_text(f'#!/bin/sh\nprintf "push\\n" >> "{audit}"\n')
+        hook.chmod(0o755)
+        for advancing in (False, True):
+            with self.subTest(advancing=advancing):
+                if advancing:
+                    self.git(self.repo, "commit", "--allow-empty", "-m", "local work")
+                head = self.git(self.repo, "rev-parse", "HEAD")
+                call = self.runner.call
+                with patch.object(self.runner, "call", wraps=call) as trace:
+                    result = self.run_sync(self.preserve)
+                self.assertEqual(result.document["status"], "complete")
+                commands = [entry.args[0] for entry in trace.call_args_list]
+                observations = [args for args in commands if "ls-remote" in args]
+                self.assertEqual(len(observations), 3)
+                self.assertEqual(observations[0][2], observations[1][2])
+                self.assertNotEqual(observations[1][2], str(self.repo))
+                push, = (args for args in commands if "push" in args and "--recurse-submodules=no" in args)
+                self.assertLess(commands.index(push), commands.index(observations[-1]))
+                self.assertEqual(observations[-1][2], str(self.repo))
+                self.assertFalse(any(args[-1].endswith(":refs/flurry/push-base") for args in commands))
+                ancestry = [args for args in commands if "merge-base" in args and args[-1] == head]
+                self.assertEqual(len(ancestry), 2 if advancing else 0)
+                self.assertEqual(self.remote_head("a"), head)
+        self.assertEqual(audit.read_text().splitlines(), ["push", "push"])
+
+    def test_pushurl_is_verified_by_exact_ref_when_only_a_suffix_matches_initially(self):
+        _, origin, _ = self.repos["a"]
+        initial = self.remote_head("a")
+        mirror = self.directory / "mirror.git"
+        self.git(self.directory, "clone", "--bare", str(origin), str(mirror))
+        self.git(self.repo, "remote", "add", "publisher", mirror.as_uri())
+        self.git(self.repo, "remote", "set-url", "--push", "publisher", origin.as_uri())
+        ref = "refs/heads/release"
+        suffix_ref = "refs/heads/topic/" + ref
+        self.git(origin, "update-ref", suffix_ref, initial)
+        (self.root / "flurry.toml").write_text(f'[repositories.a]\npush_remote = "publisher"\npush_ref = "{ref}"\n')
+        hook = self.repo / ".git/hooks/pre-push"
+        audit = self.directory / "push-arguments"
+        hook.write_text(f'#!/bin/sh\nprintf "%s\\n" "$@" > "{audit}"\n')
+        hook.chmod(0o755)
+        self.git(self.repo, "commit", "--allow-empty", "-m", "publish a new branch")
+        head = self.git(self.repo, "rev-parse", "HEAD")
+        journal = self.run_sync(self.preserve)
+        self.assertEqual(journal.document["status"], "complete")
+        self.assertEqual(self.git(origin, "rev-parse", ref), head)
+        self.assertEqual(self.git(origin, "rev-parse", suffix_ref), initial)
+        self.assertEqual(self.git(mirror, "ls-remote", "--refs", "--", str(mirror), ref), "")
+        self.assertEqual(audit.read_text().splitlines(), ["publisher", origin.as_uri()])
+
+    def test_different_baseline_ref_fetches_the_push_tip_even_if_already_local(self):
+        _, origin, seed = self.repos["a"]
+        baseline = self.remote_head("a")
+        self.git(origin, "update-ref", "refs/heads/baseline", baseline)
+        self.git(seed, "commit", "--allow-empty", "-m", "published since baseline")
+        self.git(seed, "push", "origin", "main")
+        self.git(self.repo, "pull", "--ff-only")
+        self.git(self.repo, "commit", "--allow-empty", "-m", "publish next commit")
+        (self.root / "flurry.toml").write_text('[repositories.a]\nrebase_onto = "origin/baseline"\n')
+        call = self.runner.call
+        with patch.object(self.runner, "call", wraps=call) as trace:
+            journal = self.run_sync(self.preserve)
+        self.assertEqual(journal.document["status"], "complete")
+        fetches = [entry.args[0] for entry in trace.call_args_list if entry.args[0][-1].endswith(":refs/flurry/push-base")]
+        self.assertEqual(len(fetches), 2)
+        self.assertEqual(self.remote_head("a"), self.git(self.repo, "rev-parse", "HEAD"))
+
+    def test_second_advertisement_rejects_a_remote_move_before_promotion(self):
+        _, _, seed = self.repos["a"]
+        self.git(self.repo, "commit", "--allow-empty", "-m", "local work")
+        local = self.git(self.repo, "rev-parse", "HEAD")
+        self.git(seed, "commit", "--allow-empty", "-m", "independent work")
+        remote = self.git(seed, "rev-parse", "HEAD")
+        call = self.runner.call
+        advertised = 0
+
+        def advance_after_first_advertisement(args, *rest):
+            nonlocal advertised
+            result = call(args, *rest)
+            if "ls-remote" in args:
+                advertised += 1
+                if advertised == 1:
+                    self.git(seed, "push", "origin", "main")
+            return result
+
+        with patch.object(self.runner, "call", side_effect=advance_after_first_advertisement):
+            with self.assertRaisesRegex(FlurryError, "planned push is not fast-forward"):
+                self.run_sync(self.preserve)
+        self.assertEqual(advertised, 2)
+        self.assertEqual(self.remote_head("a"), remote)
+        self.assertEqual(self.git(self.repo, "rev-parse", "HEAD"), local)
+        self.assertEqual(self.git(self.repo, "for-each-ref", "refs/flurry/"), "")
+        self.assertEqual(self.journal()["action"], "locking:a")
+
+    def test_final_rehearsal_failure_remains_resumable_with_dirty_work_preserved(self):
+        (self.repo / "edit.txt").write_text("staged\n")
+        self.git(self.repo, "add", "edit.txt")
+        (self.repo / "edit.txt").write_text("unstaged\n")
+        untracked = self.repo / "untracked"
+        untracked.write_bytes(b"private\x00\xff")
+        call = self.runner.call
+        advertised = 0
+
+        def dirty_trial_after_second_advertisement(args, *rest):
+            nonlocal advertised
+            result = call(args, *rest)
+            if "ls-remote" in args:
+                advertised += 1
+                if advertised == 2:
+                    (Path(args[2]) / "late-file").write_text("trial changed\n")
+            return result
+
+        with patch.object(self.runner, "call", side_effect=dirty_trial_after_second_advertisement):
+            with self.assertRaisesRegex(FlurryError, "Restore rehearsal requires a clean trial"):
+                self.run_sync(self.preserve)
+        failed = self.journal()
+        self.assertEqual(failed["action"], "locking:a")
+        self.assertEqual(self.git(self.repo, "for-each-ref", "refs/flurry/"), "")
+        self.assertEqual(self.sync.resume(load_config(self.root, ()), failed["id"]).document["status"], "complete")
+        self.assertEqual(self.git(self.repo, "show", ":edit.txt"), "staged")
+        self.assertEqual((self.repo / "edit.txt").read_text(), "unstaged\n")
+        self.assertEqual(untracked.read_bytes(), b"private\x00\xff")
+
+    def test_collision_guard_checks_refs_created_at_the_promotion_journal_boundary(self):
+        initial = self.remote_head("a")
+        self.git(self.repo, "commit", "--allow-empty", "-m", "local work")
+        candidate = self.git(self.repo, "rev-parse", "HEAD")
+        suffix = hashlib.sha256(str(self.repo).encode()).hexdigest()[:16]
+        save = Journal.save
+
+        def create_ref_after_promotion_save(journal):
+            save(journal)
+            if journal.document["action"] == "promoting:a" and journal.document["status"] == "running":
+                recorded = json.loads(journal.path.read_text())
+                self.assertEqual(recorded["repositories"]["a"]["head"], candidate)
+                ref = f"refs/flurry/{journal.run_id}/{suffix}/remaining"
+                self.git(self.repo, "update-ref", ref, initial)
+
+        with patch.object(Journal, "save", new=create_ref_after_promotion_save):
+            with self.assertRaisesRegex(FlurryError, "Recovery ref already exists"):
+                self.run_sync(self.preserve)
+        ref = f"refs/flurry/{self.journal()['id']}/{suffix}/remaining"
+        self.assertEqual(self.git(self.repo, "for-each-ref", "--format=%(refname) %(objectname)", "refs/flurry/"), f"{ref} {initial}")
+        self.assertEqual(self.remote_head("a"), initial)
+
+    def test_promotion_journal_failure_aborts_before_importing_recovery_refs(self):
+        _, _, seed = self.repos["a"]
+        initial = self.git(self.repo, "rev-parse", "HEAD")
+        (self.repo / "edit.txt").write_text("retained\n")
+        self.git(seed, "commit", "--allow-empty", "-m", "upstream work")
+        self.git(seed, "push", "origin", "main")
+        upstream = self.remote_head("a")
+        save = Journal.save
+
+        def fail_promotion_save(journal):
+            if journal.document["action"] == "promoting:a" and journal.document["status"] == "running":
+                self.assertEqual(journal.document["repositories"]["a"]["head"], upstream)
+                raise OSError("promotion journal write failed")
+            save(journal)
+
+        with patch.object(Journal, "save", new=fail_promotion_save):
+            with self.assertRaisesRegex(FlurryError, "promotion journal write failed"):
+                self.run_sync(self.preserve)
+        self.assertEqual(self.git(self.repo, "rev-parse", "HEAD"), initial)
+        self.assertEqual(self.git(self.repo, "for-each-ref", "refs/flurry/"), "")
+        self.assertEqual(self.git(self.repo, "stash", "list"), "")
+        self.assertEqual((self.repo / "edit.txt").read_text(), "retained\n")
+        self.assertEqual(self.remote_head("a"), upstream)
+
+
+@unittest.skipUnless(shutil.which("nix") and os.environ.get("FLURRY_REAL_NIX") != "0", "real-Nix leg explicitly disabled or Nix unavailable")
+class SyncTests(SyncFixture, unittest.TestCase):
     def test_success_removes_only_current_run_refs_and_preserves_dirty_state(self):
         a = self.add_repo("a", {})
         (a / "edit.txt").write_text("existing stash\n")

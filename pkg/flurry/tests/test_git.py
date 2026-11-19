@@ -698,7 +698,7 @@ class GitTests(unittest.TestCase):
         self.advance()
         prepared = self.prepare()
         self.adapter.promote(prepared, 'push')
-        self.adapter.push(self.repo, 'origin', 'refs/heads/main', prepared.head)
+        self.adapter.push(self.repo, 'origin', 'refs/heads/main', prepared.head, push_url=str(self.origin))
         self.assertEqual(self.git(self.origin, 'rev-parse', 'main'), prepared.head)
 
     def test_untracked_binary_symlink_mode_and_literal_paths_roundtrip(self):
@@ -713,6 +713,30 @@ class GitTests(unittest.TestCase):
         self.assertEqual(executable.read_bytes(), b'#!/bin/sh\nexit 0\n')
         self.assertTrue(executable.stat().st_mode & 0o111)
         self.assertEqual(os.readlink(link), 'outside-target')
+
+    def test_tree_paths_preserve_bytes_and_distinguish_symlinks_from_gitlinks(self):
+        link = self.repo / os.fsdecode(b':(literal)with\tnewline\n\xff')
+        link.symlink_to('missing')
+        self.git(self.repo, '--literal-pathspecs', 'add', '--', link.name)
+        self.git(self.repo, 'commit', '-m', 'tracked symlink')
+        link.unlink()
+        link.symlink_to('changed')
+        prepared = self.prepare()
+        self.adapter.promote(prepared, 'byte-path')
+        self.assertEqual(os.readlink(link), 'changed')
+        self.assertEqual(self.runner.git(self.repo, 'ls-tree', '-r', '--name-only', '-z', 'HEAD'),
+                         os.fsencode(link.name) + b'\0flake.lock\0flake.nix\0mixed\0other\0')
+
+    def test_gitlinks_in_head_or_index_are_refused(self):
+        name = os.fsdecode(b'link\tand\n\xff')
+        head = self.git(self.repo, 'rev-parse', 'HEAD')
+        self.git(self.repo, 'update-index', '--add', '--cacheinfo', '160000', head, name)
+        with self.assertRaisesRegex(FlurryError, 'Gitlink-bearing'):
+            self.prepare()
+        self.git(self.repo, 'commit', '-m', 'gitlink in head')
+        self.git(self.repo, 'update-index', '--force-remove', '--', name)
+        with self.assertRaisesRegex(FlurryError, 'Gitlink-bearing'):
+            self.prepare()
 
     def test_ignored_directory_obstructing_old_path_refused(self):
         path = self.repo / 'mixed'

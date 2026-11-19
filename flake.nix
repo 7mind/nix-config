@@ -153,7 +153,7 @@
     };
   };
 
-  outputs = inputs: (import ./lib/mk-flake.nix) {
+  outputs = inputs: import ./lib/mk-flake.nix inputs.self.outPath {
     inherit inputs;
     self = inputs.self;
   };
