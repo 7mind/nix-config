@@ -271,6 +271,11 @@ def discover(config: Config, runner: Runner, *, verified: dict[Path, Repository]
         source = parse_source(repository.origin, repository.path)
         if source is not None and source.repository_id in identities:
             found.append(repository)
+    names: dict[str, Path] = {}
+    for repository in found:
+        if repository.name in names:
+            raise FlurryError(f"Duplicate repository name {repository.name!r}: {names[repository.name]} and {repository.path}")
+        names[repository.name] = repository.path
     return tuple(sorted(found, key=lambda repository: repository.name))
 
 

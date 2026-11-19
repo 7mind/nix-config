@@ -89,9 +89,12 @@ and errors in red. Redirected output and `--json` stay plain. A nonempty
 force colour, `--color=never` to disable it, or `--color=auto` for the default;
 explicit controls override the environment, but `--json` always stays uncoloured.
 
-For an ordinary, physically clean checkout at its freshly fetched baseline, Flurry
-compares Git's index, visible untracked paths and raw file contents/modes with
-the committed tree. It still makes a private Git trial, evaluates its declarations,
+For an ordinary, physically clean checkout at or ahead of its freshly fetched
+baseline, Flurry compares Git's index, visible untracked paths and raw file
+contents/modes with the committed tree. If the commits differ, Git must prove
+the baseline is an ancestor. Both trees must have no attribute rules or use only
+simple `-whitespace` or `binary` rules; other attribute contexts use the full
+rehearsal. Flurry still makes a private Git trial, evaluates its declarations,
 refreshes the selected inputs and runs the configured checks. With nothing to
 restore, an unchanged candidate needs no stash or source checkout. Dirty,
 rebasing or more complex checkouts use the full preservation rehearsal. New

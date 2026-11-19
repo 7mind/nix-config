@@ -14,6 +14,7 @@ REFS = ('--symbolic-full-name', 'HEAD', '--glob=refs/stas[h]', '--glob=refs/repl
 OPERATIONS = ('rebase-merge', 'rebase-apply', 'MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD',
               'sequencer', 'BISECT_LOG', 'index.lock', 'commondir', 'info/grafts')
 IDENTITY_KEYS = re.compile(r'user\.(name|email|signingkey|useconfigonly)|(?:author|committer)\.(name|email)|commit\.gpgsign|gpg\..*')
+INERT_ATTRIBUTE_LINE = re.compile(rb'(?:#[ -~]*|[a-zA-Z0-9_.*][a-zA-Z0-9_./*-]* +(?:-whitespace|binary))?')
 
 
 def config_values(repo: Path, runner: Runner) -> bytes:
@@ -123,7 +124,7 @@ class Context:
             return None
         values = settings(raw)
         if (any(key.startswith(('extensions.', 'filter.unset.', 'filter.unspecified.')) for key in values)
-                or any(key in values for key in ('core.worktree', 'core.attributesfile', 'core.sparsecheckout', 'core.splitindex'))
+                or any(key in values for key in ('core.worktree', 'core.attributesfile', 'attr.tree', 'core.sparsecheckout', 'core.splitindex'))
                 or values.get('core.autocrlf', 'false') != 'false'):
             return None
         if any(key.startswith(('include.', 'includeif.')) for key in values):
@@ -179,27 +180,38 @@ class Manifest:
     @classmethod
     def load(cls, repo: Path, runner: Runner, tree: str) -> Manifest | None:
         entries = {}
-        attributes = {'.gitattributes'}
+        directories = {'.'}
+        attribute_blobs = set()
         index = []
         empty = hashlib.new('sha1' if len(tree) == 40 else 'sha256', b'blob 0\0').hexdigest().encode()
-        for item in runner.git(repo, 'ls-tree', '-r', '-z', tree).split(b'\0'):
+        for item in runner.git(repo, '--no-replace-objects', 'ls-tree', '-r', '-z', tree).split(b'\0'):
             if not item:
                 continue
             metadata, name = item.split(b'\t', 1)
             mode, kind, oid = metadata.split()
             path = Path(os.fsdecode(name))
-            if (kind != b'blob' or mode not in (b'100644', b'100755', b'120000') or path.is_absolute()
-                    or '..' in path.parts or '.git' in path.parts or path.name == '.gitattributes'
+            if (kind != b'blob' or mode not in (b'100644', b'100755', b'120000') or path.is_absolute() or not path.parts
+                    or os.fsencode(path) != name or str(path) in entries or '..' in path.parts or '.git' in path.parts
+                    or any(part.lower() == '.gitattributes' for part in path.parts[:-1])
+                    or (path.name.lower() == '.gitattributes' and (path.name != '.gitattributes' or mode == b'120000'))
                     or (str(path) in ('flake.nix', 'flake.lock') and mode == b'120000')):
                 return None
+            if path.name == '.gitattributes':
+                attribute_blobs.add(oid)
             entries[str(path)] = (mode, oid)
-            attributes.update(str(parent / '.gitattributes') for parent in path.parents)
+            directories.update(map(str, path.parents))
             index.append(b'H ' + mode + b' ' + oid + b' 0\t' + name + b'\0')
-        return cls(entries, tuple(attributes), b''.join(sorted(index, key=lambda row: row.split(b'\t', 1)[1])),
+        if not directories.isdisjoint(entries):
+            return None
+        for oid in attribute_blobs:
+            rules = runner.git(repo, '--no-replace-objects', 'cat-file', 'blob', os.fsdecode(oid))
+            if not all(INERT_ATTRIBUTE_LINE.fullmatch(line) for line in rules.split(b'\n')):
+                return None
+        return cls(entries, tuple(str(Path(p) / '.gitattributes') for p in directories), b''.join(sorted(index, key=lambda row: row.split(b'\t', 1)[1])),
                    any(oid == empty for _, oid in entries.values()))
 
     def contents(self, repo: Path, *, except_lock: bool = False, prove_blobs: bool = False) -> dict[str, bytes] | None:
-        if any(os.path.lexists(repo / name) for name in self.attributes):
+        if any(name not in self.entries and os.path.lexists(repo / name) for name in self.attributes):
             return None
         if any(name not in self.entries and os.path.lexists(repo / name)
                for name in (('flake.nix',) if except_lock else ('flake.nix', 'flake.lock'))):
@@ -232,9 +244,8 @@ class CleanCheckout:
         return 'clean-v1:' + pack((os.fsencode(self.head), os.fsencode(self.branch), os.fsencode(self.tree),
                                   pack(self.physical.values()), self.context.config, *(os.fsencode(value) for pair in self.context.identity for value in pair))).hex()
 
-    def matches(self, runner: Runner, *, known_refs: bool = False, known_contents: bool = False, except_lock: bool = False) -> bool:
-        repo = self.context.repo
-        if not self.context.valid(runner):
+    def matches(self, repo: Path, runner: Runner, *, known_refs: bool = False, known_contents: bool = False, except_lock: bool = False) -> bool:
+        if repo != self.context.repo or not self.context.valid(runner):
             return False
         observed = runner.git(repo, '--no-optional-locks', '-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false',
                               'ls-files', '--cached', '--stage', '-v', '--others', '--exclude-standard', '-z')
@@ -276,10 +287,10 @@ def clean_checkout(repo: Path, runner: Runner, *, context: Context | None = None
         return None
     head, tree, branch = observed
     context = context or Context.inspect(repo, runner)
-    if context is None or not context.valid(runner):
+    if context is None or context.repo != repo or not context.valid(runner):
         return None
     manifest = Manifest.load(repo, runner, tree)
     if manifest is None or (physical := manifest.contents(repo, prove_blobs=True)) is None:
         return None
     witness = CleanCheckout(head, tree, branch, context, manifest, physical)
-    return witness if witness.matches(runner, known_refs=True, known_contents=True) else None
+    return witness if witness.matches(repo, runner, known_refs=True, known_contents=True) else None

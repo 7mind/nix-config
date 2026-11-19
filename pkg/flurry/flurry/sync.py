@@ -355,7 +355,7 @@ class Sync:
                     self.git.push(target.repository.path, target.push_remote, target.push_ref, item.head,
                                   push_url=target.push_url, verify_source=last_check)
                     published.append(name)
-                    checkpoint = (item.original.checkpoint if isinstance(item.original, CleanCheckout) and item.original.matches(self.runner)
+                    checkpoint = (item.original.checkpoint if isinstance(item.original, CleanCheckout) and item.original.matches(target.repository.path, self.runner)
                                   else full_checkpoint(target.repository.path, self.runner))
                     journal.repository(name, {"state": "published", "checkpoint": checkpoint})
                 for name, recovery in recoveries.items():

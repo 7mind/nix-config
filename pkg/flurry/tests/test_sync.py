@@ -137,8 +137,10 @@ class LocalGitSyncTests(SyncFixture, unittest.TestCase):
                 self.assertLess(commands.index(push), commands.index(observations[-1]))
                 self.assertEqual(observations[-1][2], str(self.repo))
                 self.assertFalse(any(args[-1].endswith(":refs/flurry/push-base") for args in commands))
-                ancestry = [args for args in commands if "merge-base" in args and args[-1] == head]
+                after_first_advertisement = commands[commands.index(observations[0]) + 1:]
+                ancestry = [args for args in after_first_advertisement if "merge-base" in args and args[-1] == head]
                 self.assertEqual(len(ancestry), 2 if advancing else 0)
+                self.assertFalse(any("stash" in args and "push" in args for args in commands))
                 self.assertEqual(self.remote_head("a"), head)
         self.assertEqual(audit.read_text().splitlines(), ["push", "push"])
 
@@ -310,6 +312,28 @@ class LocalGitSyncTests(SyncFixture, unittest.TestCase):
                 self.run_sync(self.preserve)
         self.assertEqual(self.remote_head("a"), original)
 
+    def test_ahead_checkout_with_inert_root_and_nested_attributes_needs_no_stash(self):
+        nested = self.repo / "patches"
+        nested.mkdir()
+        (self.repo / ".gitattributes").write_bytes(b"*.age binary\n")
+        (nested / ".gitattributes").write_bytes(b"# Preserve patch whitespace.\n*.patch -whitespace\n")
+        (self.repo / "secret.age").write_bytes(b"cipher\x00\r\n")
+        (nested / "feature.patch").write_bytes(b"context \r\n")
+        self.git(self.repo, "add", ".")
+        self.git(self.repo, "commit", "-m", "inert attribute rules")
+        self.git(self.repo, "push", "origin", "main")
+        (self.repo / "edit.txt").write_text("local work\n")
+        self.git(self.repo, "commit", "-am", "advance locally")
+        head = self.git(self.repo, "rev-parse", "HEAD")
+        with patch.object(self.runner, "call", wraps=self.runner.call) as trace:
+            result = self.run_sync(self.preserve)
+        self.assertEqual(self.remote_head("a"), head)
+        trial = Path(result.document["repositories"]["a"]["trial"])
+        self.assertEqual((trial / "secret.age").read_bytes(), b"cipher\x00\r\n")
+        self.assertEqual((trial / "patches/feature.patch").read_bytes(), b"context \r\n")
+        commands = [entry.args[0] for entry in trace.call_args_list]
+        self.assertFalse(any("stash" in args and "push" in args for args in commands))
+
     def test_clean_local_head_does_not_skip_filter_validation_of_the_fetched_ancestor(self):
         _, origin, seed = self.repos["a"]
         (seed / ".gitattributes").write_text("edit.txt filter=filter-in-fetched-tree\n")
@@ -323,6 +347,41 @@ class LocalGitSyncTests(SyncFixture, unittest.TestCase):
         with self.assertRaisesRegex(FlurryError, "filter-in-fetched-tree"):
             self.run_sync(self.preserve)
         self.assertEqual(self.remote_head("a"), remote)
+
+    def assert_ancestor_attributes_guarded(self, location):
+        previous = self.repo / "retired" / "data"
+        previous.mkdir(parents=True)
+        (previous / "file.bin").write_bytes(b"original\n")
+        self.git(self.repo, "add", "retired")
+        (self.repo / ".gitignore").write_text("retired/\n")
+        self.git(self.repo, "add", ".gitignore")
+        self.git(self.repo, "commit", "-m", "publish a nested tree")
+        self.git(self.repo, "push", "origin", "main")
+        original = self.remote_head("a")
+        self.git(self.repo, "rm", "-r", "retired")
+        self.git(self.repo, "commit", "-m", "retire the directory locally")
+        action = Journal.action
+
+        def add_attributes(journal, name):
+            action(journal, name)
+            if name == "pushing:a":
+                repo = self.repo if location == "source" else Path(journal.document["repositories"]["a"]["trial"])
+                path = repo / "retired/data/.gitattributes"
+                path.parent.mkdir(parents=True)
+                path.write_text("*.bin filter=late-driver\n")
+                self.assertEqual(self.git(repo, "status", "--porcelain"), "")
+
+        with patch.object(Journal, "action", new=add_attributes):
+            with self.assertRaisesRegex(FlurryError, "Source changed|rehearsal"):
+                self.run_sync(self.preserve)
+        self.assertEqual(self.remote_head("a"), original)
+        self.assertEqual(self.git(self.repo, "for-each-ref", "refs/flurry/"), "")
+
+    def test_ahead_source_rechecks_ignored_attributes_along_baseline_only_paths(self):
+        self.assert_ancestor_attributes_guarded("source")
+
+    def test_ahead_trial_rechecks_ignored_attributes_along_baseline_only_paths(self):
+        self.assert_ancestor_attributes_guarded("trial")
 
     def test_head_is_checked_after_the_last_source_index_observation(self):
         old = self.remote_head("a")
@@ -349,6 +408,29 @@ class LocalGitSyncTests(SyncFixture, unittest.TestCase):
                 self.run_sync(self.preserve)
         self.assertTrue(changed)
         self.assertEqual(self.remote_head("a"), old)
+
+    def test_duplicate_discovered_names_are_rejected_before_rehearsal(self):
+        (self.repo / 'flake.nix').write_text('{ outputs = _: {}; }\n')
+        self.git(self.repo, 'add', 'flake.nix')
+        self.git(self.repo, 'commit', '-m', 'make this checkout discoverable')
+        self.git(self.repo, 'push', 'origin', 'main')
+        head = self.remote_head('a')
+        other = self.root / 'other'
+        self.git(self.root, 'clone', str(self.repos['a'][1]), str(other))
+        self.git(other, 'config', 'fixture.label', 'other')
+        (other / 'edit.txt').write_text('staged\n')
+        self.git(other, 'add', 'edit.txt')
+        (other / 'edit.txt').write_text('unstaged\n')
+        (self.root / 'flurry.toml').write_text('[repositories.a]\npath = "other"\n')
+        with patch.object(self.runner, 'call', wraps=self.runner.call) as trace:
+            with self.assertRaisesRegex(FlurryError, 'Duplicate repository name'):
+                self.run_sync(self.preserve)
+        commands = [entry.args[0] for entry in trace.call_args_list]
+        self.assertFalse(any(set(args).intersection({'clone', 'fetch', 'push'}) for args in commands))
+        self.assertFalse((self.root / '.flurry/runs').exists())
+        self.assertEqual(self.remote_head('a'), head)
+        self.assertEqual(self.git(other, 'show', ':edit.txt'), 'staged')
+        self.assertEqual((other / 'edit.txt').read_text(), 'unstaged\n')
 
     def test_ambiguous_branch_preserves_native_symbolic_ref_abbreviation(self):
         self.git(self.repo, "update-ref", "refs/remotes/main", "HEAD")
