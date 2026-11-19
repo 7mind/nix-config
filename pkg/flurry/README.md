@@ -93,8 +93,12 @@ For an ordinary, physically clean checkout at or ahead of its freshly fetched
 baseline, Flurry compares Git's index, visible untracked paths and raw file
 contents/modes with the committed tree. If the commits differ, Git must prove
 the baseline is an ancestor. Both trees must have no attribute rules or use only
-simple `-whitespace` or `binary` rules; other attribute contexts use the full
-rehearsal. Flurry still makes a private Git trial, evaluates its declarations,
+simple `-whitespace` or `binary` rules. A default global attributes file containing
+only simple `merge=driver` rules (such as Mergiraf's) is also supported: its path,
+resolved target and contents are rechecked, and this lane does not merge. Other
+attribute contexts use the full rehearsal. Ordinary existing source stashes do
+not require a dirty rehearsal; Flurry checks their tip and ordered entries without
+applying them to the trial. Flurry still makes a private Git trial, evaluates its declarations,
 refreshes the selected inputs and runs the configured checks. With nothing to
 restore, an unchanged candidate needs no stash or source checkout. Dirty,
 rebasing or more complex checkouts use the full preservation rehearsal. New

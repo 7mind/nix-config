@@ -254,6 +254,47 @@ class GitTests(unittest.TestCase):
                 self.git(self.repo, 'commit', '-m', 'candidate rules')
                 self.assertIsNone(clean_checkout(self.repo, self.runner))
 
+    def test_default_global_attributes_cannot_hide_filters_or_macro_definitions(self):
+        directory = self.root / 'xdg'
+        (directory / 'git').mkdir(parents=True)
+        self.runner.environment['XDG_CONFIG_HOME'] = str(directory)
+        attributes = directory / 'git' / 'attributes'
+        for rules in (b'* merge=safe filter=driver\n', b'[attr]mergiraf filter=driver\n*.nix merge=mergiraf\n',
+                      b'* merge=driver\0 unsafe\n', b'* merge=driver\r\n', b'* text eol=lf\n', b'"*" merge=driver\n'):
+            with self.subTest(rules=rules):
+                attributes.write_bytes(rules)
+                self.assertIsNone(clean_checkout(self.repo, self.runner))
+
+    def test_packed_stash_requires_an_ordinary_log_and_refs_layout(self):
+        (self.repo / 'mixed').write_text('saved\n')
+        self.git(self.repo, 'stash', 'push', '-m', 'user')
+        self.git(self.repo, 'pack-refs', '--all')
+        gitdir = self.repo / '.git'
+        self.assertFalse((gitdir / 'refs/stash').exists())
+        self.assertIsNotNone(clean_checkout(self.repo, self.runner))
+        for relative in ('logs', 'logs/refs', 'refs'):
+            with self.subTest(path=relative):
+                parent = gitdir / relative
+                moved = self.root / 'saved-dir'
+                parent.rename(moved)
+                parent.symlink_to(moved, target_is_directory=True)
+                try:
+                    self.assertIsNone(clean_checkout(self.repo, self.runner))
+                finally:
+                    parent.unlink()
+                    moved.rename(parent)
+        log = gitdir / 'logs/refs/stash'
+        log.write_bytes(b'')
+        self.assertIsNone(clean_checkout(self.repo, self.runner))
+        log.unlink()
+        self.assertIsNone(clean_checkout(self.repo, self.runner))
+
+    def test_symbolic_or_dangling_source_stash_is_not_clean_evidence(self):
+        self.git(self.repo, 'symbolic-ref', 'refs/stash', 'refs/heads/main')
+        self.assertIsNone(clean_checkout(self.repo, self.runner))
+        self.git(self.repo, 'symbolic-ref', 'refs/stash', 'refs/heads/nonexistent')
+        self.assertIsNone(clean_checkout(self.repo, self.runner))
+
     def test_configured_alternate_attributes_tree_is_not_a_clean_checkout(self):
         self.git(self.repo, 'config', 'attr.tree', 'HEAD~1')
         self.assertIsNone(clean_checkout(self.repo, self.runner))

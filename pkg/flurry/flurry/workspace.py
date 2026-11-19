@@ -7,7 +7,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from .clean import REFS, Context
+from .clean import REFS, CheckoutRefs, Context
 from .nix import Input, Nix
 from .process import FlurryError, Runner
 from .source import Source, parse_source
@@ -42,7 +42,7 @@ class Repository:
     upstream: str | None
     excluded: bool
     settings: RepoSettings
-    checkout_refs: tuple[str, ...] | None = None
+    checkout_refs: CheckoutRefs | None = None
 
 
 @dataclass(frozen=True)
@@ -180,11 +180,12 @@ def _repository(config: Config, path: Path, settings: RepoSettings, runner: Runn
                             "HEAD", "HEAD^{tree}", *REFS, "@{upstream}", "--abbrev-ref", "HEAD"], None, None, {}, False)
     fields = os.fsdecode(metadata.stdout).removesuffix("\n").split("\n")
     checkout_refs = None
-    if not metadata.returncode and len(fields) == 7 and fields[4].startswith("refs/heads/") and fields[5].startswith("refs/remotes/"):
-        root, storage, head, tree, branch_ref, upstream, branch = fields
-        top, common_dir = Path(root).resolve(), Path(storage).resolve()
-        if branch_ref == "refs/heads/" + branch:
-            checkout_refs = (head, tree, branch_ref)
+    observed = CheckoutRefs.parse(tuple(fields[2:-2]))
+    if not metadata.returncode and observed is not None and fields[-2].startswith("refs/remotes/"):
+        top, common_dir = Path(fields[0]).resolve(), Path(fields[1]).resolve()
+        head, upstream, branch = observed.head, fields[-2], fields[-1]
+        if observed.branch == "refs/heads/" + branch:
+            checkout_refs = observed
         else:
             branch = _optional(runner, path, "symbolic-ref", "--quiet", "--short", "HEAD")
     else:

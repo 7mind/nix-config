@@ -10,11 +10,12 @@ from pathlib import Path
 from .process import FlurryError, Runner
 
 
-REFS = ('--symbolic-full-name', 'HEAD', '--glob=refs/stas[h]', '--glob=refs/replace/*')
+REFS = ('--glob=refs/stas[h]', '--symbolic-full-name', 'HEAD', '--glob=refs/stas[h]', '--glob=refs/replace/*')
 OPERATIONS = ('rebase-merge', 'rebase-apply', 'MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD',
               'sequencer', 'BISECT_LOG', 'index.lock', 'commondir', 'info/grafts')
 IDENTITY_KEYS = re.compile(r'user\.(name|email|signingkey|useconfigonly)|(?:author|committer)\.(name|email)|commit\.gpgsign|gpg\..*')
 INERT_ATTRIBUTE_LINE = re.compile(rb'(?:#[ -~]*|[a-zA-Z0-9_.*][a-zA-Z0-9_./*-]* +(?:-whitespace|binary))?')
+MERGE_ATTRIBUTE_LINE = re.compile(rb'(?:#[ -~]*|[a-zA-Z0-9_.*][a-zA-Z0-9_./*+-]*[ \t]+merge=[a-zA-Z0-9_][a-zA-Z0-9_.-]*)?')
 
 
 def config_values(repo: Path, runner: Runner) -> bytes:
@@ -88,6 +89,34 @@ def ordinary_layout(repo: Path) -> bool:
 
 
 @dataclass(frozen=True)
+class MergeAttributes:
+    path: Path
+    target: Path
+    contents: bytes
+
+    @classmethod
+    def read(cls, path: Path) -> MergeAttributes | None:
+        try:
+            target = path.resolve(strict=True)
+            if not target.is_file():
+                return None
+            descriptor = os.open(target, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+            with os.fdopen(descriptor, 'rb') as source:
+                if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+                    return None
+                data = source.read(65537)
+            if len(data) > 65536 or not all(MERGE_ATTRIBUTE_LINE.fullmatch(row) for row in data.split(b'\n')):
+                return None
+            return cls(path, target, data)
+        except (OSError, RuntimeError):
+            return None
+
+    @property
+    def fingerprint(self) -> bytes:
+        return pack((os.fsencode(self.path), os.fsencode(self.target), self.contents))
+
+
+@dataclass(frozen=True)
 class Context:
     repo: Path
     config: bytes
@@ -95,6 +124,7 @@ class Context:
     attrs: tuple[Path, ...]
     config_paths: tuple[Path, ...]
     guard: bytes | None
+    merge_attributes: MergeAttributes | None
 
     @classmethod
     def inspect(cls, repo: Path, runner: Runner) -> Context | None:
@@ -139,14 +169,21 @@ class Context:
                 return None
             identity[kind + '.name'], identity[kind + '.email'] = match.groups()
         paths = [gitdir / 'info/attributes']
+        merge_attributes = None
         for key in ('GIT_ATTR_GLOBAL', 'GIT_ATTR_SYSTEM'):
             var = variables.get(key, [])
             if key == 'GIT_ATTR_SYSTEM' and runner.environment.get('GIT_ATTR_NOSYSTEM') == '1':
                 continue
             if len(var) != 1 or not Path(var[0]).is_absolute():
                 return None
-            paths.append(Path(var[0]))
-        return cls(repo, raw, tuple(identity.items()), tuple(paths), config_paths, guard)
+            path = Path(var[0])
+            if key == 'GIT_ATTR_GLOBAL' and os.path.lexists(path):
+                merge_attributes = MergeAttributes.read(path)
+                if merge_attributes is None:
+                    return None
+            else:
+                paths.append(path)
+        return cls(repo, raw, tuple(identity.items()), tuple(paths), config_paths, guard, merge_attributes)
 
     def may_ignore_marker(self, runner: Runner) -> bool:
         if 'core.excludesfile' in settings(self.config) or os.path.lexists(self.repo / '.gitignore'):
@@ -166,6 +203,8 @@ class Context:
         if any(os.path.lexists(gitdir / name) for name in OPERATIONS):
             return False
         if any(os.path.lexists(path) for path in self.attrs):
+            return False
+        if self.merge_attributes is not None and MergeAttributes.read(self.merge_attributes.path) != self.merge_attributes:
             return False
         return self.config_matches(runner)
 
@@ -231,6 +270,33 @@ class Manifest:
 
 
 @dataclass(frozen=True)
+class CheckoutRefs:
+    head: str
+    tree: str
+    branch: str
+    stash: str = ''
+
+    @classmethod
+    def parse(cls, rows: tuple[str, ...]) -> CheckoutRefs | None:
+        if len(rows) == 3 and rows[2].startswith('refs/heads/'):
+            return cls(*rows)
+        if len(rows) == 5 and rows[3].startswith('refs/heads/') and rows[4] == 'refs/stash' and re.fullmatch(r'[a-f0-9]{40}|[a-f0-9]{64}', rows[2]):
+            return cls(rows[0], rows[1], rows[3], rows[2])
+        return None
+
+
+def stash_layout(repo: Path, present: bool) -> bool:
+    gitdir = repo / '.git'
+    if any((gitdir / name).is_symlink() for name in ('refs', 'logs', 'logs/refs', 'packed-refs')):
+        return False
+    ref, log = gitdir / 'refs/stash', gitdir / 'logs/refs/stash'
+    if present:
+        return ((not os.path.lexists(ref) or (not ref.is_symlink() and ref.is_file()))
+                and not log.is_symlink() and log.is_file())
+    return not os.path.lexists(ref) and not os.path.lexists(log)
+
+
+@dataclass(frozen=True)
 class CleanCheckout:
     head: str
     tree: str
@@ -238,11 +304,16 @@ class CleanCheckout:
     context: Context
     manifest: Manifest
     physical: dict[str, bytes]
+    stashes: bytes = b''
 
     @property
     def checkpoint(self) -> str:
-        return 'clean-v1:' + pack((os.fsencode(self.head), os.fsencode(self.branch), os.fsencode(self.tree),
-                                  pack(self.physical.values()), self.context.config, *(os.fsencode(value) for pair in self.context.identity for value in pair))).hex()
+        checkout = pack((os.fsencode(self.head), os.fsencode(self.branch), os.fsencode(self.tree), pack(self.physical.values()),
+                         self.context.config, *(os.fsencode(value) for pair in self.context.identity for value in pair)))
+        attrs = self.context.merge_attributes
+        if not self.stashes and attrs is None:
+            return 'clean-v1:' + checkout.hex()
+        return 'clean-v2:' + pack((checkout, self.stashes, attrs.fingerprint if attrs else b'')).hex()
 
     def matches(self, repo: Path, runner: Runner, *, known_refs: bool = False, known_contents: bool = False, except_lock: bool = False) -> bool:
         if repo != self.context.repo or not self.context.valid(runner):
@@ -265,7 +336,12 @@ class CleanCheckout:
             expected_files = {key: value for key, value in self.physical.items() if key != 'flake.lock'} if except_lock else self.physical
             if self.manifest.contents(repo, except_lock=except_lock) != expected_files:
                 return False
-        return known_refs or (self.context.valid(runner) and refs(repo, runner) == (self.head, self.tree, self.branch))
+        if not stash_layout(repo, bool(self.stashes)):
+            return False
+        if self.stashes and runner.git(repo, 'stash', 'list', '--format=%H') != self.stashes:
+            return False
+        expected_refs = CheckoutRefs(self.head, self.tree, self.branch, self.stashes.partition(b'\n')[0].decode('ascii'))
+        return (known_refs and not self.stashes) or (self.context.valid(runner) and refs(repo, runner) == expected_refs)
 
 
 def checkout_head(repo: Path, runner: Runner) -> tuple[str, str, str]:
@@ -277,20 +353,25 @@ def checkout_head(repo: Path, runner: Runner) -> tuple[str, str, str]:
     return rows[0], rows[1], rows[2]
 
 
-def refs(repo: Path, runner: Runner) -> tuple[str, ...]:
-    return tuple(os.fsdecode(runner.git(repo, 'rev-parse', 'HEAD', 'HEAD^{tree}', *REFS)).rstrip('\n').split('\n'))
+def refs(repo: Path, runner: Runner) -> CheckoutRefs | None:
+    return CheckoutRefs.parse(tuple(os.fsdecode(runner.git(repo, 'rev-parse', 'HEAD', 'HEAD^{tree}', *REFS)).removesuffix('\n').split('\n')))
 
 
-def clean_checkout(repo: Path, runner: Runner, *, context: Context | None = None, observed: tuple[str, ...] | None = None) -> CleanCheckout | None:
+def clean_checkout(repo: Path, runner: Runner, *, context: Context | None = None, observed: CheckoutRefs | None = None) -> CleanCheckout | None:
     observed = refs(repo, runner) if observed is None else observed
-    if len(observed) != 3 or not observed[2].startswith('refs/heads/'):
+    if observed is None or not stash_layout(repo, bool(observed.stash)):
         return None
-    head, tree, branch = observed
     context = context or Context.inspect(repo, runner)
     if context is None or context.repo != repo or not context.valid(runner):
         return None
-    manifest = Manifest.load(repo, runner, tree)
+    manifest = Manifest.load(repo, runner, observed.tree)
     if manifest is None or (physical := manifest.contents(repo, prove_blobs=True)) is None:
         return None
-    witness = CleanCheckout(head, tree, branch, context, manifest, physical)
+    stashes = b''
+    if observed.stash:
+        stashes = runner.git(repo, 'stash', 'list', '--format=%H')
+        if (not stashes.startswith(observed.stash.encode('ascii') + b'\n')
+                or not re.fullmatch(rb'(?:[a-f0-9]{' + str(len(observed.head)).encode() + rb'}\n)+', stashes)):
+            return None
+    witness = CleanCheckout(observed.head, observed.tree, observed.branch, context, manifest, physical, stashes)
     return witness if witness.matches(repo, runner, known_refs=True, known_contents=True) else None

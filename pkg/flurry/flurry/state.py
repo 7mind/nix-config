@@ -147,7 +147,7 @@ def full_checkpoint(repo: Path, runner: Runner) -> str:
 
 
 def matches_checkpoint(repo: Path, runner: Runner, expected: str) -> bool:
-    if expected.startswith('clean-v1:'):
+    if expected.startswith(('clean-v1:', 'clean-v2:')):
         witness = clean_checkout(repo, runner)
         return witness is not None and witness.checkpoint == expected
     if expected.startswith('full-v1:'):

@@ -213,7 +213,7 @@ class Git:
             flags = b''.join(b'H ' + name + b'\0' for name in sorted(map(os.fsencode, witness.manifest.entries)))
             overrides = b'submodule.recurse\nfalse\0diff.ignoresubmodules\nall\0core.hookspath\n/dev/null\0'
             if (snapshot.head != witness.head or snapshot.branch != witness.branch or snapshot.index_tree != witness.tree
-                    or snapshot.untracked or snapshot.worktree_patch or snapshot.stashes or snapshot.files != files or snapshot.flags != flags
+                    or snapshot.untracked or snapshot.worktree_patch or snapshot.stashes != witness.stashes or snapshot.files != files or snapshot.flags != flags
                     or snapshot.config != unscoped(witness.context.config) + overrides or dict(snapshot.identity) != dict(witness.context.identity)
                     or not witness.matches(repo, self.runner)):
                 raise FlurryError(f'Source changed during rehearsal: {repo}')
@@ -440,7 +440,7 @@ class Git:
 
     def _clean_candidates(self, repo: Path, witness: CleanCheckout, destination: Path, fetched: str) -> tuple[CleanCheckout, CleanCheckout] | None:
         context = Context.inspect(destination, self.runner)
-        if context is None or not context.valid(self.runner):
+        if context is None or not context.valid(self.runner) or context.merge_attributes != witness.context.merge_attributes:
             return None
         if fetched != witness.head:
             if not self._is_ancestor(destination, fetched, witness.head):
@@ -460,7 +460,7 @@ class Git:
                 raise FlurryError(f'Git attribute or configuration context changed in the rehearsal: {destination}')
         if os.path.lexists(destination / '.git/index') or any(os.path.lexists(destination / path) for path in witness.manifest.attributes):
             return None
-        return witness, replace(witness, context=context)
+        return witness, replace(witness, context=context, stashes=b'')
 
     def prepare(self, repo: Path, destination: Path, baseline: str, dirty_mode: str,
                 message: str | None, commit_scope: str | None, *, remote: str = 'origin',

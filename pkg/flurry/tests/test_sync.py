@@ -86,6 +86,29 @@ class SyncFixture:
     def options(self, mode):
         return SyncOptions(mode, None, None, "eval", ())
 
+    def global_merge_rules(self):
+        directory = self.directory / 'git-settings'
+        directory.mkdir()
+        rules = directory / 'immutable-attributes'
+        rules.write_text('*.nix merge=mergiraf\n*.lock merge=mergiraf\n')
+        attributes = directory / 'git/attributes'
+        attributes.parent.mkdir()
+        attributes.symlink_to(rules)
+        self.runner.environment['XDG_CONFIG_HOME'] = str(directory)
+        self.runner.environment['GIT_CONFIG_GLOBAL'] = str(directory / 'config')
+        self.git(self.directory, 'config', '--global', 'merge.mergiraf.driver', 'false %O %A %B')
+        return rules
+
+    def user_stashes(self, repo):
+        for iteration in range(2):
+            tracked = repo / 'edit.txt'
+            tracked.write_text(f'staged {iteration}\n')
+            self.git(repo, 'add', 'edit.txt')
+            tracked.write_text(f'working {iteration}\n')
+            (repo / 'untracked').write_text(f'private {iteration}\n')
+            self.git(repo, 'stash', 'push', '-u', '-m', f'user {iteration}')
+        return self.git(repo, 'stash', 'list', '--format=%H')
+
     def run_sync(self, options):
         return self.sync.run(load_config(self.root, options.excludes), options, None)
 
@@ -265,7 +288,7 @@ class LocalGitSyncTests(SyncFixture, unittest.TestCase):
                 self.assertEqual(self.remote_head("a"), initial)
                 self.assertEqual(self.git(self.repo, "for-each-ref", "refs/flurry/"), "")
 
-    def assert_unchanged_push_refuses_drift(self, mutate):
+    def assert_unchanged_push_refuses_drift(self, mutate, reason='Source changed during rehearsal'):
         audit = self.directory / "pushed"
         hook = self.repo / ".git/hooks/pre-push"
         hook.write_text(f'#!/bin/sh\ntouch "{audit}"\n')
@@ -278,7 +301,7 @@ class LocalGitSyncTests(SyncFixture, unittest.TestCase):
                 mutate()
 
         with patch.object(Journal, "action", new=mutate_at_push):
-            with self.assertRaisesRegex(FlurryError, "Source changed during rehearsal"):
+            with self.assertRaisesRegex(FlurryError, reason):
                 self.run_sync(self.preserve)
         self.assertFalse(audit.exists())
         failed = self.journal()
@@ -286,6 +309,28 @@ class LocalGitSyncTests(SyncFixture, unittest.TestCase):
         self.assertEqual(self.git(self.repo, "for-each-ref", "refs/flurry/"), "")
         with self.assertRaisesRegex(FlurryError, "checkout changed"):
             self.sync.resume(load_config(self.root, ()), failed["id"])
+
+    def test_unchanged_push_refuses_same_tip_stash_reflog_drift(self):
+        self.user_stashes(self.repo)
+        top = self.git(self.repo, 'rev-parse', 'refs/stash')
+        self.assert_unchanged_push_refuses_drift(lambda: self.git(self.repo, 'stash', 'drop', 'stash@{1}'))
+        self.assertEqual(self.git(self.repo, 'rev-parse', 'refs/stash'), top)
+
+    def test_unchanged_push_rechecks_the_global_merge_attributes(self):
+        rules = self.global_merge_rules()
+        self.assert_unchanged_push_refuses_drift(lambda: rules.write_text('*.nix merge=other\n'), 'Final restore rehearsal')
+
+    def test_unchanged_push_refuses_a_same_bytes_global_attribute_retarget(self):
+        rules = self.global_merge_rules()
+        link = rules.parent / 'git/attributes'
+        moved = rules.with_name('replacement')
+        moved.write_bytes(rules.read_bytes())
+
+        def retarget():
+            link.unlink()
+            link.symlink_to(moved)
+
+        self.assert_unchanged_push_refuses_drift(retarget, 'Final restore rehearsal')
 
     def test_unchanged_push_detects_edit_with_same_head(self):
         path = self.repo / "edit.txt"
@@ -585,6 +630,66 @@ class LocalGitSyncTests(SyncFixture, unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("nix") and os.environ.get("FLURRY_REAL_NIX") != "0", "real-Nix leg explicitly disabled or Nix unavailable")
 class SyncTests(SyncFixture, unittest.TestCase):
+    def test_ordinary_rehearsal_keeps_merge_rules_and_source_only_stashes(self):
+        self.global_merge_rules()
+        stashes, heads = {}, {}
+        for name, deps, path, rule in (
+                ('a', {}, 'patches/.gitattributes', '*.patch -whitespace'),
+                ('b', {'a': 'a'}, '.gitattributes', '*.patch -whitespace'),
+                ('c', {'a': 'a', 'b': 'b'}, '.gitattributes', '*.age binary')):
+            repo = self.add_repo(name, deps)
+            attributes = repo / path
+            attributes.parent.mkdir(exist_ok=True)
+            attributes.write_text(rule + '\n')
+            self.git(repo, 'add', path)
+            self.git(repo, 'commit', '-m', 'inert tracked attributes')
+            self.git(repo, 'push', 'origin', 'main')
+            heads[name] = self.remote_head(name)
+            stashes[name] = '' if name == 'a' else self.user_stashes(repo)
+            hook = repo / '.git/hooks/pre-push'
+            hook.write_text(f'#!/bin/sh\nprintf "{name}\\n" >> "{self.directory / "hooks"}"\n')
+            hook.chmod(0o755)
+            self.assertEqual(self.git(repo, 'check-attr', 'merge', '--', 'flake.lock'), 'flake.lock: merge: mergiraf')
+        with patch.object(self.runner, 'call', wraps=self.runner.call) as trace:
+            journal = self.run_sync(self.options('reject'))
+        self.assertEqual((self.directory / 'hooks').read_text().splitlines(), ['a', 'b', 'c'])
+        for name, repo_info in self.repos.items():
+            self.assertEqual(self.remote_head(name), heads[name])
+            self.assertEqual(self.git(repo_info[0], 'stash', 'list', '--format=%H'), stashes[name])
+            self.assertNotIn('recovery', journal.document['repositories'][name])
+            if name != 'a':
+                for key, locked in self.nix.locked_inputs(repo_info[0]).items():
+                    self.assertEqual(locked.rev, heads[key])
+        commands = [call.args[0] for call in trace.call_args_list]
+        self.assertFalse(any('stash' in args and ('push' in args or 'apply' in args) for args in commands))
+
+    def test_generated_locks_and_incoming_commits_preserve_existing_source_stashes(self):
+        self.global_merge_rules()
+        a = self.add_repo('a', {})
+        b = self.add_repo('b', {'a': 'a'})
+        stashes = self.user_stashes(b)
+        hook = b / '.git/hooks/pre-commit'
+        hook.write_text('#!/bin/sh\ntest -z "$(git stash list --format=%H)"\n')
+        hook.chmod(0o755)
+        for incoming in (False, True):
+            with self.subTest(incoming=incoming):
+                if incoming:
+                    hook.unlink()
+                    seed = self.repos['b'][2]
+                    self.git(seed, 'pull', '--ff-only')
+                    (seed / 'incoming').write_text('new upstream file\n')
+                    self.git(seed, 'add', 'incoming')
+                    self.git(seed, 'commit', '-m', 'upstream work')
+                    self.git(seed, 'push', 'origin', 'main')
+                upstream = self.remote_head('b')
+                self.git(a, 'commit', '--allow-empty', '-m', 'advance provider')
+                self.assertEqual(self.run_sync(self.options('reject')).document['status'], 'complete')
+                self.assertEqual(self.git(b, 'rev-parse', 'HEAD^'), upstream)
+                self.assertEqual(self.git(b, 'rev-parse', 'HEAD'), self.remote_head('b'))
+                self.assertEqual(self.nix.locked_inputs(b)['a'].rev, self.remote_head('a'))
+                self.assertEqual(self.git(b, 'stash', 'list', '--format=%H'), stashes)
+                self.assertEqual(self.git(b, 'for-each-ref', 'refs/flurry/'), '')
+
     def test_success_removes_only_current_run_refs_and_preserves_dirty_state(self):
         a = self.add_repo("a", {})
         (a / "edit.txt").write_text("existing stash\n")
