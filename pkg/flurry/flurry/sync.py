@@ -8,11 +8,12 @@ from pathlib import Path
 from threading import Lock
 from typing import Callable
 
+from .clean import CleanCheckout, Context, clean_checkout, config_values, physical_file, settings
 from .git import Git, Prepared, Recovery
 from .nix import Nix
 from .process import FlurryError, Runner, redact, remote_head
 from .source import Source, parse_source
-from .state import Journal, config_digest, fingerprint, load_journal, workspace_lock
+from .state import Journal, config_digest, full_checkpoint, matches_checkpoint, load_journal, workspace_lock
 from .workspace import Config, Repository, WorkspaceGraph, build_graph, discover, provider_identities
 
 
@@ -40,6 +41,7 @@ class Target:
     push_remote: str
     push_ref: str
     push_url: str
+    baseline_url: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -97,16 +99,7 @@ class SyncPlan:
         }
 
 
-def optional_git(runner: Runner, repo: Path, *args: str) -> str | None:
-    result = runner.call(["git", "-C", os.fspath(repo), *args], None, None, {}, False)
-    if result.returncode == 1:
-        return None
-    if result.returncode:
-        raise FlurryError(redact(result.stderr.decode(errors="replace")))
-    return result.stdout.decode(errors="surrogateescape").strip()
-
-
-def target_for(repo: Repository, runner: Runner) -> Target:
+def target_for(repo: Repository, runner: Runner, config: bytes | None = None) -> Target:
     if repo.branch is None:
         raise FlurryError(f"{repo.name}: detached HEAD; check out a branch before sync")
     if repo.origin is None:
@@ -123,27 +116,26 @@ def target_for(repo: Repository, runner: Runner) -> Target:
     if "/" not in upstream:
         raise FlurryError(f"{repo.name}: rebase_onto must name a remote branch")
     remote, branch = upstream.split("/", 1)
-    remotes = runner.git_text(repo.path, "remote").splitlines()
-    if remote not in remotes or not branch:
+    if not remote or not branch:
         raise FlurryError(f"{repo.name}: invalid rebase remote/branch {upstream}")
-    baseline_url = runner.git_text(repo.path, "remote", "get-url", remote)
+    baseline_url = repo.origin if remote == "origin" else runner.git_text(repo.path, "remote", "get-url", remote)
     if parse_source(baseline_url, repo.path) is None:
         raise FlurryError(f"{repo.name}: unsupported rebase remote")
-    push_remote = repo.settings.push_remote or optional_git(runner, repo.path, "config", "--get", f"branch.{repo.branch}.pushRemote") or optional_git(runner, repo.path, "config", "--get", "remote.pushDefault") or optional_git(runner, repo.path, "config", "--get", f"branch.{repo.branch}.remote") or remote
-    if push_remote not in remotes:
-        raise FlurryError(f"{repo.name}: unknown push remote {push_remote}")
+    values = settings(config_values(repo.path, runner) if config is None else config)
+    push_remote = (repo.settings.push_remote or values.get(f"branch.{repo.branch}.pushremote") or values.get("remote.pushdefault")
+                   or values.get(f"branch.{repo.branch}.remote") or remote)
     push_ref = repo.settings.push_ref or f"refs/heads/{repo.branch}"
     if not push_ref.startswith("refs/heads/"):
         raise FlurryError(f"{repo.name}: push_ref must be a full refs/heads/ branch")
-    runner.git(repo.path, "check-ref-format", push_ref)
+    runner.check_branch(repo.path, push_ref)
     urls = runner.git_text(repo.path, "remote", "get-url", "--push", "--all", push_remote).splitlines()
     if len(urls) != 1:
         raise FlurryError(f"{repo.name}: exactly one push URL is required")
     push_source = parse_source(urls[0], repo.path)
     if push_source is None or push_source.repository_id != source.repository_id:
         raise FlurryError(f"{repo.name}: push URL differs from the provider origin; publication mapping is ambiguous")
-    runner.git(repo.path, "check-ref-format", f"refs/heads/{branch}")
-    return Target(repo, remote, f"refs/heads/{branch}", push_remote, push_ref, urls[0])
+    runner.check_branch(repo.path, f"refs/heads/{branch}")
+    return Target(repo, remote, f"refs/heads/{branch}", push_remote, push_ref, urls[0], baseline_url)
 
 
 def validate_dirty_policy(repository: Repository, runner: Runner, options: SyncOptions) -> None:
@@ -166,10 +158,14 @@ def validate_dirty_policy(repository: Repository, runner: Runner, options: SyncO
         raise FlurryError(f"{repository.name}: --commit staged leaves pre-existing flake.nix/flake.lock edits outside the commit; stage or reconcile those files first")
 
 
-def plan_sync(config: Config, runner: Runner, nix: Nix, options: SyncOptions) -> SyncPlan:
-    repositories = discover(config, runner)
-    graph = build_graph(repositories, nix)
-    targets = tuple(target_for(repo, runner) for repo in graph.order if not repo.excluded)
+def plan_sync(config: Config, runner: Runner, nix: Nix, options: SyncOptions, *, witnesses: dict[str, CleanCheckout] | None = None) -> SyncPlan:
+    declarations = {}
+    contexts: dict[Path, Context] = {}
+    repositories = discover(config, runner, declarations=declarations, nix=nix, contexts=contexts if witnesses is not None else None)
+    graph = build_graph(repositories, nix, declarations=declarations)
+    configs = {repo.name: context.config if (context := contexts.get(repo.path)) else config_values(repo.path, runner)
+               for repo in graph.order if not repo.excluded}
+    targets = tuple(target_for(repo, runner, configs[repo.name]) for repo in graph.order if not repo.excluded)
     if not targets:
         raise FlurryError("No selected repositories to synchronize")
     if options.dirty_mode not in ("reject", "preserve", "commit"):
@@ -179,7 +175,15 @@ def plan_sync(config: Config, runner: Runner, nix: Nix, options: SyncOptions) ->
     if options.check_mode not in ("none", "eval", "full"):
         raise FlurryError("Invalid check mode")
     for target in targets:
-        validate_dirty_policy(target.repository, runner, options)
+        repo = target.repository
+        if witnesses is not None and (context := contexts.get(repo.path)) is not None:
+            if not context.config_matches(runner):
+                raise FlurryError(f"{repo.name}: Git configuration changed during target resolution")
+            witness = clean_checkout(repo.path, runner, context=context, observed=repo.checkout_refs)
+            if witness is not None:
+                witnesses[repo.name] = witness
+                continue
+        validate_dirty_policy(repo, runner, options)
     return SyncPlan(graph, targets, options, repositories)
 
 
@@ -194,12 +198,19 @@ def default_branch(runner: Runner, repo: Path, source: Source) -> str:
 
 
 def validate_edges(graph: WorkspaceGraph, targets: dict[str, Target], runner: Runner) -> None:
+    defaults: dict[tuple[Path, str | None], str] = {}
     for edge in graph.edges:
         if edge.consumer.excluded or edge.provider.excluded or edge.input.source is None or edge.input.source.rev is not None:
             continue
         source = edge.input.source
         target = targets[edge.provider.name]
-        expected = f"refs/heads/{source.ref.removeprefix('refs/heads/')}" if source.ref is not None else default_branch(runner, edge.provider.path, source)
+        if source.ref is None:
+            key = (edge.provider.path, source.clone_url)
+            if key not in defaults:
+                defaults[key] = default_branch(runner, edge.provider.path, source)
+            expected = defaults[key]
+        else:
+            expected = f"refs/heads/{source.ref.removeprefix('refs/heads/')}"
         if expected != target.push_ref:
             raise FlurryError(f"{edge.consumer.name}.{edge.input.name} tracks {expected}, but {edge.provider.name} would push {target.push_ref}")
 
@@ -245,9 +256,10 @@ class Sync:
                 if config_digest(config.root) != guard.configuration:
                     raise FlurryError("Configuration changed before resume acquired the workspace lock")
                 for path, expected in guard.checkpoints:
-                    if fingerprint(path, self.runner) != expected:
+                    if not matches_checkpoint(path, self.runner, expected):
                         raise FlurryError(f"{path.name}: checkout changed before resume; refusing automatic retry")
-            plan = plan_sync(config, self.runner, self.nix, options)
+            witnesses: dict[str, CleanCheckout] = {}
+            plan = plan_sync(config, self.runner, self.nix, options, witnesses=witnesses)
             selected_inventory = inventory(plan.repositories)
             if guard is not None and selected_inventory != guard.inventory:
                 raise FlurryError("Workspace inventory changed since the interrupted run; review a new plan")
@@ -262,15 +274,20 @@ class Sync:
                     repo = target.repository
                     journal.repository(repo.name, {
                         "path": os.fspath(repo.path), "state": "original",
-                        "checkpoint": fingerprint(repo.path, self.runner),
+                        "checkpoint": witnesses[repo.name].checkpoint if repo.name in witnesses else full_checkpoint(repo.path, self.runner),
                         "push_ref": target.push_ref, "push_remote": target.push_remote,
                     })
                 validate_edges(plan.graph, targets, self.runner)
-                prepared = self._prepare_all(plan.targets, options, journal)
+                prepared = self._prepare_all(plan.targets, options, journal, witnesses)
+                proven = {repo.path: repo for repo in plan.repositories if repo.name in witnesses} if all(
+                    item.clean_trial is not None for item in prepared.values()) else {}
+                current = discover(config, self.runner, verified=proven, nix=self.nix)
+                if inventory(current) != selected_inventory:
+                    raise FlurryError("Workspace inventory changed during rehearsal; refusing publication")
                 trial_repositories = tuple(
                     replace(repo, path=prepared[repo.name].trial, head=prepared[repo.name].head)
                     if repo.name in prepared else repo
-                    for repo in discover(config, self.runner)
+                    for repo in current
                 )
                 graph = build_graph(trial_repositories, self.nix)
                 validate_edges(graph, targets, self.runner)
@@ -286,10 +303,13 @@ class Sync:
                     item = prepared[name]
                     edges = [edge for edge in graph.edges if edge.consumer.name == name and not edge.provider.excluded and edge.input.source is not None and edge.input.source.rev is None]
                     journal.action(f"locking:{name}")
+                    if physical_file(item.trial / "flake.lock") != item.lock_state:
+                        raise FlurryError(f"{name}: trial flake.lock changed before lock generation")
                     before = frozen_lock(item.trial, frozen_ids)
                     if edges:
                         self.report(f"Updating {name}: {', '.join(edge.input.name for edge in edges)}")
                         self.nix.update(item.trial, tuple(dict.fromkeys(edge.input.name for edge in edges)))
+                        item.lock_state = physical_file(item.trial / "flake.lock")
                         actual = self.nix.locked_inputs(item.trial)
                         for edge in edges:
                             locked = actual.get(edge.input.name)
@@ -312,7 +332,7 @@ class Sync:
                         recovery = self.git.promote(item, journal.run_id, before_source_write=before_source_write)
                         recoveries[name] = recovery
                         journal.repository(name, {
-                            "state": "promoted", "checkpoint": fingerprint(target.repository.path, self.runner),
+                            "state": "promoted", "checkpoint": full_checkpoint(target.repository.path, self.runner),
                             "recovery": {"stash_ref": recovery.stash_ref, "remaining_ref": recovery.remaining_ref,
                                          "prepared_ref": recovery.prepared_ref,
                                          "original_head": item.original.head, "marker": item.marker,
@@ -320,11 +340,24 @@ class Sync:
                         })
                     journal.action(f"pushing:{name}")
                     self.report(f"Publishing {name} -> {target.push_remote}/{target.push_ref}")
-                    if name not in recoveries:
-                        self.git.verify(item)
-                    self.git.push(target.repository.path, target.push_remote, target.push_ref, item.head, push_url=target.push_url)
+                    self.git.verify_trial(item)
+                    last_check = None
+                    if isinstance(item.original, CleanCheckout):
+                        last_check = lambda: self.git.verify(item)
+                    else:
+                        if name in recoveries:
+                            self.git.verify_promoted(recoveries[name])
+                        else:
+                            self.git.verify(item)
+                        urls = self.runner.git_text(item.repo, 'remote', 'get-url', '--push', '--all', target.push_remote).splitlines()
+                        if urls != [target.push_url]:
+                            raise FlurryError(f'{name}: push URL changed during rehearsal')
+                    self.git.push(target.repository.path, target.push_remote, target.push_ref, item.head,
+                                  push_url=target.push_url, verify_source=last_check)
                     published.append(name)
-                    journal.repository(name, {"state": "published", "checkpoint": fingerprint(target.repository.path, self.runner)})
+                    checkpoint = (item.original.checkpoint if isinstance(item.original, CleanCheckout) and item.original.matches(self.runner)
+                                  else full_checkpoint(target.repository.path, self.runner))
+                    journal.repository(name, {"state": "published", "checkpoint": checkpoint})
                 for name, recovery in recoveries.items():
                     journal.action(f"cleaning:{name}")
                     self.git.cleanup(recovery)
@@ -341,14 +374,15 @@ class Sync:
                     raise
                 raise FlurryError(f"{detail}\nPublished: {done}. Run journal/recovery data: {journal.path}\nNo published history was rolled back.") from error
 
-    def _prepare_all(self, targets: tuple[Target, ...], options: SyncOptions, journal: Journal) -> dict[str, Prepared]:
+    def _prepare_all(self, targets: tuple[Target, ...], options: SyncOptions, journal: Journal, witnesses: dict[str, CleanCheckout]) -> dict[str, Prepared]:
         max_preparations = 4
         storage_locks = {target.repository.common_dir: Lock() for target in targets}
 
         def prepare(index: int, target: Target) -> Prepared:
             # Linked worktrees share Git metadata; never capture them concurrently.
             with storage_locks[target.repository.common_dir]:
-                item = self.git.prepare(target.repository.path, journal.directory / f"trial-{index}", target.baseline, options.dirty_mode, options.message, options.commit_scope, remote=target.remote)
+                item = self.git.prepare(target.repository.path, journal.directory / f"trial-{index}", target.baseline, options.dirty_mode, options.message, options.commit_scope, remote=target.remote, witness=witnesses.get(target.repository.name), remote_url=target.baseline_url)
+                item.lock_state = physical_file(item.trial / "flake.lock")
                 self._check_push_base(target, item)
                 return item
 
@@ -404,7 +438,7 @@ class Sync:
                 path = Path(value["path"])
                 if path.is_symlink() or not path.resolve().is_relative_to(config.root):
                     raise FlurryError("Repository checkpoint escapes the workspace")
-                if fingerprint(path, self.runner) != value["checkpoint"]:
+                if not matches_checkpoint(path, self.runner, value["checkpoint"]):
                     raise FlurryError(f"{name}: checkout changed since the last checkpoint; refusing automatic resume")
                 checkpoints.append((path, value["checkpoint"]))
             raw = data.get("options")

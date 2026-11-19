@@ -89,6 +89,15 @@ and errors in red. Redirected output and `--json` stay plain. A nonempty
 force colour, `--color=never` to disable it, or `--color=auto` for the default;
 explicit controls override the environment, but `--json` always stays uncoloured.
 
+For an ordinary, physically clean checkout at its freshly fetched baseline, Flurry
+compares Git's index, visible untracked paths and raw file contents/modes with
+the committed tree. It still makes a private Git trial, evaluates its declarations,
+refreshes the selected inputs and runs the configured checks. With nothing to
+restore, an unchanged candidate needs no stash or source checkout. Dirty,
+rebasing or more complex checkouts use the full preservation rehearsal. New
+lock commits still use source commit hooks and recoverable promotion. Every
+publication uses a normal source push and verifies the exact remote ref afterward.
+
 Validation defaults to `--check eval` (`nix flake check --no-build`, no lock
 writes). `--check full` additionally builds checks; `--check none` explicitly
 skips validation and emits a warning. Flurry never activates or deploys anything.

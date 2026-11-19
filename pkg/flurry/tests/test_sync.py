@@ -294,6 +294,163 @@ class LocalGitSyncTests(SyncFixture, unittest.TestCase):
         self.assert_unchanged_push_refuses_drift(lambda: self.git(self.repo, "checkout", "-b", "other"))
         self.assertEqual(self.git(self.repo, "symbolic-ref", "HEAD"), "refs/heads/other")
 
+    def test_unchanged_push_refuses_late_private_trial_mutation(self):
+        original = self.remote_head("a")
+        self.git(self.repo, "commit", "--allow-empty", "-m", "ready to publish")
+        action = Journal.action
+
+        def change_trial(journal, name):
+            action(journal, name)
+            if name == "pushing:a":
+                trial = Path(journal.document["repositories"]["a"]["trial"])
+                (trial / "edit.txt").write_text("changed after validation\n")
+
+        with patch.object(Journal, "action", new=change_trial):
+            with self.assertRaisesRegex(FlurryError, "trial|rehearsal"):
+                self.run_sync(self.preserve)
+        self.assertEqual(self.remote_head("a"), original)
+
+    def test_clean_local_head_does_not_skip_filter_validation_of_the_fetched_ancestor(self):
+        _, origin, seed = self.repos["a"]
+        (seed / ".gitattributes").write_text("edit.txt filter=filter-in-fetched-tree\n")
+        self.git(seed, "add", ".gitattributes")
+        self.git(seed, "commit", "-m", "filtered baseline")
+        self.git(seed, "push", "origin", "main")
+        self.git(self.repo, "pull", "--ff-only")
+        self.git(self.repo, "rm", ".gitattributes")
+        self.git(self.repo, "commit", "-m", "unfiltered local work")
+        remote = self.git(origin, "rev-parse", "refs/heads/main")
+        with self.assertRaisesRegex(FlurryError, "filter-in-fetched-tree"):
+            self.run_sync(self.preserve)
+        self.assertEqual(self.remote_head("a"), remote)
+
+    def test_head_is_checked_after_the_last_source_index_observation(self):
+        old = self.remote_head("a")
+        next_head = self.git(self.repo, "commit-tree", "HEAD^{tree}", "-p", "HEAD", "-m", "same tree")
+        call, action = self.runner.call, Journal.action
+        pushing = False
+        changed = False
+
+        def phase(journal, name):
+            nonlocal pushing
+            action(journal, name)
+            pushing = name == "pushing:a"
+
+        def late_head(args, *rest):
+            nonlocal changed
+            result = call(args, *rest)
+            if pushing and not changed and "ls-files" in args and str(self.repo) in args:
+                changed = True
+                self.git(self.repo, "update-ref", "refs/heads/main", next_head)
+            return result
+
+        with patch.object(Journal, "action", new=phase), patch.object(self.runner, "call", side_effect=late_head):
+            with self.assertRaisesRegex(FlurryError, "Source changed|HEAD changed"):
+                self.run_sync(self.preserve)
+        self.assertTrue(changed)
+        self.assertEqual(self.remote_head("a"), old)
+
+    def test_ambiguous_branch_preserves_native_symbolic_ref_abbreviation(self):
+        self.git(self.repo, "update-ref", "refs/remotes/main", "HEAD")
+        branch = self.git(self.repo, "symbolic-ref", "--short", "HEAD")
+        plan = plan_sync(load_config(self.root, ()), self.runner, self.nix, self.preserve)
+        self.assertEqual(plan.targets[0].repository.branch, branch)
+        self.assertEqual(plan.targets[0].push_ref, "refs/heads/" + branch)
+
+    def test_changed_fetch_url_cannot_certify_a_stale_clean_baseline(self):
+        _, origin, seed = self.repos["a"]
+        other = self.directory / "advanced.git"
+        self.git(self.directory, "clone", "--bare", str(origin), str(other))
+        self.git(seed, "commit", "--allow-empty", "-m", "advance the replacement baseline")
+        self.git(seed, "push", str(other), "main")
+        self.git(self.repo, "remote", "set-url", "--push", "origin", str(origin))
+        self.assertNotEqual(self.git(other, "rev-parse", "main"), self.remote_head("a"))
+        initial = self.remote_head("a")
+        call = self.runner.call
+        changed = False
+
+        def switch_after_origin_read(args, *rest):
+            nonlocal changed
+            result = call(args, *rest)
+            if not changed and str(self.repo) in args and args[-3:] == ["remote", "get-url", "origin"]:
+                changed = True
+                self.git(self.repo, "remote", "set-url", "origin", str(other))
+            return result
+
+        with patch.object(self.runner, "call", side_effect=switch_after_origin_read):
+            with self.assertRaisesRegex(FlurryError, "changed"):
+                self.run_sync(self.preserve)
+        self.assertTrue(changed)
+        self.assertEqual(self.remote_head("a"), initial)
+        self.assertEqual(self.git(self.repo, "rev-parse", "HEAD"), initial)
+        self.assertFalse(any(event.startswith("Publishing") for event in self.events))
+
+    def test_symbolic_head_is_preserved_when_a_tag_is_also_named_head(self):
+        head = self.remote_head("a")
+        self.git(self.repo, "update-ref", "refs/tags/HEAD", head)
+        self.assertEqual(self.run_sync(self.preserve).document["status"], "complete")
+        self.assertEqual(self.git(self.repo, "symbolic-ref", "HEAD"), "refs/heads/main")
+        self.assertEqual(self.remote_head("a"), head)
+
+    def test_branch_name_can_contain_a_unicode_line_separator(self):
+        branch = "a\u2028b"
+        self.git(self.repo, "checkout", "-b", branch)
+        self.git(self.repo, "push", "--set-upstream", "origin", branch)
+        self.assertEqual(self.run_sync(self.preserve).document["status"], "complete")
+
+    def test_source_only_sentinel_ignore_is_irrelevant_without_source_promotion(self):
+        (self.repo / ".git/info/exclude").write_text(".flurry-*\n")
+        self.assertEqual(self.run_sync(self.preserve).document["status"], "complete")
+
+    def test_nonflake_provider_can_retain_a_dangling_tracked_lock_symlink(self):
+        (self.repo / "flake.lock").symlink_to("not-a-flake")
+        self.git(self.repo, "add", "flake.lock")
+        self.git(self.repo, "commit", "-m", "unrelated symlink")
+        self.git(self.repo, "push", "origin", "main")
+        self.assertEqual(self.run_sync(self.preserve).document["status"], "complete")
+        self.assertEqual(os.readlink(self.repo / "flake.lock"), "not-a-flake")
+
+    def test_external_attributes_path_is_not_truncated_at_a_vertical_tab(self):
+        directory = self.directory / "real\vxdg"
+        (directory / "git").mkdir(parents=True)
+        (directory / "git/attributes").write_text("edit.txt filter=external-fidelity-test\n")
+        self.runner.environment["XDG_CONFIG_HOME"] = str(directory)
+        with self.assertRaisesRegex(FlurryError, "external-fidelity-test"):
+            self.run_sync(self.preserve)
+
+    def test_intent_to_add_at_a_committed_empty_blob_is_not_clean(self):
+        name = "empty"
+        (self.repo / name).touch()
+        self.git(self.repo, "add", name)
+        self.git(self.repo, "commit", "-m", "space for data")
+        self.git(self.repo, "push", "origin", "main")
+        staged = self.git(self.repo, "ls-files", "--stage", "--", name)
+        self.git(self.repo, "rm", "--cached", name)
+        self.git(self.repo, "add", "--intent-to-add", name)
+        self.assertEqual(self.git(self.repo, "ls-files", "--stage", "--", name), staged)
+        with self.assertRaisesRegex(FlurryError, "Intent-to-add"):
+            self.run_sync(self.preserve)
+
+    def test_published_checkpoint_records_edits_made_by_the_source_push_hook(self):
+        b = self.add_repo("b", {}, flake=False)
+        (self.root / "flurry.toml").write_text('[repositories.a]\n[repositories.b]\n')
+        first = self.repo / ".git/hooks/pre-push"
+        first.write_text("#!/bin/sh\nprintf 'hook edit\\n' > edit.txt\n")
+        first.chmod(0o755)
+        second = b / ".git/hooks/pre-push"
+        second.write_text("#!/bin/sh\nexit 1\n")
+        second.chmod(0o755)
+        with self.assertRaisesRegex(FlurryError, "Published: a"):
+            self.run_sync(self.preserve)
+        saved = self.journal()
+        self.assertEqual((self.repo / "edit.txt").read_text(), "hook edit\n")
+        second.unlink()
+        (self.repo / "edit.txt").write_text("later edit\n")
+        with self.assertRaisesRegex(FlurryError, "checkout changed"):
+            self.sync.resume(load_config(self.root, ()), saved["id"])
+        (self.repo / "edit.txt").write_text("hook edit\n")
+        self.assertEqual(self.sync.resume(load_config(self.root, ()), saved["id"]).document["status"], "complete")
+
     def test_collision_guard_checks_refs_created_at_the_promotion_journal_boundary(self):
         initial = self.remote_head("a")
         seed = self.repos["a"][2]
@@ -637,6 +794,65 @@ class SyncTests(SyncFixture, unittest.TestCase):
         self.assertIn("--option allow-import-from-derivation false", errors.getvalue())
         self.assertIn("flake check --no-write-lock-file --no-build", errors.getvalue())
         self.assertNotIn("\x1b", output.getvalue() + errors.getvalue())
+
+    def test_generated_lock_must_not_adopt_a_source_edit_during_promotion_capture(self):
+        a = self.add_repo("a", {})
+        b = self.add_repo("b", {"a": "a"})
+        self.git(a, "commit", "--allow-empty", "-m", "advance the provider")
+        old_b = self.remote_head("b")
+        capture = self.sync.git._capture
+        changed = False
+
+        def concurrent_capture(repo, scratch):
+            nonlocal changed
+            if repo == b and not changed and self.remote_head("a") == self.git(a, "rev-parse", "HEAD"):
+                changed = True
+                (b / "edit.txt").write_text("new user work\n")
+            return capture(repo, scratch)
+
+        with patch.object(self.sync.git, "_capture", side_effect=concurrent_capture):
+            with self.assertRaisesRegex(FlurryError, "Source changed"):
+                self.run_sync(self.options("preserve"))
+        self.assertTrue(changed)
+        self.assertEqual((b / "edit.txt").read_text(), "new user work\n")
+        self.assertEqual(self.remote_head("b"), old_b)
+        self.assertEqual(self.git(b, "for-each-ref", "refs/flurry/"), "")
+
+    def test_generated_lock_cannot_publish_a_staged_tab_suffixed_path(self):
+        a = self.add_repo("a", {})
+        b = self.add_repo("b", {"a": "a"})
+        path = "note\tflake.lock"
+        (b / path).write_text("original\n")
+        self.git(b, "add", path)
+        self.git(b, "commit", "-m", "tab-suffixed path")
+        self.git(b, "push", "origin", "main")
+        old_b = self.remote_head("b")
+        self.git(a, "commit", "--allow-empty", "-m", "advance the provider")
+        update = self.nix.update
+
+        def stage_other_lock(checkout, inputs):
+            update(checkout, inputs)
+            (checkout / path).write_text("not validated\n")
+            self.git(checkout, "add", path)
+            (checkout / path).write_text("original\n")
+
+        with patch.object(self.nix, "update", side_effect=stage_other_lock):
+            with self.assertRaisesRegex(FlurryError, "outside flake.lock|other than"):
+                self.run_sync(self.options("preserve"))
+        self.assertEqual(self.remote_head("b"), old_b)
+
+    def test_sentinel_ignored_by_consumer_blocks_before_provider_publication(self):
+        a = self.add_repo("a", {})
+        b = self.add_repo("b", {"a": "a"})
+        (b / ".gitignore").write_text(".flurry-*\n")
+        self.git(b, "add", ".gitignore")
+        self.git(b, "commit", "-m", "custom ignores")
+        self.git(b, "push", "origin", "main")
+        old = self.remote_head("a")
+        self.git(a, "commit", "--allow-empty", "-m", "not yet published")
+        with self.assertRaisesRegex(FlurryError, "sentinel collision"):
+            self.run_sync(self.options("preserve"))
+        self.assertEqual(self.remote_head("a"), old)
 
     def test_new_lock_is_git_visible_to_the_validation_gate(self):
         self.add_repo("a", {})
