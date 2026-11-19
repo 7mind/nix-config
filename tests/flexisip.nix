@@ -542,6 +542,24 @@ pkgs.testers.runNixOSTest {
         }
       ];
 
+      # Simulate an existing 0600 upload from a previous NixOS generation.
+      users.users.wwwrun = {
+        isSystemUser = true;
+        uid = config.ids.uids.wwwrun;
+        group = "wwwrun";
+      };
+      users.groups.wwwrun.gid = config.ids.gids.wwwrun;
+      systemd.services.flexisip-test-legacy-upload = {
+        requiredBy = [ "flexisip-file-transfer-state.service" ];
+        before = [ "flexisip-file-transfer-state.service" ];
+        serviceConfig.Type = "oneshot";
+        script = ''
+          state=/var/lib/flexisip-file-transfer
+          install -d -o wwwrun -g wwwrun -m 0750 "$state"
+          printf '%s' 'legacy-upload' | install -o wwwrun -g wwwrun -m 0600 /dev/stdin "$state/legacy.jpg"
+        '';
+      };
+
       # Let wait_for_unit report startup failures instead of observing the
       # production restart loop indefinitely.
       systemd.services.flexisip-proxy.serviceConfig.Restart = lib.mkForce "no";
@@ -562,6 +580,40 @@ pkgs.testers.runNixOSTest {
     server.wait_for_unit("flexisip-presence.service")
     server.wait_for_unit("httpd.service")
     server.wait_for_unit("nginx.service")
+
+    web_user = "flexisip-file-transfer"
+    web_shell = f"runuser -u {web_user} -- "
+    wwwrun_shell = "runuser -u wwwrun -- "
+    web_config = "/run/flexisip-file-transfer/file-transfer.conf.php"
+    web_sql = f"mariadb --protocol=socket --user={web_user} --batch --skip-column-names"
+    server.succeed(f"systemctl show --property=User --value httpd.service | grep -qx {web_user}")
+    server.succeed(f"systemctl show --property=Group --value httpd.service | grep -qx {web_user}")
+    server.succeed(f"stat -c '%U:%G:%a' {web_config} | grep -qx root:{web_user}:640")
+    server.succeed(web_shell + f"test -r {web_config}")
+    server.fail(web_shell + f"test -w {web_config}")
+    server.fail(wwwrun_shell + f"test -r {web_config}")
+    for sip_secret in (
+        "/run/flexisip/users.db",
+        "/run/flexisip/flexisip.conf",
+        "/run/flexisip/flexisip-conference.conf",
+        "/var/lib/flexisip/database/password",
+    ):
+        server.succeed(f"test -s {sip_secret}")
+        server.fail(web_shell + f"test -r {sip_secret}")
+        server.fail(wwwrun_shell + f"test -r {sip_secret}")
+    server.succeed(
+        web_shell + web_sql + " -e 'SELECT COUNT(*) FROM flexisip_accounts.accounts' | grep -qx 1"
+    )
+    server.succeed(
+        web_shell + web_sql + " -e 'SELECT COUNT(*) FROM flexisip_accounts.passwords' | grep -qx 1"
+    )
+    server.fail(web_shell + web_sql + " -e 'UPDATE flexisip_accounts.passwords SET password = password'")
+    server.fail(web_shell + web_sql + " -e 'USE flexisip_messages'")
+    server.fail(web_shell + web_sql + " -e 'USE flexisip_conference'")
+    server.fail(wwwrun_shell + web_sql + " -e 'SELECT 1'")
+    server.succeed(
+        f"stat -c '%U:%G:%a' /var/lib/flexisip-file-transfer/legacy.jpg | grep -qx {web_user}:{web_user}:600"
+    )
 
     server.succeed("test $(systemctl show --property LimitNOFILE --value flexisip-proxy.service) -eq 524288")
     server.succeed("! grep -E '^(debug|tls-certificates-dir)=' /run/flexisip/flexisip.conf")
@@ -741,6 +793,11 @@ pkgs.testers.runNixOSTest {
     )
     assert unauthenticated_status == "401", unauthenticated_status
 
+    server.succeed(
+        "curl --fail --silent --show-error --insecure --digest --user 101:test-password "
+        "--header 'From: sip:101@pbx.test' "
+        "https://lp.test/flexisip-http-file-transfer-server/tmp/legacy.jpg | grep -qx legacy-upload"
+    )
     server.succeed("printf 'photo-payload' > /tmp/photo.jpg")
     upload_status = server.succeed(
         "curl --silent --show-error --insecure --digest --user 101:test-password "

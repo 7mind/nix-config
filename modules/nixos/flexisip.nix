@@ -37,8 +37,13 @@ let
   conferenceStateDir = "${stateDir}/conference";
   databaseStateDir = "${stateDir}/database";
   databasePasswordPath = "${databaseStateDir}/password";
+  databaseSocketPath = config.services.mysql.settings.mysqld.socket or "/run/mysqld/mysqld.sock";
+  mariadbAdmin = "${pkgs.mariadb}/bin/mariadb --protocol=socket --socket=${lib.escapeShellArg databaseSocketPath} --skip-print-query-on-error";
+  fileTransferUser = "flexisip-file-transfer";
+  fileTransferRuntimeDir = "/run/flexisip-file-transfer";
   fileTransferStateDir = "/var/lib/flexisip-file-transfer";
-  fileTransferConfigPath = "${runtimeDir}/file-transfer.conf.php";
+  fileTransferConfigPath = "${fileTransferRuntimeDir}/file-transfer.conf.php";
+  fileTransferNoncePath = "${databaseStateDir}/file-transfer-nonce";
   fileTransferAuthority =
     cfg.fileTransfer.publicHost
     + optionalString (cfg.fileTransfer.publicPort != 443) ":${toString cfg.fileTransfer.publicPort}";
@@ -437,9 +442,9 @@ let
     define("fhft_logFile", ${builtins.toJSON "${fileTransferStateDir}/server.log"});
     define("fhft_logDomain", "FHFT");
     define("DIGEST_AUTH", true);
-    define("AUTH_DB_HOST", "127.0.0.1");
-    define("AUTH_DB_USER", "flexisip");
-    define("AUTH_DB_PASSWORD", "${databasePasswordPlaceholder}");
+    define("AUTH_DB_HOST", "localhost");
+    define("AUTH_DB_USER", "${fileTransferUser}");
+    define("AUTH_DB_PASSWORD", "");
     define("AUTH_DB_NAME", "flexisip_accounts");
     define("ACCOUNTS_DB_TABLE", "accounts");
     define("ACCOUNTS_ALGO_DB_TABLE", "passwords");
@@ -459,7 +464,7 @@ let
     ''
       username_hex=$(printf '%s' ${lib.escapeShellArg name} | ${pkgs.coreutils}/bin/od -An -v -tx1 | ${pkgs.coreutils}/bin/tr -d ' \n')
       password_hex=$(${pkgs.coreutils}/bin/tr -d '\r\n' < ${lib.escapeShellArg ext.passwordFile} | ${pkgs.coreutils}/bin/od -An -v -tx1 | ${pkgs.coreutils}/bin/tr -d ' \n')
-      ${pkgs.mariadb}/bin/mariadb --protocol=socket flexisip_accounts <<SQL
+      ${mariadbAdmin} flexisip_accounts <<SQL
       INSERT INTO accounts (username, domain)
         VALUES (CONVERT(UNHEX('$username_hex') USING utf8mb4), CONVERT(UNHEX('$domain_hex') USING utf8mb4));
       SET @account_id = LAST_INSERT_ID();
@@ -481,16 +486,8 @@ let
       mv ${databasePasswordPath}.tmp ${databasePasswordPath}
     fi
 
-    if [[ ! -s ${databaseStateDir}/file-transfer-nonce ]]; then
-      ${pkgs.coreutils}/bin/od -An -N32 -v -tx1 /dev/urandom \
-        | ${pkgs.coreutils}/bin/tr -d ' \n' > ${databaseStateDir}/file-transfer-nonce.tmp
-      chown root:flexisip ${databaseStateDir}/file-transfer-nonce.tmp
-      chmod 0640 ${databaseStateDir}/file-transfer-nonce.tmp
-      mv ${databaseStateDir}/file-transfer-nonce.tmp ${databaseStateDir}/file-transfer-nonce
-    fi
-
     database_password=$(<${databasePasswordPath})
-    ${pkgs.mariadb}/bin/mariadb --protocol=socket <<SQL
+    ${mariadbAdmin} <<SQL
     CREATE DATABASE IF NOT EXISTS flexisip_messages CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
     CREATE DATABASE IF NOT EXISTS flexisip_accounts CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
     ${optionalString cfg.conference.enable "CREATE DATABASE IF NOT EXISTS flexisip_conference CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"}
@@ -514,11 +511,18 @@ let
       CONSTRAINT passwords_account FOREIGN KEY (account_id)
         REFERENCES flexisip_accounts.accounts (id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    ${optionalString cfg.fileTransfer.enable ''
+      CREATE USER IF NOT EXISTS '${fileTransferUser}'@'localhost' IDENTIFIED VIA unix_socket;
+      ALTER USER '${fileTransferUser}'@'localhost' IDENTIFIED VIA unix_socket;
+      REVOKE ALL PRIVILEGES, GRANT OPTION FROM '${fileTransferUser}'@'localhost';
+      GRANT SELECT ON flexisip_accounts.accounts TO '${fileTransferUser}'@'localhost';
+      GRANT SELECT ON flexisip_accounts.passwords TO '${fileTransferUser}'@'localhost';
+    ''}
     FLUSH PRIVILEGES;
     SQL
 
     domain_hex=$(printf '%s' ${lib.escapeShellArg cfg.domain} | ${pkgs.coreutils}/bin/od -An -v -tx1 | ${pkgs.coreutils}/bin/tr -d ' \n')
-    ${pkgs.mariadb}/bin/mariadb --protocol=socket flexisip_accounts <<SQL
+    ${mariadbAdmin} flexisip_accounts <<SQL
     DELETE FROM accounts
       WHERE domain=CONVERT(UNHEX('$domain_hex') USING utf8mb4) COLLATE utf8mb4_unicode_ci;
     SQL
@@ -562,8 +566,9 @@ let
     ${
       if cfg.messaging.database.enable then
         ''
-          ${pkgs.gnused}/bin/sed "s/${databasePasswordPlaceholder}/$database_password/g" \
-            ${flexisipConfTemplate} > ${confPath}
+          ${pkgs.gnused}/bin/sed -f - ${flexisipConfTemplate} > ${confPath} <<SED
+          s/${databasePasswordPlaceholder}/$database_password/g
+          SED
           chown flexisip:flexisip ${confPath}
           chmod 0640 ${confPath}
         ''
@@ -573,8 +578,9 @@ let
         ''
     }
     ${optionalString cfg.conference.enable ''
-      ${pkgs.gnused}/bin/sed "s/${databasePasswordPlaceholder}/$database_password/g" \
-        ${conferenceConfTemplate} > ${conferenceConfPath}
+      ${pkgs.gnused}/bin/sed -f - ${conferenceConfTemplate} > ${conferenceConfPath} <<SED
+      s/${databasePasswordPlaceholder}/$database_password/g
+      SED
       chown flexisip:flexisip ${conferenceConfPath}
       chmod 0640 ${conferenceConfPath}
     ''}
@@ -582,15 +588,44 @@ let
 
   writeFileTransferConfig = pkgs.writeShellScript "flexisip-write-file-transfer-conf" ''
     set -euo pipefail
-    install -d -o flexisip -g flexisip -m 0750 ${runtimeDir}
-    database_password=$(<${databasePasswordPath})
-    nonce=$(<${databaseStateDir}/file-transfer-nonce)
-    ${pkgs.gnused}/bin/sed \
-      -e "s/${databasePasswordPlaceholder}/$database_password/g" \
-      -e "s/${fileTransferNoncePlaceholder}/$nonce/g" \
-      ${fileTransferConfigTemplate} > ${fileTransferConfigPath}
-    chown root:flexisip ${fileTransferConfigPath}
-    chmod 0640 ${fileTransferConfigPath}
+    umask 0077
+    if [[ ! -s ${fileTransferNoncePath} ]]; then
+      nonce_tmp=$(mktemp ${databaseStateDir}/file-transfer-nonce.XXXXXX)
+      ${pkgs.coreutils}/bin/od -An -N32 -v -tx1 /dev/urandom \
+        | ${pkgs.coreutils}/bin/tr -d ' \n' > "$nonce_tmp"
+      mv -fT "$nonce_tmp" ${fileTransferNoncePath}
+    fi
+    chmod 0600 ${fileTransferNoncePath}
+
+    install -d -o root -g ${fileTransferUser} -m 0750 ${fileTransferRuntimeDir}
+    nonce=$(<${fileTransferNoncePath})
+    tmp=$(mktemp ${fileTransferRuntimeDir}/config.XXXXXX)
+    trap 'rm -f -- "$tmp"' EXIT
+    # Do not pass the nonce in process arguments.
+    ${pkgs.gnused}/bin/sed -f - ${fileTransferConfigTemplate} > "$tmp" <<SED
+    s/${fileTransferNoncePlaceholder}/$nonce/g
+    SED
+    chown root:${fileTransferUser} "$tmp"
+    chmod 0640 "$tmp"
+    mv -fT "$tmp" ${fileTransferConfigPath}
+    # Remove the previous web config, which held the SIP database password.
+    rm -f ${runtimeDir}/file-transfer.conf.php
+  '';
+
+  prepareFileTransferState = pkgs.writeShellScript "flexisip-file-transfer-state" ''
+    set -euo pipefail
+    # Only migrate flat upload/log files from the old wwwrun service. Never
+    # traverse symlinks or change ownership of multiply linked files.
+    if [[ -L ${fileTransferStateDir} ]]; then
+      echo 'File transfer state directory must not be a symlink' >&2
+      exit 1
+    fi
+    install -d -o root -g root -m 0700 ${fileTransferStateDir}
+    ${pkgs.findutils}/bin/find ${fileTransferStateDir} -xdev -mindepth 1 -maxdepth 1 \
+      -type f -links 1 -uid ${toString config.ids.uids.wwwrun} \
+      -exec chown --no-dereference ${fileTransferUser}:${fileTransferUser} {} +
+    chown ${fileTransferUser}:${fileTransferUser} ${fileTransferStateDir}
+    chmod 0750 ${fileTransferStateDir}
   '';
 
   preStartAll = pkgs.writeShellScript "flexisip-prestart" ''
@@ -1180,15 +1215,25 @@ in
     })
 
     (mkIf cfg.fileTransfer.enable {
-      users.users.wwwrun.extraGroups = [ "flexisip" ];
-
-      systemd.tmpfiles.rules = [
-        "d ${fileTransferStateDir} 0750 wwwrun wwwrun -"
+      # The NixOS Apache instance has one identity for all virtual hosts.
+      assertions = [
+        {
+          assertion = lib.attrNames config.services.httpd.virtualHosts == [ cfg.domain ];
+          message = "Flexisip file transfer requires a dedicated Apache instance; do not add other services to services.httpd.virtualHosts";
+        }
       ];
+      users.users.${fileTransferUser} = {
+        isSystemUser = true;
+        group = fileTransferUser;
+      };
+      users.groups.${fileTransferUser} = { };
 
       services.httpd = {
         enable = true;
+        user = fileTransferUser;
+        group = fileTransferUser;
         enablePHP = true;
+        phpOptions."mysqli.default_socket" = databaseSocketPath;
         phpPackage = pkgs.php.withExtensions (
           { enabled, all }:
           enabled ++ [ all.mysqli ]
@@ -1240,17 +1285,36 @@ in
       };
 
       systemd.services.httpd = {
-        after = [ "flexisip-database-prepare.service" ];
-        requires = [ "flexisip-database-prepare.service" ];
+        after = [
+          "flexisip-database-prepare.service"
+          "flexisip-file-transfer-state.service"
+        ];
+        requires = [
+          "flexisip-database-prepare.service"
+          "flexisip-file-transfer-state.service"
+        ];
         serviceConfig.ReadWritePaths = [ fileTransferStateDir ];
+      };
+
+      # In case of rollback, restore wwwrun:wwwrun ownership of this directory
+      # and its regular upload/log files before restarting the old Apache unit.
+      systemd.services.flexisip-file-transfer-state = {
+        description = "Prepare Linphone file-transfer state directory";
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          ExecStart = prepareFileTransferState;
+        };
       };
 
       systemd.services.flexisip-file-transfer-cleanup = {
         description = "Remove expired Linphone file transfers";
+        after = [ "flexisip-file-transfer-state.service" ];
+        requires = [ "flexisip-file-transfer-state.service" ];
         serviceConfig = {
           Type = "oneshot";
-          User = "wwwrun";
-          Group = "wwwrun";
+          User = fileTransferUser;
+          Group = fileTransferUser;
           ExecStart = pkgs.writeShellScript "flexisip-file-transfer-cleanup" ''
             set -euo pipefail
             ${pkgs.findutils}/bin/find ${fileTransferStateDir} -xdev -mindepth 1 -maxdepth 1 \
