@@ -250,8 +250,14 @@ Tracked state or overriding unignore rules cause an explicit refusal; Flurry doe
 not silently untrack files or overwrite those rules. Non-Git workspaces need no
 Git metadata changes.
 
-Git recovery refs under `refs/flurry/RUN_ID/` retain captured original state and
-prepared commits until all selected pushes have been verified. Successful runs
+If the final commit and rehearsed staged, unstaged and untracked state already
+match the original checkout, Flurry revalidates the source and publishes without
+stashing or checking it out again. Lock updates, configured checks and normal
+hook-honoring pushes still run. No source recovery refs are needed in this case.
+
+For checkouts that need promotion, Git recovery refs under `refs/flurry/RUN_ID/`
+retain captured original state and prepared commits until all selected pushes
+have been verified. Successful runs
 remove their own `stash`, `remaining` and `prepared` refs using expected-object-ID
 checks and an atomic transaction per repository. Cleanup does not alter branches,
 user stashes or checkout contents. A cleanup failure is reported, not silently

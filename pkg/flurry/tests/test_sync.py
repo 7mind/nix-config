@@ -239,10 +239,68 @@ class LocalGitSyncTests(SyncFixture, unittest.TestCase):
         self.assertEqual((self.repo / "edit.txt").read_text(), "unstaged\n")
         self.assertEqual(untracked.read_bytes(), b"private\x00\xff")
 
+    def test_clean_porcelain_does_not_prove_the_final_checkout_matches(self):
+        initial = self.remote_head("a")
+        (self.repo / ".gitattributes").write_text("edit.txt text eol=lf\n")
+        self.git(self.repo, "add", ".gitattributes")
+        self.git(self.repo, "commit", "-m", "text attributes")
+        commit_lock = self.sync.git.commit_lock
+        for change in ("normalized bytes", "hidden untracked"):
+            with self.subTest(change=change):
+                def alter_trial(item):
+                    commit_lock(item)
+                    if change == "normalized bytes":
+                        (item.trial / "edit.txt").write_bytes(b"base\r\n")
+                        self.git(item.trial, "add", "edit.txt")
+                    else:
+                        self.git(item.trial, "config", "status.showUntrackedFiles", "no")
+                        (item.trial / "late-file").write_text("not rehearsed\n")
+                    self.assertEqual(self.git(item.trial, "status", "--porcelain"), "")
+
+                with patch.object(self.sync.git, "commit_lock", side_effect=alter_trial):
+                    with self.assertRaisesRegex(FlurryError, "Final restore rehearsal"):
+                        self.run_sync(self.preserve)
+                self.assertEqual(self.remote_head("a"), initial)
+                self.assertEqual(self.git(self.repo, "for-each-ref", "refs/flurry/"), "")
+
+    def assert_unchanged_push_refuses_drift(self, mutate):
+        audit = self.directory / "pushed"
+        hook = self.repo / ".git/hooks/pre-push"
+        hook.write_text(f'#!/bin/sh\ntouch "{audit}"\n')
+        hook.chmod(0o755)
+        action = Journal.action
+
+        def mutate_at_push(journal, name):
+            action(journal, name)
+            if name == "pushing:a":
+                mutate()
+
+        with patch.object(Journal, "action", new=mutate_at_push):
+            with self.assertRaisesRegex(FlurryError, "Source changed during rehearsal"):
+                self.run_sync(self.preserve)
+        self.assertFalse(audit.exists())
+        failed = self.journal()
+        self.assertNotIn("recovery", failed["repositories"]["a"])
+        self.assertEqual(self.git(self.repo, "for-each-ref", "refs/flurry/"), "")
+        with self.assertRaisesRegex(FlurryError, "checkout changed"):
+            self.sync.resume(load_config(self.root, ()), failed["id"])
+
+    def test_unchanged_push_detects_edit_with_same_head(self):
+        path = self.repo / "edit.txt"
+        self.assert_unchanged_push_refuses_drift(lambda: path.write_text("concurrent edit\n"))
+        self.assertEqual(path.read_text(), "concurrent edit\n")
+
+    def test_unchanged_push_detects_branch_switch_with_same_head(self):
+        self.assert_unchanged_push_refuses_drift(lambda: self.git(self.repo, "checkout", "-b", "other"))
+        self.assertEqual(self.git(self.repo, "symbolic-ref", "HEAD"), "refs/heads/other")
+
     def test_collision_guard_checks_refs_created_at_the_promotion_journal_boundary(self):
         initial = self.remote_head("a")
-        self.git(self.repo, "commit", "--allow-empty", "-m", "local work")
-        candidate = self.git(self.repo, "rev-parse", "HEAD")
+        seed = self.repos["a"][2]
+        self.git(seed, "commit", "--allow-empty", "-m", "upstream work")
+        self.git(seed, "push", "origin", "HEAD:refs/heads/baseline")
+        (self.root / "flurry.toml").write_text('[repositories.a]\nrebase_onto = "origin/baseline"\n')
+        candidate = self.git(seed, "rev-parse", "HEAD")
         suffix = hashlib.sha256(str(self.repo).encode()).hexdigest()[:16]
         save = Journal.save
 
@@ -301,6 +359,7 @@ class SyncTests(SyncFixture, unittest.TestCase):
         commands = (
             ("diff", "--cached", "--binary"), ("diff", "--binary"),
             ("stash", "list", "--format=%H"), ("ls-files", "--others", "--exclude-standard"),
+            ("reflog", "show", "--format=%H %gs", "HEAD"),
         )
         before = [self.git(a, *args) for args in commands]
         refs_before = self.git(a, "for-each-ref", "--format=%(refname) %(objectname)")
@@ -328,6 +387,9 @@ class SyncTests(SyncFixture, unittest.TestCase):
 
     def test_cleanup_failure_is_reported_after_publication(self):
         a = self.add_repo("a", {})
+        seed = self.repos["a"][2]
+        self.git(seed, "commit", "--allow-empty", "-m", "upstream work")
+        self.git(seed, "push", "origin", "main")
         with patch.object(self.sync.git, "cleanup", side_effect=FlurryError("cleanup refused")):
             with self.assertRaisesRegex(FlurryError, "cleanup refused.*\\nPublished: a"):
                 self.run_sync(self.options("preserve"))
@@ -471,6 +533,8 @@ class SyncTests(SyncFixture, unittest.TestCase):
         unstaged = self.git(a, "diff", "--binary")
         result = self.run_sync(self.options("preserve"))
         self.assertEqual(result.document["status"], "complete")
+        repositories = result.document["repositories"]
+        self.assertEqual({name for name, entry in repositories.items() if "recovery" in entry}, {"b", "c"})
         self.assertNotEqual(old_b, self.remote_head("b"))
         self.assertEqual(self.nix.locked_inputs(b)["a"].rev, self.remote_head("a"))
         self.assertEqual(self.nix.locked_inputs(c)["a"].rev, self.remote_head("a"))
@@ -481,7 +545,9 @@ class SyncTests(SyncFixture, unittest.TestCase):
         published = self.git(self.repos["a"][1], "ls-tree", "-r", "--name-only", "main")
         self.assertNotIn("untracked.txt", published)
         heads = [self.remote_head(name) for name in ("a", "b", "c")]
-        self.run_sync(self.options("preserve"))
+        unchanged = self.run_sync(self.options("preserve"))
+        for entry in unchanged.document["repositories"].values():
+            self.assertNotIn("recovery", entry)
         self.assertEqual(heads, [self.remote_head(name) for name in ("a", "b", "c")])
 
     def test_checks_none_still_runs_consumer_commit_hook_before_publishing_lock(self):
@@ -728,7 +794,7 @@ class SyncTests(SyncFixture, unittest.TestCase):
         retained = {}
         for name, (repo, _, _) in self.repos.items():
             refs = self.git(repo, "for-each-ref", "--format=%(refname) %(objectname)", "refs/flurry/")
-            self.assertEqual(len(refs.splitlines()), 3)
+            self.assertEqual(len(refs.splitlines()), 3 if name == "b" else 0)
             retained[name] = refs
         hook.unlink()
         resumed = self.sync.resume(load_config(self.root, ()), data["id"])

@@ -305,20 +305,23 @@ class Sync:
                     self.git.commit_lock(item)
                     self._check_push_base(target, item)
 
-                    def before_source_write() -> None:
-                        journal.repository(name, {"head": item.head}, action=f"promoting:{name}")
+                    if self.git.requires_promotion(item):
+                        def before_source_write() -> None:
+                            journal.repository(name, {"head": item.head}, action=f"promoting:{name}")
 
-                    recovery = self.git.promote(item, journal.run_id, before_source_write=before_source_write)
-                    recoveries[name] = recovery
-                    journal.repository(name, {
-                        "state": "promoted", "checkpoint": fingerprint(target.repository.path, self.runner),
-                        "recovery": {"stash_ref": recovery.stash_ref, "remaining_ref": recovery.remaining_ref,
-                                     "prepared_ref": recovery.prepared_ref,
-                                     "original_head": item.original.head, "marker": item.marker,
-                                     "phase": recovery.phase},
-                    })
+                        recovery = self.git.promote(item, journal.run_id, before_source_write=before_source_write)
+                        recoveries[name] = recovery
+                        journal.repository(name, {
+                            "state": "promoted", "checkpoint": fingerprint(target.repository.path, self.runner),
+                            "recovery": {"stash_ref": recovery.stash_ref, "remaining_ref": recovery.remaining_ref,
+                                         "prepared_ref": recovery.prepared_ref,
+                                         "original_head": item.original.head, "marker": item.marker,
+                                         "phase": recovery.phase},
+                        })
                     journal.action(f"pushing:{name}")
                     self.report(f"Publishing {name} -> {target.push_remote}/{target.push_ref}")
+                    if name not in recoveries:
+                        self.git.verify(item)
                     self.git.push(target.repository.path, target.push_remote, target.push_ref, item.head, push_url=target.push_url)
                     published.append(name)
                     journal.repository(name, {"state": "published", "checkpoint": fingerprint(target.repository.path, self.runner)})

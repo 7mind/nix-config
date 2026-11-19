@@ -36,6 +36,10 @@ class Snapshot:
     config: bytes
     identity: tuple[tuple[str, str], ...]
 
+    def same_checkout(self, other: Snapshot) -> bool:
+        fields = ('head', 'branch', 'index_tree', 'worktree_patch', 'untracked_tree', 'untracked', 'files', 'flags')
+        return all(getattr(self, field) == getattr(other, field) for field in fields)
+
     def to_dict(self) -> dict:
         result = asdict(self)
         for field in ('worktree_patch', 'flags', 'stashes'):
@@ -483,7 +487,15 @@ class Git:
         if self._capture(prepared.repo, prepared.trial.parent) != prepared.original or self._text(prepared.repo, 'remote', 'get-url', prepared.remote) != prepared.remote_url:
             raise FlurryError(f'Source changed during rehearsal: {prepared.repo}')
 
-    def rehearse_restore(self, prepared: Prepared) -> None:
+    def requires_promotion(self, prepared: Prepared) -> bool:
+        if (prepared.head != prepared.original.head or prepared.restored is None
+                or not prepared.restored.same_checkout(prepared.original)):
+            return True
+        if not self.rehearse_restore(prepared).same_checkout(prepared.original):
+            raise FlurryError(f'Final restore rehearsal no longer matches the original checkout: {prepared.repo}')
+        return False
+
+    def rehearse_restore(self, prepared: Prepared) -> Snapshot:
         self._tree_filters(prepared, prepared.head)
         if self._text(prepared.trial, 'rev-parse', 'HEAD') != prepared.head or self._git(prepared.trial, 'status', '--porcelain'):
             raise FlurryError('Restore rehearsal requires a clean trial at the prepared commit')
@@ -497,6 +509,7 @@ class Git:
         # Destructive writes below are confined to our disposable trial and captured paths.
         self._git(prepared.trial, 'reset', '--hard', '--no-recurse-submodules', prepared.head)
         self._remove_untracked(prepared.trial, prepared.restored.untracked)
+        return prepared.restored
 
     def _remove_untracked(self, repo: Path, paths: tuple[str, ...]) -> None:
         for name in paths:
@@ -557,8 +570,7 @@ class Git:
             expected = prepared.restored
             if expected is None:
                 raise FlurryError('Missing restore rehearsal postcondition')
-            fields = ('head', 'branch', 'index_tree', 'worktree_patch', 'untracked_tree', 'untracked', 'files', 'flags')
-            if any(getattr(observed, field) != getattr(expected, field) for field in fields) or observed.stashes != prepared.original.stashes or observed.config != prepared.original.config or observed.identity != prepared.original.identity:
+            if not observed.same_checkout(expected) or observed.stashes != prepared.original.stashes or observed.config != prepared.original.config or observed.identity != prepared.original.identity:
                 raise FlurryError('Promotion postcondition changed; refusing ownership of unexpected edits')
             record.promoted = observed
             record.phase = 'promoted'
