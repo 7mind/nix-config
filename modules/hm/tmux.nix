@@ -146,12 +146,13 @@ in
         # Window tab format variants (## escapes keep format codes for display time).
         # rename-window disables automatic-rename on that window; treat that as a
         # user-set name and show it instead of path:command.
+        set -gw @smind_window_label_format "#{?automatic-rename,#{b:pane_current_path}:#{pane_current_command},#{window_name}}"
         set -gF @_smind_wfmt_wide \
-          "#[fg=#{@thm_crust},bg=#{@thm_overlay_2}] ##I #[fg=#{@thm_fg},bg=#{@thm_surface_0}]##{?automatic-rename,##{b:pane_current_path}:##{pane_current_command},##{window_name}} "
+          "#[fg=#{@thm_crust},bg=#{@thm_overlay_2}] ##I #[fg=#{@thm_fg},bg=#{@thm_surface_0}]##{E:@smind_window_label_format} "
         set -gF @_smind_wfmt_narrow \
           "#[fg=#{@thm_crust},bg=#{@thm_overlay_2}] ##I "
         set -gF @_smind_cfmt_wide \
-          "#[fg=#{@thm_crust},bg=#{@thm_mauve}] ##I #[fg=#{@thm_fg},bg=#{@thm_surface_1}]##{?automatic-rename,##{b:pane_current_path}:##{pane_current_command},##{window_name}} "
+          "#[fg=#{@thm_crust},bg=#{@thm_mauve}] ##I #[fg=#{@thm_fg},bg=#{@thm_surface_1}]##{E:@smind_window_label_format} "
         set -gF @_smind_cfmt_narrow \
           "#[fg=#{@thm_crust},bg=#{@thm_mauve}] ##I "
 
