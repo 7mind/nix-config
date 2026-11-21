@@ -566,6 +566,13 @@ pkgs.testers.runNixOSTest {
           assertion = !useGo || (!config.services.httpd.enable && !(config.systemd.services ? httpd));
           message = "the Go file-transfer backend does not require Apache";
         }
+        {
+          assertion =
+            !useGo || lib.hasSuffix
+              ''"/linphone-conference-account-0.xml" --tls-cert "%d/tls-cert" --tls-key "%d/tls-key" --credentials "%d/accounts"''
+              config.systemd.services.linphone-file-transfer.serviceConfig.ExecStart;
+          message = "Go file-transfer credential flags must be separate arguments with unescaped systemd specifiers";
+        }
       ];
 
       # Simulate an existing 0600 upload from a previous NixOS generation.

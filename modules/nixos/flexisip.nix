@@ -1283,21 +1283,25 @@ in
             "tls-cert:${cfg.tls.certificateDir}/fullchain.pem"
             "tls-key:${cfg.tls.certificateDir}/key.pem"
           ];
-          ExecStart = utils.escapeSystemdExecArgs (
-            [ goFileTransferExe "serve"
-              "--listen" "${cfg.bindAddress}:${toString cfg.fileTransfer.listenPort}"
-              "--public-origin" "https://${fileTransferAuthority}"
-              "--realm" cfg.domain
-              "--provisioning" linphoneProvisioningFile
-              "--uploads" fileTransferStateDir
-              "--database" "/var/lib/${goStateDirectory}/attachments.sqlite"
-              "--max-bytes" (toString (cfg.fileTransfer.maxFileSizeMiB * 1024 * 1024))
-              "--retention-seconds" (toString (cfg.fileTransfer.retentionDays * 86400))
-            ] ++ lib.optionals (cfg.conference.provisioningAccountIndex != null) [
-              "--conference-provisioning" linphoneConferenceAccountProvisioningFile
-              "--conference-path" linphoneConferenceAccountProvisioningPath
-            ]
-          ) + '' --tls-cert "%d/tls-cert" --tls-key "%d/tls-key" --credentials "%d/accounts"'';
+          ExecStart = lib.concatStringsSep " " [
+            (utils.escapeSystemdExecArgs (
+              [ goFileTransferExe "serve"
+                "--listen" "${cfg.bindAddress}:${toString cfg.fileTransfer.listenPort}"
+                "--public-origin" "https://${fileTransferAuthority}"
+                "--realm" cfg.domain
+                "--provisioning" linphoneProvisioningFile
+                "--uploads" fileTransferStateDir
+                "--database" "/var/lib/${goStateDirectory}/attachments.sqlite"
+                "--max-bytes" (toString (cfg.fileTransfer.maxFileSizeMiB * 1024 * 1024))
+                "--retention-seconds" (toString (cfg.fileTransfer.retentionDays * 86400))
+              ] ++ lib.optionals (cfg.conference.provisioningAccountIndex != null) [
+                "--conference-provisioning" linphoneConferenceAccountProvisioningFile
+                "--conference-path" linphoneConferenceAccountProvisioningPath
+              ]
+            ))
+            # Unlike ordinary arguments, these constant paths must expand %d.
+            ''--tls-cert "%d/tls-cert" --tls-key "%d/tls-key" --credentials "%d/accounts"''
+          ];
           StateDirectory = goStateDirectory;
           StateDirectoryMode = "0700";
           ReadWritePaths = [ fileTransferStateDir ];
