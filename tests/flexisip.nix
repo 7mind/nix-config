@@ -1,6 +1,9 @@
-{ pkgs }:
+{ pkgs, backend ? "apache" }:
 
 let
+  useGo = backend == "go";
+  legacyName = "65caabbccddff_0123456789abcdef0123.jpg";
+  photoUnit = if useGo then "linphone-file-transfer.service" else "httpd.service";
   testCertificate =
     pkgs.runCommand "flexisip-test-certificate"
       {
@@ -424,7 +427,7 @@ let
 
 in
 pkgs.testers.runNixOSTest {
-  name = "flexisip-file-transfer";
+  name = "flexisip-file-transfer" + pkgs.lib.optionalString useGo "-go";
 
   nodes.server =
     { config, lib, ... }:
@@ -500,6 +503,7 @@ pkgs.testers.runNixOSTest {
         push.enable = false;
         fileTransfer = {
           enable = true;
+          inherit backend;
           package = pkgs.callPackage ../pkg/flexisip-http-file-transfer-server/default.nix { };
           publicHost = "lp.test";
           publicPort = 443;
@@ -509,7 +513,25 @@ pkgs.testers.runNixOSTest {
         };
       };
 
-      services.nginx = {
+      services.caddy = lib.mkIf useGo {
+        enable = true;
+        globalConfig = ''
+          admin off
+          auto_https off
+        '';
+        virtualHosts."lp.test".extraConfig = ''
+          tls ${testCertificate}/fullchain.pem ${testCertificate}/key.pem
+          reverse_proxy https://127.0.0.1:8443 {
+            header_up Host {host}
+            transport http {
+              versions 1.1
+              tls_server_name pbx.test
+              tls_trust_pool file ${testCertificate}/fullchain.pem
+            }
+          }
+        '';
+      };
+      services.nginx = lib.mkIf (!useGo) {
         enable = true;
         virtualHosts."lp.test" = {
           onlySSL = true;
@@ -538,7 +560,11 @@ pkgs.testers.runNixOSTest {
       assertions = [
         {
           assertion = !builtins.elem 8443 config.networking.firewall.allowedTCPPorts;
-          message = "the Apache file-transfer backend must not be globally exposed";
+          message = "the file-transfer backend must not be globally exposed";
+        }
+        {
+          assertion = !useGo || (!config.services.httpd.enable && !(config.systemd.services ? httpd));
+          message = "the Go file-transfer backend does not require Apache";
         }
       ];
 
@@ -556,7 +582,7 @@ pkgs.testers.runNixOSTest {
         script = ''
           state=/var/lib/flexisip-file-transfer
           install -d -o wwwrun -g wwwrun -m 0750 "$state"
-          printf '%s' 'legacy-upload' | install -o wwwrun -g wwwrun -m 0600 /dev/stdin "$state/legacy.jpg"
+          printf '%s' 'legacy-upload' | install -o wwwrun -g wwwrun -m 0600 /dev/stdin "$state/${legacyName}"
         '';
       };
 
@@ -578,20 +604,28 @@ pkgs.testers.runNixOSTest {
     server.wait_for_unit("flexisip-proxy.service")
     server.wait_for_unit("flexisip-conference.service")
     server.wait_for_unit("flexisip-presence.service")
-    server.wait_for_unit("httpd.service")
-    server.wait_for_unit("nginx.service")
+    go_backend = ${if useGo then "True" else "False"}
+    web_unit = "${photoUnit}"
+    server.wait_for_unit(web_unit)
+    server.wait_for_unit("${if useGo then "caddy" else "nginx"}.service")
 
     web_user = "flexisip-file-transfer"
     web_shell = f"runuser -u {web_user} -- "
     wwwrun_shell = "runuser -u wwwrun -- "
     web_config = "/run/flexisip-file-transfer/file-transfer.conf.php"
     web_sql = f"mariadb --protocol=socket --user={web_user} --batch --skip-column-names"
-    server.succeed(f"systemctl show --property=User --value httpd.service | grep -qx {web_user}")
-    server.succeed(f"systemctl show --property=Group --value httpd.service | grep -qx {web_user}")
-    server.succeed(f"stat -c '%U:%G:%a' {web_config} | grep -qx root:{web_user}:640")
-    server.succeed(web_shell + f"test -r {web_config}")
-    server.fail(web_shell + f"test -w {web_config}")
-    server.fail(wwwrun_shell + f"test -r {web_config}")
+    server.succeed(f"systemctl show --property=User --value {web_unit} | grep -qx {web_user}")
+    server.succeed(f"systemctl show --property=Group --value {web_unit} | grep -qx {web_user}")
+    if go_backend:
+        server.fail("systemctl is-active httpd.service")
+        server.succeed(f"test ! -e {web_config}")
+        server.succeed("test -s /var/lib/linphone-file-transfer/attachments.sqlite")
+        server.fail(web_shell + "test -r /run/linphone-file-transfer-credentials/accounts.json")
+    else:
+        server.succeed(f"stat -c '%U:%G:%a' {web_config} | grep -qx root:{web_user}:640")
+        server.succeed(web_shell + f"test -r {web_config}")
+        server.fail(web_shell + f"test -w {web_config}")
+        server.fail(wwwrun_shell + f"test -r {web_config}")
     for sip_secret in (
         "/run/flexisip/users.db",
         "/run/flexisip/flexisip.conf",
@@ -601,18 +635,21 @@ pkgs.testers.runNixOSTest {
         server.succeed(f"test -s {sip_secret}")
         server.fail(web_shell + f"test -r {sip_secret}")
         server.fail(wwwrun_shell + f"test -r {sip_secret}")
-    server.succeed(
-        web_shell + web_sql + " -e 'SELECT COUNT(*) FROM flexisip_accounts.accounts' | grep -qx 1"
-    )
-    server.succeed(
-        web_shell + web_sql + " -e 'SELECT COUNT(*) FROM flexisip_accounts.passwords' | grep -qx 1"
-    )
-    server.fail(web_shell + web_sql + " -e 'UPDATE flexisip_accounts.passwords SET password = password'")
+    if go_backend:
+        server.fail(web_shell + web_sql + " -e 'SELECT 1'")
+    else:
+        server.succeed(
+            web_shell + web_sql + " -e 'SELECT COUNT(*) FROM flexisip_accounts.accounts' | grep -qx 1"
+        )
+        server.succeed(
+            web_shell + web_sql + " -e 'SELECT COUNT(*) FROM flexisip_accounts.passwords' | grep -qx 1"
+        )
+        server.fail(web_shell + web_sql + " -e 'UPDATE flexisip_accounts.passwords SET password = password'")
     server.fail(web_shell + web_sql + " -e 'USE flexisip_messages'")
     server.fail(web_shell + web_sql + " -e 'USE flexisip_conference'")
     server.fail(wwwrun_shell + web_sql + " -e 'SELECT 1'")
     server.succeed(
-        f"stat -c '%U:%G:%a' /var/lib/flexisip-file-transfer/legacy.jpg | grep -qx {web_user}:{web_user}:600"
+        f"stat -c '%U:%G:%a' /var/lib/flexisip-file-transfer/${legacyName} | grep -qx {web_user}:{web_user}:600"
     )
 
     server.succeed("test $(systemctl show --property LimitNOFILE --value flexisip-proxy.service) -eq 524288")
@@ -657,8 +694,12 @@ pkgs.testers.runNixOSTest {
     )
     server.succeed("grep -A14 -F '[101]' /etc/asterisk/pjsip.conf | grep -Fx 'rewrite_contact=no'")
     server.succeed("grep -A14 -F '[103]' /etc/asterisk/pjsip.conf | grep -Fx 'rewrite_contact=yes'")
-    server.succeed("test $(mariadb --protocol=socket --batch --skip-column-names -e 'SELECT COUNT(*) FROM flexisip_accounts.accounts') -eq 1")
-    server.succeed("test $(mariadb --protocol=socket --batch --skip-column-names -e 'SELECT HEX(password) FROM flexisip_accounts.passwords') = 746573742D70617373776F7264")
+    if go_backend:
+        server.succeed("mariadb --protocol=socket --batch --skip-column-names -e 'SELECT COUNT(*) FROM flexisip_accounts.passwords' | grep -qx 0")
+        server.succeed("mariadb --protocol=socket --batch --skip-column-names -e 'SHOW TABLES FROM flexisip_messages' | grep -Fx fork_message_context")
+    else:
+        server.succeed("test $(mariadb --protocol=socket --batch --skip-column-names -e 'SELECT COUNT(*) FROM flexisip_accounts.accounts') -eq 1")
+        server.succeed("test $(mariadb --protocol=socket --batch --skip-column-names -e 'SELECT HEX(password) FROM flexisip_accounts.passwords') = 746573742D70617373776F7264")
     server.succeed("mariadb --protocol=socket --batch --skip-column-names -e 'USE flexisip_conference; SHOW TABLES' | grep -q .")
     server.succeed("redis-cli -p 6379 ping | grep -Fx PONG")
     server.succeed("redis-cli -p 6379 set persistence-test present | grep -Fx OK")
@@ -796,7 +837,7 @@ pkgs.testers.runNixOSTest {
     server.succeed(
         "curl --fail --silent --show-error --insecure --digest --user 101:test-password "
         "--header 'From: sip:101@pbx.test' "
-        "https://lp.test/flexisip-http-file-transfer-server/tmp/legacy.jpg | grep -qx legacy-upload"
+        "https://lp.test/flexisip-http-file-transfer-server/tmp/${legacyName} | grep -qx legacy-upload"
     )
     server.succeed("printf 'photo-payload' > /tmp/photo.jpg")
     upload_status = server.succeed(
@@ -806,13 +847,15 @@ pkgs.testers.runNixOSTest {
         "https://lp.test/flexisip-http-file-transfer-server/hft.php "
         "--output /tmp/descriptor.xml --write-out '%{http_code}'"
     )
-    assert upload_status == "200", upload_status + server.succeed(
-        "cat /var/lib/flexisip-file-transfer/*.log /var/log/httpd/error_log 2>/dev/null || true"
-    )
+    assert upload_status == "200", upload_status + server.succeed(f"journalctl -n 30 -u {web_unit}")
     server.succeed(
         "xmllint --xpath 'string(//*[local-name()=\"data\"]/@url)' "
         "/tmp/descriptor.xml > /tmp/download-url"
     )
+    if go_backend:
+        server.succeed("grep -Eq '^https://lp[.]test/flexisip-http-file-transfer-server/tmp/' /tmp/download-url")
+        server.succeed(f"systemctl restart {web_unit}")
+        server.wait_for_unit(web_unit)
     server.succeed(
         "curl --silent --show-error --insecure --digest --user 101:test-password "
         "--header 'From: sip:101@pbx.test' \"$(cat /tmp/download-url)\" "
@@ -831,10 +874,11 @@ pkgs.testers.runNixOSTest {
     )
     assert oversized_status == "400", oversized_status
 
-    server.succeed("touch /var/lib/flexisip-file-transfer/current")
-    server.succeed("touch -d '3 days ago' /var/lib/flexisip-file-transfer/expired")
-    server.succeed("systemctl start flexisip-file-transfer-cleanup.service")
-    server.succeed("test -e /var/lib/flexisip-file-transfer/current")
-    server.succeed("test ! -e /var/lib/flexisip-file-transfer/expired")
+    fresh = "/var/lib/flexisip-file-transfer/${legacyName}"
+    expired = "/var/lib/flexisip-file-transfer/65caabbccddee_0123456789abcdef0123.jpg"
+    server.succeed(f"cp --preserve=mode,ownership {fresh} {expired}; touch -d '3 days ago' {expired}")
+    server.succeed(f"systemctl {'restart' if go_backend else 'start'} {'${photoUnit}' if go_backend else 'flexisip-file-transfer-cleanup.service'}")
+    server.wait_until_succeeds(f"test ! -e {expired}")
+    server.succeed(f"test -e {fresh}")
   '';
 }

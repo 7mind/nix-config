@@ -183,6 +183,8 @@ in
             llama-swap = import ../tests/llama-swap.nix { inherit pkgs inputs; };
             asterisk-linphone-fallback = import ../tests/asterisk-linphone-fallback.nix { inherit pkgs; };
             flexisip-file-transfer = import ../tests/flexisip.nix { inherit pkgs; };
+            flexisip-file-transfer-go = import ../tests/flexisip.nix { inherit pkgs; backend = "go"; };
+            linphone-file-transfer = pkgs.callPackage ../pkg/linphone-file-transfer { };
             openlinkhub = import ../tests/openlinkhub.nix { inherit pkgs; };
             jabridge = self.packages.${system}.jabridge;
             jabridge-desktops = import ../tests/jabridge.nix {

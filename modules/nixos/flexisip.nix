@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  utils,
   ...
 }:
 
@@ -44,6 +45,12 @@ let
   fileTransferStateDir = "/var/lib/flexisip-file-transfer";
   fileTransferConfigPath = "${fileTransferRuntimeDir}/file-transfer.conf.php";
   fileTransferNoncePath = "${databaseStateDir}/file-transfer-nonce";
+  apacheFileTransfer = cfg.fileTransfer.enable && cfg.fileTransfer.backend == "apache";
+  goFileTransfer = cfg.fileTransfer.enable && cfg.fileTransfer.backend == "go";
+  goFileTransferExe = lib.getExe cfg.fileTransfer.goPackage;
+  goCredentialsDirectory = "linphone-file-transfer-credentials";
+  goCredentialsPath = "/run/${goCredentialsDirectory}/accounts.json";
+  goStateDirectory = "linphone-file-transfer";
   fileTransferAuthority =
     cfg.fileTransfer.publicHost
     + optionalString (cfg.fileTransfer.publicPort != 443) ":${toString cfg.fileTransfer.publicPort}";
@@ -99,7 +106,7 @@ let
 
   isFrontend = cfg.role == "frontend";
   isStandalone = cfg.role == "standalone";
-  databaseEnabled = cfg.messaging.database.enable || cfg.fileTransfer.enable || cfg.conference.enable;
+  databaseEnabled = cfg.messaging.database.enable || apacheFileTransfer || cfg.conference.enable;
 
   extensionModule =
     { name, ... }:
@@ -511,7 +518,8 @@ let
       CONSTRAINT passwords_account FOREIGN KEY (account_id)
         REFERENCES flexisip_accounts.accounts (id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    ${optionalString cfg.fileTransfer.enable ''
+    ${optionalString goFileTransfer "DROP USER IF EXISTS '${fileTransferUser}'@'localhost';"}
+    ${optionalString apacheFileTransfer ''
       CREATE USER IF NOT EXISTS '${fileTransferUser}'@'localhost' IDENTIFIED VIA unix_socket;
       ALTER USER '${fileTransferUser}'@'localhost' IDENTIFIED VIA unix_socket;
       REVOKE ALL PRIVILEGES, GRANT OPTION FROM '${fileTransferUser}'@'localhost';
@@ -526,8 +534,8 @@ let
     DELETE FROM accounts
       WHERE domain=CONVERT(UNHEX('$domain_hex') USING utf8mb4) COLLATE utf8mb4_unicode_ci;
     SQL
-    ${extensionAccountSql}
-    ${optionalString cfg.fileTransfer.enable writeFileTransferConfig}
+    ${optionalString (!goFileTransfer) extensionAccountSql}
+    ${optionalString apacheFileTransfer writeFileTransferConfig}
   '';
 
   writeRoutes = pkgs.writeShellScript "flexisip-write-routes" (
@@ -880,10 +888,20 @@ in
 
     fileTransfer = {
       enable = mkEnableOption "Linphone-compatible HTTPS photo and file transfer";
+      backend = mkOption {
+        type = types.enum [ "apache" "go" ];
+        default = "apache";
+        description = "Implementation of the Linphone HTTP file-transfer endpoint.";
+      };
       package = mkOption {
         type = types.package;
         default = pkgs.flexisip-http-file-transfer-server;
-        description = "Flexisip HTTP file-transfer server package.";
+        description = "PHP file-transfer application used by the Apache backend.";
+      };
+      goPackage = mkOption {
+        type = types.package;
+        default = pkgs.callPackage ../../pkg/linphone-file-transfer { };
+        description = "Package used by the Go file-transfer backend.";
       };
       publicHost = mkOption {
         type = types.str;
@@ -898,7 +916,7 @@ in
       listenPort = mkOption {
         type = types.port;
         default = 8443;
-        description = "Internal Apache HTTPS port used by the reverse proxy.";
+        description = "Internal HTTPS port used by the reverse proxy.";
       };
       maxFileSizeMiB = mkOption {
         type = types.ints.positive;
@@ -1215,6 +1233,97 @@ in
     })
 
     (mkIf cfg.fileTransfer.enable {
+      users.users.${fileTransferUser} = {
+        isSystemUser = true;
+        group = fileTransferUser;
+      };
+      users.groups.${fileTransferUser} = { };
+
+      # Keep the existing attachment directory and its owner across backends.
+      systemd.services.flexisip-file-transfer-state = {
+        description = "Prepare Linphone file-transfer state directory";
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          ExecStart = prepareFileTransferState;
+        };
+      };
+    })
+
+    (mkIf goFileTransfer {
+      systemd.services.linphone-file-transfer-credentials = {
+        description = "Derive Linphone HTTP Digest verifiers from extension secrets";
+        serviceConfig = {
+          Type = "oneshot";
+          RuntimeDirectory = goCredentialsDirectory;
+          RuntimeDirectoryMode = "0700";
+          RuntimeDirectoryPreserve = "yes";
+          UMask = "0077";
+          NoNewPrivileges = true;
+          ProtectSystem = "strict";
+          ProtectHome = true;
+          ExecStart = utils.escapeSystemdExecArgs (
+            [ goFileTransferExe "credentials" "--realm" cfg.domain "--output" goCredentialsPath ]
+            ++ lib.concatLists (lib.mapAttrsToList (name: ext: [ "--account" "${name}=${ext.passwordFile}" ]) cfg.extensions)
+          );
+        };
+      };
+
+      systemd.services.linphone-file-transfer = {
+        description = "Linphone HTTPS file transfer and provisioning";
+        wantedBy = [ "multi-user.target" ];
+        wants = [ "network-online.target" ];
+        after = [ "network-online.target" "linphone-file-transfer-credentials.service" "flexisip-file-transfer-state.service" ];
+        requires = [ "linphone-file-transfer-credentials.service" "flexisip-file-transfer-state.service" ];
+        serviceConfig = {
+          User = fileTransferUser;
+          Group = fileTransferUser;
+          LoadCredential = [
+            "accounts:${goCredentialsPath}"
+            "tls-cert:${cfg.tls.certificateDir}/fullchain.pem"
+            "tls-key:${cfg.tls.certificateDir}/key.pem"
+          ];
+          ExecStart = utils.escapeSystemdExecArgs (
+            [ goFileTransferExe "serve"
+              "--listen" "${cfg.bindAddress}:${toString cfg.fileTransfer.listenPort}"
+              "--public-origin" "https://${fileTransferAuthority}"
+              "--realm" cfg.domain
+              "--provisioning" linphoneProvisioningFile
+              "--uploads" fileTransferStateDir
+              "--database" "/var/lib/${goStateDirectory}/attachments.sqlite"
+              "--max-bytes" (toString (cfg.fileTransfer.maxFileSizeMiB * 1024 * 1024))
+              "--retention-seconds" (toString (cfg.fileTransfer.retentionDays * 86400))
+            ] ++ lib.optionals (cfg.conference.provisioningAccountIndex != null) [
+              "--conference-provisioning" linphoneConferenceAccountProvisioningFile
+              "--conference-path" linphoneConferenceAccountProvisioningPath
+            ]
+          ) + '' --tls-cert "%d/tls-cert" --tls-key "%d/tls-key" --credentials "%d/accounts"'';
+          StateDirectory = goStateDirectory;
+          StateDirectoryMode = "0700";
+          ReadWritePaths = [ fileTransferStateDir ];
+          InaccessiblePaths = [ "-${builtins.dirOf databaseSocketPath}" ];
+          Restart = "on-failure";
+          RestartSec = "2s";
+          UMask = "0077";
+          NoNewPrivileges = true;
+          ProtectSystem = "strict";
+          ProtectHome = true;
+          PrivateTmp = true;
+          PrivateDevices = true;
+          ProtectKernelModules = true;
+          ProtectKernelTunables = true;
+          ProtectControlGroups = true;
+          RestrictNamespaces = true;
+          RestrictSUIDSGID = true;
+          LockPersonality = true;
+          CapabilityBoundingSet = "";
+          SystemCallArchitectures = "native";
+          RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
+        };
+      };
+    })
+
+    (mkIf apacheFileTransfer {
       # The NixOS Apache instance has one identity for all virtual hosts.
       assertions = [
         {
@@ -1222,12 +1331,6 @@ in
           message = "Flexisip file transfer requires a dedicated Apache instance; do not add other services to services.httpd.virtualHosts";
         }
       ];
-      users.users.${fileTransferUser} = {
-        isSystemUser = true;
-        group = fileTransferUser;
-      };
-      users.groups.${fileTransferUser} = { };
-
       services.httpd = {
         enable = true;
         user = fileTransferUser;
@@ -1294,17 +1397,6 @@ in
           "flexisip-file-transfer-state.service"
         ];
         serviceConfig.ReadWritePaths = [ fileTransferStateDir ];
-      };
-
-      # In case of rollback, restore wwwrun:wwwrun ownership of this directory
-      # and its regular upload/log files before restarting the old Apache unit.
-      systemd.services.flexisip-file-transfer-state = {
-        description = "Prepare Linphone file-transfer state directory";
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-          ExecStart = prepareFileTransferState;
-        };
       };
 
       systemd.services.flexisip-file-transfer-cleanup = {
