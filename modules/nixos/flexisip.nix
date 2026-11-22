@@ -38,6 +38,10 @@ let
   conferenceStateDir = "${stateDir}/conference";
   databaseStateDir = "${stateDir}/database";
   databasePasswordPath = "${databaseStateDir}/password";
+  containerQueueUser = "flexisip_queue";
+  containerQueuePasswordPath = "${databaseStateDir}/container-queue-password";
+  proxyDbUser = if cfg.proxy.onHost then "flexisip" else containerQueueUser;
+  proxyDbPasswordPath = if cfg.proxy.onHost then databasePasswordPath else containerQueuePasswordPath;
   databaseSocketPath = config.services.mysql.settings.mysqld.socket or "/run/mysqld/mysqld.sock";
   mariadbAdmin = "${pkgs.mariadb}/bin/mariadb --protocol=socket --socket=${lib.escapeShellArg databaseSocketPath} --skip-print-query-on-error";
   fileTransferUser = "flexisip-file-transfer";
@@ -125,8 +129,8 @@ let
     };
 
   tlsTransportLine = optionalString (
-    cfg.tls.certificateDir != null
-  ) "sips:${cfg.domain}:${toString cfg.tls.port};maddr=${cfg.bindAddress}";
+    cfg.proxy.certificateDir != null
+  ) "sips:${cfg.domain}:${toString cfg.tls.port};maddr=${cfg.proxy.bindAddress}";
 
   # Frontend: TLS public + localhost UDP for hairpin. Do not bind a public UDP
   # SIP port (Asterisk already owns LAN :5060 for the ATA).
@@ -290,9 +294,9 @@ let
     log-directory=/var/log/flexisip
     transports=${transports}
     aliases=${cfg.domain}
-    ${optionalString (cfg.tls.certificateDir != null) ''
-      tls-certificates-file=${cfg.tls.certificateDir}/fullchain.pem
-      tls-certificates-private-key=${cfg.tls.certificateDir}/key.pem
+    ${optionalString (cfg.proxy.certificateDir != null) ''
+      tls-certificates-file=${cfg.proxy.certificateDir}/fullchain.pem
+      tls-certificates-private-key=${cfg.proxy.certificateDir}/key.pem
     ''}
 
     [module::DoSProtection]
@@ -355,7 +359,7 @@ let
     message-database-enabled=${if cfg.messaging.database.enable then "true" else "false"}
     ${optionalString cfg.messaging.database.enable ''
       message-database-backend=mysql
-      message-database-connection-string=db='flexisip_messages' user='flexisip' password='${databasePasswordPlaceholder}' host='127.0.0.1'
+      message-database-connection-string=db='flexisip_messages' user='${proxyDbUser}' password='${databasePasswordPlaceholder}' host='${cfg.messaging.database.host}'
     ''}
 
     [module::Presence]
@@ -494,6 +498,15 @@ let
     fi
 
     database_password=$(<${databasePasswordPath})
+    ${optionalString (!cfg.proxy.onHost && cfg.messaging.database.enable) ''
+      if [[ ! -s ${containerQueuePasswordPath} ]]; then
+        umask 0077
+        ${pkgs.coreutils}/bin/od -An -N32 -v -tx1 /dev/urandom \
+          | ${pkgs.coreutils}/bin/tr -d ' \n' > ${containerQueuePasswordPath}.tmp
+        mv ${containerQueuePasswordPath}.tmp ${containerQueuePasswordPath}
+      fi
+      queue_password=$(<${containerQueuePasswordPath})
+    ''}
     ${mariadbAdmin} <<SQL
     CREATE DATABASE IF NOT EXISTS flexisip_messages CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
     CREATE DATABASE IF NOT EXISTS flexisip_accounts CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -501,6 +514,12 @@ let
     CREATE USER IF NOT EXISTS 'flexisip'@'127.0.0.1' IDENTIFIED BY '$database_password';
     ALTER USER 'flexisip'@'127.0.0.1' IDENTIFIED BY '$database_password';
     GRANT ALL PRIVILEGES ON flexisip_messages.* TO 'flexisip'@'127.0.0.1';
+    ${optionalString (!cfg.proxy.onHost && cfg.messaging.database.enable) ''
+      CREATE USER IF NOT EXISTS '${containerQueueUser}'@'127.0.0.1' IDENTIFIED BY '$queue_password';
+      ALTER USER '${containerQueueUser}'@'127.0.0.1' IDENTIFIED BY '$queue_password';
+      REVOKE ALL PRIVILEGES, GRANT OPTION FROM '${containerQueueUser}'@'127.0.0.1';
+      GRANT ALL PRIVILEGES ON flexisip_messages.* TO '${containerQueueUser}'@'127.0.0.1';
+    ''}
     ${optionalString cfg.conference.enable "GRANT ALL PRIVILEGES ON flexisip_conference.* TO 'flexisip'@'127.0.0.1';"}
     GRANT SELECT ON flexisip_accounts.* TO 'flexisip'@'127.0.0.1';
     CREATE TABLE IF NOT EXISTS flexisip_accounts.accounts (
@@ -569,7 +588,7 @@ let
       install -d -o flexisip -g flexisip -m 0750 ${conferenceStateDir}
     ''}
     ${optionalString (cfg.messaging.database.enable || cfg.conference.enable) ''
-      database_password=$(<${databasePasswordPath})
+      database_password=$(<${proxyDbPasswordPath})
     ''}
     ${
       if cfg.messaging.database.enable then
@@ -771,6 +790,26 @@ in
       '';
     };
 
+    proxy = {
+      onHost = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Run the proxy and presence daemons here, rather than only preparing their runtime configuration for a separate container.";
+      };
+      bindAddress = mkOption {
+        type = types.str;
+        default = cfg.bindAddress;
+        defaultText = lib.literalExpression "config.smind.services.flexisip.bindAddress";
+        description = "Address of the SIP TLS listener, when different from the file-transfer listener.";
+      };
+      certificateDir = mkOption {
+        type = types.nullOr types.path;
+        default = cfg.tls.certificateDir;
+        defaultText = lib.literalExpression "config.smind.services.flexisip.tls.certificateDir";
+        description = "Directory containing the SIP proxy certificate and key as seen by the proxy.";
+      };
+    };
+
     transcoder = mkOption {
       type = types.bool;
       default = false;
@@ -805,6 +844,11 @@ in
             Persist undelivered MESSAGE messages through Flexisip's MariaDB
             Soci backend. Disabling this loses queued messages on restart.
           '';
+        };
+        host = mkOption {
+          type = types.strMatching "[0-9.]+";
+          default = "127.0.0.1";
+          description = "IPv4 address of the SIP MESSAGE database endpoint as seen by the proxy.";
         };
       };
     };
@@ -1013,8 +1057,12 @@ in
           message = "frontend role requires backend.uri (Asterisk SIP URI)";
         }
         {
-          assertion = cfg.tls.certificateDir == null || cfg.bindAddress != "0.0.0.0";
-          message = "Flexisip TLS behind NAT requires a concrete bindAddress for maddr";
+          assertion = cfg.proxy.certificateDir == null || cfg.proxy.bindAddress != "0.0.0.0";
+          message = "Flexisip TLS behind NAT requires a concrete proxy bind address for maddr";
+        }
+        {
+          assertion = cfg.proxy.onHost || (isFrontend && !cfg.conference.enable);
+          message = "An externally hosted Flexisip proxy is only supported for a frontend without a local conference server";
         }
         {
           assertion = !cfg.messaging.database.enable || cfg.messaging.enable;
@@ -1092,6 +1140,9 @@ in
         };
       };
 
+    }
+
+    (mkIf cfg.proxy.onHost {
       systemd.services.flexisip-proxy = {
         description = "Flexisip SIP proxy (${cfg.role})";
         wantedBy = [ "multi-user.target" ];
@@ -1128,7 +1179,7 @@ in
             stateDir
             runtimeDir
           ];
-          ReadOnlyPaths = lib.optional (cfg.tls.certificateDir != null) cfg.tls.certificateDir;
+          ReadOnlyPaths = lib.optional (cfg.proxy.certificateDir != null) cfg.proxy.certificateDir;
           RestrictAddressFamilies = [
             "AF_UNIX"
             "AF_INET"
@@ -1141,7 +1192,7 @@ in
 
       networking.firewall = mkIf cfg.openFirewall {
         # Frontend: only TLS is public. UDP 5070 stays on loopback / LAN as bound.
-        allowedTCPPorts = lib.optional (cfg.tls.certificateDir != null) cfg.tls.port;
+        allowedTCPPorts = lib.optional (cfg.proxy.certificateDir != null) cfg.tls.port;
         allowedUDPPorts = lib.optional (!isFrontend) cfg.udpPort;
         allowedUDPPortRanges = [
           {
@@ -1150,7 +1201,7 @@ in
           }
         ];
       };
-    }
+    })
 
     (mkIf databaseEnabled {
       services.mysql = {
@@ -1434,7 +1485,7 @@ in
       };
     })
 
-    (mkIf cfg.presence.enable {
+    (mkIf (cfg.presence.enable && cfg.proxy.onHost) {
       systemd.services.flexisip-presence = {
         description = "Flexisip presence server";
         wantedBy = [ "multi-user.target" ];

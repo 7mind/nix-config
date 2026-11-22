@@ -185,6 +185,7 @@ stdenv.mkDerivation rec {
         mv submodules/externals/bc-sofia-sip-02b6544 submodules/externals/sofia-sip
         test -f submodules/externals/sofia-sip/CMakeLists.txt \
           || (echo "sofia-sip vendor unpack failed" >&2; ls -la submodules/externals >&2; exit 1)
+        patch --batch --fuzz=0 -d submodules/externals/sofia-sip -p1 < ${./sofia-sip-CVE-2026-110658.patch}
 
         # 2.6.1 XXE-patched libxsd (GitLab submodule).
         rm -rf submodules/externals/xsd
