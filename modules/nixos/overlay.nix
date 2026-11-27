@@ -122,13 +122,13 @@
             '';
           });
 
-        # Use the complete upstream 23.5 release, including its security fixes.
+        # Use the complete upstream 24.0.0 release (tag commit 86036c129fcef897d2fa8ce6034307a8772a4921).
         # The paired pjproject archive matches third-party/versions.mak.
         asterisk = super.asterisk.overrideAttrs (old: rec {
-          version = "23.5.0";
+          version = "24.0.0";
           src = super.fetchurl {
             url = "https://downloads.asterisk.org/pub/telephony/asterisk/old-releases/asterisk-${version}.tar.gz";
-            hash = "sha256-jtOiN+bY3/lKCVJ6gxQ1MLWvzBruc/p7hcBpvaUHraw=";
+            hash = "sha256-7OQqdbyWUYAAfFawPy/R3ISE64T8TN3AkNsO5dXaGvk=";
           };
           preConfigure = (old.preConfigure or "") + ''
             chmod +w externals_cache
