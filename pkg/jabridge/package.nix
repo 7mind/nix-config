@@ -14,13 +14,13 @@
 
 buildGo127Module rec {
   pname = "jabridge";
-  version = "1.5.0";
+  version = "1.7.1";
 
   src = fetchFromGitHub {
     owner = "Watchdog0x";
     repo = "jabridge";
-    rev = "108d67b669b587d05c44df4035ace5557121a874";
-    hash = "sha256-n5JKf1w99qaRZR+XnepVCnjXaLapxZcUianlDO0ICVM=";
+    rev = "22952e25f645198da089565b4b3b285e4b2be123";
+    hash = "sha256-ES6Drs0OMYgLJBuk6vKSoX502lb5v9jQ3iwzolAO7cw=";
   };
 
   vendorHash = "sha256-4WiNhTIAEwgiI/4BFXpDHilGKr7zhhlPQzhgsSEAROk=";
@@ -31,6 +31,9 @@ buildGo127Module rec {
     makeWrapper
   ];
   nativeCheckInputs = [ bashInteractive ];
+
+  # Keep the simulated ACK readable even if the fixture reattaches immediately.
+  patches = [ ./retain-mock-reset-ack.patch ];
 
   postPatch = ''
     substituteInPlace daemon/pipewire/audio_recovery_process_test.go \

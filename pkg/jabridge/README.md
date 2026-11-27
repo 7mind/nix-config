@@ -28,5 +28,12 @@ If `jabridge setup` was used previously, move aside its unmanaged
 (Home Manager will otherwise report a file conflict). Then reload/restart the
 user service so its version matches the packaged client. Do not run setup again.
 
+The Nix build patches only the upstream Link 390 reset tests. The successful
+ACK fixture leaves its simulated socket open so the host can read the ACK;
+queuing a report and then closing the peer is not proof the host received it.
+A separate test checks that the production transport treats simultaneous input
+and hangup as disconnection. The lost-ACK recovery fixture still requires an
+unknown result even when the dongle returns, without replaying the reset.
+
 These changes are declarative defaults, not a system activation. Hardware and
 firmware operation still require validation with the actual device.

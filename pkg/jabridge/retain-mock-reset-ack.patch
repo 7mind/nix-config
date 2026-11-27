@@ -1,0 +1,94 @@
+diff --git a/cmd/jabridge/link390_config_native_test.go b/cmd/jabridge/link390_config_native_test.go
+index b5ab68a..2b92e7d 100644
+--- a/cmd/jabridge/link390_config_native_test.go
++++ b/cmd/jabridge/link390_config_native_test.go
+@@ -70,6 +70,14 @@ func (s *link390Sim) restart(path string) {
+ 	}
+ }
+ 
++// Reattach without hanging up the old peer, so its queued ACK remains readable.
++func (s *link390Sim) reattachAfterACK(path string) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	s.advanceGeneration()
++	s.hid = path
++}
++
+ // Change only kernel metadata so a post-ACK test can still read the reply.
+ func (s *link390Sim) advanceGeneration() {
+ 	raw, _ := os.ReadFile(filepath.Join(s.port, "devnum"))
+diff --git a/cmd/jabridge/link390_reset_native_test.go b/cmd/jabridge/link390_reset_native_test.go
+index e9a322d..b1e4d13 100644
+--- a/cmd/jabridge/link390_reset_native_test.go
++++ b/cmd/jabridge/link390_reset_native_test.go
+@@ -63,7 +63,13 @@ func TestLink390ResetNativeWireAndRecovery(t *testing.T) {
+ 					sim.fw = "3.2.0"
+ 					sim.mu.Unlock()
+ 				}
+-				sim.restart("/dev/simhidraw-reset-returned")
++				if scenario.mode == "ack" {
++					// A socket hangup can mask a queued reply. Keep the old
++					// peer open until the host reads the ACK and closes it.
++					sim.reattachAfterACK("/dev/simhidraw-reset-returned")
++				} else {
++					sim.restart("/dev/simhidraw-reset-returned")
++				}
+ 				return true
+ 			}
+ 			result, err := (&jabraAPIBridge{}).FactoryResetBound(*settingTarget(device))
+diff --git a/internal/firmware/control_hidraw_test.go b/internal/firmware/control_hidraw_test.go
+index 06cf1eb..e59bb80 100644
+--- a/internal/firmware/control_hidraw_test.go
++++ b/internal/firmware/control_hidraw_test.go
+@@ -2,9 +2,51 @@ package firmware
+ 
+ import (
+ 	"bytes"
++	"os"
+ 	"testing"
++	"time"
++
++	"golang.org/x/sys/unix"
+ )
+ 
++// hidraw can signal both a pending input report and disconnection. The
++// production transport treats this as a lost ACK, not proof of a reset.
++func TestControlReadTreatsQueuedACKOnHangupAsDisconnect(t *testing.T) {
++	fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
++	if err != nil {
++		t.Fatal(err)
++	}
++	host := os.NewFile(uintptr(fds[0]), "host")
++	peer := os.NewFile(uintptr(fds[1]), "peer")
++	defer host.Close()
++	defer peer.Close()
++	layout, err := SelectControlLayout(managementReports(GnpReportID, 64))
++	if err != nil {
++		t.Fatal(err)
++	}
++	transport := &ControlHidraw{file: host, Layout: layout}
++	ack := []byte{GnpReportID, 0, GnpSrcDongle, 0x31, 0xc6, 0xff, 0}
++	if _, err := peer.Write(ack); err != nil {
++		t.Fatal(err)
++	}
++	if packet, err := transport.Read(time.Second); err != nil || !bytes.Equal(packet, ack) {
++		t.Fatalf("connected ACK: packet %x, error %v", packet, err)
++	}
++	if _, err := peer.Write(ack); err != nil {
++		t.Fatal(err)
++	}
++	if err := peer.Close(); err != nil {
++		t.Fatal(err)
++	}
++	poll := []unix.PollFd{{Fd: int32(fds[0]), Events: unix.POLLIN}}
++	if n, err := unix.Poll(poll, 0); err != nil || n != 1 || poll[0].Revents&(unix.POLLIN|unix.POLLHUP) != unix.POLLIN|unix.POLLHUP {
++		t.Fatalf("expected readable input plus hangup: %+v, error %v", poll, err)
++	}
++	if packet, err := transport.Read(time.Second); packet != nil || err == nil || err.Error() != "management device disconnected" {
++		t.Fatalf("disconnected ACK: packet %x, error %v", packet, err)
++	}
++}
++
+ func managementReports(id byte, size int) []HIDReport {
+ 	field := HIDField{SizeBits: 8, Count: uint32(size - 1), UsagePage: 0xff00, Usages: []uint32{1}, Flags: 0x102}
+ 	return []HIDReport{{ID: id, Kind: "input", Bytes: size, Fields: []HIDField{field}}, {ID: id, Kind: "output", Bytes: size, Fields: []HIDField{field}}}
