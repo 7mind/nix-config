@@ -6,7 +6,7 @@
   makeWrapper,
 }:
 let
-  hoymilesWifiVersion = "0.6.0";
+  hoymilesWifiVersion = "0.7.4";
 
   # Upstream library: not in nixpkgs, packaged inline. Pure-Python protobuf
   # client for the local Hoymiles DTU/HMS-W protocol.
@@ -19,7 +19,7 @@ let
       owner = "suaveolent";
       repo = "hoymiles-wifi";
       rev = "v${version}";
-      hash = "sha256-+24A3vBU3uMsT66IhMOb/zU5OE2Boss5jl2qvmkXTxE=";
+      hash = "sha256-M/Emj/3qnENvq0R0hxtjy5RxbG1ecekRDpPF0XJrxiU=";
     };
 
     build-system = [ python3.pkgs.setuptools ];
