@@ -29,6 +29,14 @@ let
         pythonRelaxDeps = (old.pythonRelaxDeps or [ ]) ++ [ "certifi" ];
         nativeCheckInputs = old.nativeCheckInputs ++ [ python-final.jsonpath-ng ];
       });
+      # Keep one markdown-it-py version in SearXNG's closure, including rich.
+      markdown-it-py = python-prev.markdown-it-py.overridePythonAttrs (old: rec {
+        version = "4.3.0";
+        src = old.src.override {
+          tag = "v${version}";
+          hash = "sha256-vylvAQ9ciMKVEItlQ4BeoQumwsrr3nafNcnvAfshIFk=";
+        };
+      });
     };
   };
   # Only SearXNG requires dateutil 3; do not upgrade unrelated test dependencies.
@@ -44,11 +52,11 @@ let
 in
 {
   searxng = (prev.searxng.override { python3 = python; }).overrideAttrs (finalAttrs: previousAttrs: {
-    version = "0-unstable-2026-10-30";
+    version = "0-unstable-2026-11-26";
 
     src = previousAttrs.src.override {
-      rev = "1cd13d98d65a58f1126fa5bb5c77e42c0ea625f3";
-      hash = "sha256-RWiS7JAcq+j9/Ge9FHkyFfXvuXgPARv6aeTUbAkw5Xc=";
+      rev = "b5605b8f2fa2591108ab8e3f4fc16e88f7d66fe4";
+      hash = "sha256-4hyyVh8hv/v9hNytFblFzZe+l9Bi52Di8tua5uWm5BY=";
     };
 
     passthru = (previousAttrs.passthru or { }) // {

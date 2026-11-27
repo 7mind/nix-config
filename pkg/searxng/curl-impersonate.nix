@@ -4,12 +4,12 @@
 # Refresh component URLs/hashes from the selected upstream CMakeLists.txt.
 curl-impersonate.overrideAttrs (old:
   let
-    version = "2.3.2";
+    version = "2.3.3";
     src = fetchFromGitHub {
       owner = "lexiforest";
       repo = "curl-impersonate";
-      tag = "v${version}";
-      hash = "sha256-PVpokqvksemCMJcyFDUlARxopa+MmVhyZWVBLD5WlQ4=";
+      rev = "050900aaeb01946c27362033f9b65033a7e03499"; # v2.3.3
+      hash = "sha256-SY6tdz+y0Gfe6f7+1sX5TcEmr5ZIatvppzplJ6CAd1I=";
     };
     brotli = fetchurl {
       name = "brotli-1.2.1.tar.gz";
@@ -17,8 +17,12 @@ curl-impersonate.overrideAttrs (old:
       hash = "sha256-mNNdEaeNxFOuu30Qw3SPP3P/eMgmfA3Gl7hjH2e/fo8=";
     };
     zlib = fetchurl {
-      url = "https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz";
-      hash = "sha256-uzKaCizQJ00FUZ1hxmfAYuBpkNcuEl7i36jeZPARnRY=";
+      url = "https://github.com/madler/zlib/releases/download/v1.4/zlib-1.4.tar.gz";
+      hash = "sha256-At0Vl4NnenScBK290CtVuKK8x+BU9Rt2tUkZmpFq1YQ=";
+    };
+    zstd = fetchurl {
+      url = "https://github.com/facebook/zstd/releases/download/v1.6.0/zstd-1.6.0.tar.gz";
+      hash = "sha256-K6WZrioleXYnjn5x6ZhDOjh7/Riqe3hngin9XYT16bg=";
     };
     curl = fetchurl {
       url = "https://github.com/curl/curl/archive/curl-8_23_0.tar.gz";
@@ -30,7 +34,7 @@ curl-impersonate.overrideAttrs (old:
     };
     sources = {
       ZLIB_URL = zlib;
-      ZSTD_URL = old.passthru.deps."zstd-1.5.7.tar.gz";
+      ZSTD_URL = zstd;
       BROTLI_URL = brotli;
       BORINGSSL_URL = old.passthru.deps."boringssl-156c7b75ae9b8c3b3f847acf264f17594c3859fb.zip";
       NGHTTP2_URL = old.passthru.deps."nghttp2-1.63.0.tar.bz2";
@@ -55,7 +59,8 @@ curl-impersonate.overrideAttrs (old:
       inherit src;
       deps = old.passthru.deps // {
         "brotli-1.2.1.tar.gz" = brotli;
-        "zlib-1.3.2.tar.gz" = zlib;
+        "zlib-1.4.tar.gz" = zlib;
+        "zstd-1.6.0.tar.gz" = zstd;
         "curl-8_23_0.tar.gz" = curl;
         "c-ares-1.34.9.tar.gz" = cares;
       };

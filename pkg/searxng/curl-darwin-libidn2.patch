@@ -1,7 +1,7 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -612,6 +612,12 @@ endif()
+@@ -619,6 +619,12 @@ endif()
  if(CMAKE_MSVC_RUNTIME_LIBRARY)
    list(APPEND _curl_platform_flags "-DCMAKE_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}")
  endif()

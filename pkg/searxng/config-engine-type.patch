@@ -1,7 +1,7 @@
 diff --git a/searx/webapp.py b/searx/webapp.py
 --- a/searx/webapp.py
 +++ b/searx/webapp.py
-@@ -1251,6 +1251,7 @@ def config():
+@@ -1282,6 +1282,7 @@ def config():
          _engines.append(
              {
                  'name': name,
