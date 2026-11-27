@@ -83,7 +83,6 @@ let
     linphonePackages.mediastreamer2
     linphonePackages.liblinphone
     linphonePackages.bc-decaf
-    linphonePackages.bc-mbedtls
     bc-soci
     jsoncpp
     openssl

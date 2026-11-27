@@ -114,10 +114,6 @@ in
       localSystem = system;
       config = {
         allowUnfreePredicate = package: inputs.nixpkgs.lib.getName package == "jabracli";
-        # Flexisip links against linphone's bc-mbedtls fork (mbedtls 3.6.1,
-        # marked insecure in current nixpkgs); smind.services.flexisip declares
-        # the same permission for host evaluations.
-        permittedInsecurePackages = [ "mbedtls-3.6.1-unstable-2025-08-11" ];
       };
       overlays = [
         inputs.agenix-rekey.overlays.default

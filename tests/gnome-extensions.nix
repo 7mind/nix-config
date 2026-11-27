@@ -49,7 +49,9 @@ let
       })
     ];
   };
-  unavailable = [ "rounded-window-corners-reborn" "open-bar" "highlight-focus" "tray-icons-reloaded" "dash2dock-lite" ];
+  roundedCorners = policy { shellVersion = "51"; rounded-window-corners-reborn.enable = true; };
+  roundedCornersPackage = extensionPkgs.gnomeExtensions.rounded-window-corners-reborn;
+  unavailable = [ "open-bar" "highlight-focus" "tray-icons-reloaded" "dash2dock-lite" ];
   rejectsUnavailable = name: !(builtins.tryEval (builtins.toJSON (map (package: package.drvPath)
     (policy { shellVersion = "51"; ${name}.enable = true; }).packages))).success;
   unsupported = builtins.tryEval (builtins.toJSON (map (package: package.drvPath)
@@ -123,6 +125,9 @@ assert lib.assertMsg (builtins.all (shell:
   (find (policy { shellVersion = shell; }) calendarUuid).drvPath
     == pkgs."gnome${shell}Extensions".${calendarUuid}.drvPath
 ) [ "49" "50" ]) "Calendar compatibility must preserve older Shell catalog selection";
+assert lib.assertMsg ((find roundedCorners roundedCornersPackage.extensionUuid).drvPath
+  == (expectedForShell "51" roundedCornersPackage).drvPath)
+  "Rounded Window Corners Reborn must select its Shell 51 catalog release";
 assert lib.assertMsg (builtins.all rejectsUnavailable unavailable)
   "Unavailable optional Shell 51 extensions must still reject explicit enablement";
 assert lib.assertMsg (builtins.all (selected:

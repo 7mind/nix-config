@@ -7,10 +7,6 @@
 }:
 
 {
-  # Flexisip (pkgs.flexisip below) links against linphone's bc-mbedtls fork
-  # (mbedtls 3.6.1, marked insecure in current nixpkgs).
-  nixpkgs.config.permittedInsecurePackages = [ "mbedtls-3.6.1-unstable-2025-08-11" ];
-
   nixpkgs.overlays = [
     (import ../../pkg/dim-completed-calendar-events/overlay.nix)
     (import ../../pkg/gsconnect/overlay.nix)
@@ -23,15 +19,6 @@
       # full ghostty derivation and building it builds all of ghostty.
       ghostty-terminfo = prev.callPackage ../../pkg/ghostty-terminfo { };
 
-      llama-swap = prev.llama-swap.overrideAttrs (old: {
-        version = "268";
-        src = old.src.override {
-          tag = "v268";
-          hash = "sha256-nwH4AMiC5b4elrG9m/HExOYM8P3r1YaWghPXUpoW/xU=";
-        };
-        vendorHash = "sha256-nauMUxfDugvYnA74eVm8jaUt+l1V7gNvL89f6l2Ls8w=";
-      });
-
       # intel-llvm's Sphinx docs targets run with warnings-as-errors and
       # Sphinx >= 8.2 trips over the SYCL attribute examples (pygments
       # misc.highlighting_failure warnings become fatal) — upstream:
@@ -41,23 +28,6 @@
       # -DSPHINX_WARNINGS_AS_ERRORS=OFF).
       intel-llvm = prev.intel-llvm.overrideScope (llvm-final: llvm-prev: {
         unwrapped = llvm-prev.unwrapped.override { enableManpages = false; };
-      });
-
-      # unified-memory-framework 1.2.0's IPC ctest scripts (test/ipc_*.sh)
-      # carry their shebang below the leading copyright comment, so execve()
-      # treats them as shebang-less and ctest (executing them directly) fails
-      # them with ENOEXEC ("exec format error"). Fixed upstream by
-      # oneapi-src/unified-memory-framework#1618 (merged 2026-10-26); v1.2.0
-      # predates it. Disable exactly those tests until the pin moves past
-      # 1.2.0, then drop this override.
-      unified-memory-framework = prev.unified-memory-framework.overrideAttrs (old: {
-        disabledTests = (old.disabledTests or [ ]) ++ [
-          "test_ipc_os_prov_anon_fd"
-          "test_ipc_os_prov_shm"
-          "test_ipc_devdax_prov"
-          "test_ipc_file_prov"
-          "test_ipc_file_prov_fsdax"
-        ];
       });
 
       # vmnet-natd is the package's only ET_EXEC (non-PIE) daemon binary.
@@ -77,14 +47,6 @@
           wrapProgram "$out/bin/vmnet-natd" \
             --prefix LD_LIBRARY_PATH : "${prev.lib.makeLibraryPath [ prev.openssl prev.stdenv.cc.libc ]}"
         '';
-      });
-
-      partclone = prev.partclone.overrideAttrs (old: {
-        version = "0.3.52";
-        src = old.src.override {
-          rev = "0.3.52";
-          hash = "sha256-tffPKO28Qh/6hY46HuRQP4XsSqq2sideEQGQC/SwMC8=";
-        };
       });
     })
     (
