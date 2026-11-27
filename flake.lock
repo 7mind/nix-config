@@ -578,16 +578,16 @@
     "hyprwhspr": {
       "flake": false,
       "locked": {
-        "lastModified": 1793312884,
-        "narHash": "sha256-cbcQHxGdRmpkvAUdUoh962J9C4MrLZlPsCO/nyQUAs8=",
+        "lastModified": 1795463037,
+        "narHash": "sha256-BalwamOU4fZrKf1DxWA1Gzh5PU7zwjEscrhiLMbVVn0=",
         "owner": "goodroot",
         "repo": "hyprwhspr",
-        "rev": "decea7c5932bfd3b2e34dfea373509cc509cd113",
+        "rev": "add6a2a70ebc3d9ae2a0f91b0cb58332d67d1b4d",
         "type": "github"
       },
       "original": {
         "owner": "goodroot",
-        "ref": "v1.50.0",
+        "ref": "v1.58.0",
         "repo": "hyprwhspr",
         "type": "github"
       }

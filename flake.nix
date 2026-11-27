@@ -3,7 +3,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     hyprwhspr = {
-      url = "github:goodroot/hyprwhspr/v1.50.0";
+      url = "github:goodroot/hyprwhspr/v1.58.0";
       flake = false;
     };
 

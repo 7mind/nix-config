@@ -22,7 +22,10 @@ let
 in
 {
   imports = [
-    (import (inputs.hyprwhspr + "/nix/module.nix") { defaultPackage = pkgs.hyprwhspr; })
+    (import (inputs.hyprwhspr + "/nix/module.nix") {
+      mkPackage = extraBackends: pkgs.hyprwhspr.override { inherit extraBackends; };
+      extraBackendNames = [ "qwen3-asr" ];
+    })
   ];
 
   options.smind.dictation = {
@@ -65,6 +68,7 @@ in
     services.hyprwhspr = {
       enable = true;
       inherit (cfg) users;
+      extraBackends = [ "qwen3-asr" ];
     };
 
     home-manager.users = lib.genAttrs cfg.users (_: import ../../lib/dictation-home.nix {
