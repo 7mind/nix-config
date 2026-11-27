@@ -4,24 +4,21 @@
   fetchPypi,
 }:
 let
-  # kipe/enocean: ESP3 protocol library + EEP decoders.
-  # Not in nixpkgs. The declared `enum-compat` dependency is a Py2 shim and
-  # is unused on Py3, so we drop it.
+  # ChristopheHD/enocean: ESP3 protocol library + EEP decoders.
+  # Not in nixpkgs.
   enocean = python3.pkgs.buildPythonPackage rec {
     pname = "enocean";
-    version = "0.60.1";
+    version = "1.0.0";
     format = "setuptools";
 
     src = fetchPypi {
       inherit pname version;
-      hash = "sha256-26MU3/017QUwChQFbva06AEmCyMxJu3unckQeiV4xXw=";
+      hash = "sha256-/qMZTUMN1VnmfTQoLTanNnsH26kUw4H5Y9NQwgHYQb8=";
     };
-
-    pythonRemoveDeps = [ "enum-compat" ];
 
     dependencies = with python3.pkgs; [
       pyserial
-      beautifulsoup4
+      cryptography
     ];
 
     doCheck = false;
@@ -33,7 +30,7 @@ let
 
     meta = {
       description = "EnOcean serial protocol implementation (ESP3 + EEP)";
-      homepage = "https://github.com/kipe/enocean";
+      homepage = "https://github.com/ChristopheHD/enocean";
       license = lib.licenses.mit;
     };
   };
