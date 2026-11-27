@@ -144,11 +144,11 @@
     "codegraph": {
       "flake": false,
       "locked": {
-        "lastModified": 1794996745,
-        "narHash": "sha256-IBJaOrcZ//yP8sbu3Z/O4soNAbbcpzjIqguMeLkz508=",
+        "lastModified": 1795762115,
+        "narHash": "sha256-uJ0r/Tqy5fYK3tIxZacs9D9lfI8FKfMnTCzHt8L8M4g=",
         "owner": "colbymchenry",
         "repo": "codegraph",
-        "rev": "cc17b69a66adeb41eab9b4bf6d2f61e8cd311b81",
+        "rev": "3c230869878559f3f96bf5580b2d2c66dcf138e7",
         "type": "github"
       },
       "original": {
@@ -1043,11 +1043,11 @@
         "squish": "squish"
       },
       "locked": {
-        "lastModified": 1795798632,
-        "narHash": "sha256-SQJzxzcJoCXaw1PRjRNSS2lovS5M597b9vTVh1fUDdE=",
+        "lastModified": 1795817504,
+        "narHash": "sha256-59Ks29GFc21LfuO0XhRbPjTlYwCdZ/kkmn4myTpdo4o=",
         "owner": "7mind",
         "repo": "ponygirls",
-        "rev": "64b64d079082542a6f12fb6bc443a55f1c13a681",
+        "rev": "3a73d7c5f4acfc41095115488cba7150933c295d",
         "type": "github"
       },
       "original": {
