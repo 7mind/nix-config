@@ -133,21 +133,28 @@ rec {
                 (final: prev:
                   let
                     upgradeOllama = package: package.overrideAttrs (finalAttrs: old: {
-                      version = "0.40.13";
+                      version = "0.40.18";
                       src = prev.fetchFromGitHub {
                         owner = "ollama";
                         repo = "ollama";
                         tag = "v${finalAttrs.version}";
-                        hash = "sha256-cxpgG6l97S7f+XZy5Hb689MYpVnbaqxBhzHLL62zAKM=";
+                        hash = "sha256-MO0AsCSNmrjf63NrdYzBDBL/xEftrHAacsf4gSXZf8g=";
                       };
                       vendorHash = "sha256-1mzJrZUHH2ouP6I+LVojHbft7No5AumqKZVq0I/Ubsg=";
+                      # Supply nvml.h without replacing the child CUDA preset flags.
+                      # NVML itself is still loaded from the driver at runtime.
+                      env = old.env // prev.lib.optionalAttrs (old.env ? CUDA_PATH) {
+                        NVCC_PREPEND_FLAGS = prev.lib.concatStringsSep " " ([
+                          "-I${prev.cudaPackages.cuda_nvml_dev.include}/include"
+                        ] ++ prev.lib.optional (old.env ? NVCC_PREPEND_FLAGS) old.env.NVCC_PREPEND_FLAGS);
+                      };
                       passthru = old.passthru // {
-                        llamaCppVersion = "b11963";
+                        llamaCppVersion = "b12651";
                         llamaCppSrc = prev.fetchFromGitHub {
                           owner = "ggml-org";
                           repo = "llama.cpp";
                           tag = finalAttrs.passthru.llamaCppVersion;
-                          hash = "sha256-DUggBODOVSOydWopvdXt/K9ZiRrbWrl+mywpr1vjJwM=";
+                          hash = "sha256-GNdA6CFxrkFNSocjHhZT2ML53WkdvTSQBMieitPR1ts=";
                         };
                       };
                     });
@@ -174,6 +181,7 @@ rec {
                   }));
                   # Keep every Ollama flavor and the planted SYCL backend on one ggml ABI.
                   ollama = upgradeOllama prev.ollama;
+                  ollama-cpu = upgradeOllama prev.ollama-cpu;
                   ollama-cuda = upgradeOllama prev.ollama-cuda;
                   ollama-rocm = upgradeOllama prev.ollama-rocm;
                   ollama-vulkan = upgradeOllama prev.ollama-vulkan;
@@ -195,7 +203,7 @@ rec {
                   });
 
                   # llama.cpp built with the SYCL backend, pinned to the same
-                  # llama.cpp tag nixpkgs ollama vendors (b11963). Linux-only —
+                  # llama.cpp tag as our Ollama override. Linux-only —
                   # needs intel-llvm + intel-compute-runtime + level-zero, none
                   # of which exist on Darwin.
                   llama-cpp-sycl = final.callPackage ./pkg/llama-cpp-sycl/default.nix {
@@ -205,13 +213,11 @@ rec {
 
                   # ollama with the GGML SYCL backend wired in for the Intel
                   # Arc Pro B70. Plants llama-cpp-sycl's libggml-sycl.so into
-                  # the nixpkgs ollama (0.40.13) backend dir. Both share llama.cpp
-                  # b11963 so the planted .so is ABI-matched to ollama's ggml-base.
-                  ollama-sycl = final.callPackage ./pkg/ollama-sycl/default.nix { };
-
-                  # Stock ollama flavors (ollama/-cuda/-rocm/-vulkan) ride
-                  # the same version (0.40.13), matching the in-container
-                  # ollama-sycl server.
+                  # the Ollama backend dir. Both share the llama.cpp pin so
+                  # the planted .so is ABI-matched to Ollama's ggml-base.
+                  ollama-sycl = final.callPackage ./pkg/ollama-sycl/default.nix {
+                    ollama = final.ollama-cpu;
+                  };
                 })
               ];
             }
