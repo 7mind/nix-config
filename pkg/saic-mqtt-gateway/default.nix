@@ -10,15 +10,17 @@ let
   gatewayVersion = "0.13.0";
 
   # Upstream library package. Not yet in nixpkgs, so we build it here.
+  # The gateway runs from source; its offline tests pass with 0.16.0 even
+  # though gateway 0.13.0 declares a <0.11.0 client dependency.
   saic-ismart-client-ng = python3.pkgs.buildPythonPackage rec {
     pname = "saic-ismart-client-ng";
-    version = "0.10.0";
+    version = "0.16.0";
     pyproject = true;
 
     src = fetchPypi {
       pname = "saic_ismart_client_ng";
       inherit version;
-      hash = "sha256-1FF8bB6XlHH1YxsINmZfAjUrtpnFUwnf9QoD3xUHdwk=";
+      hash = "sha256-CAx3Xbthip/RlvX2MLI13IB+IfruawAmlL4t4rxQLBE=";
     };
 
     build-system = [ python3.pkgs.poetry-core ];
