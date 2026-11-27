@@ -46,12 +46,11 @@ let
     ps.six
   ]);
 
-  # Flexisip 2.6.x submodule pin (GitLab only; unchanged 2.6.0 → 2.6.1). Built in-tree as STATIC libs
-  # and linked into libflexisip — not installed as a standalone shared library.
-  sofiaSrc = ./vendor/bc-sofia-sip-02b6544.tar.gz;
+  # Flexisip 2.6.2's GitLab-only sofia-sip submodule, built statically into libflexisip.
+  sofiaSrc = ./vendor/bc-sofia-sip-5c6c07e.tar.gz;
 
-  # 2.6.1 moved the XXE-patched libxsd out of tree into this GitLab-only
-  # submodule. The GitHub archive ships an empty placeholder.
+  # The XXE-patched libxsd pin is unchanged since 2.6.1. The GitHub
+  # archive ships an empty placeholder for this GitLab-only submodule.
   xsdSrc = fetchurl {
     url = "https://gitlab.linphone.org/BC/public/external/xsd/-/archive/a2ca5f3676c1139346f386648f16e95ab4f34044/xsd-a2ca5f3676c1139346f386648f16e95ab4f34044.tar.gz";
     hash = "sha256-aOPerU4PjjNCcJO7ymD6OwVh0Jp3/kTqIPOxvqL1qG4=";
@@ -116,13 +115,13 @@ let
 in
 stdenv.mkDerivation rec {
   pname = "flexisip";
-  version = "2.6.1";
+  version = "2.6.2";
 
   src = fetchFromGitHub {
     owner = "BelledonneCommunications";
     repo = "flexisip";
-    rev = version;
-    hash = "sha256-Pc/baegjA0idSt4U96LIePjQe8gfXKEEepLq/Z9qLSY=";
+    rev = "68ba0e8a51227acbb7e88f2d2f90fb2afee5bee4";
+    hash = "sha256-6zLXHgQ6Ne+N3MdgZxgHwRbMCJdpSESD2MTmK0em+1Y=";
   };
 
   patches = [ ./add-supported-path.patch ];
@@ -176,17 +175,17 @@ stdenv.mkDerivation rec {
         echo '# Nix: linphone stack provided via find_package (see nix-system-deps.cmake)' > cmake/LinphoneSDK.cmake
         cat ${./nix-system-deps.cmake} >> cmake/ExternalDependencies.cmake
 
-        # Vendor the Flexisip 2.6.x sofia-sip submodule pin. The github archive of
+        # Vendor the Flexisip sofia-sip submodule pin. The GitHub archive of
         # flexisip carries an empty sofia-sip submodule placeholder — replace it.
         rm -rf submodules/externals/sofia-sip
         mkdir -p submodules/externals
         tar xzf ${sofiaSrc} -C submodules/externals
-        mv submodules/externals/bc-sofia-sip-02b6544 submodules/externals/sofia-sip
+        mv submodules/externals/bc-sofia-sip-5c6c07e submodules/externals/sofia-sip
         test -f submodules/externals/sofia-sip/CMakeLists.txt \
           || (echo "sofia-sip vendor unpack failed" >&2; ls -la submodules/externals >&2; exit 1)
         patch --batch --fuzz=0 -d submodules/externals/sofia-sip -p1 < ${./sofia-sip-CVE-2026-110658.patch}
 
-        # 2.6.1 XXE-patched libxsd (GitLab submodule).
+        # XXE-patched libxsd (GitLab submodule).
         rm -rf submodules/externals/xsd
         tar xzf ${xsdSrc} -C submodules/externals
         mv submodules/externals/xsd-a2ca5f3676c1139346f386648f16e95ab4f34044 submodules/externals/xsd
